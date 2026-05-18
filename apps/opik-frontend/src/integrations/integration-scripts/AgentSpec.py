@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from pyagentspec.agent import Agent
 from pyagentspec.llms import OpenAiConfig
 from pyagentspec.property import FloatProperty
@@ -64,23 +65,27 @@ async def main():
     }
     langgraph_agent = AgentSpecLoader(tool_registry=tool_registry).load_component(agent)
 
-    with AgentSpecInstrumentor().instrument_context(  # HIGHLIGHTED_LINE
-      project_name="calculator-agent-trace",  # HIGHLIGHTED_LINE
-      mask_sensitive_information=False,  # HIGHLIGHTED_LINE
-    ):  # HIGHLIGHTED_LINE
-        messages = []
-        while True:
-            user_input = input("USER  >>> ")
-            if user_input.lower() in ["exit", "quit"]:
-                break
-            messages.append({"role": "user", "content": user_input})
+    thread_id = str(uuid.uuid4())  # HIGHLIGHTED_LINE
+    messages = []
+    while True:
+        user_input = input("USER  >>> ")
+        if user_input.lower() in ["exit", "quit"]:
+            break
+        messages.append({"role": "user", "content": user_input})
+
+        with AgentSpecInstrumentor().instrument_context(  # HIGHLIGHTED_LINE
+            project_name="calculator-agent-trace",  # HIGHLIGHTED_LINE
+            mask_sensitive_information=False,  # HIGHLIGHTED_LINE
+            thread_id=thread_id,  # HIGHLIGHTED_LINE
+        ):  # HIGHLIGHTED_LINE
             response = langgraph_agent.invoke(
                 input={"messages": messages},
                 config={"configurable": {"thread_id": "1"}},
             )
-            agent_answer = response["messages"][-1].content.strip()
-            print("AGENT >>>", agent_answer)
-            messages.append({"role": "assistant", "content": agent_answer})
+
+        agent_answer = response["messages"][-1].content.strip()
+        print("AGENT >>>", agent_answer)
+        messages.append({"role": "assistant", "content": agent_answer})
 
 
 if __name__ == "__main__":

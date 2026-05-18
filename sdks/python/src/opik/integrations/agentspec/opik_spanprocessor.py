@@ -1,11 +1,10 @@
 import logging
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Collection, Dict, Generator, Optional, Set
 
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor  # type: ignore
 from pyagentspec.tracing.events import Event, ExceptionRaised, LlmGenerationResponse
-from pyagentspec.tracing.spanprocessor import SpanProcessor
 from pyagentspec.tracing.spans import LlmGenerationSpan, Span, ToolExecutionSpan
 from pyagentspec.tracing.trace import get_trace
 
@@ -15,7 +14,14 @@ import opik.llm_usage as llm_usage
 logger = logging.getLogger(__name__)
 
 
-class OpikSpanProcessor(SpanProcessor):
+def _ns_to_datetime(ns: Optional[int]) -> Optional[datetime]:
+    """Convert nanosecond timestamp to a UTC-aware datetime, or None if not set."""
+    if not ns:
+        return None
+    return datetime.fromtimestamp(ns / 1_000_000_000, tz=timezone.utc)
+
+
+class OpikSpanProcessor:
     """AgentSpec Opik SpanProcessor."""
 
     _EVENT_ATTRIBUTES_TO_HIDE_IN_IO: Set[str] = {
@@ -34,6 +40,7 @@ class OpikSpanProcessor(SpanProcessor):
         workspace: Optional[str] = None,
         api_key: Optional[str] = None,
         mask_sensitive_information: bool = True,
+        thread_id: Optional[str] = None,
     ) -> None:
         """
         Forward AgentSpec tracing callbacks to an Opik client.
@@ -45,16 +52,21 @@ class OpikSpanProcessor(SpanProcessor):
             api_key: The API key to use in the Opik client.
             mask_sensitive_information: Whether to mask potentially sensitive
                 information from the span and its events.
+            thread_id: Thread ID used to group multiple traces into a conversation thread.
         """
-        super().__init__(mask_sensitive_information=mask_sensitive_information)
+        self.mask_sensitive_information = mask_sensitive_information
         self.opik_client = opik.Opik(
             project_name=project_name, host=host, workspace=workspace, api_key=api_key
         )
+        self.thread_id = thread_id
         self.opik_trace: Optional[opik.Trace] = None
         # Mapping from Agent Spec Span ID to Opik Span ID
         self.opik_span_ids_mapping: Dict[str, str] = {}
         # Collection of Agent Spec Span ID -> Opik Span
         self.opik_spans: Dict[str, opik.Span] = {}
+        # Accumulated trace-level data from LLM spans
+        self._trace_first_llm_input: Optional[Dict[str, Any]] = None
+        self._trace_last_llm_output: Optional[Dict[str, Any]] = None
 
     def _get_opik_span_type_from_agentspec_span_type(
         self, span: Span
@@ -71,6 +83,16 @@ class OpikSpanProcessor(SpanProcessor):
         if isinstance(span, LlmGenerationSpan):
             return span.llm_config.name
         return None
+
+    def _get_opik_span_name(self, span: Span) -> str:
+        """Return a meaningful name for the span, using the tool name for tool spans."""
+        if isinstance(span, ToolExecutionSpan):
+            tool_name = getattr(span.tool, "name", None)
+            # Use explicit span name if set by user, fall back to tool name, then class name
+            if span.name != span.__class__.__name__ and span.name:
+                return span.name
+            return tool_name or span.name or span.__class__.__name__
+        return span.name or span.__class__.__name__
 
     def _remove_unnecessary_attributes_for_event_display(
         self,
@@ -184,22 +206,14 @@ class OpikSpanProcessor(SpanProcessor):
         if opik_span is None and self.opik_trace:
             opik_span = self.opik_trace.span(
                 # Cannot use the AgentSpec span ID, as Opik requires the ID to be UUIDv7 compliant
-                name=span.name,
+                name=self._get_opik_span_name(span),
                 parent_span_id=(
                     self.opik_span_ids_mapping.get(span._parent_span.id, None)
                     if span._parent_span
                     else None
                 ),
-                start_time=(
-                    datetime.fromtimestamp(span.start_time / 1_000_000_000)
-                    if span.start_time
-                    else None
-                ),
-                end_time=(
-                    datetime.fromtimestamp(span.end_time / 1_000_000_000)
-                    if span.end_time
-                    else None
-                ),
+                start_time=_ns_to_datetime(span.start_time),
+                end_time=_ns_to_datetime(span.end_time),
                 type=self._get_opik_span_type_from_agentspec_span_type(span),
                 model=self._get_opik_model_from_agentspec_span(span),
                 input=self._create_opik_span_inputs_from_span(span),
@@ -211,6 +225,17 @@ class OpikSpanProcessor(SpanProcessor):
             self.opik_span_ids_mapping[span.id] = opik_span.id
             self.opik_spans[span.id] = opik_span
         return opik_span
+
+    def _accumulate_llm_trace_data(self, span: LlmGenerationSpan) -> None:
+        """Collect LLM span data to populate trace-level input/output."""
+        span_input = self._create_opik_span_inputs_from_span(span)
+        span_output = self._create_opik_span_outputs_from_span(span)
+
+        if self._trace_first_llm_input is None and span_input:
+            self._trace_first_llm_input = span_input
+
+        if span_output is not None:
+            self._trace_last_llm_output = span_output
 
     def on_start(self, span: Span) -> None:
         """
@@ -244,11 +269,7 @@ class OpikSpanProcessor(SpanProcessor):
                 # This should only happen if the trace is none, i.e., there's no trace active
                 opik_span.end(
                     # Update the span attributes with the new data we have
-                    end_time=(
-                        datetime.fromtimestamp(span.end_time / 1_000_000_000)
-                        if span.end_time
-                        else None
-                    ),
+                    end_time=_ns_to_datetime(span.end_time),
                     model=self._get_opik_model_from_agentspec_span(span),
                     input=self._create_opik_span_inputs_from_span(span),
                     output=self._create_opik_span_outputs_from_span(span),
@@ -256,6 +277,9 @@ class OpikSpanProcessor(SpanProcessor):
                     metadata=self._create_opik_span_metadata_from_span(span),
                     error_info=self._create_opik_span_error_info_from_span(span),
                 )
+
+            if isinstance(span, LlmGenerationSpan):
+                self._accumulate_llm_trace_data(span)
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.on_end`: {e}")
         finally:
@@ -287,7 +311,10 @@ class OpikSpanProcessor(SpanProcessor):
         try:
             trace = get_trace()
             # Cannot use the Agent Spec trace ID, as Opik requires the ID to be UUIDv7 compliant
-            self.opik_trace = self.opik_client.trace(name=trace.name)
+            self.opik_trace = self.opik_client.trace(
+                name=trace.name,
+                thread_id=self.thread_id,
+            )
         except Exception as e:
             self.opik_trace = None
             logger.warning(f"Exception raised during `OpikSpanProcessor.startup`: {e}")
@@ -301,11 +328,17 @@ class OpikSpanProcessor(SpanProcessor):
         """
         try:
             if self.opik_trace is not None:
-                self.opik_trace.end()
+                self.opik_trace.end(
+                    input=self._trace_first_llm_input,
+                    output=self._trace_last_llm_output,
+                    thread_id=self.thread_id,
+                )
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.shutdown`: {e}")
         finally:
             self.opik_trace = None
+            self._trace_first_llm_input = None
+            self._trace_last_llm_output = None
 
     # Async methods just call the sync versions
 
@@ -383,6 +416,7 @@ class AgentSpecInstrumentor(BaseInstrumentor):  # type: ignore
         workspace = kwargs.get("workspace", None)
         host = kwargs.get("host", None)
         mask_sensitive_information = kwargs.get("mask_sensitive_information", True)
+        thread_id = kwargs.get("thread_id", None)
 
         from pyagentspec.tracing.trace import Trace, get_trace
 
@@ -398,6 +432,7 @@ class AgentSpecInstrumentor(BaseInstrumentor):  # type: ignore
             api_key=api_key,
             workspace=workspace,
             mask_sensitive_information=mask_sensitive_information,
+            thread_id=thread_id,
         )
         trace = Trace(span_processors=[opik_span_processor])
         trace._start()

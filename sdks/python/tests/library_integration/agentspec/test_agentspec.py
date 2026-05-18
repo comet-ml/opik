@@ -300,6 +300,24 @@ def test_opik_span_processor_llm_response_is_preserved_when_span_ends_with_error
         project_name=project_name,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        input=ANY_DICT.containing(
+            {
+                "request_id": "llm-request",
+                "prompt": [
+                    {
+                        "id": None,
+                        "content": "my prompt",
+                        "role": "system",
+                        "sender": "me",
+                    }
+                ],
+            }
+        ),
+        output={
+            "response": "sunny",
+            "tool_calls": [],
+            "completion_id": None,
+        },
         last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
