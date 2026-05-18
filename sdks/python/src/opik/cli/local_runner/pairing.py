@@ -18,12 +18,12 @@ from typing import TYPE_CHECKING, List, Optional
 import click
 import httpx
 
+from opik import url_helpers
 from opik.api_objects.rest_helpers import resolve_project_id_by_name
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.errors.not_found_error import NotFoundError
-from opik.url_helpers import get_base_url, get_project_url_by_id
 
-from .error_view import build_config_error_block
+from . import error_view
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +47,28 @@ class PairingResult:
     project_name: str
     project_id: str
     bridge_key: bytes = b""
+
+
+def post_pairing_url(
+    *,
+    runner_type: RunnerType,
+    base_url: str,
+    project_id: str,
+    workspace: Optional[str],
+) -> Optional[str]:
+    """Where the user should land after pairing succeeds.
+
+    Endpoint runners exist to serve jobs from the Agent Playground, so link
+    straight there. Connect runners feed Ollie (a chat overlay), so the generic
+    project URL is the right contextual landing page.
+    """
+    if not workspace:
+        return None
+    if runner_type == RunnerType.ENDPOINT:
+        return url_helpers.get_agent_playground_url_by_project_id(
+            base_url, project_id, workspace
+        )
+    return url_helpers.get_project_url_by_id(base_url, project_id, workspace)
 
 
 def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes:
@@ -91,7 +113,7 @@ def resolve_project_id(
             )
             return resolve_project_id_by_name(api, project_name)
         header, reason, hint = _project_retrieval_components(project_name, e)
-        raise build_config_error_block(
+        raise error_view.build_config_error_block(
             header,
             reason=reason,
             workspace=workspace,
@@ -115,7 +137,7 @@ def _create_project(
         detail = _extract_server_error_message(e) or (
             f"server returned HTTP {e.status_code or 'unknown'}"
         )
-        raise build_config_error_block(
+        raise error_view.build_config_error_block(
             f"Could not create project '{project_name}'",
             reason=detail.rstrip(".").strip(),
             workspace=workspace,
@@ -228,7 +250,7 @@ def build_pairing_link(
     )
 
     fragment = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
-    domain_root = get_base_url(base_url)
+    domain_root = url_helpers.get_base_url(base_url)
     # Pass user-facing context the FE can render on error screens. The
     # fragment carries the project ID (a UUID); the project NAME has to
     # travel separately because it's not in the binary payload.
@@ -285,6 +307,7 @@ def launch_supervisor(
     runner_type: RunnerType,
     command: Optional[List[str]],
     watch: Optional[bool],
+    workspace: Optional[str],
 ) -> None:
     from opik.runner.supervisor import Supervisor
 
@@ -323,6 +346,8 @@ def launch_supervisor(
         watch=watch,
         bridge_key=bridge_key,
         runner_type=runner_type,
+        project_name=result.project_name,
+        workspace=workspace,
     )
     supervisor.run()
 
@@ -505,10 +530,11 @@ def run_pairing(
                 continue
             if runner.status == "connected":
                 if tui:
-                    project_url = (
-                        get_project_url_by_id(base_url, session.project_id, workspace)
-                        if workspace
-                        else None
+                    project_url = post_pairing_url(
+                        runner_type=runner_type,
+                        base_url=base_url,
+                        project_id=session.project_id,
+                        workspace=workspace,
                     )
                     tui.pairing_completed(project_url=project_url)
                 break
