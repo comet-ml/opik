@@ -12,6 +12,7 @@ import { Label } from "@/ui/label";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type PythonCodeRuleDetailsProps = {
@@ -60,15 +61,25 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                         const currentArguments = form.getValues(
                           "pythonCodeDetails.arguments",
                         );
+                        const isTraceScope =
+                          scope === EVALUATORS_RULE_SCOPE.trace;
                         const localArguments: Record<string, string> = {};
                         let parsingArgumentsError: boolean = false;
                         try {
                           parsePythonMethodParameters(value, "score")
                             .map((v) => v.name)
-                            .forEach(
-                              (v: string) =>
-                                (localArguments[v] = currentArguments[v] ?? ""),
-                            );
+                            .forEach((v: string) => {
+                              // Auto-fill reserved trace arguments (e.g. a `spans`
+                              // parameter) with their sentinel path so the user doesn't
+                              // need to pick one in the dropdown. Preserve any existing
+                              // user-supplied path if they already mapped this name to
+                              // something else.
+                              const reservedDefault = isTraceScope
+                                ? RESERVED_TRACE_EVALUATOR_VARIABLES[v]
+                                : undefined;
+                              localArguments[v] =
+                                currentArguments[v] || reservedDefault || "";
+                            });
                         } catch (e) {
                           parsingArgumentsError = true;
                         }

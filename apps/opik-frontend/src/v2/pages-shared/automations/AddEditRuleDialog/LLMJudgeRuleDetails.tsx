@@ -29,7 +29,7 @@ import {
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import { RESERVED_LLM_JUDGE_TRACE_VARIABLES } from "@/constants/llm";
+import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -147,7 +147,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           // Preserve any existing user-supplied path if they already mapped this name
           // to something else.
           const reservedDefault = isTraceScope
-            ? RESERVED_LLM_JUDGE_TRACE_VARIABLES[v]
+            ? RESERVED_TRACE_EVALUATOR_VARIABLES[v]
             : undefined;
           localVariables[v] = variables[v] || reservedDefault || "";
         });
