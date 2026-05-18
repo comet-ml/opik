@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.RecentActivity;
 import com.comet.opik.infrastructure.db.EvaluatorItemListColumnMapper;
 import com.comet.opik.infrastructure.db.ExecutionPolicyColumnMapper;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
@@ -198,6 +199,17 @@ public interface DatasetVersionDAO {
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
+            SELECT id
+            FROM dataset_versions
+            WHERE workspace_id = :workspace_id
+              AND dataset_id = :dataset_id
+              AND version_hash = :version_hash
+            """)
+    Optional<UUID> findVersionIdByHash(@Bind("dataset_id") UUID datasetId,
+            @Bind("version_hash") String versionHash,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
             WITH version_sequences AS (
                 SELECT
                     id,
@@ -303,6 +315,17 @@ public interface DatasetVersionDAO {
                 AND dv.workspace_id = :workspace_id
             """)
     Optional<DatasetVersion> findByTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT version_id
+            FROM dataset_version_tags
+            WHERE workspace_id = :workspace_id
+              AND dataset_id = :dataset_id
+              AND tag = :tag
+            """)
+    Optional<UUID> findVersionIdByTag(@Bind("dataset_id") UUID datasetId,
+            @Bind("tag") String tag,
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
@@ -445,6 +468,35 @@ public interface DatasetVersionDAO {
             """)
     List<DatasetVersion> findByIds(@BindList("version_ids") Collection<UUID> versionIds,
             @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT dataset_id, dataset_name, dataset_type, created_at, created_by FROM (
+                SELECT id AS dataset_id, name AS dataset_name, type AS dataset_type, created_at, created_by
+                FROM datasets
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id >= :min_id
+
+                UNION ALL
+
+                SELECT d.id, d.name, d.type, dv.created_at, dv.created_by
+                FROM dataset_versions dv
+                INNER JOIN datasets d ON dv.dataset_id = d.id AND dv.workspace_id = d.workspace_id
+                WHERE d.workspace_id = :workspace_id
+                    AND d.project_id = :project_id
+                    AND dv.id >= :min_id
+                    AND dv.created_at > d.created_at
+                    AND dv.items_total > 0
+            ) combined
+            ORDER BY created_at DESC
+            LIMIT :limit
+            """)
+    @RegisterConstructorMapper(value = RecentActivity.RecentDatasetVersion.class)
+    List<RecentActivity.RecentDatasetVersion> findRecentActivityByProjectId(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @Bind("min_id") UUID minId,
+            @Bind("limit") int limit);
 
     @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id IN (<dataset_ids>) AND workspace_id = :workspace_id")
     void deleteAllTagsByDatasetIds(@BindList("dataset_ids") Collection<UUID> datasetIds,

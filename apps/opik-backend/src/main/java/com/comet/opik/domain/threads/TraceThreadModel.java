@@ -39,7 +39,8 @@ public record TraceThreadModel(
         String firstMessage,
         String lastMessage,
         Long numberOfMessages,
-        Source source) {
+        Source source,
+        String environment) {
 
     public boolean isInactive() {
         return status == TraceThreadStatus.INACTIVE;

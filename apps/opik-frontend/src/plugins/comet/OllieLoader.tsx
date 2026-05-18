@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import OwlArt from "@/shared/OwlArt";
+import { AssistantSurfaceVariant } from "@/types/assistant-sidebar";
 
 const MESSAGES = [
   "Ollie is waking up\u2026",
@@ -12,16 +13,14 @@ const MESSAGES = [
 
 const ROTATION_INTERVAL_MS = 2200;
 
-export type OllieLoaderVariant = "page" | "sidebar" | "collapsed";
-
-const OWL_SIZE: Record<OllieLoaderVariant, string> = {
+const OWL_SIZE: Record<AssistantSurfaceVariant, string> = {
   page: "size-[72px]",
   sidebar: "size-[48px]",
   collapsed: "size-6",
 };
 
 interface OllieLoaderProps {
-  variant?: OllieLoaderVariant;
+  variant?: AssistantSurfaceVariant;
 }
 
 export function OllieLoader({

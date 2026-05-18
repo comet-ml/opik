@@ -49,6 +49,7 @@ DICTIONARY_OPERATORS = [
     "<",
     "<=",
 ]
+ENUM_OPERATORS = ["=", "!=", "in", "not_in"]
 
 
 class OQLConfig(ABC):
@@ -107,6 +108,7 @@ class TraceOQLConfig(OQLConfig):
             "last_updated_at": "date_time",
             "annotation_queue_ids": "list",
             "experiment_id": "string",
+            "environment": "enum",
         }
 
     @property
@@ -119,6 +121,7 @@ class TraceOQLConfig(OQLConfig):
             "thread_id": STRING_OPERATORS,
             "guardrails": STRING_OPERATORS,
             "experiment_id": STRING_OPERATORS,
+            "environment": ENUM_OPERATORS,
             "start_time": DATE_TIME_OPERATORS,
             "end_time": DATE_TIME_OPERATORS,
             "created_at": DATE_TIME_OPERATORS,
@@ -182,6 +185,7 @@ class SpanOQLConfig(OQLConfig):
             "error_info": "error_container",
             "type": "enum",
             "trace_id": "string",
+            "environment": "enum",
         }
 
     @property
@@ -194,7 +198,8 @@ class SpanOQLConfig(OQLConfig):
             "model": STRING_OPERATORS,
             "provider": STRING_OPERATORS,
             "trace_id": STRING_OPERATORS,
-            "type": ["=", "!="],
+            "type": ENUM_OPERATORS,
+            "environment": ENUM_OPERATORS,
             "start_time": DATE_TIME_OPERATORS,
             "end_time": DATE_TIME_OPERATORS,
             "total_estimated_cost": NUMBER_OPERATORS,
@@ -239,6 +244,7 @@ class ThreadOQLConfig(OQLConfig):
             "status": "enum",
             "tags": "list",
             "annotation_queue_ids": "list",
+            "environment": "enum",
         }
 
     @property
@@ -254,9 +260,10 @@ class ThreadOQLConfig(OQLConfig):
             "start_time": DATE_TIME_OPERATORS,
             "end_time": DATE_TIME_OPERATORS,
             "feedback_scores": FEEDBACK_SCORES_OPERATORS,
-            "status": ["=", "!="],
+            "status": ENUM_OPERATORS,
             "tags": LIST_OPERATORS,
             "annotation_queue_ids": LIST_OPERATORS,
+            "environment": ENUM_OPERATORS,
             "default": STRING_OPERATORS,
         }
 
@@ -350,6 +357,7 @@ class PromptVersionOQLConfig(OQLConfig):
 
 
 OPERATORS_WITHOUT_VALUES = {"is_empty", "is_not_empty"}
+ARRAY_VALUE_OPERATORS = {"in", "not_in"}
 
 _DEFAULT_CONFIG = TraceOQLConfig()
 
@@ -661,6 +669,50 @@ class OpikQueryLanguage:
                 f'Invalid value {self.query_string[start : self._cursor]}, expected an string in double quotes("value") or a number'
             )
 
+    def _parse_array_value(self) -> Dict[str, Any]:
+        self._skip_whitespace()
+
+        if (
+            self._cursor >= len(self.query_string)
+            or self.query_string[self._cursor] != "("
+        ):
+            raise ValueError(
+                f"Expected array value starting with '(' for in/not_in operator, got: {self.query_string[self._cursor :]!r}"
+            )
+        self._cursor += 1  # skip '('
+
+        items: List[str] = []
+        while True:
+            self._skip_whitespace()
+            if self._cursor >= len(self.query_string):
+                raise ValueError("Unterminated array value, missing ')'")
+            if self.query_string[self._cursor] == ")":
+                if not items:
+                    raise ValueError(
+                        "Expected at least one item inside (...) for in/not_in operator"
+                    )
+                self._cursor += 1
+                break
+            if items:
+                if self.query_string[self._cursor] != ",":
+                    raise ValueError(
+                        f"Expected ',' between array elements, got: {self.query_string[self._cursor :]!r}"
+                    )
+                self._cursor += 1
+                self._skip_whitespace()
+
+            if (
+                self._cursor >= len(self.query_string)
+                or self.query_string[self._cursor] != '"'
+            ):
+                raise ValueError(
+                    f"Array elements must be quoted strings, got: {self.query_string[self._cursor :]!r}"
+                )
+            parsed = self._parse_value()
+            items.append(parsed["value"])
+
+        return {"value": ",".join(items)}
+
     def _parse_expressions(self) -> Optional[List[Dict[str, Any]]]:
         if len(self.query_string) == 0:
             return None
@@ -676,8 +728,9 @@ class OpikQueryLanguage:
 
             operator_name = parsed_operator.get("operator", "")
             if operator_name in OPERATORS_WITHOUT_VALUES:
-                # For operators without values, use empty string as value
                 parsed_value = {"value": ""}
+            elif operator_name in ARRAY_VALUE_OPERATORS:
+                parsed_value = self._parse_array_value()
             else:
                 parsed_value = self._parse_value()
 

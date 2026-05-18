@@ -20,19 +20,11 @@ type TraceLogsSidebarButtonProps = {
   sourceFilters?: Filter[];
   variant?: "tag" | "icon";
   title?: string;
-  backLabel?: string;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
   TraceLogsSidebarButtonProps
-> = ({
-  projectId,
-  logsSource,
-  sourceFilters,
-  variant = "tag",
-  title,
-  backLabel,
-}) => {
+> = ({ projectId, logsSource, sourceFilters, variant = "tag", title }) => {
   const [open = false, setOpen] = useQueryParam(
     `${TLS_QUERY_PREFIX}open`,
     BooleanParam,
@@ -101,7 +93,6 @@ const TraceLogsSidebarButton: React.FunctionComponent<
         projectId={projectId}
         logsSource={logsSource}
         title={title}
-        backLabel={backLabel}
       />
     </>
   );

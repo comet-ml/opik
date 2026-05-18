@@ -21,10 +21,10 @@ import CodeHighlighter, {
 } from "@/shared/CodeHighlighter/CodeHighlighter";
 
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
-import CsvUploadDialog from "@/v2/pages-shared/datasets/CsvUploadDialog/CsvUploadDialog";
 import useDatasetForm from "@/v2/pages-shared/datasets/AddEditDatasetDialog/useDatasetForm";
 import useProjectById from "@/api/projects/useProjectById";
 import { useActiveProjectId } from "@/store/AppStore";
@@ -114,11 +114,8 @@ const CreateDatasetSidebar: React.FunctionComponent<
     thresholdInput,
     csvFile,
     csvError,
-    isOverlayShown,
-    setIsOverlayShown,
     confirmOpen,
     setConfirmOpen,
-    isCsvUploadEnabled,
     fileSizeLimit,
     typeLabel,
     submitHandler,
@@ -164,13 +161,16 @@ const CreateDatasetSidebar: React.FunctionComponent<
 
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
+  const isDirty =
+    step !== Step.SUCCESS &&
+    (name.length > 0 ||
+      description.length > 0 ||
+      csvFile !== undefined ||
+      assertions.length > 0);
+
   const handleGoToEntity = useCallback(() => {
     navigateToEntity?.();
   }, [navigateToEntity]);
-
-  const handleOverlayClose = useCallback(() => {
-    setIsOverlayShown(false);
-  }, [setIsOverlayShown]);
 
   const handleCreateAnother = useCallback(() => {
     setStep(Step.NAME_DESCRIPTION);
@@ -239,17 +239,8 @@ const CreateDatasetSidebar: React.FunctionComponent<
       <div className="mb-4">
         <Label className="mb-2 block">Upload CSV</Label>
         <Description className="mb-2 tracking-normal">
-          {isCsvUploadEnabled ? (
-            <>
-              Your CSV file can be up to {fileSizeLimit}MB in size. The file
-              will be processed in the background.
-            </>
-          ) : (
-            <>
-              Your CSV file can contain up to 1,000 rows, for larger {typeLabel}
-              s use the SDK instead.
-            </>
-          )}
+          Your CSV file can be up to {fileSizeLimit}MB in size. The file will be
+          processed in the background.
           <Button variant="link" size="sm" className="h-5 px-1" asChild>
             <a
               href={buildDocsUrl("/evaluation/advanced/manage_datasets")}
@@ -445,9 +436,13 @@ const CreateDatasetSidebar: React.FunctionComponent<
         onClose={handleClose}
         initialWidth={0.35}
         minWidth={450}
-        closeButtonPosition="right"
-        headerContent={
-          <span className="comet-title-xs">{`Create ${entityLabel}`}</span>
+        blockOverlayClose={isDirty}
+        header={
+          <ResizableSidePanelTopBar
+            variant="form"
+            title={`Create ${entityLabel}`}
+            onClose={handleClose}
+          />
         }
       >
         <div className="flex size-full flex-col">
@@ -476,11 +471,6 @@ const CreateDatasetSidebar: React.FunctionComponent<
         description={`This file cannot be uploaded because it does not pass validation. If you continue, the ${typeLabel} will be created without any items. You can add items manually later, or go back and upload a valid file.`}
         cancelText={`Create empty ${typeLabel}`}
         confirmText="Go back"
-      />
-      <CsvUploadDialog
-        open={isOverlayShown}
-        isCsvMode={isCsvUploadEnabled}
-        onClose={handleOverlayClose}
       />
     </>
   );

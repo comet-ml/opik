@@ -53,6 +53,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       page: 1,
       size: 100,
       truncate: true,
+      stripAttachments: true,
     },
     {
       enabled: isProjectId,
@@ -67,6 +68,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
         page: 1,
         size: 10,
         truncate: false,
+        stripAttachments: true,
       },
       {
         enabled: isProjectId,

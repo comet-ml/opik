@@ -32,9 +32,11 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 
 /**
- * This is the base online scorer, for all particular implementations to extend. It listens to a Redis stream for
- * Traces to be scored. Extending classes must provide a particular implementation for the score method.
- * This class extends BaseRedisSubscriber to reuse common Redis stream handling functionality.
+ * Base online scorer for all particular implementations to extend. It listens to a Redis stream for
+ * Traces/Spans/Threads to be scored. Subclasses provide a particular {@link #score(Object)} implementation that
+ * returns a {@link Mono} so the entire processing chain stays non-blocking from Redis read to feedback-score
+ * persistence. The Reactor pipeline owned by {@link BaseRedisSubscriber} schedules execution on the per-stream
+ * worker scheduler; subclasses should NOT call {@code .block()} from {@code score()}.
  */
 public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> {
 
@@ -66,51 +68,53 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
         this.type = type;
     }
 
+    /**
+     * Defers the subscription of {@link #score(Object)} so any synchronous work in implementations
+     * runs at subscription time on the per-stream worker scheduler.
+     */
     @Override
     protected Mono<Void> processEvent(M message) {
-        return Mono.fromRunnable(() -> score(message));
+        return Mono.defer(() -> score(message));
     }
 
     /**
-     * Provide a particular implementation to score the trace and store it as a FeedbackScore.
-     * @param message a Redis message with Trace to score, workspace and username.
+     * Scores the message and persists the resulting feedback scores. Implementations must compose
+     * reactive operators (no {@code .block()}); see {@link #storeScores}, {@link #storeSpanScores},
+     * {@link #storeThreadScores}.
      */
-    protected abstract void score(M message);
+    protected abstract Mono<Void> score(M message);
 
-    protected Map<String, List<BigDecimal>> storeScores(
+    protected Mono<Map<String, List<BigDecimal>>> storeScores(
             List<FeedbackScoreBatchItem> scores, Trace trace, String userName, String workspaceId) {
         log.info("Received '{}' scores for traceId '{}' in workspace '{}'. Storing them",
                 scores.size(), trace.id(), workspaceId);
-        feedbackScoreService.scoreBatchOfTraces(scores)
+        return feedbackScoreService.scoreBatchOfTraces(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block();
-        return scores.stream()
-                .collect(Collectors.groupingBy(FeedbackScoreItem::name,
-                        Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));
+                .thenReturn(groupScoresByName(scores));
     }
 
-    protected Map<String, List<BigDecimal>> storeSpanScores(
+    protected Mono<Map<String, List<BigDecimal>>> storeSpanScores(
             List<FeedbackScoreBatchItem> scores, com.comet.opik.api.Span span, String userName, String workspaceId) {
         log.info("Received '{}' scores for spanId '{}' in workspace '{}'. Storing them",
                 scores.size(), span.id(), workspaceId);
-        feedbackScoreService.scoreBatchOfSpans(scores)
+        return feedbackScoreService.scoreBatchOfSpans(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block();
-        return scores.stream()
-                .collect(Collectors.groupingBy(FeedbackScoreItem::name,
-                        Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));
+                .thenReturn(groupScoresByName(scores));
     }
 
-    protected Map<String, List<BigDecimal>> storeThreadScores(
+    protected Mono<Map<String, List<BigDecimal>>> storeThreadScores(
             List<FeedbackScoreBatchItemThread> scores, String threadId, String userName, String workspaceId) {
         log.info("Received '{}' scores for threadId '{}' in workspace '{}'. Storing them",
                 scores.size(), threadId, workspaceId);
-        feedbackScoreService.scoreBatchOfThreads(scores)
+        return feedbackScoreService.scoreBatchOfThreads(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block();
+                .thenReturn(groupScoresByName(scores));
+    }
+
+    private static <T extends FeedbackScoreItem> Map<String, List<BigDecimal>> groupScoresByName(List<T> scores) {
         return scores.stream()
                 .collect(Collectors.groupingBy(FeedbackScoreItem::name,
                         Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));

@@ -286,12 +286,26 @@ class OpikConfig(pydantic_settings.BaseSettings):
     This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
     """
 
+    environment: Optional[str] = None
+    """
+    Default environment name applied to traces and spans when no explicit
+    ``environment=`` argument is provided.
+    Env var: OPIK_ENVIRONMENT
+    """
+
     suppress_batching_update_warning: bool = False
     """
     Suppress the warning about potential data loss when calling .end() or .update()
     on spans/traces with batching enabled. Set to True if your updates happen well
     after creation and the warning is not relevant.
     Env var: OPIK_SUPPRESS_BATCHING_UPDATE_WARNING
+    """
+
+    prompt_cache_ttl_seconds: pydantic.PositiveInt = 300
+    """
+    TTL in seconds for cached prompts. Controls how long unpinned prompts are kept
+    before being refreshed from the backend. Minimum value is 1.
+    Env var: OPIK_PROMPT_CACHE_TTL_SECONDS
     """
 
     @property

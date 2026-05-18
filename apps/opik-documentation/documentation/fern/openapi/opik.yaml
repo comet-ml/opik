@@ -2027,12 +2027,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not Found - CSV upload feature is disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets/{dataset_id}/items/from-spans:
     post:
       tags:
@@ -5095,12 +5089,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/pairing/sessions:
     post:
       tags:
@@ -5141,12 +5129,6 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "429":
           description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
           content:
             application/json:
               schema:
@@ -6318,6 +6300,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/projects/{projectId}/activities:
+    get:
+      tags:
+      - Projects
+      summary: Get recent activity for a project
+      description: "Returns the most recent activity items across all entity types\
+        \ for a project, sorted by date descending."
+      operationId: getRecentActivity
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Recent activity page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentActivityPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/retention/rules:
     get:
       tags:
@@ -9907,7 +9938,6 @@ components:
     LlmAsJudgeModelParameters:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -9972,6 +10002,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10031,6 +10063,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10055,6 +10089,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10337,7 +10373,6 @@ components:
     LlmAsJudgeModelParameters_Write:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10387,6 +10422,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10446,6 +10483,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10470,6 +10509,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10792,7 +10833,6 @@ components:
     LlmAsJudgeModelParameters_Public:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10857,6 +10897,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10916,6 +10958,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10940,6 +10984,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -11286,6 +11332,8 @@ components:
           $ref: "#/components/schemas/Delta"
         finish_reason:
           type: string
+        logprobs:
+          $ref: "#/components/schemas/LogProbs"
     ChatCompletionResponse:
       type: object
       properties:
@@ -11334,6 +11382,26 @@ components:
           type: string
         arguments:
           type: string
+    LogProb:
+      type: object
+      properties:
+        token:
+          type: string
+        logprob:
+          type: number
+          format: double
+        bytes:
+          type: array
+          items:
+            type: integer
+            format: int32
+    LogProbs:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogProb"
     PromptTokensDetails:
       type: object
       properties:
@@ -11438,6 +11506,11 @@ components:
           type: string
         service_tier:
           type: string
+        logprobs:
+          type: boolean
+        top_logprobs:
+          type: integer
+          format: int32
         functions:
           type: array
           items:
@@ -11802,6 +11875,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -14573,6 +14648,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     Trace:
       required:
       - start_time
@@ -14703,6 +14782,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -14888,6 +14971,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -14937,6 +15024,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
       description: "Please provide either none, only one of evaluate_task_result or\
         \ trace, but never both"
     ValueEntry_ExperimentItemBulkWriteView:
@@ -18428,6 +18519,47 @@ components:
         Note: Prompt versions are immutable by design.
         Only organizational properties (such as tags etc.) can be updated.
         Core properties like template, metadata etc. cannot be modified after creation.
+    RecentActivityItem_Public:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - experiment
+          - dataset_version
+          - test_suite_version
+          - alert_event
+          - optimization
+          - agent_config_version
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        resource_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    RecentActivityPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentActivityItem_Public"
     RetentionRule_Public:
       required:
       - retention
@@ -18528,16 +18660,16 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
-      - collaboratorsTabEnabled
-      - csvUploadEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
+      - demoDataEnabled
       - exportEnabled
       - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
+      - ollieEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -18546,6 +18678,7 @@ components:
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
+      - v1WorkspaceAllowlistIds
       - v2WorkspaceAllowlistIds
       - vertexaiProviderEnabled
       - welcomeWizardEnabled
@@ -18567,8 +18700,6 @@ components:
           type: boolean
         welcomeWizardEnabled:
           type: boolean
-        csvUploadEnabled:
-          type: boolean
         exportEnabled:
           type: boolean
         optimizationStudioEnabled:
@@ -18576,6 +18707,8 @@ components:
         datasetVersioningEnabled:
           type: boolean
         datasetExportEnabled:
+          type: boolean
+        demoDataEnabled:
           type: boolean
         openaiProviderEnabled:
           type: boolean
@@ -18593,9 +18726,17 @@ components:
           type: boolean
         ollamaProviderEnabled:
           type: boolean
-        collaboratorsTabEnabled:
+        ollieEnabled:
+          type: boolean
+        agenticToolsEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
+        v1WorkspaceAllowlistIds:
           uniqueItems: true
           type: array
           items:
@@ -18610,6 +18751,9 @@ components:
           type: integer
           format: int32
         v2WorkspaceAllowlist:
+          type: string
+          writeOnly: true
+        v1WorkspaceAllowlist:
           type: string
           writeOnly: true
     SpanBatchUpdate:
@@ -18731,6 +18875,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ErrorInfo_Write:
       required:
       - exception_type
@@ -18820,6 +18968,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     SpanBatch:
       required:
       - spans
@@ -19019,6 +19171,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ValueEntry_Public:
       type: object
       properties:
@@ -19178,6 +19334,7 @@ components:
             - duration
             - ttft
             - source
+            - environment
         from_time:
           type: string
           description: Filter spans created from this time (ISO-8601 format).
@@ -19280,6 +19437,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -19400,6 +19561,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceBatch:
       required:
       - traces
@@ -19657,6 +19822,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceThread:
       type: object
       properties:
@@ -19719,6 +19888,8 @@ components:
         created_at:
           type: string
           format: date-time
+        environment:
+          type: string
     TraceThreadIdentifier:
       required:
       - thread_id
@@ -19930,6 +20101,7 @@ components:
             - providers
             - experiment
             - source
+            - environment
         from_time:
           type: string
           description: Filter traces created from this time (ISO-8601 format).

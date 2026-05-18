@@ -75,6 +75,24 @@ OQL provides a powerful, SQL-like syntax for filtering data in Opik. It's used w
 'end_time < "2024-12-31T23:59:59Z"';
 ```
 
+### Enum Operators
+
+Used for fields with a fixed set of values, such as `environment`:
+
+```typescript
+// Exact match
+'environment = "production"';
+
+// Not equal
+'environment != "development"';
+
+// Match any of a set of values
+'environment in ("production", "staging")';
+
+// Exclude a set of values
+'environment not_in ("development", "local")';
+```
+
 ### List Operators
 
 ```typescript
@@ -155,6 +173,18 @@ const unratedThreads = await client.searchThreads({
   filterString: 'feedback_scores.quality is_empty'
 });
 
+// Filter by environment
+const prodThreads = await client.searchThreads({
+  projectName: "my-project",
+  filterString: 'environment = "production"'
+});
+
+// Filter by multiple environments
+const stagingOrProdThreads = await client.searchThreads({
+  projectName: "my-project",
+  filterString: 'environment in ("production", "staging")'
+});
+
 // Filter by tags and metadata
 const importantProdThreads = await client.searchThreads({
   projectName: "my-project",
@@ -185,6 +215,18 @@ const traces = await client.searchTraces({
 const goodTraces = await client.searchTraces({
   projectName: "my-project",
   filterString: 'feedback_scores.accuracy > 0.9'
+});
+
+// Filter by environment
+const prodTraces = await client.searchTraces({
+  projectName: "my-project",
+  filterString: 'environment = "production"'
+});
+
+// Combine environment with other filters
+const goodProdTraces = await client.searchTraces({
+  projectName: "my-project",
+  filterString: 'environment = "production" AND feedback_scores.accuracy > 0.9'
 });
 ```
 

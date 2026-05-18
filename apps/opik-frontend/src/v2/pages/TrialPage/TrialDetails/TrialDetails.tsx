@@ -98,7 +98,6 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
             logsSource={LOGS_SOURCE.optimization}
             sourceFilters={generateExperimentIdFilter(experiment.id)}
             title="Optimization logs"
-            backLabel="Back to trial"
           />
         )}
       </div>

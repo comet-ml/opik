@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { UpdateService } from "@/tracer/UpdateService";
 import { Prompt } from "@/prompt/Prompt";
+import { ChatPrompt } from "@/prompt/ChatPrompt";
 
 const makePrompt = (
   name: string,
@@ -15,7 +16,24 @@ const makePrompt = (
     versionId,
     commit,
     prompt: template,
+    templateStructure: "text",
   }) as unknown as Prompt;
+
+const makeChatPrompt = (
+  name: string,
+  messages: { role: string; content: string }[],
+  id = "chat-prompt-id",
+  versionId = "chat-version-id",
+  commit = "chat1234"
+) =>
+  ({
+    name,
+    id,
+    versionId,
+    commit,
+    messages,
+    templateStructure: "chat",
+  }) as unknown as ChatPrompt;
 
 describe("UpdateService", () => {
   describe("processTraceUpdate with prompts", () => {
@@ -28,6 +46,7 @@ describe("UpdateService", () => {
           {
             name: "my-prompt",
             id: "prompt-id",
+            template_structure: "text",
             version: { id: "version-id", commit: "abc12345", template: "Answer: {{q}}" },
           },
         ],
@@ -109,6 +128,7 @@ describe("UpdateService", () => {
         versionId: undefined,
         commit: undefined,
         prompt: "template",
+        templateStructure: "text",
       } as unknown as Prompt;
 
       const result = UpdateService.processTraceUpdate({ prompts: [prompt] });
@@ -195,6 +215,7 @@ describe("UpdateService", () => {
           {
             name: "my-prompt",
             id: "prompt-id",
+            template_structure: "text",
             version: { id: "version-id", commit: "abc12345", template: "Answer: {{q}}" },
           },
         ],
@@ -331,6 +352,103 @@ describe("UpdateService", () => {
       expect(result.metadata).toEqual({
         initial: "yes",
         updated: "yes",
+      });
+    });
+  });
+
+  describe("processTraceUpdate with chat prompts", () => {
+    it("should serialize chat prompt with messages and template_structure", () => {
+      const chatPrompt = makeChatPrompt("assistant-prompt", [
+        { role: "system", content: "You are helpful" },
+        { role: "user", content: "Hello {{name}}" },
+      ]);
+      const result = UpdateService.processTraceUpdate({ prompts: [chatPrompt] });
+
+      expect(result.metadata).toEqual({
+        opik_prompts: [
+          {
+            name: "assistant-prompt",
+            id: "chat-prompt-id",
+            template_structure: "chat",
+            version: {
+              id: "chat-version-id",
+              commit: "chat1234",
+              template: [
+                { role: "system", content: "You are helpful" },
+                { role: "user", content: "Hello {{name}}" },
+              ],
+            },
+          },
+        ],
+      });
+    });
+
+    it("should serialize chat prompt with no id or commit", () => {
+      const chatPrompt = makeChatPrompt(
+        "bare-chat",
+        [{ role: "user", content: "Hi" }],
+        undefined as unknown as string,
+        undefined as unknown as string,
+        undefined as unknown as string
+      );
+
+      const result = UpdateService.processTraceUpdate({ prompts: [chatPrompt] });
+      const opikPrompts = (result.metadata as Record<string, unknown>).opik_prompts as { name: string; template_structure: string; version: { template: unknown } }[];
+
+      expect(opikPrompts[0].name).toBe("bare-chat");
+      expect(opikPrompts[0].template_structure).toBe("chat");
+      expect(opikPrompts[0].version.template).toEqual([{ role: "user", content: "Hi" }]);
+    });
+
+    it("should serialize mixed text and chat prompts together", () => {
+      const textPrompt = makePrompt("text-p", "Answer: {{q}}");
+      const chatPrompt = makeChatPrompt("chat-p", [
+        { role: "user", content: "Help with {{task}}" },
+      ]);
+      const result = UpdateService.processTraceUpdate({ prompts: [textPrompt, chatPrompt] });
+
+      const opikPrompts = (result.metadata as Record<string, unknown>).opik_prompts as { name: string; template_structure: string }[];
+      expect(opikPrompts).toHaveLength(2);
+      expect(opikPrompts[0].name).toBe("text-p");
+      expect(opikPrompts[0].template_structure).toBe("text");
+      expect(opikPrompts[1].name).toBe("chat-p");
+      expect(opikPrompts[1].template_structure).toBe("chat");
+    });
+  });
+
+  describe("processSpanUpdate with chat prompts", () => {
+    it("should serialize chat prompt into metadata.opik_prompts", () => {
+      const chatPrompt = makeChatPrompt("span-chat", [
+        { role: "system", content: "Be concise" },
+      ]);
+      const result = UpdateService.processSpanUpdate({ prompts: [chatPrompt] });
+
+      expect(result.metadata).toEqual({
+        opik_prompts: [
+          {
+            name: "span-chat",
+            id: "chat-prompt-id",
+            template_structure: "chat",
+            version: {
+              id: "chat-version-id",
+              commit: "chat1234",
+              template: [{ role: "system", content: "Be concise" }],
+            },
+          },
+        ],
+      });
+    });
+
+    it("should merge chat prompts with existing metadata", () => {
+      const chatPrompt = makeChatPrompt("chat-p", [{ role: "user", content: "Hi" }]);
+      const result = UpdateService.processSpanUpdate(
+        { prompts: [chatPrompt] },
+        { existingKey: "value" }
+      );
+
+      expect(result.metadata).toMatchObject({
+        existingKey: "value",
+        opik_prompts: expect.any(Array),
       });
     });
   });

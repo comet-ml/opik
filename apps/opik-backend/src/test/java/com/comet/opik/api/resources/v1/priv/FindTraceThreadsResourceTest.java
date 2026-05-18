@@ -291,8 +291,8 @@ class FindTraceThreadsResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
-                                case LIST -> {
-                                    // For LIST fields, skip invalid value tests for NO_VALUE_OPERATORS
+                                case LIST, ENUM -> {
+                                    // For LIST, ENUM fields, skip invalid value tests for NO_VALUE_OPERATORS
                                     // because these operators don't care about the value
                                     if (Operator.NO_VALUE_OPERATORS.contains(operator)) {
                                         yield Stream.empty();
@@ -442,6 +442,7 @@ class FindTraceThreadsResourceTest {
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
                     .status(TraceThreadStatus.ACTIVE)
+                    .environment(traces.getFirst().environment())
                     .build());
 
             Map<String, String> queryParams = Map.of("page", "1", "size", "5", "truncate", String.valueOf(truncate));
@@ -828,6 +829,191 @@ class FindTraceThreadsResourceTest {
             } else {
                 assertTheadStream(projectName, null, API_KEY, TEST_WORKSPACE, expectedThreads, List.of(filter));
             }
+        }
+
+        private List<Trace> buildTracesForThread(String projectName, String threadId, String environment, int count) {
+            return IntStream.range(0, count)
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .usage(null)
+                                .threadId(threadId)
+                                .environment(environment)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .toList();
+        }
+
+        @Test
+        @DisplayName("When filtering threads by environment EQUAL, returns only threads whose traces match")
+        void whenFilterByEnvironmentEqual__thenReturnMatchingThreads() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var matchingThreadId = UUID.randomUUID().toString();
+            var otherThreadId = UUID.randomUUID().toString();
+
+            var matchingTraces = buildTracesForThread(projectName, matchingThreadId, "production", 3);
+            var otherTraces = buildTracesForThread(projectName, otherThreadId, "staging", 3);
+
+            traceResourceClient.batchCreateTraces(matchingTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(otherTraces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThreads = getExpectedThreads(matchingTraces, projectId, matchingThreadId, List.of(),
+                    TraceThreadStatus.ACTIVE);
+
+            var filter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ENVIRONMENT)
+                    .operator(Operator.EQUAL)
+                    .value("production")
+                    .build();
+
+            assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("When filtering threads by environment IS_EMPTY, returns Untagged threads")
+        void whenFilterByEnvironmentIsEmpty__thenReturnUntaggedThreads() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var untaggedThreadId = UUID.randomUUID().toString();
+            var taggedThreadId = UUID.randomUUID().toString();
+
+            var untaggedTraces = buildTracesForThread(projectName, untaggedThreadId, "", 3);
+            var taggedTraces = buildTracesForThread(projectName, taggedThreadId, "production", 3);
+
+            traceResourceClient.batchCreateTraces(untaggedTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(taggedTraces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThreads = getExpectedThreads(untaggedTraces, projectId, untaggedThreadId, List.of(),
+                    TraceThreadStatus.ACTIVE);
+
+            var filter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ENVIRONMENT)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("When filtering threads by environment NOT_EQUAL, excludes threads whose traces match")
+        void whenFilterByEnvironmentNotEqual__thenExcludeMatchingThreads() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var excludedThreadId = UUID.randomUUID().toString();
+            var keptThreadId = UUID.randomUUID().toString();
+
+            var excludedTraces = buildTracesForThread(projectName, excludedThreadId, "production", 3);
+            var keptTraces = buildTracesForThread(projectName, keptThreadId, "staging", 3);
+
+            traceResourceClient.batchCreateTraces(excludedTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(keptTraces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThreads = getExpectedThreads(keptTraces, projectId, keptThreadId, List.of(),
+                    TraceThreadStatus.ACTIVE);
+
+            var filter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ENVIRONMENT)
+                    .operator(Operator.NOT_EQUAL)
+                    .value("production")
+                    .build();
+
+            assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("When filtering threads by environment IS_NOT_EMPTY, excludes Untagged threads")
+        void whenFilterByEnvironmentIsNotEmpty__thenExcludeUntaggedThreads() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var untaggedThreadId = UUID.randomUUID().toString();
+            var taggedThreadId = UUID.randomUUID().toString();
+
+            var untaggedTraces = buildTracesForThread(projectName, untaggedThreadId, "", 3);
+            var taggedTraces = buildTracesForThread(projectName, taggedThreadId, "production", 3);
+
+            traceResourceClient.batchCreateTraces(untaggedTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(taggedTraces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThreads = getExpectedThreads(taggedTraces, projectId, taggedThreadId, List.of(),
+                    TraceThreadStatus.ACTIVE);
+
+            var filter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ENVIRONMENT)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("When filtering threads by environment IN, returns threads matching any of the values")
+        void whenFilterByEnvironmentIn__thenReturnMatchingThreads() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var devThreadId = UUID.randomUUID().toString();
+            var stagingThreadId = UUID.randomUUID().toString();
+            var prodThreadId = UUID.randomUUID().toString();
+
+            var devTraces = buildTracesForThread(projectName, devThreadId, "development", 2);
+            var stagingTraces = buildTracesForThread(projectName, stagingThreadId, "staging", 2);
+            var prodTraces = buildTracesForThread(projectName, prodThreadId, "production", 2);
+
+            traceResourceClient.batchCreateTraces(devTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(stagingTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(prodTraces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThreads = Stream.concat(
+                    getExpectedThreads(stagingTraces, projectId, stagingThreadId, List.of(),
+                            TraceThreadStatus.ACTIVE).stream(),
+                    getExpectedThreads(devTraces, projectId, devThreadId, List.of(),
+                            TraceThreadStatus.ACTIVE).stream())
+                    .toList();
+
+            var filter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ENVIRONMENT)
+                    .operator(Operator.IN)
+                    .value("development,staging")
+                    .build();
+
+            assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("When filtering threads by environment NOT_IN, returns threads with envs outside the predefined set")
+        void whenFilterByEnvironmentNotIn__thenReturnUnknownEnvThreads() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var devThreadId = UUID.randomUUID().toString();
+            var stagingThreadId = UUID.randomUUID().toString();
+            var prodThreadId = UUID.randomUUID().toString();
+            var customThreadId = UUID.randomUUID().toString();
+
+            var devTraces = buildTracesForThread(projectName, devThreadId, "development", 2);
+            var stagingTraces = buildTracesForThread(projectName, stagingThreadId, "staging", 2);
+            var prodTraces = buildTracesForThread(projectName, prodThreadId, "production", 2);
+            var customTraces = buildTracesForThread(projectName, customThreadId, "qa", 2);
+
+            traceResourceClient.batchCreateTraces(devTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(stagingTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(prodTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(customTraces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThreads = getExpectedThreads(customTraces, projectId, customThreadId, List.of(),
+                    TraceThreadStatus.ACTIVE);
+
+            var filter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ENVIRONMENT)
+                    .operator(Operator.NOT_IN)
+                    .value("development,staging,production")
+                    .build();
+
+            assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
         }
 
         @ParameterizedTest
@@ -1255,6 +1441,8 @@ class FindTraceThreadsResourceTest {
                         .lastUpdatedAt(
                                 expectedTraces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).orElseThrow()
                                         .lastUpdatedAt())
+                        .environment(expectedTraces.stream().min(Comparator.comparing(Trace::id)).orElseThrow()
+                                .environment())
                         .build());
     }
 

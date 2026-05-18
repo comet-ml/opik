@@ -21,12 +21,14 @@ import TagList from "../TagList/TagList";
 import MessagesTab from "./MessagesTab";
 import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
+import ErrorCallout from "./ErrorCallout";
 import AgentConfigurationTab, {
   isAgentConfigurationMetadata,
 } from "./AgentConfigurationTab";
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import { formatDate } from "@/lib/date";
 import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
+import EnvironmentLabel from "@/shared/EnvironmentLabel/EnvironmentLabel";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import {
@@ -171,15 +173,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
         </div>
       )}
       <div className="min-w-[400px] max-w-full overflow-x-hidden p-4">
-        <div className="mb-6 flex flex-col gap-1">
-          <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
+        <div className="mb-4 flex flex-col gap-1">
+          <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-foreground">
             {created_at && (
               <TooltipWrapper content={`Created at: ${created_at}`}>
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-created-at"
                 >
-                  <Calendar className="size-3 shrink-0" /> {created_at}
+                  <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
+                  {created_at}
                 </div>
               </TooltipWrapper>
             )}
@@ -193,10 +196,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             {Boolean(data.feedback_scores?.length) && (
               <FeedbackScoreHoverCard scores={data.feedback_scores!}>
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-scores"
                 >
-                  <PenLine className="size-3 shrink-0" />{" "}
+                  <PenLine className="size-3.5 shrink-0 text-muted-slate" />{" "}
                   {data.feedback_scores!.length}
                 </div>
               </FeedbackScoreHoverCard>
@@ -208,10 +211,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   scores={traceData.span_feedback_scores!}
                 >
                   <div
-                    className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                    className="comet-body-s flex items-center gap-1 text-foreground"
                     data-testid="data-viewer-span-scores"
                   >
-                    <PenLine className="size-3 shrink-0" />{" "}
+                    <PenLine className="size-3.5 shrink-0 text-muted-slate" />{" "}
                     {traceData.span_feedback_scores!.length} span scores
                   </div>
                 </FeedbackScoreHoverCard>
@@ -219,10 +222,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-comments"
                 >
-                  <MessageSquareMore className="size-3 shrink-0" />{" "}
+                  <MessageSquareMore className="size-3.5 shrink-0 text-muted-slate" />{" "}
                   {data.comments.length}
                 </div>
               </UserCommentHoverList>
@@ -234,15 +237,21 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 }`}
               >
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-provider-model"
                 >
-                  <Brain className="size-3 shrink-0" />{" "}
+                  <Brain className="size-3.5 shrink-0 text-muted-slate" />{" "}
                   <div className="truncate">
                     {provider} {model}
                   </div>
                 </div>
               </TooltipWrapper>
+            )}
+            {data.environment && (
+              <EnvironmentLabel
+                name={data.environment}
+                className="comet-body-s text-foreground"
+              />
             )}
           </div>
           <TagList
@@ -258,21 +267,23 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           />
         </div>
 
+        <ErrorCallout error={data.error_info} search={search} />
+
         <Tabs
           defaultValue={defaultTab}
           value={selectedTab!}
           onValueChange={setTab}
         >
-          <TabsList variant="underline">
+          <TabsList variant="segmented">
             {canShowMessagesTab && (
-              <TabsTrigger variant="underline" value="messages">
+              <TabsTrigger variant="segmented" value="messages">
                 Messages
               </TabsTrigger>
             )}
-            <TabsTrigger variant="underline" value="details">
+            <TabsTrigger variant="segmented" value="details">
               Details
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="feedback_scores">
+            <TabsTrigger variant="segmented" value="feedback_scores">
               Feedback scores
               <ExplainerIcon
                 className="ml-1"
@@ -280,12 +291,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               />
             </TabsTrigger>
             {hasSpanAgentGraph && (
-              <TabsTrigger variant="underline" value="graph">
+              <TabsTrigger variant="segmented" value="graph">
                 Agent graph
               </TabsTrigger>
             )}
             {hasAgentConfiguration && (
-              <TabsTrigger variant="underline" value="configuration">
+              <TabsTrigger variant="segmented" value="configuration">
                 Configuration
               </TabsTrigger>
             )}
@@ -309,7 +320,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
                 <ConfigurableFeedbackScoreTable
                   title={isTrace ? "Trace scores" : "Span scores"}

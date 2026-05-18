@@ -31,6 +31,7 @@ TraceSearchStreamRequestPublicExcludeItem = typing.Union[
         "providers",
         "experiment",
         "source",
+        "environment",
     ],
     typing.Any,
 ]

@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.EnvironmentsResourceClient;
+import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.fasterxml.uuid.Generators;
@@ -21,6 +22,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -96,6 +99,17 @@ class EnvironmentsResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    @AfterEach
+    void cleanupSharedWorkspaceEnvironments() {
+        try (var response = environmentsClient.callFind(API_KEY, WORKSPACE_NAME)) {
+            var page = response.readEntity(Environment.EnvironmentPage.class);
+            Set<UUID> ids = page.content().stream().map(Environment::id).collect(Collectors.toSet());
+            if (!ids.isEmpty()) {
+                environmentsClient.callBatchDelete(ids, API_KEY, WORKSPACE_NAME).close();
+            }
+        }
     }
 
     private static String randomEnvName() {
@@ -161,16 +175,20 @@ class EnvironmentsResourceTest {
         }
 
         @Test
-        @DisplayName("create with only name uses defaults: color='default', position=0, description=null")
+        @DisplayName("create with only name picks a palette color, position=0, description=null")
         void createWithDefaults() {
             var input = Environment.builder().name(randomEnvName()).build();
-            var expected = input.toBuilder().color("default").position(0).build();
+            var expected = input.toBuilder()
+                    .color(EnvironmentService.pickAutoColor(input.name()))
+                    .position(0)
+                    .build();
 
             UUID id = environmentsClient.createEnvironment(input, API_KEY, WORKSPACE_NAME);
 
             try (var response = environmentsClient.callGet(id, API_KEY, WORKSPACE_NAME)) {
                 var fetched = response.readEntity(Environment.class);
                 assertCreatedMatches(fetched, expected);
+                assertThat(fetched.color()).isIn(EnvironmentService.AUTO_COLORS);
             }
         }
 
@@ -256,8 +274,8 @@ class EnvironmentsResourceTest {
             String capWorkspaceId = UUID.randomUUID().toString();
             mockIsolatedWorkspace(capApiKey, capWorkspaceName, capWorkspaceId);
 
-            // default max is 20 — fill the workspace then attempt one more
-            IntStream.range(0, 20).forEach(i -> environmentsClient.createEnvironment(
+            // test cap from config-test.yml — fill the workspace then attempt one more
+            IntStream.range(0, 5).forEach(i -> environmentsClient.createEnvironment(
                     buildEnvironment(), capApiKey, capWorkspaceName));
 
             try (var response = environmentsClient.callCreate(buildEnvironment(), capApiKey, capWorkspaceName)) {

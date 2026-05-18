@@ -16,6 +16,8 @@ TraceFilterWriteOperator = typing.Union[
         "<=",
         "is_empty",
         "is_not_empty",
+        "in",
+        "not_in",
     ],
     typing.Any,
 ]

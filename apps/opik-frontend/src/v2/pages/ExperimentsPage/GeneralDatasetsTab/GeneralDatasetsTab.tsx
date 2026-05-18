@@ -22,9 +22,8 @@ import isObject from "lodash/isObject";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import IdCell from "@/shared/DataTableCells/IdCell";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
@@ -32,7 +31,6 @@ import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
-import Loader from "@/shared/Loader/Loader";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import { isTestSuiteExperiment } from "@/lib/experiments";
@@ -58,7 +56,6 @@ import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowAc
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
-import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { Card } from "@/ui/card";
 import useGroupedExperimentsList, {
@@ -85,6 +82,9 @@ import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWra
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
 import { Skeleton } from "@/ui/skeleton";
 
@@ -148,11 +148,11 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 type GeneralDatasetsTabProps = {
-  onNewExperimentClick?: () => void;
+  isExistencePending?: boolean;
 };
 
 const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
-  onNewExperimentClick,
+  isExistencePending = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
@@ -206,13 +206,12 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: ITEM_SOURCE_LABEL,
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
         },
       },
       {
@@ -414,6 +413,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [data?.aggregationMap],
   );
 
+  const datasetTypeMap = useMemo(
+    () => data?.datasetTypeMap ?? {},
+    [data?.datasetTypeMap],
+  );
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -424,10 +428,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
   });
 
   const total = data?.total ?? 0;
-  const noData = !search && filters.length === 0;
-  const noDataText = noData
-    ? "There are no experiments yet"
-    : "No search results";
 
   const {
     columns,
@@ -456,6 +456,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
+    datasetTypeMap,
   });
 
   const handleRowClick = useCallback(
@@ -475,6 +476,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [navigate, workspaceName, activeProjectId],
   );
 
+  const handleClearFilters = useCallback(() => {
+    setSearch(undefined);
+    setFilters([]);
+  }, [setSearch, setFilters]);
+
   const hasGroups = Boolean(groups.length);
 
   const renderCustomRowCallback = useCallback(
@@ -484,14 +490,10 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [setGroupLimit],
   );
 
-  // Filter out name and dataset columns when grouping by dataset
+  // Name becomes the grouping anchor when any grouping is active and is rendered
+  // by the group cell, so hide it from the columns menu in that case.
   const availableColumns = useMemo(() => {
-    const isGroupingByDataset = groups.some(
-      (g) => g.field === COLUMN_DATASET_ID,
-    );
-
     return columnsDef.filter((col) => {
-      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
       if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
       return true;
     });
@@ -518,7 +520,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           id: datasetId,
           name: [
             {
-              label: "Test suite",
+              label: ITEM_SOURCE_LABEL,
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -555,11 +557,17 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                   undefined,
                 );
 
+                const groupField = groups[index]?.field;
+                const groupLabel =
+                  groupField === COLUMN_DATASET_ID
+                    ? ITEM_SOURCE_LABEL
+                    : calculateGroupLabel(groups[index]);
+
                 return {
-                  label: calculateGroupLabel(groups[index]),
+                  label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted test suite"
+                      ? "Deleted dataset"
                       : label || value || "Undefined",
                 };
               }),
@@ -629,38 +637,40 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     groupFieldNames,
   ]);
 
-  if (
+  const isTableLoading =
+    isExistencePending ||
     isPending ||
     isFeedbackScoresPending ||
-    (isPlaceholderData && experiments.length === 0)
-  ) {
-    return <Loader />;
-  }
+    (isPlaceholderData && experiments.length === 0);
 
   return (
     <>
-      {Boolean(experiments.length) && (
+      {(isTableLoading || experiments.length > 0) && (
         <PageBodyStickyContainer
           direction="horizontal"
           className="-mb-2 pt-4"
           limitWidth
         >
-          <FeedbackScoresChartsWrapper
-            chartsData={chartsData}
-            noDataComponent={
-              <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
-                <ChartLine className="size-4 shrink-0 text-light-slate" />
-                <div className="comet-body-s-accented text-foreground">
-                  No charts to show
-                </div>
-                <div className="comet-body-s text-muted-slate">
-                  Please expand a group to see its chart. You can expand up to{" "}
-                  {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
-                </div>
-              </Card>
-            }
-            areAggregatedScores
-          />
+          {isTableLoading ? (
+            <Skeleton className="h-[208px] w-full min-w-[400px] rounded-md" />
+          ) : (
+            <FeedbackScoresChartsWrapper
+              chartsData={chartsData}
+              noDataComponent={
+                <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
+                  <ChartLine className="size-4 shrink-0 text-light-slate" />
+                  <div className="comet-body-s-accented text-foreground">
+                    No charts to show
+                  </div>
+                  <div className="comet-body-s text-muted-slate">
+                    Please expand a group to see its chart. You can expand up to{" "}
+                    {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
+                  </div>
+                </Card>
+              }
+              areAggregatedScores
+            />
+          )}
         </PageBodyStickyContainer>
       )}
       <PageBodyStickyContainer
@@ -733,18 +743,17 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
         noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={onNewExperimentClick}>
-                Create experiment
-              </Button>
-            )}
-          </DataTableNoData>
+          <DataTableNoMatchingData
+            onClearFilters={
+              search || filters.length > 0 ? handleClearFilters : undefined
+            }
+          />
         }
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

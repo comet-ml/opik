@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { AssistantMessage } from "./AssistantMessage.js";
 import { Delta } from "./Delta.js";
+import { LogProbs } from "./LogProbs.js";
 
 export const ChatCompletionChoice: core.serialization.ObjectSchema<
     serializers.ChatCompletionChoice.Raw,
@@ -14,6 +15,7 @@ export const ChatCompletionChoice: core.serialization.ObjectSchema<
     message: AssistantMessage.optional(),
     delta: Delta.optional(),
     finishReason: core.serialization.property("finish_reason", core.serialization.string().optional()),
+    logprobs: LogProbs.optional(),
 });
 
 export declare namespace ChatCompletionChoice {
@@ -22,5 +24,6 @@ export declare namespace ChatCompletionChoice {
         message?: AssistantMessage.Raw | null;
         delta?: Delta.Raw | null;
         finish_reason?: string | null;
+        logprobs?: LogProbs.Raw | null;
     }
 }

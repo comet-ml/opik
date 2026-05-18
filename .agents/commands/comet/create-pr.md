@@ -101,6 +101,7 @@ This workflow will:
     ```bash
     git push --force-with-lease   # after rebase
     ```
+  - **Post-push: sync PR description.** If an open PR exists for this branch, invoke the `_pr-description-sync` sub-skill (`.agents/commands/comet/_pr-description-sync.md`) with `branch = git rev-parse --abbrev-ref HEAD`. The sub-skill is a no-op when no PR exists, when the description is already in sync, or when the user has opted out of refreshes for this repo.
 
 ---
 
@@ -108,8 +109,8 @@ This workflow will:
 
 - **Search existing PRs**: Use GitHub CLI when available (for example `gh pr list --head <branch> --state open`); if CLI is unavailable, use GitHub MCP fallback.
 - **If PR exists**: Show existing PR and ask:
-  > "PR already exists for this branch: <PR_URL>. Do you want to update the PR description and continue with the flow (quality checks, Jira status, progress comment)? (y/n)"
-  - **If yes**: Update PR description using the pre-filled template (Step 7 output), then continue with Steps 5–11 as usual
+  > "PR already exists for this branch: <PR_URL>. Continue with the flow (quality checks, Jira status, progress comment)? (y/n)"
+  - **If yes**: Continue with Steps 5–11. The `_pr-description-sync` sub-skill ran at the end of Step 3 — it refreshed the description if needed (no-op when the body was already in sync, the user opted out for this repo, or `gh` was unavailable). Either way, do not attempt a second refresh here.
   - **If no**: Stop the flow
 - **If no PR exists**: Continue to PR creation
 

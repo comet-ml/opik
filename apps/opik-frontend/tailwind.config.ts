@@ -98,8 +98,10 @@ module.exports = {
         "toggle-outline-active": "var(--toggle-outline-active)",
         "diff-removed-bg": "var(--diff-removed-bg)",
         "diff-removed-text": "var(--diff-removed-text)",
+        "diff-removed-border": "var(--diff-removed-border)",
         "diff-added-bg": "var(--diff-added-bg)",
         "diff-added-text": "var(--diff-added-text)",
+        "diff-added-border": "var(--diff-added-border)",
         "upload-icon-bg": "hsl(var(--upload-icon-bg))",
         "code-block": "var(--code-block)",
         "special-button": "var(--special-button)",
@@ -130,6 +132,7 @@ module.exports = {
         "chart-purple": "var(--chart-purple)",
         "chart-pink": "var(--chart-pink)",
         "chart-orange": "var(--chart-orange)",
+        "chart-teal": "var(--chart-teal)",
         "chart-gray-light": "var(--chart-gray-light)",
         "chart-gray-dark": "var(--chart-gray-dark)",
 

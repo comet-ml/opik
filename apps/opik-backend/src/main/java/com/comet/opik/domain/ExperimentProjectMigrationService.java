@@ -3,10 +3,12 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Project;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.ExperimentProjectMigrationConfig;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.google.common.collect.Lists;
+import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -20,13 +22,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -37,7 +39,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 @Slf4j
 @Singleton
-public class ExperimentProjectMigrationService {
+public class ExperimentProjectMigrationService implements Managed {
 
     public static final String METRIC_NAMESPACE = "opik.migration.experiment_project";
 
@@ -50,29 +52,32 @@ public class ExperimentProjectMigrationService {
     private static final Attributes RESULT_ALL_SKIPPED = Attributes.of(RESULT_KEY, "all_skipped_deleted_project");
     private static final Attributes SKIP_REASON_DELETED_PROJECT = Attributes.of(stringKey("reason"), "deleted_project");
 
-    /**
-     * Process-local set of workspaces whose only certain experiments point to deleted projects.
-     * Without this, every cycle would re-attempt the same workspaces and run an expensive
-     * 3-table JOIN for nothing. The set is reset on JVM restart, so a redeployed process retries
-     * each previously-trapped workspace once before re-trapping it. Operators can permanently ban
-     * a workspace via the {@code migration.excludedWorkspaceIds} config.
-     */
-    private static final Set<String> TRAPPED_WORKSPACE_IDS = ConcurrentHashMap.newKeySet();
+    private static final String TRAPPED_REASON_DELETED_PROJECT = "deleted_project";
 
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull ProjectService projectService;
     private final @NonNull ExperimentAggregationPublisher experimentAggregationPublisher;
     private final @NonNull WorkspaceVersionService workspaceVersionService;
+    private final @NonNull WorkspacesService workspacesService;
     private final @NonNull ExperimentProjectMigrationConfig config;
     private final @NonNull MigrationConfig migrationConfig;
     private final @NonNull ExperimentDenormalizationConfig denormalizationConfig;
 
     private final LongHistogram cycleEligibleWorkspaces;
     private final LongGauge cycleTrappedWorkspaces;
+    private final LongGauge cycleEnvExcludedWorkspaces;
     private final LongHistogram workspaceDuration;
     private final LongCounter experimentsSkipped;
     private final LongHistogram batchSize;
+
+    /**
+     * Dedicated bounded-elastic scheduler isolating the migration's blocking JDBC work and
+     * its post-collect CPU-heavy lambdas from the shared {@link Schedulers#boundedElastic()}
+     * and from the reactive client (R2DBC/Redisson) event loops. Sized for the sequential
+     * concatMap flow; daemon threads so JVM shutdown is never blocked by the migration pool.
+     */
+    private volatile Scheduler migrationScheduler;
 
     @Inject
     public ExperimentProjectMigrationService(
@@ -81,6 +86,7 @@ public class ExperimentProjectMigrationService {
             @NonNull ProjectService projectService,
             @NonNull ExperimentAggregationPublisher experimentAggregationPublisher,
             @NonNull WorkspaceVersionService workspaceVersionService,
+            @NonNull WorkspacesService workspacesService,
             @NonNull @Config("experimentProjectMigration") ExperimentProjectMigrationConfig config,
             @NonNull @Config("migration") MigrationConfig migrationConfig,
             @NonNull @Config("experimentDenormalization") ExperimentDenormalizationConfig denormalizationConfig) {
@@ -89,6 +95,7 @@ public class ExperimentProjectMigrationService {
         this.projectService = projectService;
         this.experimentAggregationPublisher = experimentAggregationPublisher;
         this.workspaceVersionService = workspaceVersionService;
+        this.workspacesService = workspacesService;
         this.config = config;
         this.migrationConfig = migrationConfig;
         this.denormalizationConfig = denormalizationConfig;
@@ -103,6 +110,12 @@ public class ExperimentProjectMigrationService {
                 .gaugeBuilder("%s.cycle.trapped_workspaces".formatted(METRIC_NAMESPACE))
                 .setDescription(
                         "Number of workspaces locally skipped because all their certain experiments point to deleted projects")
+                .ofLongs()
+                .build();
+        this.cycleEnvExcludedWorkspaces = meter
+                .gaugeBuilder("%s.cycle.env_excluded_workspaces".formatted(METRIC_NAMESPACE))
+                .setDescription(
+                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var. Mirrors trapped_workspaces so the dashboard can show both exclusion paths side by side.")
                 .ofLongs()
                 .build();
         this.workspaceDuration = meter
@@ -122,31 +135,69 @@ public class ExperimentProjectMigrationService {
                 .build();
     }
 
+    @Override
+    public void start() {
+        if (migrationScheduler == null) {
+            migrationScheduler = Schedulers.newBoundedElastic(
+                    config.schedulerThreadCap(),
+                    config.schedulerQueuedTaskCap(),
+                    "experiment-project-migration-service",
+                    (int) config.schedulerThreadTtl().toJavaDuration().toSeconds(),
+                    true);
+            log.info(
+                    "Initialized experiment project migration scheduler, threadCap='{}', queuedTaskCap='{}', threadTtl='{}'",
+                    config.schedulerThreadCap(), config.schedulerQueuedTaskCap(), config.schedulerThreadTtl());
+        }
+    }
+
+    @Override
+    public void stop() {
+        if (migrationScheduler != null && !migrationScheduler.isDisposed()) {
+            migrationScheduler.dispose();
+            log.info("Experiment project migration scheduler disposed");
+        }
+    }
+
     public Mono<Void> runMigrationCycle() {
-        cycleTrappedWorkspaces.set(TRAPPED_WORKSPACE_IDS.size());
-        log.info(
-                "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}'",
-                config.workspacesPerRun(), config.experimentBatchSize(), TRAPPED_WORKSPACE_IDS.size());
-        var excludedWorkspaceIds = Stream.concat(
-                migrationConfig.getExcludedWorkspaceIds().stream(),
-                TRAPPED_WORKSPACE_IDS.stream())
-                .collect(Collectors.toUnmodifiableSet());
-        return experimentDAO.findEligibleExperimentWorkspaces(excludedWorkspaceIds, config.workspacesPerRun())
-                .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, ""))
-                .collectList()
-                .flatMapMany(eligibleWorkspaces -> {
-                    cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
-                    if (CollectionUtils.isEmpty(eligibleWorkspaces)) {
-                        log.info("No workspaces with eligible experiments found, consider disabling the job");
-                        return Flux.empty();
-                    }
-                    log.info("Found workspaces with eligible experiments, count='{}'", eligibleWorkspaces.size());
-                    return Flux.fromIterable(eligibleWorkspaces)
-                            .concatMap(workspace -> migrateWorkspace(
-                                    workspace.workspaceId(),
-                                    workspace.experimentsCount(),
-                                    config.experimentBatchSize()));
-                })
+        return Mono.fromCallable(() -> {
+            var skippedWorkspaceIds = workspacesService.findMigrationSkippedWorkspaceIds();
+            var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
+            cycleTrappedWorkspaces.set(skippedWorkspaceIds.size());
+            cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
+            log.info(
+                    "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}', envExcludedWorkspaces='{}'",
+                    config.workspacesPerRun(), config.experimentBatchSize(), skippedWorkspaceIds.size(),
+                    envExcludedWorkspaceIds.size());
+            return Stream.concat(
+                    envExcludedWorkspaceIds.stream(),
+                    skippedWorkspaceIds.stream())
+                    .collect(Collectors.toUnmodifiableSet());
+        })
+                .subscribeOn(migrationScheduler)
+                .flatMapMany(excludedWorkspaceIds -> experimentDAO
+                        .findEligibleExperimentWorkspaces(excludedWorkspaceIds, config.workspacesPerRun())
+                        .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, ""))
+                        .collectList()
+                        // Hop downstream off the ClickHouse R2DBC thread before the per-workspace iteration.
+                        .publishOn(migrationScheduler)
+                        .flatMapMany(eligibleWorkspaces -> {
+                            cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
+                            if (CollectionUtils.isEmpty(eligibleWorkspaces)) {
+                                log.info("No workspaces with eligible experiments found, consider disabling the job");
+                                return Flux.empty();
+                            }
+                            log.info("Found workspaces with eligible experiments, count='{}'",
+                                    eligibleWorkspaces.size());
+                            return Flux.fromIterable(eligibleWorkspaces)
+                                    // Pin every per-workspace concatMap iteration to migrationScheduler —
+                                    // items 2 -> N would otherwise emit on whichever client thread completed
+                                    // the previous workspace's reactive tail.
+                                    .publishOn(migrationScheduler)
+                                    .concatMap(workspace -> migrateWorkspace(
+                                            workspace.workspaceId(),
+                                            workspace.experimentsCount(),
+                                            config.experimentBatchSize()));
+                        }))
                 .then();
     }
 
@@ -157,17 +208,25 @@ public class ExperimentProjectMigrationService {
         return experimentDAO.computeExperimentProjectMapping()
                 .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                 .collectList()
+                // Hop downstream off the ClickHouse R2DBC thread before iterating/grouping the
+                // mappings; for a large workspace these CPU lists are non-trivial.
+                .publishOn(migrationScheduler)
                 .flatMap(mappings -> {
                     if (CollectionUtils.isEmpty(mappings)) {
                         log.info("No certain experiments to migrate, workspaceId='{}'", workspaceId);
                         recordWorkspaceDuration(RESULT_NO_CERTAIN, workspaceStartMillis);
                         return Mono.empty();
                     }
+                    var duration = Duration.ofMillis(System.currentTimeMillis() - workspaceStartMillis);
+                    log.info(
+                            "Computed certain experiment project mappings, workspaceId='{}', count='{}', duration='{}'",
+                            workspaceId, mappings.size(), duration);
                     return migrateValidatedMappings(workspaceId, mappings, batchSize, workspaceStartMillis);
                 })
                 .onErrorResume(throwable -> {
-                    log.error("Workspace migration failed, will retry next cycle, workspaceId='{}'",
-                            workspaceId, throwable);
+                    var duration = Duration.ofMillis(System.currentTimeMillis() - workspaceStartMillis);
+                    log.error("Workspace migration failed, will retry next cycle, workspaceId='{}', duration='{}'",
+                            workspaceId, duration, throwable);
                     recordWorkspaceDuration(RESULT_ERROR, workspaceStartMillis);
                     return Mono.empty();
                 });
@@ -179,7 +238,7 @@ public class ExperimentProjectMigrationService {
                 .map(ExperimentProjectMapping::projectId)
                 .collect(Collectors.toUnmodifiableSet());
         return Mono.fromCallable(() -> projectService.findByIds(workspaceId, inferredProjectIds))
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(migrationScheduler)
                 .flatMap(existingProjects -> {
                     var validProjectIds = existingProjects.stream()
                             .map(Project::id)
@@ -197,21 +256,33 @@ public class ExperimentProjectMigrationService {
                         log.info(
                                 "All certain experiments point to deleted projects, marking workspace as trapped, workspaceId='{}'",
                                 workspaceId);
-                        TRAPPED_WORKSPACE_IDS.add(workspaceId);
-                        recordWorkspaceDuration(RESULT_ALL_SKIPPED, workspaceStartMillis);
-                        return Mono.empty();
+                        return Mono
+                                .fromRunnable(() -> workspacesService.markMigrationSkipped(
+                                        workspaceId, TRAPPED_REASON_DELETED_PROJECT))
+                                .subscribeOn(migrationScheduler)
+                                .doFinally(signalType -> recordWorkspaceDuration(
+                                        RESULT_ALL_SKIPPED, workspaceStartMillis))
+                                .then(Mono.empty());
                     }
                     var byProject = validated.stream()
                             .collect(Collectors.groupingBy(ExperimentProjectMapping::projectId));
                     return Flux.fromIterable(byProject.entrySet())
+                            // Pin every per-project concatMap iteration to migrationScheduler — also
+                            // covers the CPU inside batchUpdateProjectId (Lists.partition).
+                            .publishOn(migrationScheduler)
                             .concatMap(entry -> batchUpdateProjectId(
                                     workspaceId, entry.getKey(), entry.getValue(), batchSize))
+                            .doOnComplete(() -> log.info(
+                                    "Batch project ID updates completed, workspaceId='{}', projectGroups='{}'",
+                                    workspaceId, byProject.size()))
                             .then(triggerReaggregation(workspaceId, validated))
                             .then(evictWorkspaceVersionCache(workspaceId))
                             .doOnSuccess(__ -> {
+                                var duration = Duration
+                                        .ofMillis(System.currentTimeMillis() - workspaceStartMillis);
                                 log.info(
-                                        "Workspace migration completed, workspaceId='{}', migrated='{}', skippedDeletedProject='{}'",
-                                        workspaceId, validated.size(), skippedDeleted);
+                                        "Workspace migration completed, workspaceId='{}', migrated='{}', skippedDeletedProject='{}', duration='{}'",
+                                        workspaceId, validated.size(), skippedDeleted, duration);
                                 recordWorkspaceDuration(RESULT_MIGRATED, workspaceStartMillis);
                             });
                 });
@@ -224,6 +295,10 @@ public class ExperimentProjectMigrationService {
     private Mono<Long> batchUpdateProjectId(
             String workspaceId, UUID projectId, List<ExperimentProjectMapping> experiments, int maxBatchSize) {
         return Flux.fromIterable(Lists.partition(experiments, maxBatchSize))
+                // Pin every per-batch concatMap iteration to migrationScheduler — the per-batch
+                // stream/collect for items 2 -> N would otherwise run on the R2DBC thread of the
+                // previous batchSetProjectId's completion, accumulating on large workspaces.
+                .publishOn(migrationScheduler)
                 .concatMap(batch -> {
                     var experimentIds = batch.stream()
                             .map(ExperimentProjectMapping::experimentId)
@@ -247,13 +322,18 @@ public class ExperimentProjectMigrationService {
                 .collect(Collectors.toUnmodifiableSet());
         return experimentItemService.filterExperimentIdsByStatus(experimentIds, FINISHED_STATUSES)
                 .collect(Collectors.toUnmodifiableSet())
+                // Hop downstream off the ClickHouse R2DBC thread before the publishing hop.
+                .publishOn(migrationScheduler)
                 .flatMap(finished -> {
                     if (finished.isEmpty()) {
                         log.info("No finished experiments to reaggregate, workspaceId='{}', candidateCount='{}'",
                                 workspaceId, experimentIds.size());
                         return Mono.empty();
                     }
-                    return experimentAggregationPublisher.publish(finished, workspaceId, SYSTEM_USER);
+                    return experimentAggregationPublisher.publish(finished, workspaceId, SYSTEM_USER)
+                            .doOnSuccess(unused -> log.info(
+                                    "Reaggregation triggered, workspaceId='{}', finishedCount='{}'",
+                                    workspaceId, finished.size()));
                 })
                 .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                 .onErrorResume(throwable -> {

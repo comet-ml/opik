@@ -449,6 +449,8 @@ from .local_runner_type import LocalRunnerType
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
+from .log_prob import LogProb
+from .log_probs import LogProbs
 from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
@@ -534,6 +536,9 @@ from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
+from .recent_activity_item_public import RecentActivityItemPublic
+from .recent_activity_item_public_type import RecentActivityItemPublicType
+from .recent_activity_page_public import RecentActivityPagePublic
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -1079,6 +1084,8 @@ __all__ = [
     "LogItem",
     "LogItemLevel",
     "LogPage",
+    "LogProb",
+    "LogProbs",
     "ManualEvaluationRequest",
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
@@ -1162,6 +1169,9 @@ __all__ = [
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",
+    "RecentActivityItemPublic",
+    "RecentActivityItemPublicType",
+    "RecentActivityPagePublic",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",

@@ -446,7 +446,7 @@ class ExperimentItemProcessorTest {
         }
 
         @Test
-        void processCreatesTraceWithEmptyOutputOnLlmFailure() {
+        void processCreatesTraceWithoutLlmOutputOnLlmFailure() {
             var prompt = buildPrompt("gpt-4", "user", "Hello");
             var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
             var experimentId = UUID.randomUUID();
@@ -464,6 +464,35 @@ class ExperimentItemProcessorTest {
 
             var output = captor.getValue().output();
             assertThat(output.has("output")).isFalse();
+        }
+
+        @Test
+        void processSurfacesAgentErrorInTraceOutputOnLlmFailure() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenThrow(new RuntimeException("rate limit exceeded"));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
+
+            var traceCaptor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(traceCaptor.capture());
+
+            var output = traceCaptor.getValue().output();
+            assertThat(output.has("error")).isTrue();
+            assertThat(output.get("error").get("type").asText()).isEqualTo("RuntimeException");
+            assertThat(output.get("error").get("message").asText()).isEqualTo("rate limit exceeded");
+
+            var spanCaptor = ArgumentCaptor.forClass(Span.class);
+            verify(spanService).create(spanCaptor.capture());
+            var spanOutput = spanCaptor.getValue().output();
+            assertThat(spanOutput.has("error")).isTrue();
+            assertThat(spanOutput.get("error").get("message").asText()).isEqualTo("rate limit exceeded");
         }
     }
 

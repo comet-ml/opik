@@ -458,3 +458,191 @@ def test_run_tests__no_assertions__items_pass_with_single_run(fake_backend):
         assert item_result.runs_total == 1
         assert item_result.pass_threshold == 1
     assert len(fake_backend.trace_trees) == 2
+
+
+def test_run_tests__worker_threads_1__task_runs_in_caller_thread():
+    """worker_threads=1 must execute tasks in the caller thread (no extra worker thread)."""
+    items = [
+        dataset_item.DatasetItem(id="item-1", input={"q": "a"}),
+        dataset_item.DatasetItem(id="item-2", input={"q": "b"}),
+        dataset_item.DatasetItem(id="item-3", input={"q": "c"}),
+    ]
+    mock_dataset = _create_mock_dataset(items=items)
+    suite = _create_suite(mock_dataset)
+
+    caller_thread_id = threading.get_ident()
+    thread_ids_during_task = []
+
+    def task(item):
+        thread_ids_during_task.append(threading.get_ident())
+        return {"input": item, "output": "ok"}
+
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
+    ):
+        evaluator_module.run_tests(
+            test_suite=suite,
+            task=task,
+            experiment_name="exp",
+            verbose=0,
+            worker_threads=1,
+        )
+
+    assert len(thread_ids_during_task) == 3
+    assert all(tid == caller_thread_id for tid in thread_ids_during_task), (
+        f"With worker_threads=1, tasks must run in the caller thread "
+        f"(id={caller_thread_id}); saw {set(thread_ids_during_task)}"
+    )
+
+
+def test_run_tests__worker_threads_1__no_thread_pool_executor_created():
+    """worker_threads=1 must not instantiate a ThreadPoolExecutor."""
+    from opik.evaluation.engine import evaluation_tasks_executor
+
+    items = [dataset_item.DatasetItem(id="item-1", input={"q": "a"})]
+    mock_dataset = _create_mock_dataset(items=items)
+    suite = _create_suite(mock_dataset)
+
+    def task(item):
+        return {"input": item, "output": "ok"}
+
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
+        mock.patch.object(
+            evaluation_tasks_executor.futures,
+            "ThreadPoolExecutor",
+            wraps=evaluation_tasks_executor.futures.ThreadPoolExecutor,
+        ) as pool_spy,
+    ):
+        evaluator_module.run_tests(
+            test_suite=suite,
+            task=task,
+            experiment_name="exp",
+            verbose=0,
+            worker_threads=1,
+        )
+
+    assert pool_spy.call_count == 0, (
+        "worker_threads=1 should not create a ThreadPoolExecutor; "
+        f"got {pool_spy.call_count} calls"
+    )
+
+
+def test_run_tests__worker_threads_2__task_runs_in_worker_threads():
+    """worker_threads=2 must dispatch tasks to threads other than the caller."""
+    items = [
+        dataset_item.DatasetItem(id=f"item-{i}", input={"q": str(i)}) for i in range(4)
+    ]
+    mock_dataset = _create_mock_dataset(items=items)
+    suite = _create_suite(mock_dataset)
+
+    caller_thread_id = threading.get_ident()
+    thread_ids_during_task = []
+    thread_ids_lock = threading.Lock()
+
+    def task(item):
+        with thread_ids_lock:
+            thread_ids_during_task.append(threading.get_ident())
+        return {"input": item, "output": "ok"}
+
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
+    ):
+        evaluator_module.run_tests(
+            test_suite=suite,
+            task=task,
+            experiment_name="exp",
+            verbose=0,
+            worker_threads=2,
+        )
+
+    assert len(thread_ids_during_task) == 4
+    assert all(tid != caller_thread_id for tid in thread_ids_during_task), (
+        f"With worker_threads=2, tasks must run off the caller thread "
+        f"(id={caller_thread_id}); saw {set(thread_ids_during_task)}"
+    )
+
+
+def test_run_tests__worker_threads_1__caller_context_client_restored():
+    """worker_threads=1 must not leak the suite's client into the caller's context."""
+    items = [dataset_item.DatasetItem(id="item-1", input={"q": "a"})]
+    mock_dataset = _create_mock_dataset(items=items)
+
+    pre_existing_client = mock.MagicMock(spec=opik_client.Opik)
+    suite_client = mock.MagicMock(spec=opik_client.Opik)
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    suite_client.create_experiment.return_value = mock_experiment
+
+    suite = _create_suite(mock_dataset, client=suite_client)
+
+    token = opik_client._context_client_var.set(pre_existing_client)
+    try:
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ):
+            evaluator_module.run_tests(
+                test_suite=suite,
+                task=lambda item: {"input": item, "output": "ok"},
+                experiment_name="exp",
+                verbose=0,
+                worker_threads=1,
+            )
+
+        assert opik_client._context_client_var.get() is pre_existing_client, (
+            "Caller's context-local client must be restored after run_tests exits"
+        )
+    finally:
+        opik_client._context_client_var.reset(token)
+
+
+def test_run_tests__worker_threads_1__task_exception_propagates():
+    """worker_threads=1 sequential path still surfaces task exceptions."""
+    items = [dataset_item.DatasetItem(id="item-1", input={"q": "a"})]
+    mock_dataset = _create_mock_dataset(items=items)
+    suite = _create_suite(mock_dataset)
+
+    class BoomError(RuntimeError):
+        pass
+
+    def task(item):
+        raise BoomError("synchronous failure")
+
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
+    ):
+        try:
+            evaluator_module.run_tests(
+                test_suite=suite,
+                task=task,
+                experiment_name="exp",
+                verbose=0,
+                worker_threads=1,
+            )
+        except BoomError:
+            return
+
+    raise AssertionError("BoomError should have propagated to the caller")

@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DatasetVersionDAO;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.SpanEnrichmentOptions;
 import com.comet.opik.domain.TraceEnrichmentOptions;
@@ -70,11 +71,13 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -84,6 +87,8 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -135,10 +140,12 @@ class DatasetVersionResourceTest {
     private ExperimentResourceClient experimentResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
+        this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
 
@@ -1263,6 +1270,71 @@ class DatasetVersionResourceTest {
             assertThat(editedInV2.data().get("edited")).isNotNull();
             assertThat(editedInV2.data().get("description")).isNotNull();
         }
+
+        @Test
+        @DisplayName("OPIK-6390: unchanged items survive when base version items_total has drifted")
+        void applyChanges__whenBaseVersionItemsTotalIsStale__thenUnchangedItemsArePreserved() {
+            // Reproducer for OPIK-6390. In prod, dataset_versions.items_total drifted below the
+            // actual ClickHouse row count for the base version. The next applyDeltaChanges call
+            // sized its unchanged-UUID pool off that stale value, causing the copy step to assign
+            // empty ids to overflowing rows; under ReplacingMergeTree those rows then collapsed
+            // and items disappeared. The fix routes the pool size through a live ClickHouse count
+            // (and the COPY query falls back to generateUUIDv7 for any residual overflow), so the
+            // new version must still contain every item.
+
+            // Given: dataset with 5 items in v1.
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(5))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+            var v1 = getLatestVersion(datasetId);
+            assertThat(v1.itemsTotal()).isEqualTo(5);
+
+            // Capture v1 items in full so we can assert v2 preserves the same logical items
+            // with all fields intact, not just by stable id.
+            var v1Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v1Items).hasSize(5);
+
+            // Simulate the drift observed in prod: corrupt items_total directly in MySQL while
+            // leaving the 5 ClickHouse rows intact. Reproduces the exact precondition under which
+            // the silent data loss occurs.
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+                int updated = handle.createUpdate(
+                        "UPDATE dataset_versions SET items_total = 1 WHERE id = :version_id AND workspace_id = :workspace_id")
+                        .bind("version_id", v1.id().toString())
+                        .bind("workspace_id", WORKSPACE_ID)
+                        .execute();
+                assertThat(updated).isEqualTo(1);
+                return null;
+            });
+
+            // When: apply a +1 add on top of the (corrupted-total) v1.
+            var addedItem = generateDatasetItems(1).getFirst();
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(v1.id())
+                    .addedItems(List.of(addedItem))
+                    .build();
+            var v2 = datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then: all 5 carried-over items plus the new one survive.
+            assertThat(v2.itemsTotal()).isEqualTo(6);
+
+            var v2Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v2Items).hasSize(6);
+
+            // Every v1 item must appear in v2 with the same fields. id changes per version, so
+            // we ignore it via IGNORED_FIELDS_DATA_ITEM and compare the rest of the entity.
+            assertThat(v2Items)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsAll(v1Items);
+        }
     }
 
     @Nested
@@ -1409,6 +1481,66 @@ class DatasetVersionResourceTest {
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1ItemsAfter).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("OPIK-6390: createVersionWithDeletion preserves items when base items_total has drifted")
+        void deleteItems__whenBaseVersionItemsTotalIsStale__thenUnchangedItemsArePreserved() {
+            // Same root cause as the applyDeltaChanges reproducer, but exercising the
+            // createVersionWithDeletion path (deleteByItemIdsWithVersion → createVersionWithDeletion).
+            // It also routes UUID-pool sizing through versionDao.countRowsInVersion(); if that ever
+            // regressed back to DatasetVersion.itemsTotal(), the 4 carried-over items would collapse
+            // to NUL-id rows under ReplacingMergeTree and disappear.
+
+            // Given: dataset with 5 items in v1.
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(5))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+            var v1 = getLatestVersion(datasetId);
+            assertThat(v1.itemsTotal()).isEqualTo(5);
+
+            var v1Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v1Items).hasSize(5);
+
+            var itemToDelete = v1Items.getFirst();
+            var expectedSurvivors = v1Items.stream()
+                    .filter(item -> !item.datasetItemId().equals(itemToDelete.datasetItemId()))
+                    .toList();
+
+            // Corrupt items_total to reproduce the prod drift precondition.
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+                int updated = handle.createUpdate(
+                        "UPDATE dataset_versions SET items_total = 1 WHERE id = :version_id AND workspace_id = :workspace_id")
+                        .bind("version_id", v1.id().toString())
+                        .bind("workspace_id", WORKSPACE_ID)
+                        .execute();
+                assertThat(updated).isEqualTo(1);
+                return null;
+            });
+
+            // When: delete 1 item with a batchGroupId — triggers createVersionWithDeletion.
+            deleteDatasetItem(itemToDelete.id());
+
+            // Then: v2 carries over the 4 non-deleted items with all fields intact.
+            var v2 = getLatestVersion(datasetId);
+            assertThat(v2.id()).isNotEqualTo(v1.id());
+            assertThat(v2.itemsTotal()).isEqualTo(4);
+
+            var v2Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v2Items).hasSize(4);
+            assertThat(v2Items.stream().map(DatasetItem::datasetItemId))
+                    .doesNotContain(itemToDelete.datasetItemId());
+
+            assertThat(v2Items)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsAll(expectedSurvivors);
         }
 
         @Test
@@ -4928,6 +5060,116 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(latestItems).hasSize(1);
             assertThat(latestItems.getFirst().description()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Lightweight version-id lookups (DAO):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class LightweightVersionIdLookups {
+
+        private Optional<UUID> findVersionIdByTag(UUID datasetId, String tag, String workspaceId) {
+            return mySqlTemplate.inTransaction(READ_ONLY, handle -> handle.attach(DatasetVersionDAO.class)
+                    .findVersionIdByTag(datasetId, tag, workspaceId));
+        }
+
+        private Optional<UUID> findVersionIdByHash(UUID datasetId, String versionHash, String workspaceId) {
+            return mySqlTemplate.inTransaction(READ_ONLY, handle -> handle.attach(DatasetVersionDAO.class)
+                    .findVersionIdByHash(datasetId, versionHash, workspaceId));
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns latest version's id for the 'latest' tag")
+        void findVersionIdByTag__whenLatestTag__thenReturnsVersionId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var expected = getLatestVersion(datasetId);
+
+            var actual = findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, WORKSPACE_ID);
+
+            assertThat(actual).contains(expected.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: tracks the latest version across multiple writes")
+        void findVersionIdByTag__whenNewVersionCreated__thenReturnsNewestId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var v1 = getLatestVersion(datasetId);
+            createDatasetItems(datasetId, 1);
+            var v2 = getLatestVersion(datasetId);
+            assertThat(v1.id()).isNotEqualTo(v2.id());
+
+            var actual = findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, WORKSPACE_ID);
+
+            assertThat(actual).contains(v2.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns the version a custom tag points to")
+        void findVersionIdByTag__whenCustomTag__thenReturnsTaggedVersionId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var v1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, v1.versionHash(),
+                    DatasetVersionTag.builder().tag("stable").build(), API_KEY, TEST_WORKSPACE);
+            createDatasetItems(datasetId, 1);
+            var v2 = getLatestVersion(datasetId);
+
+            assertThat(findVersionIdByTag(datasetId, "stable", WORKSPACE_ID)).contains(v1.id());
+            assertThat(findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, WORKSPACE_ID))
+                    .contains(v2.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns empty for unknown tag")
+        void findVersionIdByTag__whenTagUnknown__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            assertThat(findVersionIdByTag(datasetId, "nonexistent", WORKSPACE_ID)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns empty for another workspace (workspace isolation)")
+        void findVersionIdByTag__whenDifferentWorkspace__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            assertThat(findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, UUID.randomUUID().toString()))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("findVersionIdByHash: returns version id for an existing hash")
+        void findVersionIdByHash__whenHashExists__thenReturnsVersionId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var expected = getLatestVersion(datasetId);
+
+            var actual = findVersionIdByHash(datasetId, expected.versionHash(), WORKSPACE_ID);
+
+            assertThat(actual).contains(expected.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByHash: returns empty for unknown hash")
+        void findVersionIdByHash__whenHashUnknown__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            assertThat(findVersionIdByHash(datasetId, "deadbeef", WORKSPACE_ID)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("findVersionIdByHash: returns empty for another workspace (workspace isolation)")
+        void findVersionIdByHash__whenDifferentWorkspace__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var version = getLatestVersion(datasetId);
+
+            assertThat(findVersionIdByHash(datasetId, version.versionHash(), UUID.randomUUID().toString()))
+                    .isEmpty();
         }
     }
 }

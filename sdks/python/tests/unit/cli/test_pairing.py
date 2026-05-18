@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import click
 import pytest
 
-from opik.cli.pairing import (
+from opik.cli.local_runner.pairing import (
     PairingResult,
     RunnerType,
     build_pairing_link,
@@ -17,6 +17,66 @@ from opik.cli.pairing import (
     validate_runner_name,
 )
 from opik.rest_api.errors.not_found_error import NotFoundError
+
+
+# Helpers — fill in the keyword-only args that production callers always supply
+# so tests don't have to repeat them. Tests override what they actually care
+# about via **overrides.
+def _resolve(api, project_name, **overrides):
+    kwargs = dict(
+        create_if_missing=False,
+        workspace=None,
+        base_url=None,
+        config_file_exists=True,
+    )
+    kwargs.update(overrides)
+    return resolve_project_id(api, project_name, **kwargs)
+
+
+def _headless(api, **overrides):
+    kwargs = dict(
+        api=api,
+        project_name="my-proj",
+        runner_name="r-1",
+        runner_type=RunnerType.ENDPOINT,
+        create_if_missing=False,
+        workspace=None,
+        base_url=None,
+        config_file_exists=True,
+    )
+    kwargs.update(overrides)
+    return run_headless(**kwargs)
+
+
+def _link(**overrides):
+    kwargs = dict(
+        base_url="https://www.comet.com/opik/api/",
+        session_id="550e8400-e29b-41d4-a716-446655440000",
+        activation_key=b"\x00" * 32,
+        project_id="660e8400-e29b-41d4-a716-446655440000",
+        project_name="my-proj",
+        runner_name="r",
+        runner_type=RunnerType.CONNECT,
+        workspace=None,
+    )
+    kwargs.update(overrides)
+    return build_pairing_link(**kwargs)
+
+
+def _pair(api, **overrides):
+    kwargs = dict(
+        api=api,
+        project_name="my-proj",
+        runner_name="r-1",
+        runner_type=RunnerType.ENDPOINT,
+        base_url="http://localhost:5173/api/",
+        workspace=None,
+        tui=None,
+        create_if_missing=False,
+        config_file_exists=True,
+    )
+    kwargs.update(overrides)
+    return run_pairing(**kwargs)
 
 
 class TestHKDF:
@@ -55,7 +115,7 @@ class TestBuildPairingLink:
         activation_key = b"\xaa" * 32
         runner_name = "my-runner"
 
-        link = build_pairing_link(
+        link = _link(
             base_url="https://www.comet.com/opik/api/",
             session_id=session_id,
             activation_key=activation_key,
@@ -63,7 +123,7 @@ class TestBuildPairingLink:
             runner_name=runner_name,
         )
 
-        assert link.startswith("https://www.comet.com/opik/pair/v1#")
+        assert link.startswith("https://www.comet.com/opik/pair/v1?")
 
         fragment = link.split("#", 1)[1]
         padding_needed = (4 - len(fragment) % 4) % 4
@@ -79,7 +139,7 @@ class TestBuildPairingLink:
         assert payload[name_end] == 0x00
 
     def test_build_pairing_link__endpoint_type__encodes_0x01(self):
-        link = build_pairing_link(
+        link = _link(
             base_url="http://localhost:5173/api/",
             session_id="550e8400-e29b-41d4-a716-446655440000",
             activation_key=b"\x00" * 32,
@@ -94,7 +154,7 @@ class TestBuildPairingLink:
         assert payload[66] == 0x01
 
     def test_build_pairing_link__cloud_url__no_double_opik_path(self):
-        link = build_pairing_link(
+        link = _link(
             base_url="https://www.comet.com/opik/api/",
             session_id="550e8400-e29b-41d4-a716-446655440000",
             activation_key=b"\x00" * 32,
@@ -104,14 +164,56 @@ class TestBuildPairingLink:
         assert "/opik/opik/" not in link
 
     def test_build_pairing_link__localhost_url__correct_prefix(self):
-        link = build_pairing_link(
+        link = _link(
             base_url="http://localhost:5173/api/",
             session_id="550e8400-e29b-41d4-a716-446655440000",
             activation_key=b"\x00" * 32,
             project_id="660e8400-e29b-41d4-a716-446655440000",
             runner_name="r",
         )
-        assert link.startswith("http://localhost:5173/opik/pair/v1#")
+        assert link.startswith("http://localhost:5173/opik/pair/v1?")
+
+    def test_build_pairing_link__always_includes_url_param(self):
+        link = _link(
+            base_url="http://localhost:5173/api/",
+            workspace=None,
+        )
+        # `/api` is stripped — we send the URL the user would visit in a
+        # browser, not the internal API endpoint.
+        assert "url=http%3A%2F%2Flocalhost%3A5173%2F" in link
+        assert "%2Fapi%2F" not in link
+
+    def test_build_pairing_link__cloud_api_url__strips_api_suffix(self):
+        link = _link(
+            base_url="https://www.comet.com/opik/api/",
+            workspace=None,
+        )
+        assert "url=https%3A%2F%2Fwww.comet.com%2Fopik%2F" in link
+
+    def test_build_pairing_link__url_param_precedes_workspace(self):
+        link = _link(
+            base_url="http://localhost:5173/api/",
+            workspace="team-a",
+        )
+        # All query params present; order is stable for FE parsing.
+        assert "url=" in link
+        assert "project=my-proj" in link
+        assert "workspace=team-a" in link
+
+    def test_build_pairing_link__project_name_with_special_chars__url_encoded(
+        self,
+    ):
+        link = _link(project_name="My Project / Demo")
+        # Spaces and `/` must be percent-encoded so the query stays parseable.
+        assert "project=My%20Project%20%2F%20Demo" in link
+
+    def test_build_pairing_link__workspace_with_special_chars__url_encoded(
+        self,
+    ):
+        # `&` and `=` in a workspace name would otherwise split the query and
+        # the FE's URLSearchParams would read a truncated value.
+        link = _link(workspace="weird&name=oops")
+        assert "workspace=weird%26name%3Doops" in link
 
 
 class TestResolveProjectId:
@@ -121,7 +223,7 @@ class TestResolveProjectId:
         project.id = "proj-uuid-123"
         api.projects.retrieve_project.return_value = project
 
-        result = resolve_project_id(api, "my-project")
+        result = _resolve(api, "my-project")
         assert result == "proj-uuid-123"
         api.projects.retrieve_project.assert_called_once_with(name="my-project")
 
@@ -135,11 +237,11 @@ class TestResolveProjectId:
         )
 
         with pytest.raises(click.ClickException) as exc_info:
-            resolve_project_id(api, "nonexistent")
-        assert exc_info.value.message == (
-            "Could not retrieve project 'nonexistent': Project not found "
-            "— check the project name and try again."
-        )
+            _resolve(api, "nonexistent")
+        message = exc_info.value.message
+        assert "Could not retrieve project 'nonexistent'" in message
+        assert "Project not found" in message
+        assert "check the project name and try again" in message
 
     def test_resolve_project_id__unauthorized__surfaces_server_message_and_docs(self):
         from opik.rest_api.core.api_error import ApiError
@@ -151,16 +253,15 @@ class TestResolveProjectId:
         )
 
         with pytest.raises(click.ClickException) as exc_info:
-            resolve_project_id(api, "my-project")
+            _resolve(api, "my-project")
         message = exc_info.value.message
-        assert message.startswith("Could not retrieve project 'my-project':")
-        assert "API key should be provided —" in message
-        assert "run `opik configure`" in message
+        assert "Could not retrieve project 'my-project'" in message
+        assert "API key should be provided" in message
+        assert "Run: opik configure" in message
         assert (
-            "(see https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration)"
+            "https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
             in message
         )
-        assert message.endswith(".")
 
     def test_resolve_project_id__forbidden__shares_auth_hint(self):
         from opik.rest_api.core.api_error import ApiError
@@ -172,10 +273,10 @@ class TestResolveProjectId:
         )
 
         with pytest.raises(click.ClickException) as exc_info:
-            resolve_project_id(api, "my-project")
+            _resolve(api, "my-project")
         message = exc_info.value.message
-        assert "User is not allowed to access workspace —" in message
-        assert "run `opik configure`" in message
+        assert "User is not allowed to access workspace" in message
+        assert "Run: opik configure" in message
 
     def test_resolve_project_id__server_error__falls_back_to_generic_hint(self):
         from opik.rest_api.core.api_error import ApiError
@@ -187,12 +288,12 @@ class TestResolveProjectId:
         )
 
         with pytest.raises(click.ClickException) as exc_info:
-            resolve_project_id(api, "my-project")
+            _resolve(api, "my-project")
         message = exc_info.value.message
-        assert "Internal Server Error —" in message
+        assert "Internal Server Error" in message
         assert "verify your Opik configuration and connectivity" in message
         assert (
-            "(see https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration)"
+            "https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
             in message
         )
 
@@ -203,8 +304,174 @@ class TestResolveProjectId:
         api.projects.retrieve_project.side_effect = ApiError(status_code=502, body=None)
 
         with pytest.raises(click.ClickException) as exc_info:
-            resolve_project_id(api, "my-project")
-        assert "server returned HTTP 502 —" in exc_info.value.message
+            _resolve(api, "my-project")
+        assert "server returned HTTP 502" in exc_info.value.message
+
+    def test_resolve_project_id__missing_and_create_flag__creates_and_resolves(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        created = MagicMock()
+        created.id = "proj-uuid-new"
+        api.projects.retrieve_project.side_effect = [
+            ApiError(status_code=404, body={"errors": ["Project not found"]}),
+            created,
+        ]
+
+        result = _resolve(api, "new-project", create_if_missing=True)
+        assert result == "proj-uuid-new"
+        api.projects.create_project.assert_called_once_with(name="new-project")
+        assert api.projects.retrieve_project.call_count == 2
+
+    def test_resolve_project_id__known_missing__skips_initial_lookup(self):
+        api = MagicMock()
+        created = MagicMock()
+        created.id = "proj-uuid-new"
+        api.projects.retrieve_project.return_value = created
+
+        result = _resolve(
+            api,
+            "new-project",
+            create_if_missing=True,
+            project_known_missing=True,
+        )
+        assert result == "proj-uuid-new"
+        api.projects.create_project.assert_called_once_with(name="new-project")
+        # Interactive preflight already saw the 404 — only the post-create
+        # lookup should run.
+        assert api.projects.retrieve_project.call_count == 1
+
+    def test_resolve_project_id__missing_no_flag__does_not_create(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=404, body={"errors": ["Project not found"]}
+        )
+
+        with pytest.raises(click.ClickException):
+            _resolve(api, "missing", create_if_missing=False)
+        api.projects.create_project.assert_not_called()
+
+    def test_resolve_project_id__non_404_with_flag__does_not_create(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=401, body={"message": "unauthorized"}
+        )
+
+        with pytest.raises(click.ClickException):
+            _resolve(api, "x", create_if_missing=True)
+        api.projects.create_project.assert_not_called()
+
+    def test_resolve_project_id__create_fails__raises_clean_error(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=404, body={"errors": ["Project not found"]}
+        )
+        api.projects.create_project.side_effect = ApiError(
+            status_code=403, body={"message": "User cannot create projects"}
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            _resolve(api, "blocked", create_if_missing=True)
+        message = exc_info.value.message
+        assert "Could not create project 'blocked'" in message
+        assert "User cannot create projects" in message
+
+    def test_resolve_project_id__retrieval_error_with_config_context__appends_workspace_and_url(
+        self,
+    ):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=404, body={"errors": ["Project not found"]}
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            _resolve(
+                api,
+                "missing-proj",
+                workspace="team-a",
+                base_url="https://opik.example.com/api/",
+            )
+        message = exc_info.value.message
+        assert "team-a" in message
+        assert "https://opik.example.com/api/" in message
+
+    def test_resolve_project_id__retrieval_error_without_config_file__appends_opik_configure_hint(
+        self,
+    ):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=401, body={"message": "API key should be provided"}
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            _resolve(
+                api,
+                "my-project",
+                workspace="default",
+                base_url="https://www.comet.com/opik/api/",
+                config_file_exists=False,
+            )
+        message = exc_info.value.message
+        assert "~/.opik.config" in message
+        assert "Run: opik configure" in message
+
+    def test_resolve_project_id__retrieval_error_with_config_file__omits_no_config_hint(
+        self,
+    ):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=500, body="Internal Server Error"
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            _resolve(
+                api,
+                "p",
+                workspace="default",
+                base_url="https://www.comet.com/opik/api/",
+                config_file_exists=True,
+            )
+        assert "~/.opik.config" not in exc_info.value.message
+
+    def test_resolve_project_id__create_fails_with_config_context__includes_workspace_and_url(
+        self,
+    ):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=404, body={"errors": ["Project not found"]}
+        )
+        api.projects.create_project.side_effect = ApiError(
+            status_code=403, body={"message": "User cannot create projects"}
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            _resolve(
+                api,
+                "blocked",
+                create_if_missing=True,
+                workspace="team-a",
+                base_url="https://opik.example.com/api/",
+                config_file_exists=False,
+            )
+        message = exc_info.value.message
+        assert "Could not create project 'blocked'" in message
+        assert "team-a" in message
+        assert "https://opik.example.com/api/" in message
+        assert "Run: opik configure" in message
 
 
 class TestValidateRunnerName:
@@ -265,10 +532,10 @@ class TestRunPairing:
 
         return api
 
-    @patch("opik.cli.pairing.time.sleep")
+    @patch("opik.cli.local_runner.pairing.time.sleep")
     def test_run_pairing__happyflow__returns_result(self, mock_sleep):
         api = self._make_api()
-        result = run_pairing(
+        result = _pair(
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
@@ -283,12 +550,12 @@ class TestRunPairing:
         assert result.project_id == self.PROJECT_ID
         assert len(result.bridge_key) == 32
 
-    @patch("opik.cli.pairing.time.sleep")
+    @patch("opik.cli.local_runner.pairing.time.sleep")
     def test_run_pairing__with_tui__calls_started_and_completed(self, mock_sleep):
         api = self._make_api()
         tui = MagicMock()
 
-        run_pairing(
+        _pair(
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
@@ -301,7 +568,7 @@ class TestRunPairing:
         tui.pairing_started.assert_called_once()
         tui.pairing_completed.assert_called_once()
 
-    @patch("opik.cli.pairing.time.sleep")
+    @patch("opik.cli.local_runner.pairing.time.sleep")
     def test_run_pairing__404_during_poll__retries_until_connected(self, mock_sleep):
         api = self._make_api()
         err = NotFoundError(body=None)
@@ -309,7 +576,7 @@ class TestRunPairing:
         runner.status = "connected"
         api.runners.get_runner.side_effect = [err, err, runner]
 
-        result = run_pairing(
+        result = _pair(
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
@@ -320,8 +587,8 @@ class TestRunPairing:
         assert result.runner_id == self.RUNNER_ID
         assert api.runners.get_runner.call_count == 3
 
-    @patch("opik.cli.pairing.time.monotonic")
-    @patch("opik.cli.pairing.time.sleep")
+    @patch("opik.cli.local_runner.pairing.time.monotonic")
+    @patch("opik.cli.local_runner.pairing.time.sleep")
     def test_run_pairing__timeout__calls_tui_pairing_failed(
         self, mock_sleep, mock_monotonic
     ):
@@ -345,7 +612,7 @@ class TestRunPairing:
 
         tui = MagicMock()
         with pytest.raises(click.ClickException) as exc_info:
-            run_pairing(
+            _pair(
                 api=api,
                 project_name="my-proj",
                 runner_name="test-runner",
@@ -358,7 +625,7 @@ class TestRunPairing:
 
         tui.pairing_failed.assert_called_once_with("timed out")
 
-    @patch("opik.cli.pairing.time.sleep")
+    @patch("opik.cli.local_runner.pairing.time.sleep")
     def test_run_pairing__keyboard_interrupt__calls_tui_pairing_failed(
         self, mock_sleep
     ):
@@ -367,7 +634,7 @@ class TestRunPairing:
 
         tui = MagicMock()
         with pytest.raises(KeyboardInterrupt):
-            run_pairing(
+            _pair(
                 api=api,
                 project_name="my-proj",
                 runner_name="test-runner",
@@ -379,7 +646,7 @@ class TestRunPairing:
 
         tui.pairing_failed.assert_called_once_with("interrupted")
 
-    @patch("opik.cli.pairing.time.sleep")
+    @patch("opik.cli.local_runner.pairing.time.sleep")
     def test_run_pairing__non_404_api_error__propagates(self, mock_sleep):
         from opik.rest_api.core.api_error import ApiError
 
@@ -389,7 +656,7 @@ class TestRunPairing:
         )
 
         with pytest.raises(ApiError) as exc_info:
-            run_pairing(
+            _pair(
                 api=api,
                 project_name="my-proj",
                 runner_name="test-runner",
@@ -421,7 +688,7 @@ class TestRunHeadless:
 
     def test_run_headless__creates_and_self_activates(self):
         api = self._make_api()
-        result = run_headless(
+        result = _headless(
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
@@ -436,7 +703,7 @@ class TestRunHeadless:
 
     def test_run_headless__no_polling(self):
         api = self._make_api()
-        run_headless(
+        _headless(
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
@@ -448,7 +715,7 @@ class TestRunHeadless:
     def test_run_headless__connect_type__raises(self):
         api = self._make_api()
         with pytest.raises(click.ClickException, match="not supported"):
-            run_headless(
+            _headless(
                 api=api,
                 project_name="my-proj",
                 runner_name="test-runner",

@@ -11,6 +11,7 @@ import {
   EvaluationTestCase,
   EvaluationTestResult,
   ScoringKeyMappingType,
+  TASK_ERROR_SCORE_NAME,
 } from "../types";
 import { logger } from "@/utils/logger";
 import { EvaluateOptions } from "../evaluate";
@@ -25,6 +26,10 @@ import { getSourceObjValue } from "@/utils/common";
 import ora from "ora";
 import type { ExecutionPolicy } from "../suite/types";
 import { BaseSuiteEvaluator } from "../suite_evaluators/BaseSuiteEvaluator";
+
+type ItemRunOutcome =
+  | { kind: "success"; testResult: EvaluationTestResult }
+  | { kind: "failure"; testResult: EvaluationTestResult; error: Error };
 
 type DatasetOrVersion<T extends DatasetItemData> =
   | Dataset<T>
@@ -90,7 +95,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   constructor(
     options: EvaluationEngineOptions<T>,
     client: OpikClient,
-    experiment: Experiment
+    experiment: Experiment,
   ) {
     this.client = client;
     this.dataset = options.dataset;
@@ -135,7 +140,11 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       let completedRuns = 0;
 
       // Build flat list of all (item, runIndex) pairs
-      const runQueue: { item: (typeof items)[number]; metrics: BaseMetric[] | undefined; runIndex: number }[] = [];
+      const runQueue: {
+        item: (typeof items)[number];
+        metrics: BaseMetric[] | undefined;
+        runIndex: number;
+      }[] = [];
       for (const item of items) {
         const runsPerItem = this.getRunsPerItem(item);
         const metrics = this.getItemMetrics(item);
@@ -156,10 +165,20 @@ export class EvaluationEngine<T = Record<string, unknown>> {
             running++;
 
             this.executeItemRun(item, metrics, runIndex)
-              .then((testResult) => {
-                testResults.push(testResult);
+              .then((outcome) => {
+                testResults.push(outcome.testResult);
+                if (outcome.kind === "failure") {
+                  errors.push({
+                    datasetItemId: item.id,
+                    runIndex,
+                    message: outcome.error.message,
+                    error: outcome.error,
+                  });
+                  progress.recordFailure();
+                }
               })
               .catch((error) => {
+                // Unexpected engine errors (infrastructure failures)
                 const errorMessage =
                   error instanceof Error ? error.message : String(error);
                 errors.push({
@@ -201,7 +220,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         testResults,
         this.experiment,
         elapsedSeconds,
-        errors
+        errors,
       );
     } finally {
       clearInterval(flushInterval);
@@ -212,7 +231,9 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private async getDatasetItems(): Promise<
     (DatasetItemData & T & { id: string })[]
   > {
-    return this.prefetchedItems ?? (await this.dataset.getItems(this.nbSamples));
+    return (
+      this.prefetchedItems ?? (await this.dataset.getItems(this.nbSamples))
+    );
   }
 
   private calculateTotalRuns(items: { id: string }[]): number {
@@ -242,7 +263,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
   private createProgressTracker(
     totalItems: number,
-    totalRuns: number
+    totalRuns: number,
   ): ProgressTracker {
     const savedLogLevel = logger.settings.minLevel;
     logger.settings.minLevel = 6;
@@ -272,7 +293,6 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         } else {
           spinner.succeed(message);
         }
-
       },
       recordFailure: () => {
         failedRuns++;
@@ -280,7 +300,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       reportErrors: (errors: EvaluationError[]) => {
         for (const err of errors) {
           logger.error(
-            `Dataset item ${err.datasetItemId} (run ${err.runIndex}): ${err.message}`
+            `Dataset item ${err.datasetItemId} (run ${err.runIndex}): ${err.message}`,
           );
         }
       },
@@ -293,8 +313,8 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private async executeItemRun(
     datasetItem: DatasetItemData & T & { id: string },
     metrics: BaseMetric[] | undefined,
-    runIndex: number
-  ): Promise<EvaluationTestResult> {
+    runIndex: number,
+  ): Promise<ItemRunOutcome> {
     const trace = this.client.trace({
       projectName: this.projectName,
       name: "evaluation_task",
@@ -304,58 +324,123 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     });
     trackStorage.enterWith({ trace });
 
-    try {
-      const { testCase, taskOutput } = await this.runTask(datasetItem, trace);
+    let taskOutput: Record<string, unknown>;
+    let testCase: EvaluationTestCase;
 
+    try {
+      ({ testCase, taskOutput } = await this.runTask(datasetItem, trace));
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
       trace.update({
-        output: taskOutput,
+        errorInfo: {
+          message: err.message,
+          exceptionType: err.name,
+          traceback: err.stack ?? "",
+        },
         endTime: new Date(),
       });
 
-      // Commit experiment item to DB.
-      await this.experiment.insert([
-        new ExperimentItemReferences({
-          datasetItemId: datasetItem.id,
-          traceId: trace.data.id,
-          projectName: trace.data.projectName,
-        }),
-      ]);
-
-      const testResult = await this.scoreTestCase(testCase, metrics, trace);
-
-      if (this.suiteMode) {
-        testResult.trialId = runIndex;
-        const itemPolicy = this.itemPolicyMap?.get(datasetItem.id);
-        if (itemPolicy) {
-          testResult.resolvedExecutionPolicy = itemPolicy;
-        }
+      // Best-effort: record the failed item so it appears in the experiment
+      // view. If the insert itself fails, log and continue so the original
+      // task error is never swallowed.
+      try {
+        await this.experiment.insert([
+          new ExperimentItemReferences({
+            datasetItemId: datasetItem.id,
+            traceId: trace.data.id,
+            projectName: trace.data.projectName,
+          }),
+        ]);
+      } catch (insertError) {
+        logger.warn(
+          `Failed to record experiment item for failed task: ${insertError}`,
+        );
       }
 
-      return testResult;
-    } catch (error) {
-      if (error instanceof Error) {
-        trace.update({
-          errorInfo: {
-            message: error.message,
-            exceptionType: error.name,
-            traceback: error.stack ?? "",
-          },
-          endTime: new Date(),
-        });
-      }
-
-      throw error;
+      return {
+        kind: "failure",
+        testResult: this.createFailedTestResult(
+          datasetItem,
+          trace,
+          runIndex,
+          err.message,
+        ),
+        error: err,
+      };
     }
+
+    trace.update({
+      output: taskOutput,
+      endTime: new Date(),
+    });
+
+    // Commit experiment item to DB.
+    await this.experiment.insert([
+      new ExperimentItemReferences({
+        datasetItemId: datasetItem.id,
+        traceId: trace.data.id,
+        projectName: trace.data.projectName,
+      }),
+    ]);
+
+    const testResult = await this.scoreTestCase(testCase, metrics, trace);
+
+    if (this.suiteMode) {
+      testResult.trialId = runIndex;
+      const itemPolicy = this.itemPolicyMap?.get(datasetItem.id);
+      if (itemPolicy) {
+        testResult.resolvedExecutionPolicy = itemPolicy;
+      }
+    }
+
+    return { kind: "success", testResult };
+  }
+
+  private createFailedTestResult(
+    datasetItem: DatasetItemData & T & { id: string },
+    trace: Trace,
+    runIndex: number,
+    errorMessage: string,
+  ): EvaluationTestResult {
+    const failedResult: EvaluationTestResult = {
+      testCase: {
+        traceId: trace.data.id,
+        datasetItemId: datasetItem.id,
+        scoringInputs: this.prepareScoringInputs(datasetItem, {}),
+        taskOutput: {},
+      },
+      scoreResults: [
+        {
+          name: TASK_ERROR_SCORE_NAME,
+          value: 0,
+          reason: errorMessage,
+          scoringFailed: true,
+        },
+      ],
+    };
+
+    if (this.suiteMode) {
+      failedResult.trialId = runIndex;
+      const itemPolicy = this.itemPolicyMap?.get(datasetItem.id);
+      if (itemPolicy) {
+        failedResult.resolvedExecutionPolicy = itemPolicy;
+      }
+    }
+
+    return failedResult;
   }
 
   private async runTask(
     datasetItem: DatasetItemData & T & { id: string },
-    trace: Trace
-  ): Promise<{ testCase: EvaluationTestCase; taskOutput: Record<string, unknown> }> {
+    trace: Trace,
+  ): Promise<{
+    testCase: EvaluationTestCase;
+    taskOutput: Record<string, unknown>;
+  }> {
     logger.debug(`Starting evaluation task on dataset item ${datasetItem.id}`);
     const taskOutput = await track(
       { name: "llm_task", type: SpanType.General },
-      this.task
+      this.task,
     )(datasetItem);
     logger.debug(`Finished evaluation task on dataset item ${datasetItem.id}`);
 
@@ -374,7 +459,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private async scoreTestCase(
     testCase: EvaluationTestCase,
     metrics: BaseMetric[] | undefined,
-    trace: Trace
+    trace: Trace,
   ): Promise<EvaluationTestResult> {
     const effectiveMetrics = metrics ?? this.scoringMetrics;
 
@@ -392,7 +477,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private async calculateScores(
     testCase: EvaluationTestCase,
     metrics: BaseMetric[] | undefined,
-    trace: Trace
+    trace: Trace,
   ): Promise<EvaluationTestResult> {
     const scoreResults: EvaluationScoreResult[] = [];
     const { scoringInputs } = testCase;
@@ -432,16 +517,16 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         value: score.value,
         reason: score.reason,
         categoryName: score.categoryName,
-      })
+      }),
     );
 
     const assertionProjectName = this.client.resolveProjectName(
-      trace.data.projectName
+      trace.data.projectName,
     );
     assertionResults.forEach((result) => {
       if (result.value !== 0 && result.value !== 1) {
         logger.warn(
-          `Suite evaluator "${result.name}" returned non-binary value ${result.value}; coercing to "failed". BaseSuiteEvaluator.score() must return 0 or 1.`
+          `Suite evaluator "${result.name}" returned non-binary value ${result.value}; coercing to "failed". BaseSuiteEvaluator.score() must return 0 or 1.`,
         );
       }
       this.client.traceAssertionResultsBatchQueue.create({
@@ -463,7 +548,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
   private prepareScoringInputs(
     datasetItem: Record<string, unknown>,
-    taskOutput: Record<string, unknown>
+    taskOutput: Record<string, unknown>,
   ): Record<string, unknown> {
     const combined = { ...datasetItem, ...taskOutput };
 
@@ -473,7 +558,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const mapped: Record<string, unknown> = { ...combined };
 
     for (const [targetKey, sourceKey] of Object.entries(
-      this.scoringKeyMapping
+      this.scoringKeyMapping,
     )) {
       const value = getSourceObjValue(combined, sourceKey);
 

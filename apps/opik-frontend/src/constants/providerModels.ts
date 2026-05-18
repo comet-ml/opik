@@ -134,14 +134,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
-      label: "Claude Opus 4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
-      label: "Claude Sonnet 4",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -286,6 +278,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
+      label: "anthropic/claude-opus-4.7-fast",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
@@ -326,6 +322,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/trinity-large-thinking",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING_FREE,
+      label: "arcee-ai/trinity-large-thinking:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_MINI,
       label: "arcee-ai/trinity-mini",
     },
@@ -346,6 +346,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arliai/qwq-32b-arliai-rpr-v1:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.BAIDU_COBUDDY_FREE,
+      label: "baidu/cobuddy:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_21B_A3B,
       label: "baidu/ernie-4.5-21b-a3b",
     },
@@ -364,6 +368,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_VL_424B_A47B,
       label: "baidu/ernie-4.5-vl-424b-a47b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST,
+      label: "baidu/qianfan-ocr-fast",
     },
     {
       value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST_FREE,
@@ -515,6 +523,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
+      label: "deepseek/deepseek-v4-flash:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO,
       label: "deepseek/deepseek-v4-pro",
     },
@@ -589,6 +601,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW,
       label: "google/gemini-3.1-flash-image-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE,
+      label: "google/gemini-3.1-flash-lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW,
@@ -679,6 +695,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "ibm-granite/granite-4.0-h-micro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.IBM_GRANITE_GRANITE_4_1_8B,
+      label: "ibm-granite/granite-4.1-8b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY,
       label: "inception/mercury",
     },
@@ -691,6 +711,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inception/mercury-coder",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T,
+      label: "inclusionai/ling-2.6-1t",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T_FREE,
       label: "inclusionai/ling-2.6-1t:free",
     },
@@ -701,6 +725,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
       label: "inclusionai/ling-2.6-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
+      label: "inclusionai/ring-2.6-1t",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T_FREE,
+      label: "inclusionai/ring-2.6-1t:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PI,
@@ -855,6 +887,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "microsoft/phi-4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4_MINI_INSTRUCT,
+      label: "microsoft/phi-4-mini-instruct",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4_MULTIMODAL_INSTRUCT,
       label: "microsoft/phi-4-multimodal-instruct",
     },
@@ -993,6 +1029,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3,
       label: "mistralai/mistral-medium-3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_5,
+      label: "mistralai/mistral-medium-3-5",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_1,
@@ -1416,6 +1456,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-audio-mini",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_CHAT_LATEST,
+      label: "openai/gpt-chat-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B,
       label: "openai/gpt-oss-120b",
     },
@@ -1508,8 +1552,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/hunter-alpha",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_OWL_ALPHA,
+      label: "openrouter/owl-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
       label: "openrouter/pareto-code",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.PERCEPTRON_PERCEPTRON_MK1,
+      label: "perceptron/perceptron-mk1",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
@@ -1872,6 +1924,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hunyuan-a13b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
+      label: "tencent/hy3-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
       label: "tencent/hy3-preview:free",
     },
@@ -1974,6 +2030,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_20_MULTI_AGENT_BETA,
       label: "x-ai/grok-4.20-multi-agent-beta",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_3,
+      label: "x-ai/grok-4.3",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_CODE_FAST_1,
@@ -2095,8 +2155,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.1 Pro Preview",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
-      label: "Gemini 3.1 Flash TTS Preview",
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      label: "Gemini 3.1 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
@@ -2125,6 +2185,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash-Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_26B_A4B_IT,
+      label: "Gemma 4 26B A4B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
+      label: "Gemma 4 31B IT",
     },
     {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,

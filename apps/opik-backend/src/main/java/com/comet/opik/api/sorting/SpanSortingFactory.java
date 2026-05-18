@@ -6,6 +6,7 @@ import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DURATION;
 import static com.comet.opik.api.sorting.SortableFields.END_TIME;
+import static com.comet.opik.api.sorting.SortableFields.ENVIRONMENT;
 import static com.comet.opik.api.sorting.SortableFields.ERROR_INFO;
 import static com.comet.opik.api.sorting.SortableFields.FEEDBACK_SCORES;
 import static com.comet.opik.api.sorting.SortableFields.ID;
@@ -52,6 +53,7 @@ public class SpanSortingFactory extends SortingFactory {
                 TOTAL_ESTIMATED_COST,
                 ERROR_INFO,
                 CREATED_BY,
-                FEEDBACK_SCORES);
+                FEEDBACK_SCORES,
+                ENVIRONMENT);
     }
 }

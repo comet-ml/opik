@@ -23,6 +23,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
         ttft: core.serialization.number().optional(),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
         source: TraceWriteSource.optional(),
+        environment: core.serialization.string().optional(),
     });
 
 export declare namespace TraceWrite {
@@ -41,5 +42,6 @@ export declare namespace TraceWrite {
         ttft?: number | null;
         thread_id?: string | null;
         source?: TraceWriteSource.Raw | null;
+        environment?: string | null;
     }
 }

@@ -247,6 +247,7 @@ interface SMEFlowContextValue {
   isLoading: boolean;
   isError: boolean;
   isItemsLoading: boolean;
+  isItemsError: boolean;
 }
 
 const SMEFlowContext = createContext<SMEFlowContextValue | null>(null);
@@ -319,7 +320,35 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     [annotationQueue?.id],
   );
 
-  const { data: tracesData, isLoading: isTracesLoading } = useTracesList(
+  const {
+    data: tracesData,
+    isLoading: isTracesLoading,
+    isError: isTracesError,
+  } = useTracesList(
+    {
+      projectId: annotationQueue?.project_id || "",
+      page: 1,
+      size: MAX_QUEUE_ITEMS,
+      sorting: [],
+      filters: annotationQueueFilter,
+      search: "",
+      truncate: true,
+      stripAttachments: true,
+    },
+    {
+      enabled:
+        !!annotationQueue &&
+        !!annotationQueue.project_id &&
+        annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE,
+      placeholderData: keepPreviousData,
+    },
+  );
+
+  const {
+    data: threadsData,
+    isLoading: isThreadsLoading,
+    isError: isThreadsError,
+  } = useThreadsList(
     {
       projectId: annotationQueue?.project_id || "",
       page: 1,
@@ -333,28 +362,17 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       enabled:
         !!annotationQueue &&
         !!annotationQueue.project_id &&
-        annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE,
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  const { data: threadsData, isLoading: isThreadsLoading } = useThreadsList(
-    {
-      projectId: annotationQueue?.project_id || "",
-      page: 1,
-      size: MAX_QUEUE_ITEMS,
-      sorting: [],
-      filters: annotationQueueFilter,
-      search: "",
-    },
-    {
-      enabled:
-        !!annotationQueue &&
-        !!annotationQueue.project_id &&
         annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.THREAD,
       placeholderData: keepPreviousData,
     },
   );
+
+  const isItemsError =
+    annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.TRACE
+      ? isTracesError
+      : annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.THREAD
+        ? isThreadsError
+        : false;
 
   const queueItems = useMemo(() => {
     return (
@@ -681,6 +699,8 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
 
     if (wasLastUnprocessed) {
       setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    } else if (isCurrentItemProcessed && currentIndex < queueItems.length - 1) {
+      setCurrentIndex(currentIndex + 1);
     } else {
       handleNextUnprocessed();
     }
@@ -696,6 +716,9 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     handleNextUnprocessed,
     unprocessedIds,
     setCurrentView,
+    isCurrentItemProcessed,
+    currentIndex,
+    queueItems.length,
   ]);
 
   useEffect(() => {
@@ -818,6 +841,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     isLoading,
     isError,
     isItemsLoading,
+    isItemsError,
   };
 
   return (

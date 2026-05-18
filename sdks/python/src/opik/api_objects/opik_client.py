@@ -46,6 +46,8 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .prompt.text import prompt as text_prompt_module
+from .prompt.chat import chat_prompt as chat_prompt_module
 from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
 from .agent_config.base import Config
 from .agent_config.config import ConfigManager
@@ -72,8 +74,10 @@ from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
 from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
+from ..rest_api import errors as rest_api_errors
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
+    environment_public,
     project_public,
     span_public,
     trace_public,
@@ -303,6 +307,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
+        environment: Optional[str] = None,
         **ignored_kwargs: Any,
     ) -> trace_module.Trace:
         """
@@ -343,6 +348,7 @@ class Opik:
             thread_id=thread_id,
             attachments=attachments,
             source="sdk",
+            environment=environment,
         )
 
     def __internal_api__trace__(
@@ -361,6 +367,7 @@ class Opik:
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
         source: TraceSource = "sdk",
+        environment: Optional[str] = None,
         **ignored_kwargs: Any,
     ) -> trace_module.Trace:
         id = id if id is not None else id_helpers.generate_id()
@@ -370,6 +377,8 @@ class Opik:
         last_updated_at = datetime_helpers.local_timestamp()
 
         project_name = self._resolve_project_name(project_name)
+        if environment is None:
+            environment = self._config.environment
 
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
@@ -385,6 +394,7 @@ class Opik:
             thread_id=thread_id,
             last_updated_at=last_updated_at,
             source=source,
+            environment=environment,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
@@ -416,6 +426,7 @@ class Opik:
             url_override=self._config.url_override,
             source=source,
             config=self._config,
+            environment=environment,
         )
 
     def copy_traces(
@@ -585,6 +596,7 @@ class Opik:
         total_cost: Optional[float] = None,
         attachments: Optional[List[Attachment]] = None,
         source: TraceSource = "sdk",
+        environment: Optional[str] = None,
     ) -> span_module.Span:
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
@@ -592,6 +604,8 @@ class Opik:
         )
 
         project_name = self._resolve_project_name(project_name)
+        if environment is None:
+            environment = self._config.environment
 
         if trace_id is None:
             trace_id = id_helpers.generate_id()
@@ -611,6 +625,7 @@ class Opik:
                 thread_id=None,
                 last_updated_at=datetime_helpers.local_timestamp(),
                 source=source,
+                environment=environment,
             )
             self._streamer.put(create_trace_message)
 
@@ -645,6 +660,7 @@ class Opik:
             attachments=attachments,
             source=source,
             config=self._config,
+            environment=environment,
         )
 
     def update_span(
@@ -1007,6 +1023,7 @@ class Opik:
                 Supported columns:
                 - `id`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
                 - `first_message`, `last_message`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - `environment`: Enum for lifecycle stage (=, !=, in, not_in)
                 - `status`: Enum (=, !=)
                 - `start_time`, `end_time`, `created_at`, `last_updated_at`: DateTime (=, !=, >, >=, <, <=)
                 - `feedback_scores`: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
@@ -1020,6 +1037,8 @@ class Opik:
                 - `first_message contains "hello"` - Filter by first message content
                 - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
                 - `tags contains "important"` - Filter by tag
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
 
                 If not provided, all threads in the project will be returned up to the limit.
             max_results: The maximum number of threads to retrieve. The default value is 1000.
@@ -1079,6 +1098,79 @@ class Opik:
             id=span_id,
             name=name,
         )
+
+    def create_environment(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
+    ) -> environment_public.EnvironmentPublic:
+        """Create a new environment in the current workspace.
+
+        Args:
+            name: Human-readable environment name (e.g. ``production``).
+            description: Optional description.
+            color: Optional color hex code used for UI display.
+
+        Returns:
+            The created environment.
+        """
+        new_id = id_helpers.generate_id()
+        try:
+            self._rest_client.environments.create_environment(
+                id=new_id,
+                name=name,
+                description=description,
+                color=color,
+            )
+        except rest_api_errors.ConflictError:
+            raise exceptions.EnvironmentAlreadyExists(
+                f"Environment {name!r} already exists in this workspace."
+            )
+        return self._rest_client.environments.get_environment_by_id(new_id)
+
+    def get_environments(self) -> List[environment_public.EnvironmentPublic]:
+        """List environments in the current workspace.
+
+        The backend caps the response at the workspace limit (default 20).
+        """
+        page = self._rest_client.environments.find_environments()
+        return list(page.content or [])
+
+    def update_environment(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
+    ) -> environment_public.EnvironmentPublic:
+        """Update the description and/or color of an environment, identified by name.
+
+        Returns the updated environment.
+        """
+        existing = self._find_environment_by_name(name)
+        if existing is None:
+            raise exceptions.OpikException(f"No environment found with name {name!r}.")
+        self._rest_client.environments.update_environment(
+            existing.id,
+            description=description,
+            color=color,
+        )
+        return self._rest_client.environments.get_environment_by_id(existing.id)
+
+    def delete_environment(self, name: str) -> None:
+        """Delete an environment by name. No-op if no matching environment exists."""
+        existing = self._find_environment_by_name(name)
+        if existing is None:
+            return
+        self._rest_client.environments.delete_environments_batch(ids=[existing.id])
+
+    def _find_environment_by_name(
+        self, name: str
+    ) -> Optional[environment_public.EnvironmentPublic]:
+        for env in self.get_environments():
+            if env.name == name:
+                return env
+        return None
 
     def get_dataset(
         self, name: str, project_name: Optional[str] = None
@@ -1753,6 +1845,7 @@ class Opik:
 
                 Supported columns include:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `environment`: Enum field for lifecycle stage (=, !=, in, not_in)
                 - `status`: String field (=, contains, not_contains only)
                 - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
                 - `input`, `output`: String fields for content (=, contains, not_contains only)
@@ -1764,6 +1857,7 @@ class Opik:
 
                 Supported operators by column:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `environment`: =, !=, in, not_in
                 - `status`: =, contains, not_contains
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
@@ -1783,6 +1877,8 @@ class Opik:
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
 
                 If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
@@ -1854,6 +1950,7 @@ class Opik:
 
                 Supported columns include:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `environment`: Enum field for lifecycle stage (=, !=, in, not_in)
                 - `status`: String field (=, contains, not_contains only)
                 - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
                 - `input`, `output`: String fields for content (=, contains, not_contains only)
@@ -1865,6 +1962,7 @@ class Opik:
 
                 Supported operators by column:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `environment`: =, !=, in, not_in
                 - `status`: =, contains, not_contains
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
@@ -1884,6 +1982,8 @@ class Opik:
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
 
                 If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
@@ -2170,16 +2270,21 @@ class Opik:
         name: str,
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
+        no_cache: bool = False,
     ) -> Optional[prompt_module.Prompt]:
         """
         Retrieve a text prompt by name and optional commit version.
 
-        This method only returns text prompts.
+        This method only returns text prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        Pinned commits are cached indefinitely. When called inside an @track
+        context the prompt reference is injected into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
@@ -2187,20 +2292,13 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        project_name = self._resolve_project_name(project_name)
-        fern_prompt_version = prompt_client_.get_prompt(
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
-            raise_if_not_template_structure="text",
-            project_name=project_name,
-        )
-
-        if fern_prompt_version is None:
-            return None
-
-        return prompt_module.Prompt.from_fern_prompt_version(
-            name, fern_prompt_version, project_name=project_name
+            project_name=self._resolve_project_name(project_name),
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=no_cache,
         )
 
     def get_chat_prompt(
@@ -2208,16 +2306,21 @@ class Opik:
         name: str,
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
+        no_cache: bool = False,
     ) -> Optional[prompt_module.ChatPrompt]:
         """
         Retrieve a chat prompt by name and optional commit version.
 
-        This method only returns chat prompts.
+        This method only returns chat prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        Pinned commits are cached indefinitely. When called inside an @track
+        context the prompt reference is injected into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
@@ -2225,20 +2328,13 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
         """
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        project_name = self._resolve_project_name(project_name)
-        fern_prompt_version = prompt_client_.get_prompt(
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
-            raise_if_not_template_structure="chat",
-            project_name=project_name,
-        )
-
-        if fern_prompt_version is None:
-            return None
-
-        return prompt_module.ChatPrompt.from_fern_prompt_version(
-            name, fern_prompt_version, project_name=project_name
+            project_name=self._resolve_project_name(project_name),
+            template_structure="chat",
+            prompt_cls=chat_prompt_module.ChatPrompt,
+            no_cache=no_cache,
         )
 
     def get_prompt_history(

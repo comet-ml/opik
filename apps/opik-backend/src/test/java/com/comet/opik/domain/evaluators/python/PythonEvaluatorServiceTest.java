@@ -75,6 +75,8 @@ class PythonEvaluatorServiceTest {
         pythonEvaluatorConfig.setMaxRetryAttempts(4);
         pythonEvaluatorConfig.setMinRetryDelay(Duration.milliseconds(100));
         pythonEvaluatorConfig.setMaxRetryDelay(Duration.milliseconds(100));
+        pythonEvaluatorConfig.setConnectTimeout(Duration.seconds(1));
+        pythonEvaluatorConfig.setReadTimeout(Duration.seconds(5));
 
         config = new OpikConfiguration();
         config.setPythonEvaluator(pythonEvaluatorConfig);
@@ -96,7 +98,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenValidRequest__shouldReturnResults() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(
                     podamFactory.manufacturePojo(PythonScoreResult.class),
                     podamFactory.manufacturePojo(PythonScoreResult.class));
@@ -116,7 +118,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -127,7 +129,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenEmptyData__shouldThrowIllegalArgumentException() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var emptyData = Map.<String, String>of();
+            var emptyData = Map.<String, Object>of();
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, emptyData))
@@ -139,7 +141,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__when503Error__shouldRetryAndEventuallySucceed() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
             var pythonResponse = PythonEvaluatorResponse.builder()
                     .scores(expectedScores)
@@ -168,7 +170,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -179,7 +181,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__when504Error__shouldRetryAndEventuallySucceed() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
             var pythonResponse = PythonEvaluatorResponse.builder()
                     .scores(expectedScores)
@@ -203,7 +205,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -214,7 +216,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenTimeoutException__shouldRetryAndEventuallySucceed() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
             var pythonResponse = PythonEvaluatorResponse.builder()
                     .scores(expectedScores)
@@ -239,7 +241,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -250,7 +252,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenMaxRetriesExceeded__shouldThrowException() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             setupHttpCallChain();
@@ -265,7 +267,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(RuntimeException.class);
 
             // Should retry 4 times + initial attempt = 5 total calls
@@ -276,7 +278,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__when400Error__shouldNotRetryAndThrowImmediately() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var errorResponse = PythonEvaluatorErrorResponse.builder()
                     .error("Invalid Python code")
                     .build();
@@ -294,7 +296,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Invalid Python code");
 
@@ -306,7 +308,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenNonRetryableProcessingException__shouldThrowImmediately() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             when(client.target(anyString())).thenReturn(webTarget);
@@ -320,7 +322,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(ProcessingException.class)
                     .hasMessageContaining("Connection refused");
 
@@ -359,7 +361,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluateThread(code, context);
+            var actualScores = pythonEvaluatorService.evaluateThread(code, context).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -406,7 +408,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluateThread(code, context);
+            var actualScores = pythonEvaluatorService.evaluateThread(code, context).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -432,7 +434,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluateThread(code, context))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluateThread(code, context).block())
                     .isInstanceOf(RuntimeException.class);
 
             // Should retry 4 times + initial attempt = 5 total calls
@@ -448,7 +450,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenErrorResponseParsingFails__shouldFallbackToStringParsing() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             setupHttpCallChain();
@@ -471,7 +473,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Custom error message");
         }
@@ -480,7 +482,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenBothErrorResponseParsingFails__shouldUseDefaultMessage() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             setupHttpCallChain();
@@ -504,7 +506,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining(
                             "Python evaluation failed (HTTP 500): Unknown error during Python evaluation");

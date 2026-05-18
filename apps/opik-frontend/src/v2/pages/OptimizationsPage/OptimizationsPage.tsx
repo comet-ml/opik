@@ -10,7 +10,7 @@ import {
 } from "use-query-params";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DatasetNameCell from "@/v2/pages/OptimizationsPage/DatasetNameCell";
 import OptimizationStatusCell from "@/v2/pages/OptimizationsPage/OptimizationStatusCell";
 import {
@@ -20,7 +20,6 @@ import {
   OptimizationCostCell,
   OptimizationTotalCostCell,
 } from "@/v2/pages/OptimizationsPage/OptimizationMetricCells";
-import Loader from "@/shared/Loader/Loader";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -36,7 +35,6 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import OptimizationRowActionsCell from "@/v2/pages/OptimizationsPage/OptimizationRowActionsCell";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
-import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import {
   generateActionsColumDef,
@@ -217,10 +215,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const noData = !search && filters.length === 0;
-  const noDataText = noData
-    ? "There are no optimizations yet\n" +
-      "Optimizations help improve your LLM application's performance, accuracy, and overall user experience"
-    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -320,11 +314,14 @@ const OptimizationsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending || (isPlaceholderData && optimizations.length === 0)) {
-    return <Loader />;
-  }
+  const isTableLoading =
+    isPending || (isPlaceholderData && optimizations.length === 0);
+  const isEmpty = !isTableLoading && noData && optimizations.length === 0;
 
-  const isEmpty = noData && optimizations.length === 0;
+  const handleClearFilters = useCallback(() => {
+    setSearch(undefined);
+    setFilters([]);
+  }, [setSearch, setFilters]);
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -355,9 +352,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
             <StudioTemplates />
           )}
           <div className="pt-4">
-            <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-              Optimization runs
-            </h2>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
               <div className="flex items-center gap-2">
                 <SearchInput
@@ -409,15 +403,18 @@ const OptimizationsPage: React.FunctionComponent = () => {
                 setRowSelection,
               }}
               noData={
-                <DataTableNoData title={noDataText}>
-                  {noData && canUseOptimizationStudio && (
-                    <Button variant="link" onClick={handleNewOptimizationClick}>
-                      Create optimization
-                    </Button>
-                  )}
-                </DataTableNoData>
+                <DataTableNoMatchingData
+                  onClearFilters={
+                    search || filters.length > 0
+                      ? handleClearFilters
+                      : undefined
+                  }
+                />
               }
-              showLoadingOverlay={isPlaceholderData && isFetching}
+              showSkeleton={isTableLoading}
+              showLoadingOverlay={
+                !isTableLoading && isPlaceholderData && isFetching
+              }
             />
             <div className="py-4">
               <DataTablePagination

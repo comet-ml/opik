@@ -7,6 +7,7 @@ import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.domain.TagOperations;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -20,6 +21,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -29,6 +31,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -79,7 +82,7 @@ public interface TraceThreadDAO {
 class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String INSERT_THREADS_SQL = """
-            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source)
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source, environment)
             VALUES
                 <items:{item |
                     (
@@ -90,12 +93,13 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                          :status<item.index>,
                          :created_by<item.index>,
                          :last_updated_by<item.index>,
-                         parseDateTime64BestEffort(:created_at<item.index> , 9),
-                         parseDateTime64BestEffort(:last_updated_at<item.index> , 6),
+                         :created_at<item.index>,
+                         :last_updated_at<item.index>,
                          :tags<item.index>,
-                         mapFromArrays(:rule_ids<item.index>, :sampling<item.index>),
+                         :sampling_per_rule<item.index>,
                          :scored_at<item.index>,
-                         :source<item.index>
+                         :source<item.index>,
+                         :environment<item.index>
                      )
                      <if(item.hasNext)>
                         ,
@@ -106,7 +110,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String UPDATE_THREAD_SQL = """
             INSERT INTO trace_threads (
-            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule, scored_at, source
+            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule, scored_at, source, environment
             )
             SELECT
                 workspace_id,
@@ -120,7 +124,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 created_at,
                 sampling_per_rule,
                 scored_at,
-                source
+                source,
+                environment
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
@@ -165,9 +170,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
-            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source)
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source, environment)
             SELECT
-                workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6), tags, sampling_per_rule, NULL, source
+                workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6), tags, sampling_per_rule, NULL, source, environment
             FROM (
                 SELECT *
                 FROM trace_threads
@@ -191,7 +196,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     private static final String UPDATE_THREAD_SAMPLING_PER_RULE = """
-            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source)
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source, environment)
             SELECT
                 new_tt.workspace_id,
                 new_tt.project_id,
@@ -205,7 +210,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 if(empty(tt.thread_id), new_tt.tags, tt.tags) AS tags,
                 new_tt.sampling_per_rule AS sampling_per_rule,
                 if(empty(tt.thread_id), new_tt.scored_at, tt.scored_at) AS scored_at,
-                if(empty(tt.thread_id), new_tt.source, tt.source) AS source
+                if(empty(tt.thread_id), new_tt.source, tt.source) AS source,
+                if(empty(tt.thread_id), new_tt.environment, tt.environment) AS environment
             FROM (
                 <items:{item |
                     SELECT
@@ -221,7 +227,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         :tags<item.index> AS tags,
                         mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule,
                         :scored_at<item.index> AS scored_at,
-                        :source<item.index> AS source
+                        :source<item.index> AS source,
+                        :environment<item.index> AS environment
                     <if(item.hasNext)>UNION ALL<endif>
                 }>
             ) as new_tt
@@ -239,7 +246,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     tt.tags AS tags,
                     tt.sampling_per_rule AS sampling_per_rule,
                     tt.scored_at AS scored_at,
-                    tt.source AS source
+                    tt.source AS source,
+                    tt.environment AS environment
                 FROM trace_threads tt final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -253,7 +261,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     private static final String UPDATE_THREAD_SCORED_AT = """
-            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source)
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source, environment)
             SELECT
                 workspace_id,
                 project_id,
@@ -267,7 +275,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tags,
                 sampling_per_rule,
                 parseDateTime64BestEffort(:scored_at, 9),
-                source
+                source,
+                environment
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
@@ -276,7 +285,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     public static final String GET_RECENT_CLOSED_THREADS_PER_PROJECT = """
             SELECT
-                workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source
+                workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at, source, environment
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
@@ -317,8 +326,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 statement.bind("status" + i, item.status().getValue());
                 statement.bind("created_by" + i, item.createdBy());
                 statement.bind("last_updated_by" + i, userName);
-                statement.bind("created_at" + i, item.createdAt().toString());
-                statement.bind("last_updated_at" + i, item.lastUpdatedAt().toString());
+                statement.bind("created_at" + i, ClickHouseDateTimeFormat.formatNanos(item.createdAt()));
+                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(item.lastUpdatedAt()));
 
                 if (item.tags() != null) {
                     statement.bind("tags" + i, item.tags().toArray(String[]::new));
@@ -326,20 +335,13 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     statement.bind("tags" + i, new String[]{});
                 }
 
-                if (item.sampling() != null) {
-                    UUID[] ruleIds = item.sampling().keySet().toArray(UUID[]::new);
-                    statement.bind("rule_ids" + i, ruleIds);
-                    statement.bind("sampling" + i,
-                            Arrays.stream(ruleIds).map(ruleId -> item.sampling().get(ruleId)).toArray(Boolean[]::new));
-                } else {
-                    statement.bind("rule_ids" + i, new UUID[]{});
-                    statement.bind("sampling" + i, new Boolean[]{});
-                }
+                statement.bind("sampling_per_rule" + i,
+                        item.sampling() != null ? item.sampling() : Map.of());
 
                 if (item.scoredAt() != null) {
-                    statement.bind("scored_at" + i, item.scoredAt().toString());
+                    statement.bind("scored_at" + i, ClickHouseDateTimeFormat.formatNanos(item.scoredAt()));
                 } else {
-                    statement.bindNull("scored_at" + i, Instant.class);
+                    statement.bindNull("scored_at" + i, String.class);
                 }
 
                 if (item.source() != null) {
@@ -347,6 +349,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 } else {
                     statement.bindNull("source" + i, String.class);
                 }
+
+                statement.bind("environment" + i, StringUtils.defaultString(item.environment()));
 
                 i++;
             }
@@ -518,9 +522,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         : new String[]{});
 
                 if (traceThreadModel.scoredAt() != null) {
-                    statement.bind("scored_at" + i, traceThreadModel.scoredAt().toString());
+                    statement.bind("scored_at" + i, ClickHouseDateTimeFormat.formatNanos(traceThreadModel.scoredAt()));
                 } else {
-                    statement.bindNull("scored_at" + i, Instant.class);
+                    statement.bindNull("scored_at" + i, String.class);
                 }
 
                 if (traceThreadModel.source() != null) {
@@ -528,6 +532,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 } else {
                     statement.bindNull("source" + i, String.class);
                 }
+
+                statement.bind("environment" + i, StringUtils.defaultString(traceThreadModel.environment()));
 
                 i++;
             }
@@ -568,7 +574,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(UPDATE_THREAD_SCORED_AT)
                     .bind("project_id", projectId)
                     .bind("thread_ids", threadIds)
-                    .bind("scored_at", scoredAt.toString());
+                    .bind("scored_at", ClickHouseDateTimeFormat.formatNanos(scoredAt));
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
@@ -642,7 +648,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tags,
                 sampling_per_rule,
                 scored_at,
-                source
+                source,
+                environment
             )
             SELECT
                 tt.workspace_id,
@@ -658,7 +665,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 as tags,
                 tt.sampling_per_rule,
                 tt.scored_at,
-                tt.source
+                tt.source,
+                tt.environment
             FROM trace_threads tt
             WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
             ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC

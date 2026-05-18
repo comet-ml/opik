@@ -211,9 +211,6 @@ analytics:
   # Default: empty
   # Description: Environment name included in every analytics event (e.g. "staging", "production")
   environment:
-  # Default: 1d (minimum allowed, sufficient for test duration)
-  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
-  firstTraceCreatedDedupTtl: 1d
 
 # Configuration for anonymous usage reporting
 usageReport:
@@ -277,6 +274,13 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: 100
+  # Default: 50000
+  # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes
+  #   through the agentic-tools path. Below the threshold the inline path is used.
+  agenticToolsThresholdTokens: 50000
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
+  agenticToolsCharsPerToken: 4
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -492,6 +496,64 @@ pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+  # Default: 10s
+  # Description: Max wait for a Python evaluator response read per call.
+  readTimeout: 10s
+  # Default: 5s
+  # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
+  connectTimeout: 5s
+
+# JAX-RS Jersey client configuration. This is the singleton HTTP client shared in the service.
+jerseyClient:
+  # Default: 30s
+  # Description: Overall response read timeout. Per-call timeouts can override via Jersey ClientProperties.READ_TIMEOUT.
+  timeout: 30s
+  # Default: 2s
+  # Description: The maximum time to wait for a connection to open.
+  connectionTimeout: 2s
+  # Default: 1s
+  # Description: The maximum time to wait for a connection to be returned from the connection pool.
+  connectionRequestTimeout: 1s
+  # Default: 5m
+  # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
+  timeToLive: 5m
+  # Default: 256
+  # Description: The maximum number of concurrent open connections.
+  maxConnections: 256
+  # Default: 64
+  # Description: The maximum number of concurrent open connections per route.
+  maxConnectionsPerRoute: 64
+  # Default: 5s
+  # Description: The maximum time before a persistent connection is checked to remain active. If set to 0, no inactivity check will be performed.
+  validateAfterInactivityPeriod: 5s
+  # Default: 16
+  # Description: Minimum idle Jersey async worker threads.
+  minThreads: 16
+  # Default: 128
+  # Description: Maximum Jersey async worker threads.
+  maxThreads: 128
+  # Default: 64
+  # Description: The size of the work queue of the pool used for asynchronous requests. Additional threads will be spawn only if the queue is reached its maximum size.
+  workQueueSize: 64
+  # Default: false
+  # Description: Whether to send gzipped request bodies. Off because not all upstreams handle Content-Encoding: gzip on requests.
+  gzipEnabledForRequests: false
+  # Default: false
+  # Description: Whether to enable Transfer-Encoding: chunked on outbound request bodies. Off because sending Content-Length is universally accepted.
+  chunkedEncodingEnabled: false
+  # Default: false (tests only — production keeps default of true).
+  # Description: Adds an Accept-Encoding: gzip header to all requests, and enables automatic gzip decoding of responses.
+  # WireMock returns plain (non-gzipped) bodies and some response paths surface ZipException.
+  # Off in tests; production upstreams follow the HTTP contract correctly (Content-Encoding only when actually gzipped)
+  gzipEnabled: false
+  # TLS relaxation for tests only. WireMock with uses self-signed certs, miss-matching the hostname.
+  tls:
+    # Default: true
+    # Description: Whether to trust self-signed certificates regardless of trustStore settings.
+    trustSelfSignedCertificates: true
+    # Default: false
+    # Description: Whether to verify the hostname of the server against the hostname presented in the server certificate.
+    verifyHostname: false
 
 serviceToggles:
   # Default: false for testing. It should be enabled for test scenarios when it's relevant.
@@ -515,9 +577,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: "false"
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
@@ -527,6 +586,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
   datasetExportEnabled: "true"
+  # Default: true
+  # Description: Whether the deployment is expected to produce demo project data on signup
+  demoDataEnabled: "true"
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
@@ -555,8 +617,11 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
   # Default: false
-  # Description: Whether or not Collaborators tab feature is enabled
-  collaboratorsTabEnabled: "false"
+  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  ollieEnabled: "false"
+  # Default: false
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
+  agenticToolsEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
@@ -580,7 +645,6 @@ serviceToggles:
 
 # Local Runner configuration
 localRunner:
-  enabled: true
   jobTimeout: 30s
   maxPendingJobsPerRunner: 100
   heartbeatTtl: 15s
@@ -691,6 +755,14 @@ experimentProjectMigration:
   lockWaitTime: 100ms
   # Per-cycle timeout — short for tests so hangs fail fast
   jobTimeout: 30s
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: 2
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: 50
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
@@ -793,3 +865,8 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: 5000ms
+
+# Environment CRUD configuration
+environment:
+  # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
+  maxPerWorkspace: 5

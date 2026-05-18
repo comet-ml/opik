@@ -56,7 +56,7 @@ class ExperimentTracePersistence {
     Mono<Void> persistTraceSpanAndItem(@NonNull PersistenceContext ctx) {
 
         ObjectNode input = buildMessagesInput(ctx.renderedMessages());
-        ObjectNode output = buildLlmOutput(ctx.llmResponse());
+        ObjectNode output = buildLlmOutput(ctx.llmResponse(), ctx.errorType(), ctx.errorMessage());
 
         return Mono.when(createTrace(ctx, input, output), createSpan(ctx, input, output))
                 .then(createExperimentItem(ctx.experimentId(), ctx.datasetItemId(), ctx.traceId(),
@@ -177,13 +177,25 @@ class ExperimentTracePersistence {
         return input;
     }
 
-    private ObjectNode buildLlmOutput(ChatCompletionResponse llmResponse) {
+    private ObjectNode buildLlmOutput(ChatCompletionResponse llmResponse, String errorType, String errorMessage) {
         ObjectNode output = JsonUtils.createObjectNode();
         if (llmResponse != null && llmResponse.choices() != null && !llmResponse.choices().isEmpty()) {
             var choice = llmResponse.choices().getFirst();
             if (choice.message() != null && choice.message().content() != null) {
                 output.put("output", choice.message().content());
             }
+        }
+        // When the agent LLM call failed, surface the error inside the persisted output so the
+        // assertion judge (which reads trace.output) can recognise the fault state instead of
+        // fabricating verdicts against an empty `{}`. The structured ErrorInfo on the trace itself
+        // is set separately in createTrace; the assertion path doesn't consume that field today.
+        if (errorMessage != null) {
+            ObjectNode errorNode = JsonUtils.createObjectNode();
+            if (errorType != null) {
+                errorNode.put("type", errorType);
+            }
+            errorNode.put("message", errorMessage);
+            output.set("error", errorNode);
         }
         return output;
     }

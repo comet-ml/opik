@@ -19,6 +19,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,24 +87,32 @@ public class ExperimentProjectMigrationJob extends Job implements InterruptableJ
                     }
                     return migrationService.runMigrationCycle()
                             .timeout(config.jobTimeout().toJavaDuration())
-                            .doOnSuccess(unused -> cycleDuration.record(
-                                    System.currentTimeMillis() - startMillis, RESULT_SUCCESS));
+                            .doOnSuccess(unused -> {
+                                long durationMillis = System.currentTimeMillis() - startMillis;
+                                var duration = Duration.ofMillis(durationMillis);
+                                cycleDuration.record(durationMillis, RESULT_SUCCESS);
+                                log.info("Experiment project migration cycle finished, duration='{}'", duration);
+                            });
                 }),
                 Mono.defer(() -> {
-                    log.info("Could not acquire lock, another instance is already running");
-                    cycleDuration.record(System.currentTimeMillis() - startMillis, RESULT_LOCK_SKIPPED);
+                    long durationMillis = System.currentTimeMillis() - startMillis;
+                    var duration = Duration.ofMillis(durationMillis);
+                    cycleDuration.record(durationMillis, RESULT_LOCK_SKIPPED);
+                    log.info("Could not acquire lock, another instance is already running, duration='{}'", duration);
                     return Mono.empty();
                 }),
                 config.lockTimeout().toJavaDuration(),
                 config.lockWaitTime().toJavaDuration(),
-                true)
+                false)
                 // Resume on errors so the recurring job stays alive
                 .onErrorResume(throwable -> {
-                    cycleDuration.record(System.currentTimeMillis() - startMillis, RESULT_ERROR);
+                    long durationMillis = System.currentTimeMillis() - startMillis;
+                    var duration = Duration.ofMillis(durationMillis);
+                    cycleDuration.record(durationMillis, RESULT_ERROR);
                     if (interrupted.get()) {
-                        log.warn("Experiment project migration was interrupted", throwable);
+                        log.warn("Experiment project migration was interrupted, duration='{}'", duration, throwable);
                     } else {
-                        log.error("Experiment project migration failed", throwable);
+                        log.error("Experiment project migration failed, duration='{}'", duration, throwable);
                     }
                     return Mono.empty();
                 })
