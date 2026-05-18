@@ -37,15 +37,15 @@ jobs:
       OPIK_SENTRY_ENABLE: False
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Get pip cache dir
         id: pip-cache
         run: |
-          echo "::set-output name=dir::$(pip cache dir)"
+          echo "dir=$(pip cache dir)" >> "$GITHUB_OUTPUT"
       - name: pip cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ steps.pip-cache.outputs.dir }}
           key: ${{ matrix.os }}-${{ matrix.python-version }}-pip
@@ -67,7 +67,7 @@ jobs:
       - name: Test notebook
         run: |
           cd "$TEST_DIRECTORY" || exit
-          python -X faulthandler $(which ipython) "$TEST_NOTEBOOK"
+          python -X faulthandler "$(which ipython)" "$TEST_NOTEBOOK"
         env:
           OPENAI_API_KEY: ${{ secrets.DOCS_OPENAI_API_KEY }}
           OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
