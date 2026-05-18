@@ -26,6 +26,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator
+from unittest import mock
 
 import pytest
 
@@ -412,25 +413,19 @@ def test_migrate_dataset__cascade_trace_and_span_comments__round_trip(
     dest_trace_id = dest_items[0].trace_id
     assert dest_trace_id is not None
 
-    def _dest_trace_has_comments() -> Any:
-        t = rest.traces.get_trace_by_id(id=dest_trace_id)
-        return (
-            t if (t.comments and len(t.comments) == len(trace_comment_texts)) else None
-        )
-
-    dest_trace = _wait_until(_dest_trace_has_comments)
-    assert dest_trace is not None, (
-        f"destination trace {dest_trace_id} did not receive all "
-        f"{len(trace_comment_texts)} expected comments"
-    )
-    assert [c.text for c in dest_trace.comments] == trace_comment_texts, (
-        "destination trace comments differ in content or order"
+    # Verify the destination trace's comments via the shared verifier
+    # (it polls through ``_retry_until_assertions_pass`` for BE eventual
+    # consistency, so we don't need a separate hand-rolled wait).
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=dest_trace_id,
+        project_name=target_project_name,
+        comments=trace_comment_texts,
     )
 
-    # Find the destination span matching our source span by ``name`` (the
-    # cascade mints fresh span ids, so we can't match on id). Pick a span
-    # off the destination trace with the same ``name`` as the source
-    # ``target_span`` we attached comments to.
+    # Span comments: the cascade mints fresh span ids, so we resolve the
+    # destination span via name match on the source ``target_span``
+    # before delegating to the shared verifier for the content check.
     dest_spans = _wait_until(
         lambda: list(
             opik_client.search_spans(
@@ -442,23 +437,35 @@ def test_migrate_dataset__cascade_trace_and_span_comments__round_trip(
         )
     )
     assert dest_spans, "no destination spans after migrate"
-    candidates = [s for s in dest_spans if s.name == target_span.name]
-    assert candidates, (
+    matching = [s for s in dest_spans if s.name == target_span.name]
+    assert matching, (
         f"destination trace has no span matching source name {target_span.name!r}"
     )
+    # If multiple destination spans share the source span's name (rare;
+    # the seeded experiment has one root + a few children with distinct
+    # names), pick the one whose comment count matches before delegating
+    # to verify_span -- the verifier's exact-equality assert would fail
+    # against an unrelated namesake otherwise.
+    candidate_ids = [s.id for s in matching]
+    if len(candidate_ids) > 1:
+        chosen = next(
+            (
+                s.id
+                for s in matching
+                if rest.spans.get_span_by_id(id=s.id).comments
+                and len(rest.spans.get_span_by_id(id=s.id).comments)
+                == len(span_comment_texts)
+            ),
+            candidate_ids[0],
+        )
+    else:
+        chosen = candidate_ids[0]
 
-    def _matching_dest_span_with_comments() -> Any:
-        for candidate in candidates:
-            span = rest.spans.get_span_by_id(id=candidate.id)
-            if span.comments and len(span.comments) == len(span_comment_texts):
-                return span
-        return None
-
-    dest_span = _wait_until(_matching_dest_span_with_comments)
-    assert dest_span is not None, (
-        f"no destination span carried the expected {len(span_comment_texts)} "
-        "comments after migrate"
-    )
-    assert [c.text for c in dest_span.comments] == span_comment_texts, (
-        "destination span comments differ in content or order"
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=chosen,
+        trace_id=dest_trace_id,
+        parent_span_id=mock.ANY,
+        project_name=target_project_name,
+        comments=span_comment_texts,
     )
