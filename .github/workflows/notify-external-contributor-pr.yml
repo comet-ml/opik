@@ -3,18 +3,27 @@ name: 📣 Notify Slack — External Contributor PR
 on:
   pull_request_target:
     types: [opened, ready_for_review]
+  # Manual escape hatch: a maintainer can retroactively notify about a
+  # PR that slipped through auto-fire (e.g., labeler ran late and our
+  # workflow saw no labels, or the PR predates this workflow). The
+  # dispatcher's identity is NOT relevant — gates are applied to the
+  # TARGET PR's state (draft, author_association, marker), so a
+  # maintainer can't bypass the external-contributor constraint by
+  # dispatching against an internal PR.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number in comet-ml/opik to notify about'
+        required: true
+        type: number
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: false
 
 jobs:
   notify:
     name: Notify #code-review on external contributor PR
-    if: >-
-      !github.event.pull_request.draft &&
-      contains(fromJSON('["NONE","FIRST_TIME_CONTRIBUTOR","FIRST_TIMER","CONTRIBUTOR"]'),
-               github.event.pull_request.author_association)
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -26,11 +35,104 @@ jobs:
       MARKER: <!-- opik-contributor-slack-notified -->
 
     steps:
-      - name: Check for prior notification marker comment
-        id: marker_check
+      - name: Resolve PR context
+        # Unify both trigger paths into a single set of step outputs so
+        # downstream steps don't care whether we got here from a PR
+        # event or from manual dispatch. For pull_request_target the
+        # event already carries everything we need; for workflow_dispatch
+        # we fetch the PR via the API.
+        #
+        # SECURITY: PR-controlled values (title, author display name,
+        # branch ref) are passed through env vars, never `${{ }}`
+        # interpolation in `run:` blocks, so a malicious PR title can't
+        # shell-inject. PR number is a numeric input, safe to interpolate.
+        id: resolve_pr
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          EVT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVT_PR_URL: ${{ github.event.pull_request.html_url }}
+          EVT_PR_TITLE: ${{ github.event.pull_request.title }}
+          EVT_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVT_PR_DRAFT: ${{ github.event.pull_request.draft }}
+          EVT_PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          EVT_PR_AUTHOR_DISPLAY: ${{ github.event.pull_request.user.name }}
+          EVT_PR_AUTHOR_ASSOC: ${{ github.event.pull_request.author_association }}
         run: |
           set -euo pipefail
-          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            PR_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${DISPATCH_PR_NUMBER}")
+            PR_NUMBER="$DISPATCH_PR_NUMBER"
+            PR_URL=$(printf '%s' "$PR_JSON" | jq -r .html_url)
+            PR_TITLE=$(printf '%s' "$PR_JSON" | jq -r .title)
+            PR_HEAD_SHA=$(printf '%s' "$PR_JSON" | jq -r .head.sha)
+            PR_DRAFT=$(printf '%s' "$PR_JSON" | jq -r .draft)
+            PR_AUTHOR_LOGIN=$(printf '%s' "$PR_JSON" | jq -r .user.login)
+            PR_AUTHOR_DISPLAY=$(printf '%s' "$PR_JSON" | jq -r '.user.name // ""')
+            PR_AUTHOR_ASSOC=$(printf '%s' "$PR_JSON" | jq -r .author_association)
+          else
+            PR_NUMBER="$EVT_PR_NUMBER"
+            PR_URL="$EVT_PR_URL"
+            PR_TITLE="$EVT_PR_TITLE"
+            PR_HEAD_SHA="$EVT_PR_HEAD_SHA"
+            PR_DRAFT="$EVT_PR_DRAFT"
+            PR_AUTHOR_LOGIN="$EVT_PR_AUTHOR_LOGIN"
+            PR_AUTHOR_DISPLAY="$EVT_PR_AUTHOR_DISPLAY"
+            PR_AUTHOR_ASSOC="$EVT_PR_AUTHOR_ASSOC"
+          fi
+          # Use heredoc for multiline-safe output (titles can contain
+          # special chars; outputs file is parsed line-by-line).
+          {
+            echo "pr_number=${PR_NUMBER}"
+            echo "pr_url=${PR_URL}"
+            echo "pr_head_sha=${PR_HEAD_SHA}"
+            echo "pr_draft=${PR_DRAFT}"
+            echo "pr_author_login=${PR_AUTHOR_LOGIN}"
+            echo "pr_author_assoc=${PR_AUTHOR_ASSOC}"
+          } >> "$GITHUB_OUTPUT"
+          # Title and display name may legitimately contain `=` or other
+          # chars that confuse the simple `key=value` parser; use the
+          # heredoc form for those.
+          {
+            echo "pr_title<<__EOF__"
+            printf '%s\n' "$PR_TITLE"
+            echo "__EOF__"
+            echo "pr_author_display<<__EOF__"
+            printf '%s\n' "$PR_AUTHOR_DISPLAY"
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Gate check (draft + author_association)
+        # Same gates as the previous job-level `if:`. Apply to the TARGET
+        # PR's state, regardless of how we were triggered. Exits the job
+        # cleanly via a `proceed=true|false` output rather than failing —
+        # a dispatched no-op should not show as a failed CI run.
+        id: gate
+        run: |
+          set -euo pipefail
+          DRAFT="${{ steps.resolve_pr.outputs.pr_draft }}"
+          ASSOC="${{ steps.resolve_pr.outputs.pr_author_assoc }}"
+          PR_NUMBER="${{ steps.resolve_pr.outputs.pr_number }}"
+          case "$ASSOC" in
+            NONE|FIRST_TIME_CONTRIBUTOR|FIRST_TIMER|CONTRIBUTOR) IS_EXTERNAL=true ;;
+            *) IS_EXTERNAL=false ;;
+          esac
+          if [ "$DRAFT" = "true" ]; then
+            echo "::notice::PR #${PR_NUMBER} is in draft state; skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_EXTERNAL" != "true" ]; then
+            echo "::notice::PR #${PR_NUMBER} author_association=${ASSOC} is internal; skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for prior notification marker comment
+        id: marker_check
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ steps.resolve_pr.outputs.pr_number }}"
           COMMENTS=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body')
           if printf '%s' "$COMMENTS" | grep -Fq "$MARKER"; then
             echo "already_notified=true" >> "$GITHUB_OUTPUT"
@@ -41,20 +143,20 @@ jobs:
 
       - name: Wait for labeler workflow to finish
         # Auto Label PR (.github/workflows/labeler.yml) applies the scope
-        # labels (Frontend / Backend / Python SDK / TypeScript SDK) that
-        # drive the component lines in the Slack message. Both workflows
-        # fire on the same PR events, so without this step our run can
-        # race ahead and read an empty/incomplete label set. Poll until
-        # the labeler run for the same head SHA is `completed`, with a
-        # 30s timeout — fail open so a hung/missing labeler run still
-        # lets us notify with whatever labels are present.
-        # NOTE: this is a stopgap until OPIK-6222 follow-up migrates the
-        # trigger to `workflow_run` against the labeler workflow, which
-        # removes the wait entirely.
+        # labels (Frontend / Backend / Python SDK / TypeScript SDK /
+        # Infrastructure) that drive the component lines in the Slack
+        # message. For auto-fire, both workflows trigger on the same PR
+        # events and can race — wait until the labeler run for the same
+        # head SHA is `completed`, with a 30s timeout and fail-open
+        # behavior. For manual dispatch the labeler has typically run
+        # long ago so this resolves on the first poll.
+        # NOTE: stopgap until a follow-up migrates the trigger to
+        # `workflow_run` against the labeler workflow, which removes the
+        # wait entirely.
         if: steps.marker_check.outputs.already_notified == 'false'
         run: |
           set -euo pipefail
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          HEAD_SHA="${{ steps.resolve_pr.outputs.pr_head_sha }}"
           DEADLINE=$(( $(date +%s) + 30 ))
           while [ "$(date +%s)" -lt "$DEADLINE" ]; do
             STATUS=$(gh api \
@@ -73,7 +175,7 @@ jobs:
         if: steps.marker_check.outputs.already_notified == 'false'
         run: |
           set -euo pipefail
-          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_NUMBER="${{ steps.resolve_pr.outputs.pr_number }}"
           LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '[.[].name] | join(",")')
           echo "labels=${LABELS}" >> "$GITHUB_OUTPUT"
           echo "::notice::PR labels: ${LABELS}"
@@ -92,12 +194,12 @@ jobs:
         continue-on-error: true
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_CODE_REVIEW }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ steps.resolve_pr.outputs.pr_url }}
+          PR_NUMBER: ${{ steps.resolve_pr.outputs.pr_number }}
+          PR_TITLE: ${{ steps.resolve_pr.outputs.pr_title }}
           PR_LABELS: ${{ steps.read_labels.outputs.labels }}
-          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
-          AUTHOR_DISPLAY: ${{ github.event.pull_request.user.name }}
+          AUTHOR_LOGIN: ${{ steps.resolve_pr.outputs.pr_author_login }}
+          AUTHOR_DISPLAY: ${{ steps.resolve_pr.outputs.pr_author_display }}
         run: .github/scripts/notify-slack-contributor-pr.sh
 
       - name: Leave marker comment
@@ -110,7 +212,7 @@ jobs:
           steps.marker_check.outputs.already_notified == 'false' &&
           steps.send_slack.outputs.sent == 'true'
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_NUMBER="${{ steps.resolve_pr.outputs.pr_number }}"
           gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -f body="$MARKER" >/dev/null
           echo "Marker comment posted on PR #${PR_NUMBER}"
