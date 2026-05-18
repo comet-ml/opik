@@ -32,13 +32,18 @@ public class TestStreamConfiguration implements StreamConfiguration {
     @Builder.Default
     private Duration poolingInterval = Duration.milliseconds(100);
 
-    // BaseRedisSubscriber.stop() uses this as the .block() timeout when removing the consumer from
-    // the group. If it expires before Redis responds, stop() disposes the consumerScheduler and
-    // cancels the in-flight removeConsumer call, leaving the consumer behind. 100ms is tighter than
-    // Redis-container response under load and made shouldRemoveConsumerOnStop fail 8/8 locally; 2s
-    // is still well under any test wait and matches the headroom prod has at 5s.
+    // Used both as the read-loop XREADGROUP BLOCK timeout and as BaseRedisSubscriber.stop()'s
+    // removeConsumer .block() timeout. Trade-off:
+    //   - Too short (100ms): Redis-container response under load can exceed it, the in-flight
+    //     removeConsumer call is then cancelled by consumerScheduler disposal in stop(),
+    //     and the consumer is left in the group (shouldRemoveConsumerOnStop fails 8/8 locally).
+    //   - Too long (>=1s): one read-loop cycle takes >=1s, so autoClaim (gated by
+    //     claimIntervalRatio polls) doesn't fire within the 2s test budget and the RetryTests fail.
+    // 500ms gives ~5× headroom for Redis response while keeping autoClaim firing inside 2s
+    // (chain ~= 100ms poolingInterval + 500ms block; with claimIntervalRatio=2 the retry tests
+    // override, autoClaim fires around t ~= 1.2s).
     @Builder.Default
-    private Duration longPollingDuration = Duration.seconds(2);
+    private Duration longPollingDuration = Duration.milliseconds(500);
 
     @Builder.Default
     private int claimIntervalRatio = 10;
