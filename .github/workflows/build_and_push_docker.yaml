@@ -16,13 +16,11 @@ on:
       build_from:
         type: string
         required: true
-        description: Original version to build from 
-        default: ""
+        description: Original version to build from
       build_comet_image:
         type: boolean
         required: true
         description: If to build a Comet integration image
-        default: false
       comet_build_args:
         type: string
         required: false
@@ -32,7 +30,6 @@ on:
         type: boolean
         required: true
         description: If this is a release build (will build multi-arch and push latest tag)
-        default: false
       is_adhoc:
         type: boolean
         required: false

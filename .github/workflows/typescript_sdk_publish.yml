@@ -35,7 +35,6 @@ on:
         type: string
         required: true
         description: Version
-        default: ""
       is_release:
         type: boolean
         required: false
