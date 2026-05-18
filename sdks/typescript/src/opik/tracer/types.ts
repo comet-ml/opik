@@ -1,4 +1,4 @@
-import type { Prompt } from "@/prompt/Prompt";
+import type { BasePrompt } from "@/prompt/BasePrompt";
 import type * as OpikApi from "@/rest_api/api";
 import type { FeedbackScoreBatchItem } from "@/rest_api/api/types/FeedbackScoreBatchItem";
 
@@ -28,10 +28,11 @@ export type FeedbackScoreData = Omit<
 export interface PromptInfoDict {
   name: string;
   id?: string;
+  template_structure?: string;
   version: {
     id?: string;
     commit?: string;
-    template: string;
+    template: unknown;
   };
 }
 
@@ -41,7 +42,8 @@ export interface PromptInfoDict {
  */
 export interface TraceUpdateData
   extends Omit<OpikApi.TraceUpdate, "projectId"> {
-  prompts?: Prompt[];
+  prompts?: BasePrompt[];
+  appendPrompts?: boolean;
 }
 
 /**
@@ -53,5 +55,6 @@ export interface SpanUpdateData
     OpikApi.SpanUpdate,
     "traceId" | "parentSpanId" | "projectId" | "projectName"
   > {
-  prompts?: Prompt[];
+  prompts?: BasePrompt[];
+  appendPrompts?: boolean;
 }

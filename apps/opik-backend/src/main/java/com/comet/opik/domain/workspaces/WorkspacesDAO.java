@@ -92,4 +92,28 @@ public interface WorkspacesDAO {
 
     @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE migration_skipped_at IS NOT NULL")
     long countMigrationSkipped();
+
+    /**
+     * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the
+     * workspace row doesn't exist yet — callers treat it as TRUE (safe-include UNION), same as
+     * the column default. An admin/backfill flow flips workspaces with no legacy data to FALSE
+     * so their stats queries skip the empty-table scan.
+     */
+    @SqlQuery("SELECT has_legacy_scores FROM workspaces WHERE id = :id")
+    Optional<Boolean> findHasLegacyScores(@Bind("id") String id);
+
+    /**
+     * Idempotent upsert that sets the legacy-feedback-scores flag explicitly. Called from the
+     * workspace version determination flow after a one-shot ClickHouse presence check.
+     */
+    @SqlUpdate("""
+            INSERT INTO workspaces (id, has_legacy_scores, created_by, last_updated_by)
+            VALUES (:id, :hasLegacyScores, :userName, :userName)
+            ON DUPLICATE KEY UPDATE
+                has_legacy_scores = :hasLegacyScores,
+                last_updated_by = :userName
+            """)
+    int upsertHasLegacyScores(@Bind("id") String id,
+            @Bind("hasLegacyScores") boolean hasLegacyScores,
+            @Bind("userName") String userName);
 }
