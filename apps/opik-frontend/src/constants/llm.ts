@@ -57,6 +57,17 @@ export const RESERVED_TRACE_EVALUATOR_VARIABLES: Record<string, string> = {
   spans: "spans",
 };
 
+/**
+ * Stable, frozen array of the reserved variable *names* (the keys of
+ * {@link RESERVED_TRACE_EVALUATOR_VARIABLES}). Pre-computed at module scope so
+ * the array reference doesn't change between renders — important because it's
+ * passed as `hiddenVariableNames` into `LLMPromptMessagesVariables`, whose
+ * `variablesList` `useMemo` depends on it. Computing `Object.keys(...)` inline
+ * on each render allocates a new array and invalidates the memo for no reason.
+ */
+export const RESERVED_TRACE_EVALUATOR_VARIABLE_NAMES: readonly string[] =
+  Object.freeze(Object.keys(RESERVED_TRACE_EVALUATOR_VARIABLES));
+
 export const DEFAULT_OPEN_AI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 4000,

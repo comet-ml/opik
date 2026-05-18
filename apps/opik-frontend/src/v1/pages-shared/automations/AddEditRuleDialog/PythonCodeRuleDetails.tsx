@@ -12,7 +12,10 @@ import { Label } from "@/ui/label";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
+import {
+  RESERVED_TRACE_EVALUATOR_VARIABLES,
+  RESERVED_TRACE_EVALUATOR_VARIABLE_NAMES,
+} from "@/constants/llm";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type PythonCodeRuleDetailsProps = {
@@ -129,9 +132,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 datasetColumnNames={datasetColumnNames}
                 type={autocompleteType}
                 includeIntermediateNodes
-                hiddenVariableNames={Object.keys(
-                  RESERVED_TRACE_EVALUATOR_VARIABLES,
-                )}
+                hiddenVariableNames={RESERVED_TRACE_EVALUATOR_VARIABLE_NAMES}
               />
             );
           }}

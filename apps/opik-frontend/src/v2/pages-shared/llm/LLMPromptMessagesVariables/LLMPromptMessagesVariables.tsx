@@ -37,7 +37,7 @@ interface LLMPromptMessagesVariablesProps {
    * but the user doesn't see a row they don't need to interact with — used for
    * reserved trace evaluators like `{{spans}}` whose path is fixed.
    */
-  hiddenVariableNames?: string[];
+  hiddenVariableNames?: readonly string[];
 }
 
 const LLMPromptMessagesVariables = ({

@@ -29,7 +29,10 @@ import {
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
+import {
+  RESERVED_TRACE_EVALUATOR_VARIABLES,
+  RESERVED_TRACE_EVALUATOR_VARIABLE_NAMES,
+} from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -347,9 +350,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     datasetColumnNames={datasetColumnNames}
                     type={autocompleteType}
                     includeIntermediateNodes
-                    hiddenVariableNames={Object.keys(
-                      RESERVED_TRACE_EVALUATOR_VARIABLES,
-                    )}
+                    hiddenVariableNames={RESERVED_TRACE_EVALUATOR_VARIABLE_NAMES}
                   />
                 </>
               );
