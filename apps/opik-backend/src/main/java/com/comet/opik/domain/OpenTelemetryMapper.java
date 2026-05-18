@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
+import com.comet.opik.domain.mapping.otel.ElasticInferenceServiceResolver;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -118,73 +119,93 @@ public class OpenTelemetryMapper {
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
         Set<String> tags = new HashSet<>();
+        // Hold model and provider until the attribute loop completes so we can apply
+        // post-processing (e.g. Elastic Inference Service routing) that needs both values.
+        String model = null;
+        String provider = null;
 
         if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
         }
 
         // Iterate over each attribute key-value pair
-        attributes.forEach(attribute -> {
+        for (KeyValue attribute : attributes) {
             var key = attribute.getKey();
             var value = attribute.getValue();
+            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key);
 
-            OpenTelemetryMappingRuleFactory.findRule(key).ifPresentOrElse(rule -> {
-                Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
-
-                switch (rule.getOutcome()) {
-                    case MODEL :
-                        spanBuilder.model(value.getStringValue());
-                        break;
-
-                    case PROVIDER :
-                        spanBuilder.provider(value.getStringValue());
-                        break;
-
-                    case USAGE :
-                        extractUsageField(usage, rule, key, value);
-                        break;
-
-                    case INPUT :
-                    case OUTPUT :
-                    case METADATA :
-                        ObjectNode node;
-                        node = switch (rule.getOutcome()) {
-                            case INPUT -> input;
-                            case OUTPUT -> output;
-                            default -> metadata;
-                        };
-
-                        extractToJsonColumn(node, key, value);
-                        break;
-
-                    case TAGS :
-                        List<String> span_tags = extractTags(value);
-                        if (CollectionUtils.isNotEmpty(span_tags)) {
-                            tags.addAll(span_tags);
-                        }
-                        break;
-
-                    case THREAD_ID :
-                        // Store as 'thread_id' in metadata for trace grouping
-                        // First value wins if multiple attributes map to THREAD_ID
-                        if (!metadata.has("thread_id")) {
-                            extractToJsonColumn(metadata, "thread_id", value);
-                        }
-                        break;
-
-                    case DROP :
-                        // Explicitly drop this attribute
-                        break;
-                }
-            }, () -> {
+            if (ruleOpt.isEmpty()) {
                 // if it's not explicitly request to drop, we keep it in input
                 log.debug("No rule found for kv {} -> {}. Using for Input.", key, attribute.getValue());
                 extractToJsonColumn(input, key, value);
-            });
-        });
+                continue;
+            }
+
+            var rule = ruleOpt.get();
+            Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
+
+            switch (rule.getOutcome()) {
+                case MODEL :
+                    model = value.getStringValue();
+                    break;
+
+                case PROVIDER :
+                    provider = value.getStringValue();
+                    break;
+
+                case USAGE :
+                    extractUsageField(usage, rule, key, value);
+                    break;
+
+                case INPUT :
+                case OUTPUT :
+                case METADATA :
+                    ObjectNode node = switch (rule.getOutcome()) {
+                        case INPUT -> input;
+                        case OUTPUT -> output;
+                        default -> metadata;
+                    };
+
+                    extractToJsonColumn(node, key, value);
+                    break;
+
+                case TAGS :
+                    List<String> span_tags = extractTags(value);
+                    if (CollectionUtils.isNotEmpty(span_tags)) {
+                        tags.addAll(span_tags);
+                    }
+                    break;
+
+                case THREAD_ID :
+                    // Store as 'thread_id' in metadata for trace grouping
+                    // First value wins if multiple attributes map to THREAD_ID
+                    if (!metadata.has("thread_id")) {
+                        extractToJsonColumn(metadata, "thread_id", value);
+                    }
+                    break;
+
+                case DROP :
+                    // Explicitly drop this attribute
+                    break;
+            }
+        }
 
         // Process events and add them to metadata
         processEvents(events, metadata);
+
+        // Rewrite Elastic Inference Service model/provider into the underlying provider so
+        // that cost lookup and provider-based filtering see the real upstream. Records the
+        // original values in metadata for traceability. Returns the (possibly unchanged) pair.
+        var resolved = ElasticInferenceServiceResolver.resolve(model, provider, metadata);
+        model = resolved.model();
+        provider = resolved.provider();
+
+        if (model != null) {
+            spanBuilder.model(model);
+        }
+        if (provider != null) {
+            spanBuilder.provider(provider);
+        }
 
         if (!metadata.isEmpty()) {
             spanBuilder.metadata(metadata);
