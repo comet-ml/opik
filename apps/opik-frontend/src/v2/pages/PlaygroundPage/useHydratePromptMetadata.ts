@@ -9,7 +9,6 @@ import { PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { useFetchPrompt } from "@/api/prompts/usePromptById";
 import { useFetchPromptVersion } from "@/api/prompts/usePromptVersionById";
-import { useFetchPromptByCommit } from "@/api/prompts/usePromptByCommit";
 import { serializeChatTemplate, chatTemplatesEqual } from "@/lib/chatTemplate";
 
 const parseTemplateJson = (template: string | undefined): unknown => {
@@ -48,7 +47,6 @@ const buildMetadata = (
 export function useHydratePromptMetadata() {
   const fetchPrompt = useFetchPrompt();
   const fetchPromptVersion = useFetchPromptVersion();
-  const fetchPromptByCommit = useFetchPromptByCommit();
 
   return useCallback(
     async (
@@ -59,42 +57,7 @@ export function useHydratePromptMetadata() {
         content: m.content,
       }));
 
-      // Loaded from an agent configuration blueprint
-      const blueprintRef = prompt.loadedBlueprintRef;
-      if (blueprintRef) {
-        try {
-          const commitData = await fetchPromptByCommit({
-            commitId: blueprintRef.commitId,
-          });
-          const version = commitData.requested_version;
-          if (!version?.template) return undefined;
-          if (
-            !chatTemplatesEqual(
-              serializeChatTemplate(currentMessages),
-              version.template,
-            )
-          )
-            return undefined;
-
-          return buildMetadata(
-            {
-              name: commitData.name,
-              id: commitData.id,
-              template_structure: commitData.template_structure,
-            },
-            {
-              id: version.id,
-              template: version.template,
-              commit: version.commit,
-              metadata: version.metadata ?? undefined,
-            },
-          );
-        } catch {
-          return undefined;
-        }
-      }
-
-      // Loaded from a CHAT prompt in the library (legacy path)
+      // Loaded from a CHAT prompt in the library
       const chatPromptId = prompt.loadedChatPromptId;
       if (chatPromptId) {
         try {
@@ -162,6 +125,6 @@ export function useHydratePromptMetadata() {
 
       return undefined;
     },
-    [fetchPrompt, fetchPromptVersion, fetchPromptByCommit],
+    [fetchPrompt, fetchPromptVersion],
   );
 }

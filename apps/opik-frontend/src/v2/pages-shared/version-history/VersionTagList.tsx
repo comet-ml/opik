@@ -4,14 +4,14 @@ import { isBasicStage, sortTags } from "@/utils/agent-configurations";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
 import ChildrenWidthMeasurer from "@/shared/ChildrenWidthMeasurer/ChildrenWidthMeasurer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import BasicStageTag from "./BasicStageTag";
 import ColoredTag from "@/shared/ColoredTag/ColoredTag";
+import StageTag from "./StageTag";
 
-type AgentConfigTagListSize = "sm" | "md";
+type VersionTagListSize = "sm" | "md";
 
-type AgentConfigTagListProps = {
+type VersionTagListProps = {
   tags: string[];
-  size?: AgentConfigTagListSize;
+  size?: VersionTagListSize;
   maxWidth?: number;
   className?: string;
 };
@@ -19,21 +19,21 @@ type AgentConfigTagListProps = {
 const TAGS_CONFIG = { itemGap: 4 };
 
 const TAG_SIZE_MAP: Record<
-  AgentConfigTagListSize,
+  VersionTagListSize,
   { basic: "xs" | "sm"; colored: "sm" | "md" }
 > = {
   sm: { basic: "xs", colored: "sm" },
   md: { basic: "sm", colored: "md" },
 };
 
-const COUNTER_CLASSES: Record<AgentConfigTagListSize, string> = {
+const COUNTER_CLASSES: Record<VersionTagListSize, string> = {
   sm: "comet-body-xs-accented flex h-4 shrink-0 items-center rounded border border-border px-1 text-[11px] leading-4 text-muted-slate",
   md: "comet-body-s-accented flex h-6 shrink-0 items-center rounded-md border border-border pl-1 pr-1.5 text-muted-slate",
 };
 
-const renderTag = (tag: string, size: AgentConfigTagListSize) =>
+const renderTag = (tag: string, size: VersionTagListSize) =>
   isBasicStage(tag) ? (
-    <BasicStageTag key={tag} value={tag} size={TAG_SIZE_MAP[size].basic} />
+    <StageTag key={tag} value={tag} size={TAG_SIZE_MAP[size].basic} />
   ) : (
     <ColoredTag
       key={tag}
@@ -43,7 +43,7 @@ const renderTag = (tag: string, size: AgentConfigTagListSize) =>
     />
   );
 
-const AgentConfigTagList: React.FC<AgentConfigTagListProps> = ({
+const VersionTagList: React.FC<VersionTagListProps> = ({
   tags,
   size = "md",
   maxWidth,
@@ -102,4 +102,4 @@ const AgentConfigTagList: React.FC<AgentConfigTagListProps> = ({
   );
 };
 
-export default AgentConfigTagList;
+export default VersionTagList;

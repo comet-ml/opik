@@ -4,6 +4,7 @@ import {
   Bot,
   ChartLine,
   Database,
+  FileTerminal,
   FlaskConical,
   LayoutDashboard,
   ListChecks,
@@ -13,7 +14,6 @@ import {
   UserPen,
   Brain,
   GitBranch,
-  Workflow,
 } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
 import {
@@ -95,6 +95,14 @@ const getMenuItems = ({
       label: "Development",
       items: [
         {
+          id: "prompts",
+          path: projectPath("/prompts"),
+          type: MENU_ITEM_TYPE.router,
+          icon: FileTerminal,
+          label: "Prompt library",
+          disabled: !projectPrefix,
+        },
+        {
           id: "agent_runner",
           path: projectPath("/agent-playground"),
           type: MENU_ITEM_TYPE.router,
@@ -114,14 +122,6 @@ const getMenuItems = ({
               },
             ]
           : []),
-        {
-          id: "agent_configuration",
-          path: projectPath("/agent-configuration"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Workflow,
-          label: "Agent configuration",
-          disabled: !projectPrefix,
-        },
         ...(canViewOptimizationRuns
           ? [
               {
