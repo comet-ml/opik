@@ -37,6 +37,15 @@ public class LocalRunnersResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
+    public Response callDisconnect(UUID runnerId, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(runnerId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete();
+    }
+
     public LocalRunner.LocalRunnerPage listRunners(UUID projectId, String apiKey, String workspaceName) {
         return listRunners(projectId, null, 0, 25, apiKey, workspaceName);
     }
