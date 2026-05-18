@@ -20,23 +20,6 @@ prompt = client.get_prompt("my-system-prompt")
 prompt = client.get_prompt("my-system-prompt", no_cache=True)
 ```
 
-## 📦 `opik migrate dataset` CLI Command
-
-A new `opik migrate dataset` command lets you move a dataset — including its full version history, all linked experiments, traces, and spans — from one project to another within the same workspace, in a single command.
-
-```bash
-# Migrate a dataset with a dry-run preview
-opik migrate dataset "MyDataset" --to-project=NewProject --dry-run
-
-# Execute the migration
-opik migrate dataset "MyDataset" --to-project=NewProject
-
-# Migrate from a specific source project
-opik migrate dataset "MyDataset" --from-project=OldProject --to-project=NewProject
-```
-
-Test suites linked to the dataset are migrated as well. An audit log is written so you can trace exactly what was copied.
-
 ## 🔌 `opik connect` CLI Improvements
 
 The `opik connect` and `opik endpoint` CLI commands have been reorganized with a much better error experience:
