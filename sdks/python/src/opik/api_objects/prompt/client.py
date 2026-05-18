@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 import json
 import dataclasses
+import logging
 
 import opik.exceptions
 from opik.rest_api import client as rest_client, PromptVersionUpdate
@@ -8,6 +9,12 @@ from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
 from opik.api_objects import opik_query_language, rest_helpers
 from . import types as prompt_types
+from . import prompt_cache
+from .base_prompt import BasePrompt
+
+LOGGER = logging.getLogger(__name__)
+
+_PromptT = TypeVar("_PromptT", bound=BasePrompt)
 
 
 @dataclasses.dataclass
@@ -101,6 +108,7 @@ class PromptClient:
                 type=type,
                 metadata=metadata,
                 project_name=project_name,
+                is_new=prompt_version is None,
                 template_structure=template_structure,
                 id=id,
                 description=description,
@@ -117,20 +125,16 @@ class PromptClient:
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         project_name: Optional[str],
+        is_new: bool = True,
         template_structure: str = "text",
         id: Optional[str] = None,
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
-        # Check if this is a new prompt (no existing versions)
-        existing_version = self._get_latest_version(name, project_name=project_name)
-
         # If it's a new prompt and container-level params are provided, use create_prompt endpoint
         # which creates both the container and first version in one call
-        if existing_version is None and (
-            id is not None or description is not None or tags is not None
-        ):
+        if is_new and (id is not None or description is not None or tags is not None):
             self._rest_client.prompts.create_prompt(
                 name=name,
                 id=id,
@@ -237,6 +241,45 @@ class PromptClient:
                 raise e
             # 400, 404 - not found
         return None
+
+    def get_prompt_with_cache(
+        self,
+        name: str,
+        commit: Optional[str],
+        project_name: Optional[str],
+        template_structure: str,
+        prompt_cls: Type[_PromptT],
+        no_cache: bool = False,
+    ) -> Optional[_PromptT]:
+        def _fetch() -> Optional[_PromptT]:
+            prompt_version = self.get_prompt(
+                name=name,
+                commit=commit,
+                raise_if_not_template_structure=template_structure,
+                project_name=project_name,
+            )
+            if prompt_version is None:
+                return None
+            return prompt_cls.from_fern_prompt_version(
+                name, prompt_version, project_name=project_name
+            )
+
+        if no_cache:
+            result = _fetch()
+        else:
+            result = prompt_cache.get_or_fetch(
+                name=name,
+                commit=commit,
+                project_name=project_name,
+                template_structure=template_structure,
+                fetch_fn=_fetch,
+            )
+        if result is not None:
+            from opik import opik_context
+
+            opik_context.attach_prompt_to_current_trace(result)
+            opik_context.attach_prompt_to_current_span(result)
+        return result
 
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id

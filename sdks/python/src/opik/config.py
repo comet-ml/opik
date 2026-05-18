@@ -301,6 +301,13 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Env var: OPIK_SUPPRESS_BATCHING_UPDATE_WARNING
     """
 
+    prompt_cache_ttl_seconds: pydantic.PositiveInt = 300
+    """
+    TTL in seconds for cached prompts. Controls how long unpinned prompts are kept
+    before being refreshed from the backend. Minimum value is 1.
+    Env var: OPIK_PROMPT_CACHE_TTL_SECONDS
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

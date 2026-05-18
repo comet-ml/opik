@@ -578,6 +578,8 @@ openrouter:
     label: "inclusionai/ling-2.6-flash"
   - id: "inclusionai/ling-2.6-flash:free"
     label: "inclusionai/ling-2.6-flash:free"
+  - id: "inclusionai/ring-2.6-1t"
+    label: "inclusionai/ring-2.6-1t"
   - id: "inclusionai/ring-2.6-1t:free"
     label: "inclusionai/ring-2.6-1t:free"
   - id: "inflection/inflection-3-pi"

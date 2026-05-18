@@ -210,7 +210,7 @@ class ToolRegistryTest {
                 .name("trace")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 
     private record RecordingTool(String name, AtomicReference<String> captured) implements ToolExecutor {

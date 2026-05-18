@@ -727,6 +727,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-2.6-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
+      label: "inclusionai/ring-2.6-1t",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T_FREE,
       label: "inclusionai/ring-2.6-1t:free",
     },
