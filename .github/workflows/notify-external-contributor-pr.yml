@@ -29,6 +29,12 @@ jobs:
     permissions:
       pull-requests: write
       contents: read
+      # Needed for the `Wait for labeler workflow to finish` step to
+      # list runs via `repos/.../actions/workflows/labeler.yml/runs`.
+      # The smoke test passed without this because public repos grant
+      # default read access; declaring it explicitly hardens against
+      # future visibility changes and tighter default scopes.
+      actions: read
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -58,6 +64,7 @@ jobs:
           EVT_PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
           EVT_PR_AUTHOR_DISPLAY: ${{ github.event.pull_request.user.name }}
           EVT_PR_AUTHOR_ASSOC: ${{ github.event.pull_request.author_association }}
+          EVT_PR_STATE: ${{ github.event.pull_request.state }}
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
@@ -67,6 +74,7 @@ jobs:
             PR_TITLE=$(printf '%s' "$PR_JSON" | jq -r .title)
             PR_HEAD_SHA=$(printf '%s' "$PR_JSON" | jq -r .head.sha)
             PR_DRAFT=$(printf '%s' "$PR_JSON" | jq -r .draft)
+            PR_STATE=$(printf '%s' "$PR_JSON" | jq -r .state)
             PR_AUTHOR_LOGIN=$(printf '%s' "$PR_JSON" | jq -r .user.login)
             PR_AUTHOR_DISPLAY=$(printf '%s' "$PR_JSON" | jq -r '.user.name // ""')
             PR_AUTHOR_ASSOC=$(printf '%s' "$PR_JSON" | jq -r .author_association)
@@ -76,6 +84,7 @@ jobs:
             PR_TITLE="$EVT_PR_TITLE"
             PR_HEAD_SHA="$EVT_PR_HEAD_SHA"
             PR_DRAFT="$EVT_PR_DRAFT"
+            PR_STATE="$EVT_PR_STATE"
             PR_AUTHOR_LOGIN="$EVT_PR_AUTHOR_LOGIN"
             PR_AUTHOR_DISPLAY="$EVT_PR_AUTHOR_DISPLAY"
             PR_AUTHOR_ASSOC="$EVT_PR_AUTHOR_ASSOC"
@@ -87,6 +96,7 @@ jobs:
             echo "pr_url=${PR_URL}"
             echo "pr_head_sha=${PR_HEAD_SHA}"
             echo "pr_draft=${PR_DRAFT}"
+            echo "pr_state=${PR_STATE}"
             echo "pr_author_login=${PR_AUTHOR_LOGIN}"
             echo "pr_author_assoc=${PR_AUTHOR_ASSOC}"
           } >> "$GITHUB_OUTPUT"
@@ -102,14 +112,20 @@ jobs:
             echo "__EOF__"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Gate check (draft + author_association)
+      - name: Gate check (state + draft + author_association)
         # Same gates as the previous job-level `if:`. Apply to the TARGET
         # PR's state, regardless of how we were triggered. Exits the job
         # cleanly via a `proceed=true|false` output rather than failing —
         # a dispatched no-op should not show as a failed CI run.
+        # The `state == open` check matters for workflow_dispatch: without
+        # it, a maintainer could retroactively notify about a closed or
+        # merged PR. pull_request_target's events don't fire for
+        # closed/merged PRs so the check is a no-op there, but applying
+        # it uniformly keeps the gate consistent across triggers.
         id: gate
         run: |
           set -euo pipefail
+          STATE="${{ steps.resolve_pr.outputs.pr_state }}"
           DRAFT="${{ steps.resolve_pr.outputs.pr_draft }}"
           ASSOC="${{ steps.resolve_pr.outputs.pr_author_assoc }}"
           PR_NUMBER="${{ steps.resolve_pr.outputs.pr_number }}"
@@ -117,7 +133,10 @@ jobs:
             NONE|FIRST_TIME_CONTRIBUTOR|FIRST_TIMER|CONTRIBUTOR) IS_EXTERNAL=true ;;
             *) IS_EXTERNAL=false ;;
           esac
-          if [ "$DRAFT" = "true" ]; then
+          if [ "$STATE" != "open" ]; then
+            echo "::notice::PR #${PR_NUMBER} state=${STATE} (not open); skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          elif [ "$DRAFT" = "true" ]; then
             echo "::notice::PR #${PR_NUMBER} is in draft state; skipping."
             echo "proceed=false" >> "$GITHUB_OUTPUT"
           elif [ "$IS_EXTERNAL" != "true" ]; then

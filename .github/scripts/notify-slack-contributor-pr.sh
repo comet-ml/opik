@@ -90,10 +90,16 @@ MESSAGE_TEXT+="
 ${PR_LINE}
 ${AUTHOR_LINE}"
 
-for line in ${COMPONENT_LINES[@]+"${COMPONENT_LINES[@]}"}; do
-  MESSAGE_TEXT+="
+# Guard the iteration because bash 3.2 (macOS default) throws an
+# "unbound variable" error on empty-array expansion under `set -u`,
+# even with the standard quoted form. Production runners use bash 5+
+# where the guard is redundant but harmless.
+if ((${#COMPONENT_LINES[@]} > 0)); then
+  for line in "${COMPONENT_LINES[@]}"; do
+    MESSAGE_TEXT+="
 ${line}"
-done
+  done
+fi
 
 jq -n --arg text "$MESSAGE_TEXT" '{text: $text}' > /tmp/slack-payload.json
 
