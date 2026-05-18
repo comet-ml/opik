@@ -37,6 +37,10 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .map(JsonNode::asText)
                 .map(PromptVersionType::fromString)
                 .orElse(PromptVersionType.PROMPT_VERSION);
+        String environment = Optional.ofNullable(jsonNode.get("environment"))
+                .filter(node -> !node.isNull())
+                .map(JsonNode::asText)
+                .orElse(null);
 
         return PromptVersion.builder()
                 .id(UUID.fromString(jsonNode.get("id").asText()))
@@ -47,6 +51,7 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .changeDescription(jsonNode.get("change_description").asText())
                 .type(type)
                 .versionType(versionType)
+                .environment(environment)
                 .variables(TemplateParseUtils.extractVariables(template, type))
                 .tags(jsonNode.has("tags") && jsonNode.get("tags") != null && !jsonNode.get("tags").isNull()
                         ? JsonUtils.readValue(jsonNode.get("tags").asText(), SetFlatArgumentFactory.TYPE_REFERENCE)

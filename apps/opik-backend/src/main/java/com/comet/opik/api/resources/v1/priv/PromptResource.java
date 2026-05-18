@@ -9,6 +9,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionEnvironmentUpdate;
 import com.comet.opik.api.PromptVersionIdsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
@@ -134,21 +135,25 @@ public class PromptResource {
 
     @GET
     @Path("{id}")
-    @Operation(operationId = "getPromptById", summary = "Get prompt by id", description = "Get prompt by id; when mask_id is provided, requestedVersion is populated with that mask overlay", responses = {
+    @Operation(operationId = "getPromptById", summary = "Get prompt by id", description = "Get prompt by id; when mask_id or environment is provided, requestedVersion is populated with the resolved version. mask_id and environment are mutually exclusive.", responses = {
             @ApiResponse(responseCode = "200", description = "Prompt resource", content = @Content(schema = @Schema(implementation = Prompt.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({Prompt.View.Detail.class})
     public Response getPromptById(@PathParam("id") UUID id,
-            @Parameter(description = "Optional mask version id; when set, requestedVersion is the mask row for that id") @QueryParam("mask_id") UUID maskId) {
+            @Parameter(description = "Optional mask version id; when set, requestedVersion is the mask row for that id") @QueryParam("mask_id") UUID maskId,
+            @Parameter(description = "Optional environment name; when set, requestedVersion is the version mapped to that environment for the prompt") @QueryParam("environment") String environment) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting prompt by id '{}', mask_id '{}' on workspace_id '{}'", id, maskId, workspaceId);
+        log.info("Getting prompt by id '{}', mask_id '{}', environment '{}' on workspace_id '{}'", id, maskId,
+                environment, workspaceId);
 
-        Prompt prompt = promptService.getById(id, maskId);
+        Prompt prompt = promptService.getById(id, maskId, environment);
 
-        log.info("Got prompt by id '{}', mask_id '{}' on workspace_id '{}'", id, maskId, workspaceId);
+        log.info("Got prompt by id '{}', mask_id '{}', environment '{}' on workspace_id '{}'", id, maskId,
+                environment, workspaceId);
 
         return Response.ok(prompt).build();
     }
@@ -376,6 +381,31 @@ public class PromptResource {
         return Response.noContent().build();
     }
 
+    @PATCH
+    @Path("/versions/{versionId}")
+    @Operation(operationId = "setPromptVersionEnvironment", summary = "Set prompt version environment", description = """
+            Set or clear the environment owned by a prompt version.
+            Setting a non-null environment moves ownership atomically: any previous owner of that
+            environment for the same prompt has its environment cleared in the same transaction.
+            Setting null clears the environment from the version.
+            The environment is auto-created in the workspace registry when set.
+            """, responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response setPromptVersionEnvironment(@PathParam("versionId") UUID versionId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionEnvironmentUpdate.class))) @Valid @NotNull PromptVersionEnvironmentUpdate request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Setting environment '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environment(), versionId, workspaceId);
+        promptService.setVersionEnvironment(versionId, request.environment());
+        log.info("Successfully set environment '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environment(), versionId, workspaceId);
+        return Response.noContent().build();
+    }
+
     @POST
     @Path("/versions/retrieve")
     @Operation(operationId = "retrievePromptVersion", summary = "Retrieve prompt version", description = "Retrieve prompt version", responses = {
@@ -390,14 +420,14 @@ public class PromptResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving prompt name '{}'  with commit '{}' on workspace_id '{}'",
-                request.name(), request.commit(), workspaceId);
+        log.info("Retrieving prompt name '{}' with commit '{}', environment '{}' on workspace_id '{}'",
+                request.name(), request.commit(), request.environment(), workspaceId);
 
         PromptVersion promptVersion = promptService.retrievePromptVersion(
-                request.name(), request.commit(), request.projectName());
+                request.name(), request.commit(), request.environment(), request.projectName());
 
-        log.info("Retrieved prompt name '{}'  with commit '{}' on workspace_id '{}'", request.name(),
-                request.commit(), workspaceId);
+        log.info("Retrieved prompt name '{}' with commit '{}', environment '{}' on workspace_id '{}'", request.name(),
+                request.commit(), request.environment(), workspaceId);
 
         var responseBuilder = Response.ok(promptVersion);
         String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
