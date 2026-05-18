@@ -25,8 +25,6 @@ function dynamicMasks(page: Page) {
     page.locator('td').filter({ hasText: /[0-9a-f]{8}-[0-9a-f]{4}/ }),
     // mask breadcrumb — shows dynamic project/dataset names on sub-pages
     page.locator('nav[aria-label="breadcrumb"]'),
-    // mask demo project banner — may appear in some environments
-    page.locator('div').filter({ hasText: 'You are viewing a demo project' }).first(),
   ];
 }
 
@@ -35,7 +33,14 @@ const screenshotOpts = (page: Page) => ({
   animations: 'disabled' as const,
 });
 
+async function hideDemoBanner(page: Page) {
+  await page.addStyleTag({
+    content: '.z-10.h-8.bg-primary { display: none !important; }',
+  });
+}
+
 async function screenshot(page: Page, name: string) {
+  await hideDemoBanner(page);
   if (IS_COMPARISON_RUN) {
     fs.mkdirSync(COMPARISON_DIR, { recursive: true });
     await page.screenshot({
