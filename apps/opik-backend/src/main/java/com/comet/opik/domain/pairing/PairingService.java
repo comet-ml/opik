@@ -39,6 +39,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @ImplementedBy(PairingServiceImpl.class)
@@ -46,7 +47,13 @@ public interface PairingService {
 
     CreateSessionResponse create(String workspaceId, String userName, CreateSessionRequest request);
 
-    UUID activate(String workspaceId, String userName, UUID sessionId, ActivateRequest request);
+    ActivationResult activate(String workspaceId, String userName, UUID sessionId, ActivateRequest request);
+
+    // Workspace-scoped read used to tag opik_connect_failed analytics with runner_type.
+    Optional<RunnerType> peekSessionType(String workspaceId, UUID sessionId);
+
+    record ActivationResult(UUID runnerId, RunnerType runnerType, boolean headless) {
+    }
 }
 
 @Slf4j
@@ -68,6 +75,7 @@ class PairingServiceImpl implements PairingService {
     private static final String FIELD_ACTIVATED = "activated";
     private static final String FIELD_ACTIVATED_VALUE = "1";
     private static final String FIELD_TYPE = "type";
+    private static final String FIELD_HEADLESS = "headless";
 
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
@@ -119,6 +127,7 @@ class PairingServiceImpl implements PairingService {
         UUID runnerId = idGenerator.generateId();
         int ttlSeconds = request.ttlSeconds() != null ? request.ttlSeconds() : DEFAULT_TTL_SECONDS;
 
+        boolean headless = Boolean.TRUE.equals(request.headless());
         Map<String, String> sessionFields = Map.of(
                 FIELD_WORKSPACE_ID, workspaceId,
                 FIELD_USER_NAME, userName,
@@ -127,7 +136,8 @@ class PairingServiceImpl implements PairingService {
                 FIELD_ACTIVATION_KEY, request.activationKey(),
                 FIELD_TTL_SECONDS, String.valueOf(ttlSeconds),
                 FIELD_CREATED_AT, Instant.now().toString(),
-                FIELD_TYPE, request.type().getValue());
+                FIELD_TYPE, request.type().getValue(),
+                FIELD_HEADLESS, Boolean.toString(headless));
 
         // Write the hash and set its TTL in a single Redis round-trip. The spec
         // allows a best-effort write, but pipelining is cheap and keeps the session
@@ -139,8 +149,8 @@ class PairingServiceImpl implements PairingService {
         batch.execute();
 
         log.info(
-                "pairing session created sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}' ttlSeconds='{}' type='{}'",
-                sessionId, runnerId, workspaceId, userName, ttlSeconds, request.type().getValue());
+                "pairing session created sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}' ttlSeconds='{}' type='{}' headless='{}'",
+                sessionId, runnerId, workspaceId, userName, ttlSeconds, request.type().getValue(), headless);
         return CreateSessionResponse.builder()
                 .sessionId(sessionId)
                 .runnerId(runnerId)
@@ -148,7 +158,7 @@ class PairingServiceImpl implements PairingService {
     }
 
     @Override
-    public UUID activate(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID sessionId,
+    public ActivationResult activate(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID sessionId,
             @NonNull ActivateRequest request) {
 
         RMap<String, String> sessionMap = redisClient.getMap(PairingSessionKey.key(sessionId));
@@ -210,6 +220,8 @@ class PairingServiceImpl implements PairingService {
                     sessionId, workspaceId, storedType);
             throw new NotFoundException("Pairing session not found: " + sessionId);
         }
+        // Missing field on sessions written before this shipped → false (browser pairing default).
+        boolean headless = Boolean.parseBoolean(fields.get(FIELD_HEADLESS));
 
         // Activate the runner BEFORE flipping the session's activated flag. If
         // activateFromPairing fails (Redis hiccup, internal error in one of the
@@ -233,9 +245,26 @@ class PairingServiceImpl implements PairingService {
                             .build());
         }
 
-        log.info("pairing session activated sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}'",
-                sessionId, runnerId, workspaceId, userName);
-        return runnerId;
+        log.info(
+                "pairing session activated sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}' type='{}' headless='{}'",
+                sessionId, runnerId, workspaceId, userName, runnerType.getValue(), headless);
+        return new ActivationResult(runnerId, runnerType, headless);
+    }
+
+    @Override
+    public Optional<RunnerType> peekSessionType(@NonNull String workspaceId, @NonNull UUID sessionId) {
+        try {
+            RMap<String, String> sessionMap = redisClient.getMap(PairingSessionKey.key(sessionId));
+            Map<String, String> fields = sessionMap.readAllMap();
+            if (fields.isEmpty() || !workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
+                return Optional.empty();
+            }
+            String storedType = fields.get(FIELD_TYPE);
+            return storedType == null ? Optional.empty() : Optional.of(RunnerType.fromValue(storedType));
+        } catch (RuntimeException e) {
+            log.debug("peekSessionType failed for sessionId='{}' workspaceId='{}'", sessionId, workspaceId, e);
+            return Optional.empty();
+        }
     }
 
     // HMAC-SHA256(activationKey, sessionIdBytes(16) || SHA256(runnerNameBytes)(32)).
