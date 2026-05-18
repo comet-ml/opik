@@ -41,6 +41,7 @@ const PageLayout = () => {
   const welcomeWizardEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
   );
+  const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
 
   const { data: wizardStatus } = useWelcomeWizardStatus({
     enabled: welcomeWizardEnabled,
@@ -59,7 +60,8 @@ const PageLayout = () => {
       to: "/$workspaceName/projects/$projectId/home",
     });
 
-  const showAssistantSidebar = !!AssistantSidebar && !isOlliePage;
+  const showAssistantSidebar =
+    !!AssistantSidebar && !isOlliePage && ollieEnabled;
 
   const assistantWidth = showAssistantSidebar ? assistantSidebarWidth : 0;
   const { isPhone } = useIsPhone();
