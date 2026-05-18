@@ -7,6 +7,8 @@ import SidebarMenuItem, {
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
 import getMenuItems from "@/v2/layout/SideBar/helpers/getMenuItems";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { cn } from "@/lib/utils";
 
 interface SideBarMenuItemsProps {
@@ -16,6 +18,7 @@ interface SideBarMenuItemsProps {
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const activeProjectId = useActiveProjectId();
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
+  const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
   const {
     permissions: {
       canViewExperiments,
@@ -33,7 +36,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     canViewDashboards,
     canUsePlayground,
     canViewOptimizationRuns,
-    showOlliePage: !!AssistantSidebar,
+    showOlliePage: !!AssistantSidebar && ollieEnabled,
   });
 
   const renderItems = (items: MenuItem[]) => {
