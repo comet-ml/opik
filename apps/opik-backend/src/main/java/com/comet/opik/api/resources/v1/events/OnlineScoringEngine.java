@@ -99,20 +99,23 @@ public class OnlineScoringEngine {
      *         ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
-            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
-        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE);
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull List<Span> spans) {
+        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE, spans);
     }
 
     public static ChatRequest prepareLlmRequest(
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
-            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType) {
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
+            @NonNull List<Span> spans) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        injectSpansIntoReplacements(replacements, evaluatorCode.variables(), spans);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
     /**
-     * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType)}
+     * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType, List)}
      * that caps each rendered variable substitution at {@code maxReplacementChars}. Values longer
      * than the cap are replaced with their first {@code maxReplacementChars} chars followed by
      * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path, so a 50K-token
@@ -122,11 +125,52 @@ public class OnlineScoringEngine {
     public static ChatRequest prepareLlmRequest(
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
-            int maxReplacementChars, @NonNull String drillDownHint) {
+            int maxReplacementChars, @NonNull String drillDownHint, @NonNull List<Span> spans) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        injectSpansIntoReplacements(replacements, evaluatorCode.variables(), spans);
         Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Whether the user's variable mapping declares a variable that should be substituted with
+     * the trace's spans list. Sentinel value (mirroring the Python-metric convention): any
+     * variable whose value is the bare string {@code "spans"} (no JSONPath prefix) gets the
+     * full spans array serialized as JSON at render time.
+     *
+     * <p>Used by the trace scorer to opt-in to the {@code spanService.getByTraceIds(...)} fetch
+     * for inline LLM-as-judge evaluations whose template references {@code {{spans}}} — without
+     * this gate, small traces would skip the fetch and the variable would render as the literal
+     * sentinel rather than the actual spans.
+     */
+    public static boolean templateReferencesSpans(@NonNull Map<String, String> variables) {
+        return variables.containsValue(SPANS_VARIABLE_NAME);
+    }
+
+    /**
+     * Replace any variable whose source path is the {@code "spans"} sentinel with the JSON-
+     * serialized spans list (sorted by start_time, matching the Python-metric convention).
+     * Mutates {@code replacements} in place. No-op when {@code spans} is empty or no variable
+     * references the sentinel — wasted JSONPath resolution on the bare {@code "spans"} value
+     * is left in place to keep the override path simple; the bad value gets overwritten.
+     */
+    private static void injectSpansIntoReplacements(
+            Map<String, String> replacements, Map<String, String> variables, List<Span> spans) {
+        if (spans.isEmpty() || !templateReferencesSpans(variables)) {
+            return;
+        }
+        String spansJson;
+        try {
+            spansJson = OBJECT_MAPPER.writeValueAsString(spans.stream().sorted(BY_SPAN_START_TIME).toList());
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
+        variables.forEach((name, path) -> {
+            if (SPANS_VARIABLE_NAME.equals(path)) {
+                replacements.put(name, spansJson);
+            }
+        });
     }
 
     static Map<String, String> capReplacements(Map<String, String> replacements,

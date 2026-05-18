@@ -158,18 +158,21 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 UserLog.TRACE_ID, trace.id().toString(),
                 UserLog.RULE_ID, message.ruleId().toString());
 
-        // Spans are fetched here, in the reactive chain, only when the agentic-tools path could
-        // fire — i.e. when the provider supports tool-calling AND either the experimentId
-        // branch is on (test-suite assertion) or the size-based toggle is on. If the provider
-        // can't handle tools, shouldUseAgenticTools will fall back to inline regardless, so
-        // pre-fetching spans would just be wasted I/O. Keeping the fetch reactive and out of
+        // Spans are fetched here, in the reactive chain, only when they'll actually be consumed
+        // downstream — either to pre-seed the agentic-tools cache (provider supports tools AND
+        // experimentId branch OR size-based toggle is on) OR to substitute into a {{spans}}
+        // template variable on the inline path (sentinel: any variable mapped to the bare
+        // string "spans"). Skip the I/O otherwise. Keeping the fetch reactive and out of
         // evaluate() avoids the .block() pattern that pinned a workersScheduler thread for the
         // upstream wait (OPIK-6308).
         String modelName = message.llmAsJudgeCode().model().name();
-        boolean spansNeeded = OnlineScoringEngine.supportsToolCalling(
+        boolean agenticToolsPathPossible = OnlineScoringEngine.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName))
                 && (LlmAsJudgeToolsMode.shouldUseTools(message)
                         || serviceTogglesConfig.isAgenticToolsEnabled());
+        boolean templateNeedsSpans = OnlineScoringEngine
+                .templateReferencesSpans(message.llmAsJudgeCode().variables());
+        boolean spansNeeded = agenticToolsPathPossible || templateNeedsSpans;
         Mono<List<Span>> spansMono = spansNeeded
                 ? spanService.getByTraceIds(Set.of(trace.id()))
                         .collectList()
@@ -275,7 +278,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             .formatted(trace.id(), trace.id());
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace, new InstructionStrategy(),
-                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint);
+                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans);
                     // The post-tool-loop wrap-up must use the provider-native structured-output
                     // strategy (e.g. response_format=json_schema on OpenAI). InstructionStrategy
                     // is a soft prompt and Anthropic in particular often returns conversational
@@ -284,12 +287,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     structuredRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace,
                             llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint);
+                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans);
                 } else {
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace,
                             llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            message.promptType());
+                            message.promptType(), spans);
                     structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {

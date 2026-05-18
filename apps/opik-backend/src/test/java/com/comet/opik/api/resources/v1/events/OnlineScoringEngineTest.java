@@ -1002,7 +1002,8 @@ class OnlineScoringEngineTest {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
-        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy());
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy(),
+                List.of());
 
         assertThat(request.responseFormat()).isNotNull();
         var expectedSchema = createTestSchema();
@@ -1016,7 +1017,7 @@ class OnlineScoringEngineTest {
         var trace = createTrace(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareLlmRequest(
-                evaluatorCode, trace, new InstructionStrategy());
+                evaluatorCode, trace, new InstructionStrategy(), List.of());
 
         assertThat(request.responseFormat()).isNull();
 
@@ -1034,6 +1035,85 @@ class OnlineScoringEngineTest {
         assertThat(userMessage.singleText()).contains("Summary: " + SUMMARY_STR);
         assertThat(userMessage.singleText()).contains("Instruction: " + OUTPUT_STR);
         assertThat(userMessage.singleText()).contains("Literal: some literal value");
+    }
+
+    @Test
+    @DisplayName("templateReferencesSpans detects the 'spans' sentinel anywhere in the variables map")
+    void testTemplateReferencesSpans() {
+        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of())).isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of(
+                "summary", "input.foo",
+                "out", "output.bar"))).isFalse();
+        // Sentinel matches the bare value "spans" — not "input.spans", not "Spans", not "$.spans".
+        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of("mySpans", "spans"))).isTrue();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of(
+                "summary", "input.foo",
+                "spansList", "spans"))).isTrue();
+        // Case-sensitive: only the lowercase bare sentinel triggers injection.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of("x", "Spans"))).isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of("x", "input.spans"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest substitutes {{spans}}-referencing variables with the serialized spans list")
+    void testPrepareLlmRequestInjectsSpansFromSentinel() {
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Count the spans: {{mySpans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("mySpans", "spans")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span1 = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("span-a").type(com.comet.opik.domain.SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+        var span2 = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("span-b").type(com.comet.opik.domain.SpanType.general)
+                .startTime(java.time.Instant.now().plusMillis(1)).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span2, span1));
+
+        // The {{mySpans}} variable substitution should be the JSON-serialized spans list (sorted
+        // by start_time so the wire order is stable). Smoke-check: both span names appear and
+        // earliest-start span comes first.
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        assertThat(allText).contains("span-a");
+        assertThat(allText).contains("span-b");
+        assertThat(allText.indexOf("span-a")).isLessThan(allText.indexOf("span-b"));
+        // Sentinel literal should NOT leak into the rendered prompt.
+        assertThat(allText).doesNotContain("{{mySpans}}");
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest leaves non-spans variables alone when spans are passed")
+    void testPrepareLlmRequestIgnoresSpansWhenNoSentinel() {
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("ignored-span").type(com.comet.opik.domain.SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span));
+
+        // Template variables don't include the "spans" sentinel, so the span shouldn't appear
+        // in the rendered prompt — even though spans were available. Stringify the whole message
+        // list so the assertion catches the span name wherever it might have landed.
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        assertThat(allText).doesNotContain("ignored-span");
     }
 
     private static Stream<Arguments> feedbackParsingArguments() {
