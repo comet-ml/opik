@@ -31,6 +31,13 @@ interface LLMPromptMessagesVariablesProps {
   datasetColumnNames?: string[];
   type?: TRACE_DATA_TYPE;
   includeIntermediateNodes?: boolean;
+  /**
+   * Names that should be hidden from the rendered mapping list. The underlying
+   * `variables` map still carries them (so the backend receives the sentinel),
+   * but the user doesn't see a row they don't need to interact with — used for
+   * reserved trace evaluators like `{{spans}}` whose path is fixed.
+   */
+  hiddenVariableNames?: string[];
 }
 
 const LLMPromptMessagesVariables = ({
@@ -44,15 +51,18 @@ const LLMPromptMessagesVariables = ({
   datasetColumnNames,
   type = TRACE_DATA_TYPE.traces,
   includeIntermediateNodes = false,
+  hiddenVariableNames,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     if (!variables || typeof variables !== "object") {
       return [];
     }
+    const hidden = new Set(hiddenVariableNames ?? []);
     return Object.entries(variables)
+      .filter(([name]) => !hidden.has(name))
       .map((e) => ({ label: e[0], value: e[1] }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [variables]);
+  }, [variables, hiddenVariableNames]);
 
   const handleChangeVariables = useCallback(
     (changes: DropdownOption<string>) => {

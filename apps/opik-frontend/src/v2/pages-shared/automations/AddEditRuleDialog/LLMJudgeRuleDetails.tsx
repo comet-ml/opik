@@ -347,6 +347,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     datasetColumnNames={datasetColumnNames}
                     type={autocompleteType}
                     includeIntermediateNodes
+                    hiddenVariableNames={Object.keys(
+                      RESERVED_TRACE_EVALUATOR_VARIABLES,
+                    )}
                   />
                 </>
               );

@@ -129,6 +129,9 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 datasetColumnNames={datasetColumnNames}
                 type={autocompleteType}
                 includeIntermediateNodes
+                hiddenVariableNames={Object.keys(
+                  RESERVED_TRACE_EVALUATOR_VARIABLES,
+                )}
               />
             );
           }}
