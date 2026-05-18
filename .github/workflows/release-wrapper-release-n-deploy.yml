@@ -37,7 +37,6 @@ jobs:
       - name: Notify Release-n-Deploy-Agent
         if: ${{ inputs.resumeUrl != '' }}
         run: |
-          echo "url: ${{ inputs }}"
           echo "All inputs: ${{ toJSON(inputs) }}"
           echo "resumeUrl input: '${{ inputs.resumeUrl }}'"
           
