@@ -72,7 +72,10 @@ async function globalSetup(_config: FullConfig) {
   console.log('Cleaning up any existing test data...');
   try { await client.deleteDataset(DATASET_NAME); } catch { /* ignore */ }
   try { await client.deleteDataset(TEST_SUITE_NAME); } catch { /* ignore */ }
-  try { await client.deleteProject(PROJECT_NAME); } catch { /* ignore */ }
+  try {
+    await client.deleteProject(PROJECT_NAME);
+    await client.waitForProjectDeleted(PROJECT_NAME, 30);
+  } catch { /* ignore */ }
 
   console.log('Creating test data...');
   await client.createProject(PROJECT_NAME);
