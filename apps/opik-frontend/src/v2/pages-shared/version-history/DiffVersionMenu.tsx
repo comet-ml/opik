@@ -1,7 +1,6 @@
 import React from "react";
 import { Clock, GitCompareArrows } from "lucide-react";
 
-import { ConfigHistoryItem } from "@/types/agent-configs";
 import { getTimeFromNow } from "@/lib/date";
 import { Button } from "@/ui/button";
 import {
@@ -12,30 +11,37 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import AgentConfigTagList from "./AgentConfigTagList";
+import VersionTagList from "./VersionTagList";
+import type { VersionHistoryItem } from "./VersionHistoryTimeline";
 
-type DiffVersionMenuProps = {
+interface DiffVersionMenuProps {
   currentItemId: string;
-  versions: ConfigHistoryItem[];
-  onSelectVersion: (item: ConfigHistoryItem) => void;
-};
+  versions: VersionHistoryItem[];
+  onSelectVersion: (item: VersionHistoryItem) => void;
+  triggerLabel?: string;
+}
 
 const DiffVersionMenu: React.FC<DiffVersionMenuProps> = ({
   currentItemId,
   versions,
   onSelectVersion,
+  triggerLabel = "Show diff",
 }) => {
   const selectableVersions = versions.filter((v) => v.id !== currentItemId);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="xs" variant="outline">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={selectableVersions.length === 0}
+        >
           <GitCompareArrows className="mr-1.5 size-3.5" />
-          Diff
+          {triggerLabel}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel size="sm">Compare against</DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-border" />
         <div className="max-h-[40vh] overflow-y-auto">
@@ -47,12 +53,10 @@ const DiffVersionMenu: React.FC<DiffVersionMenuProps> = ({
               onSelect={() => onSelectVersion(version)}
             >
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <span className="shrink-0 text-foreground">{version.name}</span>
-                <AgentConfigTagList
-                  tags={version.tags}
-                  size="sm"
-                  maxWidth={120}
-                />
+                <span className="shrink-0 text-foreground">
+                  {version.label}
+                </span>
+                <VersionTagList tags={version.tags} size="sm" maxWidth={120} />
               </div>
               <span className="comet-body-xs flex shrink-0 items-center gap-1 text-muted-slate">
                 <Clock className="size-3 shrink-0" />
