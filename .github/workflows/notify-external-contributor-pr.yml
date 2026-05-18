@@ -61,9 +61,14 @@ jobs:
         run: .github/scripts/notify-slack-contributor-pr.sh
 
       - name: Leave marker comment
+        # The marker comment short-circuits this workflow forever for the
+        # PR, so it MUST be gated on an explicit "Slack delivered" signal.
+        # `steps.send_slack.outcome == 'success'` alone is not enough — the
+        # script's `set -euo pipefail` + explicit HTTP-200 check + `sent=true`
+        # output is the actual contract.
         if: >-
           steps.marker_check.outputs.already_notified == 'false' &&
-          steps.send_slack.outcome == 'success'
+          steps.send_slack.outputs.sent == 'true'
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
           gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \

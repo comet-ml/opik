@@ -5,8 +5,14 @@
 # Mirrors the message format produced by the `send-code-review-slack` skill
 # (.agents/commands/comet/send-code-review-slack.md).
 #
+# Unlike .github/scripts/send-slack-message.sh, this script treats a missing
+# SLACK_WEBHOOK_URL as a hard error. The caller workflow gates the marker
+# comment on this script writing `sent=true` to $GITHUB_OUTPUT, so silently
+# skipping on a missing webhook would let the marker get posted anyway and
+# permanently block re-notification for the PR.
+#
 # Required env vars:
-#   SLACK_WEBHOOK_URL — Slack incoming webhook URL
+#   SLACK_WEBHOOK_URL — Slack incoming webhook URL (must be non-empty)
 #   PR_URL            — URL of the PR
 #   PR_NUMBER         — PR number
 #   PR_TITLE          — PR title (used to extract Jira key and component tag)
@@ -14,11 +20,11 @@
 #
 # Optional env vars:
 #   AUTHOR_DISPLAY    — PR author's display name (falls back to AUTHOR_LOGIN)
+#   GITHUB_OUTPUT     — when set (in CI), `sent=true` is appended on HTTP 200
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
+: "${SLACK_WEBHOOK_URL:?SLACK_WEBHOOK_URL is required (refusing to silently skip)}"
 : "${PR_URL:?PR_URL is required}"
 : "${PR_NUMBER:?PR_NUMBER is required}"
 : "${PR_TITLE:?PR_TITLE is required}"
@@ -77,4 +83,16 @@ fi
 
 jq -n --arg text "$MESSAGE_TEXT" '{text: $text}' > /tmp/slack-payload.json
 
-exec "$SCRIPT_DIR/send-slack-message.sh" /tmp/slack-payload.json
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+  -X POST -H 'Content-type: application/json' \
+  --data @/tmp/slack-payload.json "$SLACK_WEBHOOK_URL")
+
+if [ "$HTTP_CODE" != "200" ]; then
+  echo "::error::Slack webhook returned HTTP $HTTP_CODE"
+  exit 1
+fi
+
+echo "Slack notification sent (HTTP 200)"
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "sent=true" >> "$GITHUB_OUTPUT"
+fi
