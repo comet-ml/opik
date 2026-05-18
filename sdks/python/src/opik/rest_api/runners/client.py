@@ -179,6 +179,7 @@ class RunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        prompt_masks: typing.Optional[typing.Dict[str, str]] = OMIT,
         blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -195,6 +196,10 @@ class RunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+            Deprecated. Use prompt_masks to pass one or more mask overlays keyed by prompt id.
+
+        prompt_masks : typing.Optional[typing.Dict[str, str]]
+            Mask overlays to apply during agent execution, keyed by prompt id.
 
         blueprint_name : typing.Optional[str]
 
@@ -218,6 +223,7 @@ class RunnersClient:
             project_id=project_id,
             inputs=inputs,
             mask_id=mask_id,
+            prompt_masks=prompt_masks,
             blueprint_name=blueprint_name,
             metadata=metadata,
             request_options=request_options,
@@ -844,6 +850,7 @@ class AsyncRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        prompt_masks: typing.Optional[typing.Dict[str, str]] = OMIT,
         blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -860,6 +867,10 @@ class AsyncRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+            Deprecated. Use prompt_masks to pass one or more mask overlays keyed by prompt id.
+
+        prompt_masks : typing.Optional[typing.Dict[str, str]]
+            Mask overlays to apply during agent execution, keyed by prompt id.
 
         blueprint_name : typing.Optional[str]
 
@@ -886,6 +897,7 @@ class AsyncRunnersClient:
             project_id=project_id,
             inputs=inputs,
             mask_id=mask_id,
+            prompt_masks=prompt_masks,
             blueprint_name=blueprint_name,
             metadata=metadata,
             request_options=request_options,

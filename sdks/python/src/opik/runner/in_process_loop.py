@@ -243,7 +243,7 @@ class InProcessRunnerLoop:
 
         func: Callable = entry["func"]
         mask_id = job.mask_id
-        masks = job.masks
+        masks = job.prompt_masks
         blueprint_name = job.blueprint_name
 
         trace_id = id_helpers.generate_id()

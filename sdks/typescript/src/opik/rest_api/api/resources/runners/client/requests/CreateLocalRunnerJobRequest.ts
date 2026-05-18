@@ -13,7 +13,10 @@ export interface CreateLocalRunnerJobRequest {
     agentName: string;
     inputs?: OpikApi.JsonNode;
     projectId: string;
+    /** Deprecated. Use prompt_masks to pass one or more mask overlays keyed by prompt id. */
     maskId?: string;
+    /** Mask overlays to apply during agent execution, keyed by prompt id. */
+    promptMasks?: Record<string, string>;
     blueprintName?: string;
     metadata?: OpikApi.LocalRunnerJobMetadata;
 }

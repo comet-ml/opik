@@ -301,6 +301,7 @@ class RawRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        prompt_masks: typing.Optional[typing.Dict[str, str]] = OMIT,
         blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -317,6 +318,10 @@ class RawRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+            Deprecated. Use prompt_masks to pass one or more mask overlays keyed by prompt id.
+
+        prompt_masks : typing.Optional[typing.Dict[str, str]]
+            Mask overlays to apply during agent execution, keyed by prompt id.
 
         blueprint_name : typing.Optional[str]
 
@@ -337,6 +342,7 @@ class RawRunnersClient:
                 "inputs": inputs,
                 "project_id": project_id,
                 "mask_id": mask_id,
+                "prompt_masks": prompt_masks,
                 "blueprint_name": blueprint_name,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=LocalRunnerJobMetadata, direction="write"
@@ -1428,6 +1434,7 @@ class AsyncRawRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        prompt_masks: typing.Optional[typing.Dict[str, str]] = OMIT,
         blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1444,6 +1451,10 @@ class AsyncRawRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+            Deprecated. Use prompt_masks to pass one or more mask overlays keyed by prompt id.
+
+        prompt_masks : typing.Optional[typing.Dict[str, str]]
+            Mask overlays to apply during agent execution, keyed by prompt id.
 
         blueprint_name : typing.Optional[str]
 
@@ -1464,6 +1475,7 @@ class AsyncRawRunnersClient:
                 "inputs": inputs,
                 "project_id": project_id,
                 "mask_id": mask_id,
+                "prompt_masks": prompt_masks,
                 "blueprint_name": blueprint_name,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=LocalRunnerJobMetadata, direction="write"
