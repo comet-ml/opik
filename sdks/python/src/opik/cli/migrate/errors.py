@@ -21,6 +21,16 @@ class DatasetNotFoundError(MigrationError):
     """Raised when the source dataset name cannot be resolved."""
 
 
+class PromptNotFoundError(MigrationError):
+    """Raised when the source prompt name cannot be resolved.
+
+    Prompt names are workspace-unique (see liquibase migration
+    ``000004_add_prompt_library_tables.sql`` — unique key on
+    ``(workspace_id, name)``), so no ``--from-project`` disambiguation is
+    needed; either the workspace has the name or it doesn't.
+    """
+
+
 class AmbiguityError(MigrationError):
     """Raised when a workspace-scoped name resolves to multiple datasets."""
 
