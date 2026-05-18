@@ -1,13 +1,7 @@
 name: 📣 Notify Slack — External Contributor PR
 
 on:
-  # TODO(OPIK-6222): trigger is temporarily `pull_request` (not
-  # `pull_request_target`) so the workflow fires from THIS branch
-  # rather than from `main` during the smoke test. The revert commit
-  # restores `pull_request_target` for production (needed for fork PRs
-  # to access secrets). Same-repo PRs (e.g. JetoPistola) get secrets
-  # under `pull_request` too, which is why this works for testing.
-  pull_request:
+  pull_request_target:
     types: [opened, ready_for_review]
 
 concurrency:
@@ -17,17 +11,10 @@ concurrency:
 jobs:
   notify:
     name: Notify #code-review on external contributor PR
-    # TODO(OPIK-6222): the `JetoPistola` clause is a smoke-test exception.
-    # MUST be reverted before merge — see the follow-up revert commit on
-    # this branch. Without the revert this workflow will fire on every
-    # PR opened by JetoPistola, who is a comet-ml MEMBER.
     if: >-
       !github.event.pull_request.draft &&
-      (
-        contains(fromJSON('["NONE","FIRST_TIME_CONTRIBUTOR","FIRST_TIMER","CONTRIBUTOR"]'),
-                 github.event.pull_request.author_association)
-        || github.event.pull_request.user.login == 'JetoPistola'
-      )
+      contains(fromJSON('["NONE","FIRST_TIME_CONTRIBUTOR","FIRST_TIMER","CONTRIBUTOR"]'),
+               github.event.pull_request.author_association)
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
