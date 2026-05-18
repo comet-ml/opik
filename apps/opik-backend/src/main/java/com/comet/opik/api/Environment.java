@@ -18,7 +18,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Environment(
-        @JsonView( {
+        @JsonView({
                 Environment.View.Public.class, Environment.View.Write.class}) UUID id,
         @JsonView({Environment.View.Public.class,
                 Environment.View.Write.class}) @NotBlank @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String name,
@@ -32,7 +32,7 @@ public record Environment(
         @JsonView({
                 Environment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({
-                Environment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                Environment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
     public static final String NAME_PATTERN = "^[A-Za-z0-9_-]+$";
     public static final String NAME_PATTERN_MESSAGE = "must match '" + NAME_PATTERN + "'";
@@ -46,14 +46,14 @@ public record Environment(
     }
 
     public record EnvironmentPage(
-            @JsonView( {
+            @JsonView({
                     Environment.View.Public.class}) int page,
             @JsonView({Environment.View.Public.class}) int size,
             @JsonView({Environment.View.Public.class}) long total,
             @JsonView({Environment.View.Public.class}) List<Environment> content,
             @JsonView({Environment.View.Public.class}) List<String> sortableBy)
             implements
-                com.comet.opik.api.Page<Environment>{
+                com.comet.opik.api.Page<Environment> {
 
         public static EnvironmentPage empty() {
             return new EnvironmentPage(1, 0, 0, List.of(), List.of("created_at"));

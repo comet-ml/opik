@@ -12,5 +12,5 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetVersionRestore(
         @NotBlank @Schema(description = "Version hash or tag to restore from", examples = {
-                "abc12345", "baseline", "latest"}, requiredMode = Schema.RequiredMode.REQUIRED) String versionRef){
+                "abc12345", "baseline", "latest"}, requiredMode = Schema.RequiredMode.REQUIRED) String versionRef) {
 }

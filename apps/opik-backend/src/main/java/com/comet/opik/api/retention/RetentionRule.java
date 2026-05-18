@@ -18,7 +18,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record RetentionRule(
-        @JsonView( {
+        @JsonView({
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String workspaceId,
         @JsonView({View.Public.class, View.Write.class}) UUID projectId,
@@ -37,7 +37,7 @@ public record RetentionRule(
         @JsonView({
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Current position of historical data cleanup") UUID catchUpCursor,
         @JsonView({
-                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Whether historical catch-up is complete") Boolean catchUpDone){
+                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Whether historical catch-up is complete") Boolean catchUpDone) {
 
     public static class View {
         public static class Public {
@@ -51,11 +51,11 @@ public record RetentionRule(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record RetentionRulePage(
-            @JsonView( {
+            @JsonView({
                     View.Public.class}) List<RetentionRule> content,
             @JsonView({View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
-            @JsonView({View.Public.class}) long total) implements Page<RetentionRule>{
+            @JsonView({View.Public.class}) long total) implements Page<RetentionRule> {
 
         public static RetentionRulePage empty(int page) {
             return new RetentionRulePage(List.of(), page, 0, 0);

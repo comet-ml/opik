@@ -72,8 +72,9 @@ import static org.assertj.core.api.Assumptions.assumeThat;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-/// For some providers, the tests need to make actual LLM calls. For that to work, the relevant API keys must be set in
-/// the environment prior to running the tests. If an environment variable for a specific provider is not set, the
+/// For some providers, the tests need to make actual LLM calls. For that to
+/// work, the relevant API keys must be set in the environment prior to running
+/// the tests. If an environment variable for a specific provider is not set, the
 /// relevant test will be skipped for that provider.
 /// - **Openai**: runs against a demo server and doesn't require an API key
 /// - **Anthropic**: set `ANTHROPIC_API_KEY` to your anthropic api key
@@ -345,10 +346,12 @@ class ChatCompletionsResourceTest {
                 llmProviderApiKey, llmProvider, API_KEY, workspaceName, 201);
     }
 
-    /// Validates that 4xx errors from the upstream LLM provider gateway reach the API caller
-    /// intact. Covers both the OpenAI-compatible error body shape (which current
-    /// [com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage] expects) and the
-    /// Azure OpenAI error body shape (nested error object). Relevant to OPIK-4551 AC #9.
+    /// Validates that 4xx errors from the upstream LLM provider gateway reach the
+    /// API caller intact. Covers both the OpenAI-compatible error body shape (which
+    /// current
+    /// [com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage] expects)
+    /// and the Azure OpenAI error body shape (nested error object). Relevant to
+    /// OPIK-4551 AC #9.
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @DisplayName("Custom LLM provider — upstream gateway error propagation")

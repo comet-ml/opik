@@ -185,11 +185,11 @@ public abstract sealed class FeedbackDefinition<T> {
     }
 
     public record FeedbackDefinitionPage(
-            @JsonView( {
+            @JsonView({
                     View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
-            @JsonView({View.Public.class}) List<FeedbackDefinition<?>> content) implements Page<FeedbackDefinition<?>>{
+            @JsonView({View.Public.class}) List<FeedbackDefinition<?>> content) implements Page<FeedbackDefinition<?>> {
     }
 
     // Fields and methods

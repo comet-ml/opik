@@ -24,7 +24,7 @@ import static com.comet.opik.api.PromptType.MUSTACHE;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersion(
-        @JsonView( {
+        @JsonView({
                 Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version unique identifier, generated if absent") UUID id,
@@ -53,7 +53,7 @@ public record PromptVersion(
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
-                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy){
+                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy) {
 
     public static class View {
         public static class Detail {
@@ -65,14 +65,14 @@ public record PromptVersion(
 
     @Builder
     public record PromptVersionPage(
-            @JsonView( {
+            @JsonView({
                     PromptVersion.View.Public.class}) int page,
             @JsonView({PromptVersion.View.Public.class}) int size,
             @JsonView({PromptVersion.View.Public.class}) long total,
             @JsonView({PromptVersion.View.Public.class}) List<PromptVersion> content,
             @JsonView({PromptVersion.View.Public.class}) List<String> sortableBy)
             implements
-                Page<PromptVersion>{
+                Page<PromptVersion> {
 
         public static PromptVersion.PromptVersionPage empty(int page, List<String> sortableBy) {
             return new PromptVersion.PromptVersionPage(page, 0, 0, List.of(), sortableBy);

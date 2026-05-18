@@ -23,7 +23,7 @@ import java.util.UUID;
 // for property names
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Project(
-        @JsonView( {
+        @JsonView({
                 Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({Project.View.Public.class, View.Write.class}) @NotBlank String name,
         @JsonView({Project.View.Public.class, View.Write.class}) Visibility visibility,
@@ -52,7 +52,7 @@ public record Project(
         @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long guardrailsFailedCount,
         @JsonView({
-                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable ErrorCountWithDeviation errorCount){
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable ErrorCountWithDeviation errorCount) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -73,14 +73,14 @@ public record Project(
     }
 
     public record ProjectPage(
-            @JsonView( {
+            @JsonView({
                     Project.View.Public.class}) int page,
             @JsonView({Project.View.Public.class}) int size,
             @JsonView({Project.View.Public.class}) long total,
             @JsonView({Project.View.Public.class}) List<Project> content,
             @JsonView({Project.View.Public.class}) List<String> sortableBy)
             implements
-                com.comet.opik.api.Page<Project>{
+                com.comet.opik.api.Page<Project> {
 
         public static ProjectPage empty(int page) {
             return new ProjectPage(page, 0, 0, List.of(), List.of());

@@ -33,11 +33,11 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record LlmAsJudgeCode(
-            @JsonView( {
+            @JsonView({
                     View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
             @JsonView({View.Public.class, View.Write.class}) @NotNull Map<String, String> variables,
-            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema){
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema) {
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",

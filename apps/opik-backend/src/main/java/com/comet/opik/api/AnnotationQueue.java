@@ -23,7 +23,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AnnotationQueue(
-        @JsonView( {
+        @JsonView({
                 AnnotationQueue.View.Public.class, AnnotationQueue.View.Write.class}) @Nullable UUID id,
         @JsonView({AnnotationQueue.View.Public.class, AnnotationQueue.View.Write.class}) @NotNull UUID projectId,
         @JsonView({
@@ -51,7 +51,7 @@ public record AnnotationQueue(
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({
-                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
     @Getter
     @RequiredArgsConstructor
@@ -81,12 +81,12 @@ public record AnnotationQueue(
 
     @Builder(toBuilder = true)
     public record AnnotationQueuePage(
-            @JsonView( {
+            @JsonView({
                     View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
             @JsonView({View.Public.class}) List<AnnotationQueue> content,
-            @JsonView({View.Public.class}) List<String> sortableBy) implements Page<AnnotationQueue>{
+            @JsonView({View.Public.class}) List<String> sortableBy) implements Page<AnnotationQueue> {
 
         public static AnnotationQueuePage empty(int page, List<String> sortableBy) {
             return new AnnotationQueuePage(page, 0, 0, List.of(), sortableBy);

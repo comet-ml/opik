@@ -24,7 +24,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Prompt(
-        @JsonView( {
+        @JsonView({
                 Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class}) UUID id,
         @JsonView({Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class,
                 Prompt.View.Updatable.class}) @NotBlank String name,
@@ -61,7 +61,7 @@ public record Prompt(
         @JsonView({
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PromptVersion latestVersion,
         @JsonView({
-                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PromptVersion requestedVersion){
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PromptVersion requestedVersion) {
 
     public static class View {
         public static class Write {
@@ -79,14 +79,14 @@ public record Prompt(
 
     @Builder
     public record PromptPage(
-            @JsonView( {
+            @JsonView({
                     Prompt.View.Public.class}) int page,
             @JsonView({Prompt.View.Public.class}) int size,
             @JsonView({Prompt.View.Public.class}) long total,
             @JsonView({Prompt.View.Public.class}) List<Prompt> content,
             @JsonView({Prompt.View.Public.class}) List<String> sortableBy)
             implements
-                Page<Prompt>{
+                Page<Prompt> {
 
         public static Prompt.PromptPage empty(int page, List<String> sortableBy) {
             return new Prompt.PromptPage(page, 0, 0, List.of(), sortableBy);

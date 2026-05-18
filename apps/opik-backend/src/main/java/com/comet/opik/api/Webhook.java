@@ -22,7 +22,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Webhook(
-        @JsonView( {
+        @JsonView({
                 Alert.View.Public.class, Alert.View.Write.class}) UUID id,
 
         @JsonView({Alert.View.Public.class,
@@ -47,7 +47,7 @@ public record Webhook(
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
 
         @JsonView({
-                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
     @Override
     public String toString() {
