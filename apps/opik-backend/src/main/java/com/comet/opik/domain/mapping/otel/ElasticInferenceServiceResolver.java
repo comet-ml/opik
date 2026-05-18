@@ -36,7 +36,7 @@ public class ElasticInferenceServiceResolver {
     }
 
     // EIS model IDs follow the convention "<provider>-<model>" (except Elastic's own models like
-     // "elser_model_2", which have no dash and are skipped). Default behavior: use the prefix as
+    // "elser_model_2", which have no dash and are skipped). Default behavior: use the prefix as
     // the Opik provider name and strip it from the model.
     //
     // Overrides are only needed when:
