@@ -60,6 +60,8 @@ class OpikSpanProcessor:
         )
         self.thread_id = thread_id
         self.opik_trace: Optional[opik.Trace] = None
+        self._trace_name: Optional[str] = None
+        self._trace_start_time: Optional[datetime] = None
         # Mapping from Agent Spec Span ID to Opik Span ID
         self.opik_span_ids_mapping: Dict[str, str] = {}
         # Collection of Agent Spec Span ID -> Opik Span
@@ -86,13 +88,17 @@ class OpikSpanProcessor:
 
     def _get_opik_span_name(self, span: Span) -> str:
         """Return a meaningful name for the span, using the tool name for tool spans."""
+        # Honor explicit user-provided span name (anything different from the class default)
+        if span.name and span.name != span.__class__.__name__:
+            return span.name
+        # For tool spans without an explicit name, prefer the underlying tool's name
+        # over the class default "ToolExecutionSpan" (which the LangGraph adapter triggers).
         if isinstance(span, ToolExecutionSpan):
-            tool_name = getattr(span.tool, "name", None)
-            # Use explicit span name if set by user, fall back to tool name, then class name
-            if span.name != span.__class__.__name__ and span.name:
-                return span.name
-            return tool_name or span.name or span.__class__.__name__
-        return span.name or span.__class__.__name__
+            tool = getattr(span, "tool", None)
+            tool_name = getattr(tool, "name", None) if tool is not None else None
+            if tool_name:
+                return tool_name
+        return span.__class__.__name__
 
     def _remove_unnecessary_attributes_for_event_display(
         self,
@@ -310,9 +316,12 @@ class OpikSpanProcessor:
         """
         try:
             trace = get_trace()
+            self._trace_name = trace.name
+            self._trace_start_time = datetime.now(timezone.utc)
             # Cannot use the Agent Spec trace ID, as Opik requires the ID to be UUIDv7 compliant
             self.opik_trace = self.opik_client.trace(
-                name=trace.name,
+                name=self._trace_name,
+                start_time=self._trace_start_time,
                 thread_id=self.thread_id,
             )
         except Exception as e:
@@ -328,7 +337,15 @@ class OpikSpanProcessor:
         """
         try:
             if self.opik_trace is not None:
-                self.opik_trace.end(
+                # Re-send the full trace payload with the same ID instead of calling
+                # trace.end(): with batching enabled, an UpdateTraceMessage shortly after
+                # CreateTraceMessage can be lost. Re-sending overwrites at the backend.
+                # https://www.comet.com/docs/opik/tracing/batching_and_updates
+                self.opik_client.trace(
+                    id=self.opik_trace.id,
+                    name=self._trace_name,
+                    start_time=self._trace_start_time,
+                    end_time=datetime.now(timezone.utc),
                     input=self._trace_first_llm_input,
                     output=self._trace_last_llm_output,
                     thread_id=self.thread_id,
@@ -337,6 +354,8 @@ class OpikSpanProcessor:
             logger.warning(f"Exception raised during `OpikSpanProcessor.shutdown`: {e}")
         finally:
             self.opik_trace = None
+            self._trace_name = None
+            self._trace_start_time = None
             self._trace_first_llm_input = None
             self._trace_last_llm_output = None
 
