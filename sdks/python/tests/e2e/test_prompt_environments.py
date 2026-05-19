@@ -21,29 +21,32 @@ def _generate_random_prompt_name() -> str:
     return f"prompt-env-{_generate_random_suffix()}"
 
 
-def _generate_random_env_name() -> str:
-    return f"env-{_generate_random_suffix()}"
-
-
-@pytest.fixture
-def environment_name(opik_client: opik.Opik) -> str:
-    """Register a fresh environment in the workspace registry."""
-    name = _generate_random_env_name()
+def _register_env(opik_client: opik.Opik, name: str) -> str:
+    """Create the environment in the workspace registry and return its name."""
     opik_client.rest_client.environments.create_environment(name=name)
     return name
 
 
 @pytest.fixture
-def second_environment_name(opik_client: opik.Opik) -> str:
-    """Register a second fresh environment in the workspace registry."""
-    name = _generate_random_env_name()
-    opik_client.rest_client.environments.create_environment(name=name)
-    return name
+def second_environment_name(opik_client: opik.Opik):
+    """A unique second environment for tests that need two; deleted on teardown.
+
+    The shared ``environment_name`` fixture in ``conftest.py`` covers the
+    single-env case; this complements it for tests that exercise ownership
+    moves between two environments. Cleanup is best-effort — ``delete_environment``
+    is a no-op if the test bailed before creating it."""
+    name = f"e2e-tests-environment-{_generate_random_suffix()}"
+    yield name
+    try:
+        opik_client.delete_environment(name)
+    except rest_api_core.ApiError:
+        pass
 
 
 def test_create_prompt__with_environment__sets_ownership(
     opik_client: opik.Opik, environment_name: str
 ):
+    _register_env(opik_client, environment_name)
     prompt_name = _generate_random_prompt_name()
     prompt_template = f"some-prompt-text-{_generate_random_suffix()}"
 
@@ -63,6 +66,8 @@ def test_create_prompt__with_environment__sets_ownership(
 def test_set_environment__moves_ownership__visible_after_refetch(
     opik_client: opik.Opik, environment_name: str, second_environment_name: str
 ):
+    _register_env(opik_client, environment_name)
+    _register_env(opik_client, second_environment_name)
     prompt_name = _generate_random_prompt_name()
     prompt_template = f"some-prompt-text-{_generate_random_suffix()}"
 
@@ -83,6 +88,7 @@ def test_set_environment__moves_ownership__visible_after_refetch(
 def test_set_environment__none__clears_ownership(
     opik_client: opik.Opik, environment_name: str
 ):
+    _register_env(opik_client, environment_name)
     prompt_name = _generate_random_prompt_name()
     prompt_template = f"some-prompt-text-{_generate_random_suffix()}"
 
@@ -102,6 +108,7 @@ def test_set_environment__none__clears_ownership(
 def test_get_prompt__by_environment__resolves_to_owning_version(
     opik_client: opik.Opik, environment_name: str
 ):
+    _register_env(opik_client, environment_name)
     prompt_name = _generate_random_prompt_name()
     first_template = f"first-text-{_generate_random_suffix()}"
     second_template = f"second-text-{_generate_random_suffix()}"
@@ -130,6 +137,7 @@ def test_get_prompt__by_environment__resolves_to_owning_version(
 def test_set_prompt_environment__targets_specific_version(
     opik_client: opik.Opik, environment_name: str
 ):
+    _register_env(opik_client, environment_name)
     prompt_name = _generate_random_prompt_name()
     first_template = f"first-text-{_generate_random_suffix()}"
     second_template = f"second-text-{_generate_random_suffix()}"
@@ -166,6 +174,7 @@ def test_set_environment__unknown_environment__raises_404(opik_client: opik.Opik
 def test_create_chat_prompt__with_environment__sets_ownership(
     opik_client: opik.Opik, environment_name: str
 ):
+    _register_env(opik_client, environment_name)
     prompt_name = _generate_random_prompt_name()
     messages = [{"role": "user", "content": f"hi {_generate_random_suffix()}"}]
 

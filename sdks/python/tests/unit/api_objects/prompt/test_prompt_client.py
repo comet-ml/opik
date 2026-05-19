@@ -716,3 +716,40 @@ class TestPromptEnvironment:
             version_id="version-id",
             environment="staging",
         )
+
+    def test_set_prompt_environment__invalidates_cache(self, mock_rest_client):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+        resolved_project = opik_client._resolve_project_name(None)
+
+        cache = prompt_cache.get_global_cache()
+        cache.clear()
+        try:
+            sentinel = mock.MagicMock()
+            cache.get_or_fetch(
+                key=("env-prompt", None, resolved_project, "text", "staging"),
+                fetch_fn=lambda: sentinel,
+                ttl_seconds=None,
+            )
+            cache.get_or_fetch(
+                key=("other-prompt", None, resolved_project, "text", "staging"),
+                fetch_fn=lambda: sentinel,
+                ttl_seconds=None,
+            )
+
+            opik_client.set_prompt_environment("env-prompt", "production")
+
+            assert (
+                cache.get(("env-prompt", None, resolved_project, "text", "staging"))
+                is None
+            ), "stale entry for the updated prompt should be evicted"
+            assert (
+                cache.get(("other-prompt", None, resolved_project, "text", "staging"))
+                is sentinel
+            ), "entries for unrelated prompts must not be evicted"
+        finally:
+            cache.clear()

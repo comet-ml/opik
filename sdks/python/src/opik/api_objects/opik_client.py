@@ -46,6 +46,7 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .prompt import prompt_cache
 from .prompt.text import prompt as text_prompt_module
 from .prompt.chat import chat_prompt as chat_prompt_module
 from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
@@ -2388,7 +2389,8 @@ class Opik:
         By default this targets the latest version. Pass ``commit`` to target a specific
         version instead. The in-memory state of any previously fetched ``Prompt`` object is
         **not** mutated; to observe the updated state, re-fetch with
-        ``client.get_prompt(name=..., no_cache=True)``.
+        ``client.get_prompt(name=...)``. Local cache entries for this prompt name are
+        invalidated so the next ``get_prompt(..., environment=...)`` call hits the backend.
 
         Parameters:
             name: The name of the prompt whose version will have its environment set.
@@ -2414,6 +2416,9 @@ class Opik:
         self._rest_client.prompts.set_prompt_version_environment(
             version_id=version.id,
             environment=environment,
+        )
+        prompt_cache.invalidate_for_prompt(
+            name=name, project_name=resolved_project_name
         )
 
     def get_prompt_history(
