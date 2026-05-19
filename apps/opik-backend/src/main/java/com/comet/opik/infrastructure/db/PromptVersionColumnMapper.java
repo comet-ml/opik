@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionType;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,6 +32,11 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
     private PromptVersion mapObject(JsonNode jsonNode) {
         String template = jsonNode.get("template").asText();
         PromptType type = PromptType.fromString(jsonNode.get("type").asText());
+        PromptVersionType versionType = Optional.ofNullable(jsonNode.get("version_type"))
+                .filter(node -> !node.isNull())
+                .map(JsonNode::asText)
+                .map(PromptVersionType::fromString)
+                .orElse(PromptVersionType.PROMPT_VERSION);
 
         return PromptVersion.builder()
                 .id(UUID.fromString(jsonNode.get("id").asText()))
@@ -40,6 +46,7 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .metadata(jsonNode.get("metadata"))
                 .changeDescription(jsonNode.get("change_description").asText())
                 .type(type)
+                .versionType(versionType)
                 .variables(TemplateParseUtils.extractVariables(template, type))
                 .tags(jsonNode.has("tags") && jsonNode.get("tags") != null && !jsonNode.get("tags").isNull()
                         ? JsonUtils.readValue(jsonNode.get("tags").asText(), SetFlatArgumentFactory.TYPE_REFERENCE)
