@@ -1246,6 +1246,57 @@ class OnlineScoringEngineTest {
     }
 
     @Test
+    @DisplayName("buildSpanTree reconstructs parent/child hierarchy, promotes orphans, sorts siblings by start_time")
+    void buildSpanTreeReconstructsHierarchyAndPromotesOrphans() {
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var rootId = generator.generate();
+        var childA = generator.generate();
+        var childB = generator.generate();
+        var grandchild = generator.generate();
+        var orphanParent = generator.generate(); // intentionally NOT in the input set
+        var orphan = generator.generate();
+        var now = java.time.Instant.parse("2026-05-19T10:00:00Z");
+
+        // Layout:
+        //   root (no parent)
+        //     ├── child-A          (sibling, earlier start)
+        //     │     └── grandchild
+        //     └── child-B          (sibling, later start)
+        //   orphan (parent not in input — promoted to root)
+        // Input order is shuffled to prove buildSpanTree doesn't rely on it.
+        var spans = List.of(
+                Span.builder().id(childB).parentSpanId(rootId).name("child-B").type(SpanType.tool)
+                        .startTime(now.plusMillis(200)).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(orphan).parentSpanId(orphanParent).name("orphan").type(SpanType.general)
+                        .startTime(now.plusMillis(500)).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(grandchild).parentSpanId(childA).name("grandchild").type(SpanType.tool)
+                        .startTime(now.plusMillis(150)).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(rootId).parentSpanId(null).name("root").type(SpanType.general)
+                        .startTime(now).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(childA).parentSpanId(rootId).name("child-A").type(SpanType.tool)
+                        .startTime(now.plusMillis(100)).traceId(traceId).projectId(projectId).build());
+
+        var tree = OnlineScoringEngine.buildSpanTree(spans);
+
+        // Two roots — the real root + the orphan (promoted because its parent isn't in the set).
+        // root sorts before orphan because root.startTime < orphan.startTime.
+        assertThat(tree).hasSize(2);
+        assertThat(tree.get(0).name()).isEqualTo("root");
+        assertThat(tree.get(1).name()).isEqualTo("orphan");
+        // root has two direct children in start_time order: child-A then child-B.
+        assertThat(tree.get(0).spans()).hasSize(2);
+        assertThat(tree.get(0).spans().get(0).name()).isEqualTo("child-A");
+        assertThat(tree.get(0).spans().get(1).name()).isEqualTo("child-B");
+        // child-A has one nested child; child-B is a leaf (spans omitted via NON_NULL).
+        assertThat(tree.get(0).spans().get(0).spans()).hasSize(1);
+        assertThat(tree.get(0).spans().get(0).spans().get(0).name()).isEqualTo("grandchild");
+        assertThat(tree.get(0).spans().get(1).spans()).isNull();
+        // Orphan is a leaf with no children.
+        assertThat(tree.get(1).spans()).isNull();
+    }
+
+    @Test
     @DisplayName("substituted {{spans}} carries only the LLM-relevant fields — not feedback scores, comments, audit metadata")
     void prepareLlmRequestRendersSpansWithLeanProjection() {
         // Build a Span with the full kitchen sink — every field that SpanForLlm intentionally

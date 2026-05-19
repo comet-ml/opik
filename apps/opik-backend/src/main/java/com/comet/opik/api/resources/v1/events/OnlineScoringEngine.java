@@ -55,11 +55,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.UUID;
@@ -234,16 +237,13 @@ public class OnlineScoringEngine {
         if (!sentinelMapped && !templateOnly) {
             return;
         }
-        // Project to SpanForLlm so the prompt only carries fields a judge actually uses
-        // (name, type, in/out, timing, model/provider, errorInfo). Drops audit metadata,
-        // feedback scores, comments, cost data — none of which help the judge and all of
-        // which burn tokens. Sort first so the projection preserves call order.
+        // Project to SpanForLlm and reconstruct parent → child hierarchy so the judge sees
+        // the call tree, not a flat list. Drops audit metadata, feedback scores, comments,
+        // cost data — none of which help the judge and all of which burn tokens. Siblings
+        // are sorted by start_time inside buildSpanTree.
         String spansJson;
         try {
-            spansJson = OBJECT_MAPPER.writeValueAsString(spans.stream()
-                    .sorted(BY_SPAN_START_TIME)
-                    .map(SpanForLlm::from)
-                    .toList());
+            spansJson = OBJECT_MAPPER.writeValueAsString(buildSpanTree(spans));
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException(e);
         }
@@ -796,10 +796,11 @@ public class OnlineScoringEngine {
                 .collect(Collectors.groupingBy(Span::traceId));
         return traces.stream()
                 .flatMap(trace -> {
-                    List<SpanForLlm> traceSpans = spansByTrace.getOrDefault(trace.id(), List.of()).stream()
-                            .sorted(BY_SPAN_START_TIME)
-                            .map(SpanForLlm::from)
-                            .toList();
+                    // Reconstruct parent → child hierarchy per-trace so the assistant entry
+                    // carries a tree of spans, not a flat list. buildSpanTree handles sorting
+                    // siblings by start_time at every level.
+                    List<SpanForLlm> traceSpans = buildSpanTree(
+                            spansByTrace.getOrDefault(trace.id(), List.of()));
                     return Stream.of(
                             EnrichedThreadChatMessage.builder()
                                     .role(TraceThreadPythonEvaluatorRequest.ROLE_USER)
@@ -841,11 +842,15 @@ public class OnlineScoringEngine {
      *   <li>{@code startTime} / {@code endTime} / {@code duration}: call order + how long
      *   <li>{@code model} / {@code provider}: for LLM spans, which model
      *   <li>{@code errorInfo}: if the call failed
+     *   <li>{@code spans}: nested child spans, recursively projected — lets the judge see the
+     *       call tree (planner → sub-agent → tool) instead of a flat list with parent-id refs
+     *       it would have to mentally resolve. Built by {@link #buildSpanTree}.
      * </ul>
      * Null fields are omitted via {@code @JsonInclude(NON_NULL)} so e.g. a successful tool
-     * span doesn't pad the JSON with {@code error_info: null}. Same shape is used by the
-     * trace-scope {@code {{spans}}} substitution and the thread-scope {@code {{context}}}
-     * per-assistant {@code spans} field — one projection, two render paths.
+     * span doesn't pad the JSON with {@code error_info: null}, and a leaf span doesn't pad
+     * with an empty {@code spans} array. Same shape is used by the trace-scope
+     * {@code {{spans}}} substitution and the thread-scope {@code {{context}}} per-assistant
+     * {@code spans} field — one projection, two render paths.
      */
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -861,23 +866,69 @@ public class OnlineScoringEngine {
             JsonNode metadata,
             String model,
             String provider,
-            ErrorInfo errorInfo) {
+            ErrorInfo errorInfo,
+            List<SpanForLlm> spans) {
+    }
 
-        public static SpanForLlm from(Span span) {
-            return SpanForLlm.builder()
-                    .name(span.name())
-                    .type(span.type())
-                    .startTime(span.startTime())
-                    .endTime(span.endTime())
-                    .duration(span.duration())
-                    .input(span.input())
-                    .output(span.output())
-                    .metadata(span.metadata())
-                    .model(span.model())
-                    .provider(span.provider())
-                    .errorInfo(span.errorInfo())
-                    .build();
+    /**
+     * Build a nested-tree projection of the given spans for inline LLM rendering.
+     *
+     * <p>Reconstructs parent → child hierarchy from {@code parentSpanId} links, projects each
+     * node to {@link SpanForLlm} (dropping the audit/score/cost noise that {@code Span}
+     * carries), and sorts siblings at every level by {@code startTime} so the wire order
+     * tracks call order within each branch. Returns the top-level roots.
+     *
+     * <p>Orphans (spans whose {@code parentSpanId} isn't in the input list) are promoted to
+     * roots — happens when the caller passes a subset of a trace's spans, or when a parent
+     * was dropped server-side. The tree stays well-formed instead of silently dropping the
+     * orphaned subtree.
+     */
+    public static List<SpanForLlm> buildSpanTree(@NonNull List<Span> spans) {
+        if (spans.isEmpty()) {
+            return List.of();
         }
+        Map<UUID, List<Span>> childrenByParent = new HashMap<>();
+        Set<UUID> presentIds = new HashSet<>();
+        for (Span span : spans) {
+            if (span.id() != null) {
+                presentIds.add(span.id());
+            }
+            UUID parentId = span.parentSpanId();
+            if (parentId != null) {
+                childrenByParent.computeIfAbsent(parentId, k -> new ArrayList<>()).add(span);
+            }
+        }
+        // Roots: parent is null OR parent isn't in the visible set (orphan promotion).
+        List<Span> roots = spans.stream()
+                .filter(s -> s.parentSpanId() == null || !presentIds.contains(s.parentSpanId()))
+                .sorted(BY_SPAN_START_TIME)
+                .toList();
+        return roots.stream()
+                .map(root -> buildSpanNode(root, childrenByParent))
+                .toList();
+    }
+
+    private static SpanForLlm buildSpanNode(Span span, Map<UUID, List<Span>> childrenByParent) {
+        List<SpanForLlm> children = span.id() == null
+                ? List.of()
+                : childrenByParent.getOrDefault(span.id(), List.of()).stream()
+                        .sorted(BY_SPAN_START_TIME)
+                        .map(child -> buildSpanNode(child, childrenByParent))
+                        .toList();
+        return SpanForLlm.builder()
+                .name(span.name())
+                .type(span.type())
+                .startTime(span.startTime())
+                .endTime(span.endTime())
+                .duration(span.duration())
+                .input(span.input())
+                .output(span.output())
+                .metadata(span.metadata())
+                .model(span.model())
+                .provider(span.provider())
+                .errorInfo(span.errorInfo())
+                .spans(children.isEmpty() ? null : children)
+                .build();
     }
 
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames) {
