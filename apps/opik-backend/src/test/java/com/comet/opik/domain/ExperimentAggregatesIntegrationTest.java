@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
@@ -1329,6 +1330,13 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(page.content()).isNotEmpty();
     }
 
+    private void assertPageMetadataMatches(Page<?> actual, Page<?> expected) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields("content")
+                .isEqualTo(expected);
+    }
+
     private void assertPageNotEmpty(ExperimentGroupResponse response) {
         assertThat(response).isNotNull();
         assertThat(response.content()).isNotEmpty();
@@ -1608,6 +1616,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -1695,6 +1705,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2066,11 +2078,7 @@ class ExperimentAggregatesIntegrationTest {
 
         assertThat(afterAggregation).isNotNull();
 
-        assertThat(afterAggregation)
-                .as("Page metadata should match before/after aggregation for scenario: %s", scenarioName)
-                .usingRecursiveComparison()
-                .ignoringFields("content")
-                .isEqualTo(beforeAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
 
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
@@ -2338,6 +2346,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, API_KEY, TEST_WORKSPACE);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2374,6 +2384,8 @@ class ExperimentAggregatesIntegrationTest {
         var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
 
         experimentService.delete(Set.of(experiment.id()))
@@ -2436,6 +2448,8 @@ class ExperimentAggregatesIntegrationTest {
         var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
 
         // Delete HALF of the experiment items (partial delete), using ids captured from the raw query
@@ -2640,6 +2654,8 @@ class ExperimentAggregatesIntegrationTest {
                 .as("Filtered total should match before/after aggregation for filter %s %s %s",
                         field, operator, value)
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2685,6 +2701,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("Searched total should match before/after aggregation for term '%s'", searchTerm)
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2729,6 +2747,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2779,6 +2799,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("Filtered+sorted total should match before/after aggregation")
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2842,6 +2864,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("Filtered total should match before/after aggregation across multiple dataset versions")
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2905,6 +2929,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("EIA-filtered total should match before/after aggregation across multiple dataset versions")
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
