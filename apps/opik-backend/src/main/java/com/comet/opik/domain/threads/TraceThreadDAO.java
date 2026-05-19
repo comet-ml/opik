@@ -151,22 +151,31 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * Dedup via {@code LIMIT 1 BY} reverse-order read instead of {@code FINAL} to avoid the
+     * ReplacingSorted merge cost that caused 30s timeouts and JVM OOMs (OPIK-6519). Same pattern
+     * as OPIK-4828. Pre-dedup filter {@code last_updated_at > X} is safe because
+     * {@code max(last_updated_at)} per key is monotone under a {@code >} filter on the version column.
+     */
     private static final String FIND_PENDING_CLOSURE_THREADS_SQL = """
             SELECT
                 tt.workspace_id,
                 tt.project_id
             FROM (
-                SELECT workspace_id, project_id, status, min(last_updated_at) AS min_last_updated_at
-                FROM trace_threads FINAL
+                SELECT workspace_id, project_id, thread_id, id, status, last_updated_at
+                FROM trace_threads
                 WHERE last_updated_at > parseDateTime64BestEffort(:cached_max_inactive_period, 6)
-                GROUP BY workspace_id, project_id, status
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY (workspace_id, project_id, thread_id, id)
             ) tt
             LEFT ANY JOIN workspace_configurations wc FINAL
                 ON tt.workspace_id = wc.workspace_id
             WHERE tt.status = 'active'
-            AND tt.min_last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
-            ORDER BY tt.min_last_updated_at
+            AND tt.last_updated_at \\< parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
+            GROUP BY tt.workspace_id, tt.project_id
+            ORDER BY min(tt.last_updated_at)
             LIMIT :limit
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
@@ -394,7 +403,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive,
             @NonNull Instant cachedMaxInactivePeriod, int limit) {
         return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
+            var template = getSTWithLogComment(FIND_PENDING_CLOSURE_THREADS_SQL,
+                    "find_projects_with_pending_closure_threads", "", "", "");
+            var statement = connection.createStatement(template.render())
                     .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("default_timeout_seconds", defaultTimeoutToMarkThreadAsInactive.toSeconds())
                     .bind("cached_max_inactive_period",

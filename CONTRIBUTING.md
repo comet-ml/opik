@@ -47,6 +47,11 @@ Please review the CLA before contributing:
 5. Open a draft PR with GitHub CLI: `gh pr create --draft`.
 6. Fill `.github/pull_request_template.md` completely.
 
+## GitHub Actions workflows
+Workflow files in `.github/workflows/` are validated with [actionlint](https://github.com/rhysd/actionlint).
+- CI: `.github/workflows/actionlint.yml` runs on PRs that touch workflow files and lints only the changed ones.
+- Local: `.hooks/pre-commit` runs actionlint against staged workflow files when the binary is available; install with `brew install actionlint` (macOS) or via the [official install guide](https://github.com/rhysd/actionlint#installation). Without it the hook prints a hint and skips.
+
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
 - `apps/opik-frontend/src/data/model_prices_and_context_window.json`

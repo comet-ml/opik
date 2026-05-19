@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: '0 12 * * *'  # Run daily at noon UTC
   workflow_dispatch:
+    inputs:
+      ALLURE_JOB_RUN_ID:
+        description: Allure run ID to attach test results to
+        required: false
+        type: string
 
 jobs:
   check-links:
@@ -20,7 +25,7 @@ jobs:
         uses: actions/checkout@v6
         
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
       

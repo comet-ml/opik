@@ -21,7 +21,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Alert(
-        @JsonView( {
+        @JsonView({
                 Alert.View.Public.class, Alert.View.Write.class}) UUID id,
 
         @JsonView({Alert.View.Public.class,
@@ -60,7 +60,7 @@ public record Alert(
                         Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. \
                         Sending both project_id and a scope:project trigger config will result in an error.\
                         """) UUID projectId,
-        @JsonIgnore String workspaceId){
+        @JsonIgnore String workspaceId) {
 
     public static class View {
         public static class Public {
@@ -74,12 +74,12 @@ public record Alert(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record AlertPage(
-            @JsonView( {
+            @JsonView({
                     Alert.View.Public.class}) int page,
             @JsonView({Alert.View.Public.class}) int size,
             @JsonView({Alert.View.Public.class}) long total,
             @JsonView({Alert.View.Public.class}) List<Alert> content,
-            @JsonView({Alert.View.Public.class}) List<String> sortableBy) implements Page<Alert>{
+            @JsonView({Alert.View.Public.class}) List<String> sortableBy) implements Page<Alert> {
 
         public static AlertPage empty(int page, List<String> sortableBy) {
             return new AlertPage(page, 0, 0, List.of(), sortableBy);

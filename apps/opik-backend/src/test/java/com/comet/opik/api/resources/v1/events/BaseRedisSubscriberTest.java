@@ -416,7 +416,11 @@ class BaseRedisSubscriberTest {
             subscriber.stop();
 
             // Verify this specific consumer was removed from the group
-            var consumersAfterStop = stream.listConsumers(config.getConsumerGroupName()).block();
+            // listConsumers returns an empty Mono (block() -> null) when the group has no
+            // consumers, which is the expected state right after removing the last one.
+            var consumersAfterStop = stream.listConsumers(config.getConsumerGroupName())
+                    .blockOptional()
+                    .orElse(List.of());
             assertThat(consumersAfterStop)
                     .noneMatch(consumer -> subscriber.getConsumerId().equals(consumer.getName()));
 
