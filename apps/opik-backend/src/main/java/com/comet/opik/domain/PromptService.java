@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
@@ -345,9 +346,6 @@ class PromptServiceImpl implements PromptService {
         String environment = StringUtils.trimToNull(createPromptVersion.version().environment());
 
         if (environment != null) {
-            if (createPromptVersion.version().versionType() == PromptVersionType.MASK) {
-                throw new BadRequestException(MASK_ENV_NOT_ALLOWED);
-            }
             environmentService.bulkCreate(Set.of(environment), workspaceId, userName);
             return createVersionWithEnvironment(workspaceId, workspaceName, userName, projectId, prompt,
                     createPromptVersion, id, commit, environment);
@@ -383,30 +381,35 @@ class PromptServiceImpl implements PromptService {
     private PromptVersion createVersionWithEnvironment(String workspaceId, String workspaceName, String userName,
             UUID projectId, Prompt prompt, CreatePromptVersion createPromptVersion, UUID id, String commit,
             String environment) {
+        return withEnvironmentPromotionLock(prompt.id(), () -> {
+            PromptVersion existing = transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
+                return dao.findByEnvironment(prompt.id(), environment, workspaceId);
+            });
+            if (existing != null) {
+                throw new EntityAlreadyExistsException(new ErrorMessage(409,
+                        "Environment '%s' is already mapped to version '%s'"
+                                .formatted(environment, existing.commit())));
+            }
+
+            PromptVersion promptVersion = createPromptVersion.version().toBuilder()
+                    .promptId(prompt.id())
+                    .createdBy(userName)
+                    .id(id)
+                    .commit(commit)
+                    .build();
+
+            var saved = savePromptVersion(workspaceId, promptVersion);
+            postPromptCommittedEvent(saved, workspaceId, workspaceName, userName, projectId);
+            return saved;
+        });
+    }
+
+    private <T> T withEnvironmentPromotionLock(UUID promptId, Callable<T> action) {
         return lockService.executeWithLock(
-                new LockService.Lock(prompt.id(), PROMPT_ENV_PROMOTE_LOCK),
-                Mono.fromCallable(() -> {
-                    PromptVersion existing = transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                        PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
-                        return dao.findByEnvironment(prompt.id(), environment, workspaceId);
-                    });
-                    if (existing != null) {
-                        throw new EntityAlreadyExistsException(new ErrorMessage(409,
-                                "Environment '%s' is already mapped to version '%s'"
-                                        .formatted(environment, existing.commit())));
-                    }
-
-                    PromptVersion promptVersion = createPromptVersion.version().toBuilder()
-                            .promptId(prompt.id())
-                            .createdBy(userName)
-                            .id(id)
-                            .commit(commit)
-                            .build();
-
-                    var saved = savePromptVersion(workspaceId, promptVersion);
-                    postPromptCommittedEvent(saved, workspaceId, workspaceName, userName, projectId);
-                    return saved;
-                }).subscribeOn(Schedulers.boundedElastic())).block();
+                new LockService.Lock(promptId, PROMPT_ENV_PROMOTE_LOCK),
+                Mono.fromCallable(action).subscribeOn(Schedulers.boundedElastic()))
+                .block();
     }
 
     @Override
@@ -751,19 +754,17 @@ class PromptServiceImpl implements PromptService {
                     "Environment '%s' does not exist in the workspace".formatted(env));
         }
 
-        lockService.executeWithLock(
-                new LockService.Lock(promptId, PROMPT_ENV_PROMOTE_LOCK),
-                Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
-                    PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
-                    if (env != null) {
-                        dao.clearEnvironment(promptId, workspaceId, env);
-                    }
-                    int updated = dao.updateEnvironment(versionId, workspaceId, env);
-                    if (updated == 0) {
-                        throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
-                    }
-                    return updated;
-                })).subscribeOn(Schedulers.boundedElastic())).block();
+        withEnvironmentPromotionLock(promptId, () -> transactionTemplate.inTransaction(WRITE, handle -> {
+            PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
+            if (env != null) {
+                dao.clearEnvironment(promptId, workspaceId, env);
+            }
+            int updated = dao.updateEnvironment(versionId, workspaceId, env);
+            if (updated == 0) {
+                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+            }
+            return updated;
+        }));
 
         log.info("Set environment '{}' on prompt version '{}'", env, versionId);
     }

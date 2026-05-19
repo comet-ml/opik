@@ -384,7 +384,7 @@ public class PromptResource {
     }
 
     @PATCH
-    @Path("/versions/{versionId}")
+    @Path("/versions/{versionId}/environments")
     @Operation(operationId = "setPromptVersionEnvironment", summary = "Set prompt version environment", description = """
             Set or clear the environment owned by a prompt version.
             Setting a non-null environment moves ownership atomically: any previous owner of that

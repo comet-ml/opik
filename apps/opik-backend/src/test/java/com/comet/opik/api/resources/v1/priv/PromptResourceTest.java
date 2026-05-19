@@ -5058,15 +5058,15 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("Creating a mask version with environment returns 400 Bad Request")
-        void creatingMaskWithEnvironmentReturnsBadRequest() {
+        @DisplayName("Creating a mask version with environment returns 422 Unprocessable Content")
+        void creatingMaskWithEnvironmentReturnsUnprocessable() {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             var mask = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER).versionType(PromptVersionType.MASK).environment(uniqueEnvName("mask")).build();
             try (var response = postVersionRaw(prompt.name(), mask, prompt.templateStructure())) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
             }
         }
 

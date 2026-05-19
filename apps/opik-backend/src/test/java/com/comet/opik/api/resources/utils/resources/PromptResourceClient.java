@@ -272,7 +272,7 @@ public class PromptResourceClient {
 
     public Response callSetPromptVersionEnvironment(UUID versionId, PromptVersionEnvironmentUpdate update,
             String apiKey, String workspaceName) {
-        return client.target(PROMPT_PATH.formatted(baseURI) + "/versions/" + versionId)
+        return client.target(PROMPT_PATH.formatted(baseURI) + "/versions/" + versionId + "/environments")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)

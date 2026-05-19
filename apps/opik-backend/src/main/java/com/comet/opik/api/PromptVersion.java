@@ -5,10 +5,12 @@ import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -94,5 +96,11 @@ public record PromptVersion(
     @Override
     public PromptVersionType versionType() {
         return versionType == null ? PROMPT_VERSION : versionType;
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "environment cannot be set on a mask version")
+    public boolean isEnvironmentCompatibleWithVersionType() {
+        return environment == null || versionType() != PromptVersionType.MASK;
     }
 }
