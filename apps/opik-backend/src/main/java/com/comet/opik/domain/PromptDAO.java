@@ -109,6 +109,7 @@ public interface PromptDAO {
                     WHERE pv.prompt_id = p.id
                     AND pv.workspace_id = p.workspace_id
                     AND pv.id = :mask_id
+                    AND pv.version_type = 'mask'
                 ) AS requested_version
                 <endif>
             FROM prompts p

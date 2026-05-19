@@ -209,7 +209,7 @@ public class PromptResource {
     }
 
     @POST
-    @Path("/retrieve")
+    @Path("/versions/retrieve-by-ids")
     @Operation(operationId = "retrievePromptVersionsByIds", summary = "Retrieve prompt versions by ids", description = "Retrieve a batch of prompt versions by their ids. Typically used by the UI to resolve mask overlays.", responses = {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersion.class)))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),

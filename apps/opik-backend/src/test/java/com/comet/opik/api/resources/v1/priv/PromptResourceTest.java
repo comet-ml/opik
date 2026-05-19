@@ -4790,11 +4790,8 @@ class PromptResourceTest {
                     createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
                     API_KEY, TEST_WORKSPACE);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/by-commit/" + savedMask.commit())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            try (var response = promptResourceClient.callGetPromptByCommit(
+                    savedMask.commit(), API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
@@ -4838,21 +4835,13 @@ class PromptResourceTest {
                     createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
                     API_KEY, TEST_WORKSPACE);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptId)
-                    .queryParam("mask_id", savedMask.id())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                Prompt fetched = response.readEntity(Prompt.class);
-                assertThat(fetched.id()).isEqualTo(promptId);
-                assertThat(fetched.requestedVersion()).isNotNull();
-                assertThat(fetched.requestedVersion().id()).isEqualTo(savedMask.id());
-                assertThat(fetched.requestedVersion().versionType()).isEqualTo(PromptVersionType.MASK);
-                assertThat(fetched.latestVersion()).isNotNull();
-                assertThat(fetched.latestVersion().id()).isEqualTo(savedReal.id());
-            }
+            Prompt fetched = promptResourceClient.getPrompt(promptId, savedMask.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(fetched.id()).isEqualTo(promptId);
+            assertThat(fetched.requestedVersion()).isNotNull();
+            assertThat(fetched.requestedVersion().id()).isEqualTo(savedMask.id());
+            assertThat(fetched.requestedVersion().versionType()).isEqualTo(PromptVersionType.MASK);
+            assertThat(fetched.latestVersion()).isNotNull();
+            assertThat(fetched.latestVersion().id()).isEqualTo(savedReal.id());
         }
 
         @Test
@@ -4863,12 +4852,8 @@ class PromptResourceTest {
 
             UUID unknownMaskId = factory.manufacturePojo(UUID.class);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptId)
-                    .queryParam("mask_id", unknownMaskId)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            try (var response = promptResourceClient.callGetPrompt(
+                    promptId, unknownMaskId, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                         .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
@@ -4890,18 +4875,35 @@ class PromptResourceTest {
                     createPromptVersionRequest(promptB.name(), maskVersion, promptB.templateStructure()),
                     API_KEY, TEST_WORKSPACE);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptAId)
-                    .queryParam("mask_id", maskOfB.id())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            try (var response = promptResourceClient.callGetPrompt(
+                    promptAId, maskOfB.id(), API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
 
         @Test
-        @DisplayName("POST /prompts/retrieve returns the requested versions by id")
+        @DisplayName("GET /prompts/{id}?mask_id pointing to a non-mask version returns 404")
+        void getPromptByIdWithNonMaskVersionIdReturnsNotFound() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPrompt(
+                    promptId, savedReal.id(), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt version not found"));
+            }
+        }
+
+        @Test
+        @DisplayName("POST /prompts/versions/retrieve-by-ids returns the requested versions by id")
         void retrieveVersionsByIds() {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -4921,11 +4923,8 @@ class PromptResourceTest {
             var request = PromptVersionIdsRequest.builder()
                     .ids(List.of(savedA.id(), savedB.id())).build();
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(request))) {
+            try (var response = promptResourceClient.callRetrieveVersionsByIds(
+                    request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 List<PromptVersion> versions = response
                         .readEntity(new jakarta.ws.rs.core.GenericType<List<PromptVersion>>() {
@@ -4939,15 +4938,12 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("POST /prompts/retrieve with empty ids returns 422")
+        @DisplayName("POST /prompts/versions/retrieve-by-ids with empty ids returns 422")
         void retrieveVersionsByIdsEmptyReturnsValidationError() {
             var request = PromptVersionIdsRequest.builder().ids(List.of()).build();
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(request))) {
+            try (var response = promptResourceClient.callRetrieveVersionsByIds(
+                    request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
             }
         }

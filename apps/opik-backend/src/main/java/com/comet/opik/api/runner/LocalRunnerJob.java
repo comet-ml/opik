@@ -29,7 +29,7 @@ public record LocalRunnerJob(
         String error,
         UUID projectId,
         UUID traceId,
-        @Deprecated @Schema(deprecated = true, description = "Deprecated. Use prompt_masks to read one or more mask overlays keyed by prompt id.") UUID maskId,
+        @Deprecated(forRemoval = true) @Schema(deprecated = true, description = "Deprecated. Use prompt_masks to read one or more mask overlays keyed by prompt id.") UUID maskId,
         @Schema(description = "Mask overlays to apply during agent execution, keyed by prompt id.") Map<UUID, UUID> promptMasks,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String blueprintName,
         LocalRunnerJobMetadata metadata,
