@@ -58,6 +58,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,6 +84,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     private ProjectService projectService;
     @Mock
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    @Mock
+    private com.comet.opik.domain.SpanService spanService;
 
     private OnlineScoringTraceThreadUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -127,7 +130,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 traceService,
                 traceThreadService,
                 projectService,
-                automationRuleEvaluatorService);
+                automationRuleEvaluatorService,
+                spanService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -202,6 +206,39 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
 
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
+        }
+
+        @Test
+        void skipsSpanFetchWhenAgenticToolsDisabled() {
+            // Locks the toggle gate for the Python thread path: when isAgenticToolsEnabled
+            // is false, the scorer must NOT call spanService.getByTraceIds — preserves
+            // today's [{role, content}, ...] wire shape to the Python runner exactly.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("test_score")
+                    .value(BigDecimal.valueOf(0.95))
+                    .reason("ok")
+                    .build();
+
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
+                    .thenReturn(Mono.empty());
+            // Toggle off — the scorer should not even ask the SpanService.
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
+
+            scorer.score(message).block();
+
+            verifyNoInteractions(spanService);
         }
 
         @Test
