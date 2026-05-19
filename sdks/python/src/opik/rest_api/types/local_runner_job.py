@@ -20,7 +20,16 @@ class LocalRunnerJob(UniversalBaseModel):
     error: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
     trace_id: typing.Optional[str] = None
-    mask_id: typing.Optional[str] = None
+    mask_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Deprecated. Use prompt_masks to read one or more mask overlays keyed by prompt id.
+    """
+
+    prompt_masks: typing.Optional[typing.Dict[str, str]] = pydantic.Field(default=None)
+    """
+    Mask overlays to apply during agent execution, keyed by prompt id.
+    """
+
     blueprint_name: typing.Optional[str] = None
     metadata: typing.Optional[LocalRunnerJobMetadata] = None
     timeout: typing.Optional[int] = None

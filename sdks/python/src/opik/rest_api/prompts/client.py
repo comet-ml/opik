@@ -267,13 +267,18 @@ class PromptsClient:
         )
         return _response.data
 
-    def get_prompt_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> PromptDetail:
+    def get_prompt_by_id(
+        self, id: str, *, mask_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptDetail:
         """
-        Get prompt by id
+        Get prompt by id; when mask_id is provided, requestedVersion is populated with that mask overlay
 
         Parameters
         ----------
         id : str
+
+        mask_id : typing.Optional[str]
+            Optional mask version id; when set, requestedVersion is the mask row for that id
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -289,7 +294,7 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.get_prompt_by_id(id='id', )
         """
-        _response = self._raw_client.get_prompt_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_prompt_by_id(id, mask_id=mask_id, request_options=request_options)
         return _response.data
 
     def update_prompt(
@@ -579,6 +584,33 @@ class PromptsClient:
         )
         return _response.data
 
+    def retrieve_prompt_versions_by_ids(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[PromptVersionDetail]:
+        """
+        Retrieve a batch of prompt versions by their ids. Typically used by the UI to resolve mask overlays.
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[PromptVersionDetail]
+            OK
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.prompts.retrieve_prompt_versions_by_ids(ids=['ids'], )
+        """
+        _response = self._raw_client.retrieve_prompt_versions_by_ids(ids=ids, request_options=request_options)
+        return _response.data
+
 
 class AsyncPromptsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -840,14 +872,17 @@ class AsyncPromptsClient:
         return _response.data
 
     async def get_prompt_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, *, mask_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> PromptDetail:
         """
-        Get prompt by id
+        Get prompt by id; when mask_id is provided, requestedVersion is populated with that mask overlay
 
         Parameters
         ----------
         id : str
+
+        mask_id : typing.Optional[str]
+            Optional mask version id; when set, requestedVersion is the mask row for that id
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -866,7 +901,7 @@ class AsyncPromptsClient:
             await client.prompts.get_prompt_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_prompt_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_prompt_by_id(id, mask_id=mask_id, request_options=request_options)
         return _response.data
 
     async def update_prompt(
@@ -1183,4 +1218,34 @@ class AsyncPromptsClient:
         _response = await self._raw_client.retrieve_prompt_version(
             name=name, commit=commit, project_name=project_name, request_options=request_options
         )
+        return _response.data
+
+    async def retrieve_prompt_versions_by_ids(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[PromptVersionDetail]:
+        """
+        Retrieve a batch of prompt versions by their ids. Typically used by the UI to resolve mask overlays.
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[PromptVersionDetail]
+            OK
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.prompts.retrieve_prompt_versions_by_ids(ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.retrieve_prompt_versions_by_ids(ids=ids, request_options=request_options)
         return _response.data
