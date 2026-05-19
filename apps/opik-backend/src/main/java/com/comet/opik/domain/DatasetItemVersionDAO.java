@@ -427,17 +427,72 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     /**
-     * Counts dataset items with experiment items, applying all filters from search criteria.
-     * This ensures pagination totals match the filtered results.
-     * Note: Uses simplified feedback scores processing (only aggregated values, not full details)
-     * since we only need values for filtering in HAVING clauses, not for display.
-     * This keeps the count query closer to the legacy pattern while supporting all required filters.
+     * Counts dataset items with experiment items. The {@code slim_count} branch routes the count
+     * through {@code experiment_item_aggregates}; the legacy branch keeps the full CTE chain for
+     * search and raw-only inputs. OPIK-6177 stable-id resolution shape is preserved in both.
      *
-     * <p>OPIK-6177: same stable-id resolution shape as
-     * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS} — see that constant's comment
-     * for the rationale on the lookup_for_count CTE and the direct-table lookup_div LEFT JOIN.
+     * <p>The slim branch's {@code dataset_items_filtered_ids} CTE mirrors the one in
+     * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS}'s {@code push_top_limit} branch,
+     * minus the {@code dataset_version_id} predicate (the slim path doesn't have
+     * {@code experiment_aggregated_scope_ids} in scope). Keep the column list and dataset scoping
+     * aligned across both call sites.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
+            <if(slim_count)>
+            <if(dataset_item_filters)>
+            WITH dataset_items_filtered_ids AS (
+                SELECT id, row_id
+                FROM (
+                    SELECT
+                        dataset_item_id AS id,
+                        id AS row_id,
+                        data,
+                        description,
+                        source,
+                        trace_id,
+                        span_id,
+                        tags,
+                        evaluators,
+                        execution_policy,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    FROM dataset_item_versions FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND dataset_id = :datasetId
+                ) AS resolved
+                WHERE <dataset_item_filters>
+            )
+            <endif>
+            SELECT count(DISTINCT
+                if(notEmpty(lookup_div.dataset_item_id),
+                   lookup_div.dataset_item_id,
+                   eia.dataset_item_id)
+            ) AS count
+            FROM experiment_item_aggregates AS eia FINAL
+            LEFT JOIN (
+                SELECT id, workspace_id, dataset_item_id
+                FROM dataset_item_versions FINAL
+                WHERE workspace_id = :workspace_id
+                  AND dataset_id = :datasetId
+            ) AS lookup_div
+                ON lookup_div.workspace_id = eia.workspace_id
+                AND lookup_div.id = eia.dataset_item_id
+            WHERE eia.workspace_id = :workspace_id
+            AND eia.experiment_id IN (
+                SELECT id
+                FROM experiment_aggregates
+                WHERE workspace_id = :workspace_id
+                  AND dataset_id = :datasetId
+                  <if(experiment_ids)>AND id IN :experiment_ids<endif>
+            )
+            <if(experiment_item_filters)>AND <experiment_item_filters><endif>
+            <if(feedback_scores_filters_agg)>AND <feedback_scores_filters_agg><endif>
+            <if(feedback_scores_empty_filters_agg)>AND <feedback_scores_empty_filters_agg><endif>
+            <if(dataset_item_filters)>AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_filtered_ids)<endif>
+            SETTINGS log_comment = '<log_comment>'
+            <else>
             WITH experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
@@ -737,6 +792,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <endif>
             )
+            <endif>
             """;
 
     // Query to extract columns from trace output for experiment items view
@@ -2859,53 +2915,73 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
                 versionId);
 
-        return asyncTemplate.nonTransaction(connection -> {
-            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
+        // OPIK-6311: slim_count routes the count through EIA when search is absent; filters use
+        // the same renderable strategies as the data path's top_dataset_items CTE.
+        boolean slimCount = hasAggregated && !hasRaw && StringUtils.isBlank(criteria.search());
 
-            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-            template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-            // Add experiment IDs if present
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                template.add("experiment_ids", true);
-            }
+            return asyncTemplate.nonTransaction(connection -> {
+                ST template = slimCount
+                        ? getSTWithLogComment(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT,
+                                "count_dataset_item_versions_with_experiment_items_slim",
+                                workspaceId, userName, criteria.datasetId().toString())
+                        : TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
 
-            // Add branch flags to conditionally include/exclude UNION ALL branches
-            template.add("has_aggregated", hasAggregated);
-            template.add("has_raw", hasRaw);
+                if (slimCount) {
+                    template.add("slim_count", true);
+                }
 
-            // Add filters and search criteria using helper method
-            addFiltersToTemplate(template, criteria);
+                template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
-            // Add target project IDs flag to template (from separate query to reduce traces table scans)
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                template.add("has_target_projects", true);
-            }
+                // Add experiment IDs if present
+                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                    template.add("experiment_ids", true);
+                }
 
-            var statement = connection.createStatement(template.render())
-                    .bind("datasetId", criteria.datasetId())
-                    .bind("versionId", versionId);
+                // Add branch flags to conditionally include/exclude UNION ALL branches
+                template.add("has_aggregated", hasAggregated);
+                template.add("has_raw", hasRaw);
 
-            // Bind target project IDs (from separate query to reduce traces table scans)
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
-            }
+                // Add filters and search criteria using helper method
+                addFiltersToTemplate(template, criteria);
 
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-            }
+                // Add target project IDs flag to template (from separate query to reduce traces table scans)
+                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                    template.add("has_target_projects", true);
+                }
 
-            // Bind search and filter parameters using helper method
-            statement = bindSearchAndFilters(statement, criteria);
+                var statement = connection.createStatement(template.render())
+                        .bind("datasetId", criteria.datasetId());
 
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
-                    "count_dataset_item_versions_with_experiment_filters");
+                if (!slimCount) {
+                    statement.bind("versionId", versionId);
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
-                    .reduce(0L, Long::sum)
-                    .onErrorResume(e -> handleSqlError(e, 0L));
+                    if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                        statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                    }
+                }
+
+                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                    statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+                }
+
+                statement = bindSearchAndFilters(statement, criteria);
+
+                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                        slimCount
+                                ? "count_dataset_item_versions_with_experiment_items_slim"
+                                : "count_dataset_item_versions_with_experiment_filters");
+
+                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                        .doFinally(signalType -> endSegment(segment))
+                        .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
+                        .reduce(0L, Long::sum)
+                        .onErrorResume(e -> handleSqlError(e, 0L));
+            });
         });
     }
 
