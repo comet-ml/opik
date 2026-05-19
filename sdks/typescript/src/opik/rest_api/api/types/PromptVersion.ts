@@ -11,6 +11,8 @@ export interface PromptVersion {
     template: string;
     metadata?: OpikApi.JsonNode;
     type?: OpikApi.PromptVersionType;
+    /** version type discriminator; defaults to prompt_version */
+    versionType?: OpikApi.PromptVersionVersionType;
     changeDescription?: string;
     tags?: string[];
     variables?: string[];

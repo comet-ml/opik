@@ -12,7 +12,10 @@ export interface LocalRunnerJob {
     error?: string;
     projectId?: string;
     traceId?: string;
+    /** Deprecated. Use prompt_masks to read one or more mask overlays keyed by prompt id. */
     maskId?: string;
+    /** Mask overlays to apply during agent execution, keyed by prompt id. */
+    promptMasks?: Record<string, string>;
     blueprintName?: string;
     metadata?: OpikApi.LocalRunnerJobMetadata;
     timeout?: number;
