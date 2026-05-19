@@ -92,14 +92,7 @@ class ExperimentProjectMigrationJobTest {
                         .customConfigs(List.of(
                                 new CustomConfig("experimentProjectMigration.enabled", "true"),
                                 // Buffer so the first cycle fires after the initial seed+prime.
-                                // 10s instead of the prior 3s: the prime assertion runs at
-                                // T+~3.1s on a busy CI runner (containers shared with other
-                                // tests in the same Integration Group), past the old buffer,
-                                // and the migration would already have flipped V1 → V2 by
-                                // then — turning a deterministic test into a CI-load-dependent
-                                // flake. 10s gives ~3× headroom without making the second
-                                // phase (which polls until V2) noticeably slower.
-                                new CustomConfig("experimentProjectMigration.startupDelay", "10s"),
+                                new CustomConfig("experimentProjectMigration.startupDelay", "3s"),
                                 new CustomConfig("migration.excludedWorkspaceIds",
                                         "%s,%s".formatted(EXCLUDED_WORKSPACE_ID_1, EXCLUDED_WORKSPACE_ID_2)),
                                 // Cache enabled with the production TTL so only the migration's
