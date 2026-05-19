@@ -71,7 +71,7 @@ public interface WorkspacesDAO {
                 migration_skipped_at = :skippedAt,
                 migration_skipped_reason = :reason,
                 last_updated_by = :userName
-            WHERE id = :id AND experiment_project_migration_skipped_at IS NULL
+            WHERE id = :id AND migration_skipped_at IS NULL
             """)
     int updateExperimentProjectMigrationSkippedIfNull(@Bind("id") String id,
             @Bind("skippedAt") Instant skippedAt,

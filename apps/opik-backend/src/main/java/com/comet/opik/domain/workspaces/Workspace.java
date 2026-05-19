@@ -20,6 +20,8 @@ public record Workspace(
         String lastKnownVersion,
         Instant versionDeterminedAt,
         Instant firstTraceReportedAt,
+        Instant migrationSkippedAt,
+        String migrationSkippedReason,
         Instant experimentProjectMigrationSkippedAt,
         String experimentProjectMigrationSkipReason,
         Instant datasetProjectMigrationSkippedAt,
