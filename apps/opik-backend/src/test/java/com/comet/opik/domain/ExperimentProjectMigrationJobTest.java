@@ -278,7 +278,8 @@ class ExperimentProjectMigrationJobTest {
         // Trapped workspaces persist via the workspaces.migration_skipped_at column; the next
         // cycle reads that list to assemble its exclusion set, so the workspace must appear here.
         Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
-                () -> assertThat(workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds()).contains(workspaceId));
+                () -> assertThat(workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds())
+                        .contains(workspaceId));
     }
 
     @Test
