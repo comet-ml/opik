@@ -2363,6 +2363,46 @@ class Opik:
             environment=environment,
         )
 
+    def set_prompt_environment(
+        self,
+        name: str,
+        environment: Optional[str],
+        *,
+        project_name: Optional[str] = None,
+    ) -> None:
+        """Set or clear the environment owning the latest version of a prompt.
+
+        Resolves the latest version of the named prompt and sets (or clears) its environment
+        ownership. Setting a non-null environment atomically moves ownership: any other
+        version of the same prompt that previously owned the environment is cleared by the
+        backend. Passing ``None`` clears the environment from the latest version.
+
+        This method targets the latest version only; cross-version targeting is not
+        supported. The in-memory state of any previously fetched ``Prompt`` object is **not**
+        mutated; to observe the updated state, re-fetch with
+        ``client.get_prompt(name=..., no_cache=True)``.
+
+        Parameters:
+            name: The name of the prompt whose latest version will have its environment set.
+            environment: Name of an environment registered in the workspace, or ``None`` to clear.
+            project_name: The name of the project the prompt belongs to. If not provided,
+                falls back to the active project context, then to the client's default.
+
+        Raises:
+            ApiError: 404 if the prompt name does not exist, or if the environment name is
+                not registered in the workspace; 422 if the latest version is a mask version
+                (which cannot own an environment).
+        """
+        resolved_project_name = self._resolve_project_name(project_name)
+        version = self._rest_client.prompts.retrieve_prompt_version(
+            name=name,
+            project_name=resolved_project_name,
+        )
+        self._rest_client.prompts.set_prompt_version_environment(
+            version_id=version.id,
+            environment=environment,
+        )
+
     def get_prompt_history(
         self,
         name: str,

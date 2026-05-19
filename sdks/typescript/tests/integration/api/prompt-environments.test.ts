@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { OpikApiError } from "@/rest_api";
+import { getGlobalCache } from "@/prompt/promptCache";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -24,6 +25,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
   });
 
   afterEach(async () => {
+    getGlobalCache().clear();
     if (createdPromptIds.length > 0) {
       try {
         await client.deletePrompts(createdPromptIds);
@@ -85,7 +87,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(retrieved?.environment).toBe(stagingName);
   }, 30000);
 
-  it("moves environment ownership via setEnvironment", async () => {
+  it("moves environment ownership via setPromptEnvironment", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;
     const productionName = `production-${ts}`;
@@ -101,8 +103,11 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     createdPromptIds.push(prompt.id!);
     expect(prompt.environment).toBe(stagingName);
 
-    await prompt.setEnvironment(productionName);
-    expect(prompt.environment).toBe(productionName);
+    await client.setPromptEnvironment({
+      name: prompt.name,
+      environment: productionName,
+    });
+    getGlobalCache().clear();
 
     const retrieved = await client.getPrompt({
       name: promptName,
@@ -113,7 +118,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(retrieved?.environment).toBe(productionName);
   }, 30000);
 
-  it("clears environment ownership via setEnvironment(null)", async () => {
+  it("clears environment ownership via setPromptEnvironment with null", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;
     const promptName = `env-clear-${ts}`;
@@ -127,8 +132,44 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     createdPromptIds.push(prompt.id!);
     expect(prompt.environment).toBe(stagingName);
 
-    await prompt.setEnvironment(null);
-    expect(prompt.environment).toBeUndefined();
+    await client.setPromptEnvironment({
+      name: prompt.name,
+      environment: null,
+    });
+    getGlobalCache().clear();
+
+    const retrieved = await client.getPrompt({
+      name: promptName,
+    });
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.environment).toBeUndefined();
+  }, 30000);
+
+  it("sets environment by prompt name without a prompt instance", async () => {
+    const ts = Date.now();
+    const productionName = `production-${ts}`;
+    const promptName = `env-by-name-${ts}`;
+    await ensureEnvironment(productionName);
+
+    const created = await client.createPrompt({
+      name: promptName,
+      prompt: "v1 {{x}}",
+    });
+    createdPromptIds.push(created.id!);
+
+    await client.setPromptEnvironment({
+      name: promptName,
+      environment: productionName,
+    });
+    getGlobalCache().clear();
+
+    const retrieved = await client.getPrompt({
+      name: promptName,
+      environment: productionName,
+    });
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.commit).toBe(created.commit);
+    expect(retrieved?.environment).toBe(productionName);
   }, 30000);
 
   it("retrieves the correct version by environment", async () => {
@@ -165,7 +206,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(fromStaging?.commit).toBe(v2.commit);
   }, 30000);
 
-  it("rejects setEnvironment with an unknown environment (404)", async () => {
+  it("rejects setPromptEnvironment with an unknown environment (404)", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;
     const promptName = `env-404-${ts}`;
@@ -179,7 +220,10 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     createdPromptIds.push(prompt.id!);
 
     await expect(
-      prompt.setEnvironment(`does-not-exist-${ts}`),
+      client.setPromptEnvironment({
+        name: prompt.name,
+        environment: `does-not-exist-${ts}`,
+      }),
     ).rejects.toMatchObject({
       statusCode: 404,
     } satisfies Partial<OpikApiError>);
