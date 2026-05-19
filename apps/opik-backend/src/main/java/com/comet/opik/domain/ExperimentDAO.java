@@ -1178,10 +1178,15 @@ public class ExperimentDAO {
             ),
             eia_projects AS (
                 SELECT id, project_id
-                FROM experiment_aggregates
-                WHERE workspace_id = :workspace_id
-                  AND id IN (SELECT id FROM experiments_final)
-                  AND project_id != :zero_uuid
+                FROM (
+                    SELECT workspace_id, dataset_id, id, project_id
+                    FROM experiment_aggregates
+                    WHERE workspace_id = :workspace_id
+                      AND id IN (SELECT id FROM experiments_final)
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY (workspace_id, dataset_id, id)
+                )
+                WHERE project_id != :zero_uuid
             ),
             legacy_scope AS (
                 SELECT id
