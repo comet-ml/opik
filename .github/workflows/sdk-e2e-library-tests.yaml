@@ -3,6 +3,7 @@
 name: SDK E2E Libraries Integration Tests
 permissions:
   contents: read
+  packages: write
 run-name: "SDK E2E Libraries Integration Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
@@ -62,9 +63,14 @@ jobs:
         run: |
           echo "::warning::SDK E2E Libraries Integration Tests workflow is disabled because OPENAI_API_KEY is not set"
 
+  build-opik:
+    needs: [has_needed_secrets]
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
+    uses: ./.github/workflows/build_e2e_docker.yaml
+
   run_e2e_lib_integration:
     name: E2E Lib Integration Python ${{matrix.python_version}}
-    needs: [has_needed_secrets]
+    needs: [has_needed_secrets, build-opik]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
@@ -76,6 +82,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Docker images from GHCR
+        env:
+          TAG: ${{ needs.build-opik.outputs.image_tag }}
+        run: |
+          docker pull ghcr.io/comet-ml/opik/opik-backend:$TAG
+          docker pull ghcr.io/comet-ml/opik/opik-python-backend:$TAG
+          docker tag ghcr.io/comet-ml/opik/opik-backend:$TAG ghcr.io/comet-ml/opik/opik-backend:latest
+          docker tag ghcr.io/comet-ml/opik/opik-python-backend:$TAG ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Install uv and set the Python version ${{ matrix.python_version }}
         uses: astral-sh/setup-uv@v5
@@ -90,12 +112,13 @@ jobs:
       - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
-          # Avoid Buildx Bake concurrent image export collisions in CI.
           COMPOSE_BAKE: false
+          OPIK_BACKEND_PULL_POLICY: never
+          PYTHON_BACKEND_PULL_POLICY: never
         shell: bash
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --backend --port-mapping --build
+          ./opik.sh --backend --port-mapping
 
       - name: Check Opik server availability
         shell: bash
