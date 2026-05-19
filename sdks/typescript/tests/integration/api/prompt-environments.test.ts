@@ -118,6 +118,42 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(retrieved?.environment).toBe(productionName);
   }, 30000);
 
+  it("targets a specific version when commit is provided", async () => {
+    const ts = Date.now();
+    const envName = `staging-${ts}`;
+    const promptName = `env-commit-${ts}`;
+    await ensureEnvironment(envName);
+
+    const v1 = await client.createPrompt({
+      name: promptName,
+      prompt: "v1 {{x}}",
+    });
+    createdPromptIds.push(v1.id!);
+    const v1Commit = v1.commit!;
+    expect(v1Commit).toBeTruthy();
+
+    const v2 = await client.createPrompt({
+      name: promptName,
+      prompt: "different template {{x}}",
+    });
+    expect(v2.commit).not.toBe(v1Commit);
+
+    await client.setPromptEnvironment({
+      name: promptName,
+      environment: envName,
+      commit: v1Commit,
+    });
+    getGlobalCache().clear();
+
+    const retrieved = await client.getPrompt({
+      name: promptName,
+      environment: envName,
+    });
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.commit).toBe(v1Commit);
+    expect(retrieved?.environment).toBe(envName);
+  }, 30000);
+
   it("clears environment ownership via setPromptEnvironment with null", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;

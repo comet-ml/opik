@@ -480,3 +480,22 @@ class TestPromptEnvironment:
         retrieve_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
         assert retrieve_kwargs["name"] == "env-prompt"
         assert retrieve_kwargs["project_name"] == "my-project"
+
+    def test_set_prompt_environment__forwards_commit(self, mock_rest_client):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        opik_client.set_prompt_environment("env-prompt", "staging", commit="abc12345")
+
+        mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
+        retrieve_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
+        assert retrieve_kwargs["name"] == "env-prompt"
+        assert retrieve_kwargs["commit"] == "abc12345"
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environment="staging",
+        )
