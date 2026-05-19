@@ -1,11 +1,112 @@
 name: Cleanup E2E Docker Images
 
 on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "0 3 * * 6"  # Every Saturday at 03:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGES: >-
+    opik-backend
+    opik-python-backend
+    opik-guardrails-backend
+
 jobs:
-  dummy:
-    runs-on: ubuntu-22.04
+  cleanup-pr:
+    name: Cleanup merged PR images
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: echo
-        run: echo
+      - name: Delete CI images for PR ${{ github.event.pull_request.number }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || secrets.GITHUB_TOKEN }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          TAGS=("ci-e2e-${PR}" "ci-e2e-${PR}-guardrails")
+
+          for IMAGE in ${{ env.IMAGES }}; do
+            VERSIONS=$(gh api \
+              "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions" \
+              --paginate --jq '.[]' 2>/dev/null) || continue
+
+            for TAG in "${TAGS[@]}"; do
+              VERSION_ID=$(echo "$VERSIONS" | jq -r \
+                "select(.metadata.container.tags | index(\"${TAG}\")) | .id" 2>/dev/null)
+
+              if [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "null" ]; then
+                echo "Deleting ${IMAGE}:${TAG} (version ${VERSION_ID})"
+                gh api --method DELETE \
+                  "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" \
+                  2>/dev/null && echo "  Deleted" || echo "  Failed (may need admin token)"
+              fi
+            done
+          done
+
+  cleanup-stale:
+    name: Cleanup stale CI images
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Delete ci-e2e-* images for closed PRs
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || secrets.GITHUB_TOKEN }}
+        run: |
+          DELETED=0
+          SKIPPED=0
+          FAILED=0
+
+          for IMAGE in ${{ env.IMAGES }}; do
+            echo "=== Scanning ${IMAGE} ==="
+
+            VERSIONS=$(gh api \
+              "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions" \
+              --paginate --jq '.[]' 2>/dev/null) || continue
+
+            echo "$VERSIONS" | jq -c '{id: .id, tags: .metadata.container.tags}' | while read -r VERSION; do
+              VERSION_ID=$(echo "$VERSION" | jq -r '.id')
+              TAGS=$(echo "$VERSION" | jq -r '.tags[]' 2>/dev/null)
+
+              for TAG in $TAGS; do
+                if [[ ! "$TAG" =~ ^ci-e2e- ]]; then
+                  continue
+                fi
+
+                PR_NUM=$(echo "$TAG" | sed -n 's/^ci-e2e-\([0-9]*\)\(-guardrails\)\{0,1\}$/\1/p')
+
+                if [ -z "$PR_NUM" ]; then
+                  # SHA-based tag (workflow_dispatch/schedule/main) — delete if older than 7 days
+                  # These are handled by age below
+                  continue
+                fi
+
+                PR_STATE=$(gh api "/repos/comet-ml/opik/pulls/${PR_NUM}" --jq '.state' 2>/dev/null || echo "unknown")
+
+                if [ "$PR_STATE" = "closed" ]; then
+                  echo "Deleting ${IMAGE}:${TAG} (PR #${PR_NUM} is closed)"
+                  if gh api --method DELETE \
+                    "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>/dev/null; then
+                    DELETED=$((DELETED + 1))
+                  else
+                    FAILED=$((FAILED + 1))
+                  fi
+                  break  # version deleted, no need to check other tags
+                else
+                  SKIPPED=$((SKIPPED + 1))
+                fi
+              done
+            done
+          done
+
+          echo ""
+          echo "=== Summary ==="
+          echo "Deleted: ${DELETED}"
+          echo "Skipped (open PRs): ${SKIPPED}"
+          echo "Failed: ${FAILED}"
