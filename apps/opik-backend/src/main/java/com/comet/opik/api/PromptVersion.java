@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.PromptType.MUSTACHE;
+import static com.comet.opik.api.PromptVersionType.PROMPT_VERSION;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -39,6 +40,8 @@ public record PromptVersion(
                 PromptVersion.View.Detail.class}) JsonNode metadata,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) PromptType type,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) @Schema(description = "version type discriminator; defaults to prompt_version") PromptVersionType versionType,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
@@ -82,5 +85,10 @@ public record PromptVersion(
     @Override
     public PromptType type() {
         return type == null ? MUSTACHE : type;
+    }
+
+    @Override
+    public PromptVersionType versionType() {
+        return versionType == null ? PROMPT_VERSION : versionType;
     }
 }
