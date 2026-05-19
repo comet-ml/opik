@@ -12,9 +12,13 @@ Backend parity: thresholds and skeleton shape match
 not `jq`) — see design doc §3.5.
 """
 
+import datetime
+import logging
 from typing import Any, Dict, List, Optional
 
 from . import path_aware_truncator, tier as tier_module, tokens
+
+LOGGER = logging.getLogger(__name__)
 
 FULL_TOKEN_LIMIT = 8_000
 MEDIUM_TOKEN_LIMIT = 50_000
@@ -130,11 +134,17 @@ def _build_span_tree(
 def _duration_ms(start: Optional[str], end: Optional[str]) -> Optional[float]:
     if start is None or end is None:
         return None
-    import datetime
-
     try:
         start_dt = datetime.datetime.fromisoformat(start)
         end_dt = datetime.datetime.fromisoformat(end)
     except (TypeError, ValueError):
+        # Best-effort: skeleton-tier duration is informational, not load-bearing.
+        LOGGER.info(
+            "Failed to parse trace timestamps for duration_ms "
+            "(start=%r, end=%r); returning None.",
+            start,
+            end,
+            exc_info=True,
+        )
         return None
     return (end_dt - start_dt).total_seconds() * 1000.0
