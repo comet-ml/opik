@@ -233,8 +233,10 @@ public class CostService {
             return;
         }
 
-        // Two-pass merge so the result is independent of overrides-file iteration order:
-        // a direct override for some key must be visible to aliases that resolve to that key.
+        // Apply direct overrides first, then aliases. Aliases resolve their target against `upstream`
+        // (they exist to reuse an upstream LiteLLM row under a different name), but their *price* is
+        // read from the merged `prices` map — so a direct override that re-prices an upstream key
+        // must already be in place when its aliases are resolved. Order in the JSON file is irrelevant.
         List<Map.Entry<String, ModelCostData>> aliasEntries = new ArrayList<>();
         overrides.forEach((modelName, override) -> {
             if (StringUtils.isNotBlank(override.aliasOf())) {
