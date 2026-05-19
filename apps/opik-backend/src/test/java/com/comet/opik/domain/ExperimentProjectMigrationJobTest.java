@@ -278,7 +278,7 @@ class ExperimentProjectMigrationJobTest {
         // Trapped workspaces persist via the workspaces.migration_skipped_at column; the next
         // cycle reads that list to assemble its exclusion set, so the workspace must appear here.
         Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
-                () -> assertThat(workspacesService.findMigrationSkippedWorkspaceIds()).contains(workspaceId));
+                () -> assertThat(workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds()).contains(workspaceId));
     }
 
     @Test
@@ -305,7 +305,7 @@ class ExperimentProjectMigrationJobTest {
     void skipPreMarkedTrappedWorkspaces(WorkspacesService workspacesService) {
         // Pre-mark a workspace as skipped via the workspaces table BEFORE seeding any experiments.
         // The cycle's exclusion set is the union of migration.excludedWorkspaceIds config and
-        // findMigrationSkippedWorkspaceIds(), so this workspace must be omitted — proven by the
+        // findExperimentProjectMigrationSkippedWorkspaceIds(), so this workspace must be omitted — proven by the
         // eligible experiment never getting migrated.
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
@@ -316,7 +316,7 @@ class ExperimentProjectMigrationJobTest {
         var experimentId = seeded.getLeft();
         var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
 
-        workspacesService.markMigrationSkipped(workspaceId, "test-pre-marked-trap");
+        workspacesService.markExperimentProjectMigrationSkipped(workspaceId, "test-pre-marked-trap");
 
         assertWorkspaceVersion1(apiKey, workspaceName);
 

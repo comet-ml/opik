@@ -49,11 +49,24 @@ public interface WorkspacesService {
      *
      * @return {@code true} when this caller flipped the flag; {@code false} when it was already set
      */
-    boolean markMigrationSkipped(String workspaceId, String reason);
+    boolean markExperimentProjectMigrationSkipped(String workspaceId, String reason);
 
-    List<String> findMigrationSkippedWorkspaceIds();
+    List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    long countMigrationSkipped();
+    long countExperimentProjectMigrationSkipped();
+
+    /**
+     * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
+     * are stamped with the system user — this is the dataset migration job's call site, never a
+     * direct user action.
+     *
+     * @return {@code true} when this caller flipped the flag; {@code false} when it was already set
+     */
+    boolean markDatasetProjectMigrationSkipped(String workspaceId, String reason);
+
+    List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
+
+    long countDatasetProjectMigrationSkipped();
 
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
@@ -131,24 +144,27 @@ class WorkspacesServiceImpl implements WorkspacesService {
 
     /**
      * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
-     * to the {@code migration_skipped_at} flag. Idempotent: returns {@code false} when this caller
-     * loses the race or the workspace was already trapped.
+     * to the {@code experiment_project_migration_skipped_at} flag (which also keeps
+     * {@code migration_skipped_at} in sync for old pods still in the rolling deployment window).
+     * Idempotent: returns {@code false} when this caller loses the race or the workspace was
+     * already trapped.
      */
     @Override
-    public boolean markMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+    public boolean markExperimentProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(WorkspacesDAO.class);
             var now = Instant.now();
-            if (dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+            if (dao.updateExperimentProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
                 return true;
             }
             try {
-                dao.insertMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                dao.insertExperimentProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
                 return true;
             } catch (UnableToExecuteStatementException exception) {
                 if (exception.getCause() instanceof SQLException sql
                         && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
+                    return dao.updateExperimentProjectMigrationSkippedIfNull(workspaceId, now, reason,
+                            SYSTEM_USER) > 0;
                 }
                 throw exception;
             }
@@ -156,15 +172,54 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     @Override
-    public List<String> findMigrationSkippedWorkspaceIds() {
+    public List<String> findExperimentProjectMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).findMigrationSkippedWorkspaceIds());
+                handle -> handle.attach(WorkspacesDAO.class).findExperimentProjectMigrationSkippedWorkspaceIds());
     }
 
     @Override
-    public long countMigrationSkipped() {
+    public long countExperimentProjectMigrationSkipped() {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countMigrationSkipped());
+                handle -> handle.attach(WorkspacesDAO.class).countExperimentProjectMigrationSkipped());
+    }
+
+    /**
+     * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
+     * to the {@code dataset_project_migration_skipped_at} flag. Idempotent: returns {@code false}
+     * when this caller loses the race or the workspace was already trapped.
+     */
+    @Override
+    public boolean markDatasetProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertDatasetProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason,
+                            SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
+    }
+
+    @Override
+    public List<String> findDatasetProjectMigrationSkippedWorkspaceIds() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).findDatasetProjectMigrationSkippedWorkspaceIds());
+    }
+
+    @Override
+    public long countDatasetProjectMigrationSkipped() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).countDatasetProjectMigrationSkipped());
     }
 
     @Override

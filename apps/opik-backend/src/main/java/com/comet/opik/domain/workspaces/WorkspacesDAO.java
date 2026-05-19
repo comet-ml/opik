@@ -57,41 +57,83 @@ public interface WorkspacesDAO {
             @Bind("userName") String userName);
 
     /**
-     * Atomic NULL → timestamp transition for the migration-skipped flag. Returns 1 only when
-     * this caller flipped {@code migration_skipped_at} from NULL to {@code :skippedAt}; returns
-     * 0 if no row exists or the column was already non-null. Pair with {@link #insertMigrationSkipped}
-     * for the missing-row case.
+     * Atomic NULL → timestamp transition for the experiment-project-migration-skipped flag.
+     * Writes to both {@code experiment_project_migration_skipped_at} (new column) and
+     * {@code migration_skipped_at} (legacy column kept in sync during rolling deployment).
+     * Returns 1 only when this caller flipped the new column from NULL; returns 0 if no row
+     * exists or the column was already non-null.
+     * Pair with {@link #insertExperimentProjectMigrationSkipped} for the missing-row case.
      */
     @SqlUpdate("""
             UPDATE workspaces
-            SET migration_skipped_at = :skippedAt,
+            SET experiment_project_migration_skipped_at = :skippedAt,
+                experiment_project_migration_skip_reason = :reason,
+                migration_skipped_at = :skippedAt,
                 migration_skipped_reason = :reason,
                 last_updated_by = :userName
-            WHERE id = :id AND migration_skipped_at IS NULL
+            WHERE id = :id AND experiment_project_migration_skipped_at IS NULL
             """)
-    int updateMigrationSkippedIfNull(@Bind("id") String id,
+    int updateExperimentProjectMigrationSkippedIfNull(@Bind("id") String id,
             @Bind("skippedAt") Instant skippedAt,
             @Bind("reason") String reason,
             @Bind("userName") String userName);
 
     /**
      * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
-     * branch via the {@link #updateMigrationSkippedIfNull} attempt that precedes it.
+     * branch via the {@link #updateExperimentProjectMigrationSkippedIfNull} attempt that precedes it.
+     * Writes to both new and legacy columns to keep them in sync.
      */
     @SqlUpdate("""
-            INSERT INTO workspaces (id, migration_skipped_at, migration_skipped_reason, created_by, last_updated_by)
-            VALUES (:id, :skippedAt, :reason, :userName, :userName)
+            INSERT INTO workspaces (id, experiment_project_migration_skipped_at, experiment_project_migration_skip_reason, migration_skipped_at, migration_skipped_reason, created_by, last_updated_by)
+            VALUES (:id, :skippedAt, :reason, :skippedAt, :reason, :userName, :userName)
             """)
-    void insertMigrationSkipped(@Bind("id") String id,
+    void insertExperimentProjectMigrationSkipped(@Bind("id") String id,
             @Bind("skippedAt") Instant skippedAt,
             @Bind("reason") String reason,
             @Bind("userName") String userName);
 
-    @SqlQuery("SELECT id FROM workspaces WHERE migration_skipped_at IS NOT NULL")
-    List<String> findMigrationSkippedWorkspaceIds();
+    @SqlQuery("SELECT id FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
+    List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE migration_skipped_at IS NOT NULL")
-    long countMigrationSkipped();
+    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
+    long countExperimentProjectMigrationSkipped();
+
+    /**
+     * Atomic NULL → timestamp transition for the dataset-project-migration-skipped flag. Returns 1 only when
+     * this caller flipped {@code dataset_project_migration_skipped_at} from NULL to {@code :skippedAt}; returns
+     * 0 if no row exists or the column was already non-null. Pair with {@link #insertDatasetProjectMigrationSkipped}
+     * for the missing-row case.
+     */
+    @SqlUpdate("""
+            UPDATE workspaces
+            SET dataset_project_migration_skipped_at = :skippedAt,
+                dataset_project_migration_skip_reason = :reason,
+                last_updated_by = :userName
+            WHERE id = :id AND dataset_project_migration_skipped_at IS NULL
+            """)
+    int updateDatasetProjectMigrationSkippedIfNull(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    /**
+     * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
+     * branch via the {@link #updateDatasetProjectMigrationSkippedIfNull} attempt that precedes it.
+     */
+    @SqlUpdate("""
+            INSERT INTO workspaces (id, dataset_project_migration_skipped_at, dataset_project_migration_skip_reason, created_by, last_updated_by)
+            VALUES (:id, :skippedAt, :reason, :userName, :userName)
+            """)
+    void insertDatasetProjectMigrationSkipped(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    @SqlQuery("SELECT id FROM workspaces WHERE dataset_project_migration_skipped_at IS NOT NULL")
+    List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
+
+    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE dataset_project_migration_skipped_at IS NOT NULL")
+    long countDatasetProjectMigrationSkipped();
 
     /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the

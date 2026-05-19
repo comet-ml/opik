@@ -160,7 +160,7 @@ public class ExperimentProjectMigrationService implements Managed {
 
     public Mono<Void> runMigrationCycle() {
         return Mono.fromCallable(() -> {
-            var skippedWorkspaceIds = workspacesService.findMigrationSkippedWorkspaceIds();
+            var skippedWorkspaceIds = workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds();
             var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
             cycleTrappedWorkspaces.set(skippedWorkspaceIds.size());
             cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
@@ -257,7 +257,7 @@ public class ExperimentProjectMigrationService implements Managed {
                                 "All certain experiments point to deleted projects, marking workspace as trapped, workspaceId='{}'",
                                 workspaceId);
                         return Mono
-                                .fromRunnable(() -> workspacesService.markMigrationSkipped(
+                                .fromRunnable(() -> workspacesService.markExperimentProjectMigrationSkipped(
                                         workspaceId, TRAPPED_REASON_DELETED_PROJECT))
                                 .subscribeOn(migrationScheduler)
                                 .doFinally(signalType -> recordWorkspaceDuration(
