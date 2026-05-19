@@ -6,6 +6,7 @@ import type * as serializers from "../index.js";
 import { JsonNodeDetail } from "./JsonNodeDetail.js";
 import { PromptVersionDetailTemplateStructure } from "./PromptVersionDetailTemplateStructure.js";
 import { PromptVersionDetailType } from "./PromptVersionDetailType.js";
+import { PromptVersionDetailVersionType } from "./PromptVersionDetailVersionType.js";
 
 export const PromptVersionDetail: core.serialization.ObjectSchema<
     serializers.PromptVersionDetail.Raw,
@@ -17,6 +18,7 @@ export const PromptVersionDetail: core.serialization.ObjectSchema<
     template: core.serialization.string(),
     metadata: JsonNodeDetail.optional(),
     type: PromptVersionDetailType.optional(),
+    versionType: core.serialization.property("version_type", PromptVersionDetailVersionType.optional()),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     tags: core.serialization.list(core.serialization.string()).optional(),
     variables: core.serialization.list(core.serialization.string()).optional(),
@@ -36,6 +38,7 @@ export declare namespace PromptVersionDetail {
         template: string;
         metadata?: JsonNodeDetail.Raw | null;
         type?: PromptVersionDetailType.Raw | null;
+        version_type?: PromptVersionDetailVersionType.Raw | null;
         change_description?: string | null;
         tags?: string[] | null;
         variables?: string[] | null;
