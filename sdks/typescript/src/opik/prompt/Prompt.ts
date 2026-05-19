@@ -57,6 +57,7 @@ export class Prompt extends BasePrompt {
         type: this.type,
         description: this._description,
         tags: this._tags.length ? Array.from(this._tags) : undefined,
+        environment: this.environment,
       }),
     );
   }
@@ -164,6 +165,7 @@ export class Prompt extends BasePrompt {
         tags: promptData.tags,
         synced: true,
         projectName,
+        environment: apiResponse.environment,
       },
       opik,
     );
@@ -229,6 +231,7 @@ export class Prompt extends BasePrompt {
         type: this.type,
         description: this.description,
         tags: this.tags ? Array.from(this.tags) : undefined,
+        environment: this.environment,
       });
     } catch (error) {
       logger.warn(

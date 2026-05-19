@@ -192,17 +192,24 @@ describe("PromptCache", () => {
 describe("buildCacheKey", () => {
   it("builds key from all parameters", () => {
     const key = buildCacheKey("my-prompt", "abc123", "my-project", "text");
-    expect(key).toBe(JSON.stringify(["my-prompt", "abc123", "my-project", "text", ""]));
+    expect(key).toBe(JSON.stringify(["my-prompt", "abc123", "my-project", "text", "", ""]));
   });
 
   it("handles undefined commit and project", () => {
     const key = buildCacheKey("my-prompt", undefined, undefined, "chat");
-    expect(key).toBe(JSON.stringify(["my-prompt", "", "", "chat", ""]));
+    expect(key).toBe(JSON.stringify(["my-prompt", "", "", "chat", "", ""]));
   });
 
   it("includes maskId in key", () => {
     const key = buildCacheKey("my-prompt", undefined, "proj", "text", "mask-1");
-    expect(key).toBe(JSON.stringify(["my-prompt", "", "proj", "text", "mask-1"]));
+    expect(key).toBe(JSON.stringify(["my-prompt", "", "proj", "text", "", "mask-1"]));
+  });
+
+  it("includes environment in the key when provided", () => {
+    const keyA = buildCacheKey("p", undefined, undefined, "text", undefined, undefined, "staging");
+    const keyB = buildCacheKey("p", undefined, undefined, "text", undefined, undefined, "production");
+    expect(keyA).not.toBe(keyB);
+    expect(keyA).toBe(JSON.stringify(["p", "", "", "text", "staging", ""]));
   });
 
   it("produces different keys for different parameters", () => {

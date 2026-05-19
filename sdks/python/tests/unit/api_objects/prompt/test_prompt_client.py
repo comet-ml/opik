@@ -472,3 +472,226 @@ class TestGetPromptWithCacheBypass:
         )
 
         assert result is None
+
+
+class TestPromptEnvironment:
+    """Unit tests for the prompt ``environment`` plumbing."""
+
+    @pytest.fixture(autouse=True)
+    def clear_global_cache(self):
+        yield
+        prompt_cache.get_global_cache().clear()
+
+    def test_create_new_prompt_without_container_params__forwards_environment_on_version_body(
+        self, client, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
+        mock_rest_client.prompts.create_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        client.create_prompt(
+            name="env-prompt",
+            prompt="hello",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            environment="staging",
+        )
+
+        mock_rest_client.prompts.create_prompt_version.assert_called_once()
+        call_kwargs = mock_rest_client.prompts.create_prompt_version.call_args[1]
+        assert call_kwargs["version"].environment == "staging"
+        mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
+
+    def test_create_new_prompt_with_container_params__calls_set_environment_after_create(
+        self, client, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
+            _make_404_error(),
+            _make_mock_version(),
+        ]
+
+        client.create_prompt(
+            name="env-prompt",
+            prompt="hello",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            tags=["t1"],
+            environment="staging",
+        )
+
+        mock_rest_client.prompts.create_prompt.assert_called_once()
+        create_kwargs = mock_rest_client.prompts.create_prompt.call_args[1]
+        assert "environment" not in create_kwargs
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environment="staging",
+        )
+
+    def test_update_existing_prompt__environment_differs__set_environment_called(
+        self, client, mock_rest_client
+    ):
+        existing_version = _make_mock_version(template="same template")
+        existing_version_with_env_none = prompt_version_detail.PromptVersionDetail(
+            id=existing_version.id,
+            prompt_id=existing_version.prompt_id,
+            commit=existing_version.commit,
+            template=existing_version.template,
+            metadata=existing_version.metadata,
+            type=existing_version.type,
+            template_structure="text",
+            environment=None,
+        )
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            existing_version_with_env_none
+        )
+
+        client.create_prompt(
+            name="env-prompt",
+            prompt="same template",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            environment="production",
+        )
+
+        mock_rest_client.prompts.create_prompt_version.assert_not_called()
+        mock_rest_client.prompts.create_prompt.assert_not_called()
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environment="production",
+        )
+
+    def test_update_existing_prompt__environment_unchanged__set_environment_not_called(
+        self, client, mock_rest_client
+    ):
+        existing_version = prompt_version_detail.PromptVersionDetail(
+            id="version-id",
+            prompt_id="prompt-id",
+            template="same template",
+            type="mustache",
+            metadata=None,
+            commit="abc123",
+            template_structure="text",
+            environment="production",
+        )
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = existing_version
+
+        client.create_prompt(
+            name="env-prompt",
+            prompt="same template",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            environment="production",
+        )
+
+        mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
+
+    def test_get_prompt__forwards_environment_to_retrieve(
+        self, client, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        client.get_prompt(name="env-prompt", environment="staging")
+
+        mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
+        call_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
+        assert call_kwargs["environment"] == "staging"
+
+    def test_get_prompt_with_cache__different_environments__not_cached_together(
+        self, mock_rest_client
+    ):
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        staging_version = prompt_version_detail.PromptVersionDetail(
+            id="staging-id",
+            prompt_id="prompt-id",
+            template="staging template",
+            type="mustache",
+            metadata=None,
+            commit="aaa",
+            template_structure="text",
+            environment="staging",
+        )
+        production_version = prompt_version_detail.PromptVersionDetail(
+            id="prod-id",
+            prompt_id="prompt-id",
+            template="prod template",
+            type="mustache",
+            metadata=None,
+            commit="bbb",
+            template_structure="text",
+            environment="production",
+        )
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
+            staging_version,
+            production_version,
+        ]
+
+        staging = opik_client.get_prompt(name="env-prompt", environment="staging")
+        production = opik_client.get_prompt(name="env-prompt", environment="production")
+
+        assert staging is not None and production is not None
+        assert staging.commit == "aaa"
+        assert production.commit == "bbb"
+        assert mock_rest_client.prompts.retrieve_prompt_version.call_count == 2
+
+    def test_set_environment__no_version_id__raises_value_error(self):
+        from opik.api_objects.prompt.text.prompt import Prompt
+
+        with (
+            mock.patch(
+                "opik.api_objects.opik_client.get_client_cached",
+                return_value=mock.MagicMock(),
+            ),
+            mock.patch(
+                "opik.api_objects.prompt.client.PromptClient.create_prompt",
+                side_effect=rest_api_core.ApiError(status_code=500),
+            ),
+        ):
+            prompt = Prompt(name="env-prompt", prompt="hello")
+
+        assert prompt.synced is False
+        assert prompt.version_id is None
+
+        with pytest.raises(ValueError, match="has not been synced"):
+            prompt.set_environment("staging")
+
+    def test_set_environment__calls_rest_client_and_updates_local_state(self):
+        from opik.api_objects.prompt.text.prompt import Prompt
+
+        rest_client_mock = mock.MagicMock()
+
+        with (
+            mock.patch(
+                "opik.api_objects.opik_client.get_global_client",
+                return_value=mock.MagicMock(rest_client=rest_client_mock),
+            ),
+            mock.patch(
+                "opik.api_objects.opik_client.get_client_cached",
+                return_value=mock.MagicMock(),
+            ),
+            mock.patch(
+                "opik.api_objects.prompt.client.PromptClient.create_prompt",
+                return_value=_make_mock_version(),
+            ),
+        ):
+            prompt = Prompt(name="env-prompt", prompt="hello")
+            prompt.set_environment("staging")
+
+        rest_client_mock.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environment="staging",
+        )
+        assert prompt.environment == "staging"
+
+        with (
+            mock.patch(
+                "opik.api_objects.opik_client.get_global_client",
+                return_value=mock.MagicMock(rest_client=rest_client_mock),
+            ),
+        ):
+            prompt.set_environment(None)
+        assert prompt.environment is None

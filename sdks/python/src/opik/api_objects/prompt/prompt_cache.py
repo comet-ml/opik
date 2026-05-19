@@ -13,9 +13,14 @@ logger = logging.getLogger(__name__)
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
 _CacheKey = typing.Tuple[
-    str, typing.Optional[str], typing.Optional[str], str, typing.Optional[str]
+    str,
+    typing.Optional[str],
+    typing.Optional[str],
+    str,
+    typing.Optional[str],
+    typing.Optional[str],
 ]
-#                         name  commit               project_name           tmpl  mask_id
+#             name  pin(commit/ver)  project_name  tmpl  environment  mask_id
 
 _RefreshCallback = typing.Callable[[], typing.Optional[BasePrompt]]
 
@@ -174,6 +179,7 @@ def get_or_fetch(
     fetch_fn: typing.Callable[[], typing.Optional[_PromptT]],
     mask_id: typing.Optional[str] = None,
     version: typing.Optional[str] = None,
+    environment: typing.Optional[str] = None,
 ) -> typing.Optional[_PromptT]:
     """Return a cached prompt or fetch, cache, and return it.
 
@@ -197,7 +203,7 @@ def get_or_fetch(
     refresh_callback = (
         fetch_fn if (ttl_seconds is not None and mask_id is None) else None
     )
-    key: _CacheKey = (name, identifier, project_name, template_structure, mask_id)
+    key: _CacheKey = (name, identifier, project_name, template_structure, environment, mask_id)
     result = _cache.get_or_fetch(
         key=key,
         fetch_fn=fetch_fn,
