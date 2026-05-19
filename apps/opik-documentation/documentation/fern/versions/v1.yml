@@ -567,9 +567,6 @@ navigation:
           - section: Dataset Management
             skip-slug: true
             contents:
-              - page: Gretel
-                path: ../docs/tracing/integrations/gretel.mdx
-                slug: gretel
               - page: Hugging Face Datasets
                 path: ../docs/tracing/integrations/huggingface-datasets.mdx
                 slug: huggingface-datasets

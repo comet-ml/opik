@@ -737,9 +737,6 @@ navigation:
           - section: Dataset Management
             skip-slug: true
             contents:
-              - page: Gretel
-                path: ../docs-v2/integrations/gretel.mdx
-                slug: gretel
               - page: Hugging Face Datasets
                 path: ../docs-v2/integrations/huggingface-datasets.mdx
                 slug: huggingface-datasets
