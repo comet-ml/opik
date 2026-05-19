@@ -557,16 +557,24 @@ public class OnlineScoringEngine {
 
     /**
      * Variant that injects a built-in {@code spans} variable holding the trace's spans
-     * (sorted by start_time) as a real JSON array. Used by Python metrics whose
-     * {@code score(...)} signature accepts {@code spans}; the user opts in by including a
-     * {@code "spans"} key in their {@code arguments} map. The value the user maps for
-     * {@code spans} is overridden with the typed list — {@code spans} is a reserved
-     * built-in, not a regular path-resolved variable.
+     * projected to {@link SpanForLlm} and reconstructed as a parent→child tree. Used by
+     * Python metrics whose {@code score(...)} signature accepts {@code spans}; the user
+     * opts in by including a {@code "spans"} key in their {@code arguments} map. The value
+     * the user maps for {@code spans} is overridden with the typed list — {@code spans} is
+     * a reserved built-in, not a regular path-resolved variable.
+     *
+     * <p>The shape matches every other span-render path on this PR (trace-scope
+     * {@code {{spans}}} for LLM-as-judge, thread-scope {@code {{context}}} for both LLM-as-
+     * judge and Python): lean {@link SpanForLlm} projection (11 fields — name, type, in/out,
+     * timing, model/provider, error_info, plus nested children), {@code @JsonInclude(NON_NULL)}
+     * to keep the JSON tight, and call-order preserved by sorting siblings on {@code startTime}
+     * at every level inside {@link #buildSpanTree}.
      *
      * <p>The returned map is typed as {@code Map<String, Object>} so the spans value can
-     * carry a {@code List<Span>} through Jackson serialization to the Python runner as a
-     * JSON array. The Python side receives {@code spans} as a list of dicts after
-     * {@code json.loads(...)} — not as a JSON string that the user would have to re-parse.
+     * carry the {@code List<SpanForLlm>} tree through Jackson serialization to the Python
+     * runner as a JSON array. The Python side receives {@code spans} as a list of dicts
+     * after {@code json.loads(...)} — not as a JSON string that the user would have to
+     * re-parse.
      *
      * <p>Caller is responsible for only invoking this overload when the user actually
      * requested spans (i.e. {@code arguments.containsKey("spans")}). The scorer makes this
@@ -576,7 +584,7 @@ public class OnlineScoringEngine {
             @NonNull Map<String, String> variables, @NonNull Trace trace, @NonNull List<Span> spans) {
         var base = toReplacements(variables, trace);
         var result = new LinkedHashMap<String, Object>(base);
-        result.put(SPANS_VARIABLE_NAME, spans.stream().sorted(BY_SPAN_START_TIME).toList());
+        result.put(SPANS_VARIABLE_NAME, buildSpanTree(spans));
         return result;
     }
 
