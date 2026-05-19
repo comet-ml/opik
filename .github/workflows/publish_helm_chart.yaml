@@ -15,7 +15,6 @@ on:
         type: string
         required: true
         description: Version
-        default: ""
 
 
 jobs:

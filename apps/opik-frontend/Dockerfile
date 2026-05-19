@@ -5,7 +5,7 @@ WORKDIR /opt/frontend
 
 COPY package*.json ./
 COPY patches ./patches
-RUN npm install
+RUN npm ci
 # Copy and build the application
 COPY . .
 
