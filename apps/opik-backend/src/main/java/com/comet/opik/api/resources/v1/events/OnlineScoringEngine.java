@@ -17,6 +17,7 @@ import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -296,9 +297,10 @@ public class OnlineScoringEngine {
      */
     public static ChatRequest prepareThreadLlmRequest(
             @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
-            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull StructuredOutputStrategy structuredOutputStrategy,
+            @NonNull List<Span> spans) {
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
-                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
+                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces, spans);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
@@ -406,15 +408,20 @@ public class OnlineScoringEngine {
     }
 
     static List<ChatMessage> renderThreadMessages(
-            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces,
+            List<Span> spans) {
         // prepare the map of replacements to use in all messages
         Map<String, String> replacements = variablesMap.keySet().stream()
                 .map(variableName -> switch (variableName) {
                     case TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME -> {
+                        // Always use the enriched shape — when `spans` is empty (toggle off),
+                        // the `spans` field is omitted via @JsonInclude(NON_NULL) and the
+                        // JSON is wire-identical to today's [{role, content}, ...] shape.
                         try {
                             yield MessageVariableMapping.builder()
                                     .variableName(variableName)
-                                    .valueToReplace(OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)))
+                                    .valueToReplace(OBJECT_MAPPER.writeValueAsString(
+                                            fromTraceToThreadEnriched(traces, spans)))
                                     .build();
                         } catch (JsonProcessingException ex) {
                             throw new UncheckedIOException(ex);
@@ -760,6 +767,56 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
+    /**
+     * Build the chat-message list that fills {@code {{context}}} on the LLM thread render
+     * path, optionally enriched with each trace's child spans attached to its assistant
+     * message. Backward-compatible: the {@code spans} field is omitted from the JSON whenever
+     * a trace has no spans (or the caller passed an empty list), so a rule written against
+     * today's {@code [{role, content}, ...]} shape sees no difference.
+     *
+     * <p>Spans within each trace are sorted by start_time so the wire order matches call
+     * order — same convention as the trace-scope {@code {{spans}}} path.
+     *
+     * <p>Separate from {@link #fromTraceToThread(List)} which keeps returning the bare
+     * Python-evaluator {@code ChatMessage} shape — the Python runner has its own contract
+     * and we don't want to leak the {@code spans} field into that path.
+     */
+    public static List<EnrichedThreadChatMessage> fromTraceToThreadEnriched(
+            @NonNull List<Trace> traces, @NonNull List<Span> spans) {
+        Map<UUID, List<Span>> spansByTrace = spans.stream()
+                .collect(Collectors.groupingBy(Span::traceId));
+        return traces.stream()
+                .flatMap(trace -> {
+                    List<Span> traceSpans = spansByTrace.getOrDefault(trace.id(), List.of()).stream()
+                            .sorted(BY_SPAN_START_TIME)
+                            .toList();
+                    return Stream.of(
+                            EnrichedThreadChatMessage.builder()
+                                    .role(TraceThreadPythonEvaluatorRequest.ROLE_USER)
+                                    .content(trace.input())
+                                    .build(),
+                            EnrichedThreadChatMessage.builder()
+                                    .role(TraceThreadPythonEvaluatorRequest.ROLE_ASSISTANT)
+                                    .content(trace.output())
+                                    .spans(traceSpans.isEmpty() ? null : traceSpans)
+                                    .build());
+                })
+                .toList();
+    }
+
+    /**
+     * Enriched chat-message shape for thread-scope {@code {{context}}} rendering. Extends
+     * the existing {@code {role, content}} contract with an optional {@code spans} field
+     * carrying the assistant turn's tool calls and other child spans. The field is omitted
+     * from the JSON when null (via {@link JsonInclude.Include#NON_NULL}) so existing rules
+     * that don't care about spans see the exact same wire shape they see today.
+     */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Builder(toBuilder = true)
+    public record EnrichedThreadChatMessage(String role, JsonNode content, List<Span> spans) {
+    }
+
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames) {
         public static ParsedFeedbackScores empty() {
             return new ParsedFeedbackScores(List.of(), List.of());
@@ -883,20 +940,26 @@ public class OnlineScoringEngine {
 
     /**
      * Rough character-based token estimate for the thread context as it would be
-     * rendered on the inline path (full trace-list JSON, no spans). Used by
-     * {@code OnlineScoringTraceThreadLlmAsJudgeScorer} to decide whether a thread is
-     * big enough to switch to the agentic-tools path (skeleton + drill-down via
-     * ReadTool). The estimate is on the trace bodies only — spans aren't part of
-     * the inline thread render today, so factoring them in would over-trigger the
-     * tools branch.
+     * rendered on the inline path. Estimates the enriched shape — trace input/output
+     * plus the assistant turn's child spans (tool calls + I/O) — so the agentic-tools
+     * routing decision reflects what {@link #prepareThreadLlmRequest} will actually
+     * serialize. Pass an empty {@code spans} list when the toggle is off; the
+     * enriched serializer omits the {@code spans} field via {@code @JsonInclude(NON_NULL)},
+     * so the estimate then matches the original trace-bodies-only shape exactly.
+     *
+     * <p>Used by {@code OnlineScoringTraceThreadLlmAsJudgeScorer} to decide whether
+     * a thread is big enough to switch to the agentic-tools path (skeleton +
+     * drill-down via ReadTool).
      *
      * <p>Same {@code charsPerToken} contract as {@link #estimateTraceContextTokens}:
      * configurable via {@code onlineScoring.agenticToolsCharsPerToken}.
      */
-    public static int estimateThreadContextTokens(@NonNull List<Trace> traces, int charsPerToken) {
+    public static int estimateThreadContextTokens(
+            @NonNull List<Trace> traces, @NonNull List<Span> spans, int charsPerToken) {
         Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
         try {
-            return OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)).length() / charsPerToken;
+            return OBJECT_MAPPER.writeValueAsString(fromTraceToThreadEnriched(traces, spans)).length()
+                    / charsPerToken;
         } catch (JsonProcessingException ex) {
             throw new UncheckedIOException(ex);
         }

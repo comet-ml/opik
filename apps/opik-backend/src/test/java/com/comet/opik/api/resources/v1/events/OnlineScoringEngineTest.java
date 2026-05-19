@@ -967,7 +967,8 @@ class OnlineScoringEngineTest {
                 .build();
 
         var renderedMessages = OnlineScoringEngine.renderThreadMessages(
-                evaluatorCode.messages(), Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), List.of(trace));
+                evaluatorCode.messages(), Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), List.of(trace),
+                List.of());
 
         assertThat(renderedMessages).hasSize(2);
 
@@ -989,11 +990,96 @@ class OnlineScoringEngineTest {
                 .build();
 
         var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
-                new ToolCallingStrategy());
+                new ToolCallingStrategy(), List.of());
 
         assertThat(request.responseFormat()).isNotNull();
         var expectedSchema = createTestSchema();
         assertThat(request.responseFormat().jsonSchema().rootElement()).isEqualTo(expectedSchema);
+    }
+
+    @Test
+    @DisplayName("thread {{context}} is wire-identical to today's shape when no spans are passed")
+    void prepareThreadLlmRequestKeepsLegacyContextShapeWhenSpansAreEmpty() {
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var trace = createTrace(traceId, generator.generate()).toBuilder()
+                .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
+                .build();
+
+        var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
+                new InstructionStrategy(), List.of());
+
+        // Empty spans → enriched serializer omits the `spans` field via @JsonInclude(NON_NULL).
+        // The substituted {{context}} JSON renders user/assistant entries from the trace but
+        // never the `spans` key. Mustache HTML-escapes the substituted JSON (`&quot;`), so
+        // we match on bare field names rather than full quoted-string fragments.
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        assertThat(allText).contains("role");
+        assertThat(allText).contains("user");
+        assertThat(allText).contains("assistant");
+        // The TEST_TRACE_THREAD_EVALUATOR system prompt does not mention "spans", so a bare
+        // substring check is sufficient to prove the field isn't in the substituted JSON.
+        assertThat(allText).doesNotContain("spans");
+    }
+
+    @Test
+    @DisplayName("thread {{context}} attaches sorted spans under the assistant entry when toggle on")
+    void prepareThreadLlmRequestAttachesSpansToAssistantEntryWhenProvided() {
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId).toBuilder()
+                .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
+                .build();
+        // Two spans on the same trace, out-of-order on input — the helper sorts by start_time
+        // so the wire order tracks call order regardless of how the caller hands them in.
+        var spanLate = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("tool-late").type(com.comet.opik.domain.SpanType.tool)
+                .startTime(java.time.Instant.now().plusMillis(10)).traceId(traceId).projectId(projectId)
+                .build();
+        var spanEarly = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("tool-early").type(com.comet.opik.domain.SpanType.tool)
+                .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
+                .build();
+
+        var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
+                new InstructionStrategy(), List.of(spanLate, spanEarly));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        // The `spans` array shows up nested under the assistant entry, with the earlier-started
+        // span first — the LLM sees call order matching the trace's actual execution order.
+        // Mustache HTML-escapes the substituted JSON, so we match on field/value substrings
+        // rather than full quoted-string fragments.
+        assertThat(allText).contains("spans");
+        assertThat(allText).contains("tool-early");
+        assertThat(allText).contains("tool-late");
+        assertThat(allText.indexOf("tool-early")).isLessThan(allText.indexOf("tool-late"));
+    }
+
+    @Test
+    @DisplayName("estimateThreadContextTokens reflects spans size, so big enriched threads route to agentic-tools")
+    void estimateThreadContextTokensFactorsInSpansSize() {
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+        var bigSpan = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("huge-tool-call").type(com.comet.opik.domain.SpanType.tool)
+                .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
+                .input(JsonUtils.readTree("{\"payload\":\"" + "x".repeat(2000) + "\"}"))
+                .build();
+
+        int estimateNoSpans = OnlineScoringEngine.estimateThreadContextTokens(
+                List.of(trace), List.of(), 4);
+        int estimateWithSpans = OnlineScoringEngine.estimateThreadContextTokens(
+                List.of(trace), List.of(bigSpan), 4);
+
+        // Adding ~2KB of span payload must move the estimate up — otherwise the agentic-tools
+        // routing gate would underestimate and inline-render an oversized prompt.
+        assertThat(estimateWithSpans).isGreaterThan(estimateNoSpans);
     }
 
     @Test
