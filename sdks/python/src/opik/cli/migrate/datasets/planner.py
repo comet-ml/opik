@@ -168,13 +168,16 @@ def build_dataset_plan(
     client: opik.Opik,
     name: str,
     to_project: str,
-    from_project: Optional[str],
+    from_project: Optional[str] = None,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
     Ordering invariant: the source rename always precedes the destination
     create, so the workspace-unique-name constraint never trips. The target
     keeps the source's original name.
+
+    ``from_project`` is an optional source-scope hint (perf + clearer
+    error message); ``None`` does a workspace-wide source lookup.
 
     The plan emits, in order:
 
