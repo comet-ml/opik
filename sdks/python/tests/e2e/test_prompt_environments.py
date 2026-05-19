@@ -127,6 +127,28 @@ def test_get_prompt__by_environment__resolves_to_owning_version(
     assert resolved.environment == environment_name
 
 
+def test_set_prompt_environment__targets_specific_version(
+    opik_client: opik.Opik, environment_name: str
+):
+    prompt_name = _generate_random_prompt_name()
+    first_template = f"first-text-{_generate_random_suffix()}"
+    second_template = f"second-text-{_generate_random_suffix()}"
+
+    v1 = opik_client.create_prompt(name=prompt_name, prompt=first_template)
+    v1_commit = v1.commit
+
+    v2 = opik_client.create_prompt(name=prompt_name, prompt=second_template)
+    assert v2.commit != v1_commit
+
+    opik_client.set_prompt_environment(prompt_name, environment_name, commit=v1_commit)
+
+    resolved = opik_client.get_prompt(
+        name=prompt_name, environment=environment_name, no_cache=True
+    )
+    assert resolved is not None
+    assert resolved.commit == v1_commit
+
+
 def test_set_environment__unknown_environment__raises_404(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
     prompt_template = f"some-prompt-text-{_generate_random_suffix()}"
