@@ -5098,12 +5098,7 @@ class PromptResourceTest {
                     createPromptVersionRequest(prompt.name(), v3, prompt.templateStructure()),
                     API_KEY, TEST_WORKSPACE);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptId)
-                    .queryParam("environment", env)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            try (var response = promptResourceClient.callGetPrompt(promptId, null, env, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 Prompt fetched = response.readEntity(Prompt.class);
                 assertThat(fetched.requestedVersion()).isNotNull();
@@ -5120,12 +5115,8 @@ class PromptResourceTest {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptId)
-                    .queryParam("environment", uniqueEnvName("missing"))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            try (var response = promptResourceClient.callGetPrompt(promptId, null, uniqueEnvName("missing"),
+                    API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
@@ -5136,13 +5127,8 @@ class PromptResourceTest {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptId)
-                    .queryParam("mask_id", UUID.randomUUID())
-                    .queryParam("environment", uniqueEnvName("conflict"))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            try (var response = promptResourceClient.callGetPrompt(promptId, UUID.randomUUID(),
+                    uniqueEnvName("conflict"), API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
@@ -5165,7 +5151,8 @@ class PromptResourceTest {
 
             patchVersionEnvironment(saved.id(), env, HttpStatus.SC_NO_CONTENT);
 
-            assertThat(getVersionById(saved.id()).environment()).isEqualTo(env);
+            assertThat(promptResourceClient.getPromptVersion(saved.id(), API_KEY, TEST_WORKSPACE).environment())
+                    .isEqualTo(env);
         }
 
         @Test
@@ -5198,7 +5185,8 @@ class PromptResourceTest {
 
             patchVersionEnvironment(saved.id(), null, HttpStatus.SC_NO_CONTENT);
 
-            assertThat(getVersionById(saved.id()).environment()).isNull();
+            assertThat(promptResourceClient.getPromptVersion(saved.id(), API_KEY, TEST_WORKSPACE).environment())
+                    .isNull();
         }
 
         @Test
@@ -5222,8 +5210,10 @@ class PromptResourceTest {
 
             patchVersionEnvironment(savedNext.id(), env, HttpStatus.SC_NO_CONTENT);
 
-            assertThat(getVersionById(savedOwner.id()).environment()).isNull();
-            assertThat(getVersionById(savedNext.id()).environment()).isEqualTo(env);
+            assertThat(promptResourceClient.getPromptVersion(savedOwner.id(), API_KEY, TEST_WORKSPACE).environment())
+                    .isNull();
+            assertThat(promptResourceClient.getPromptVersion(savedNext.id(), API_KEY, TEST_WORKSPACE).environment())
+                    .isEqualTo(env);
         }
 
         @Test
@@ -5265,11 +5255,7 @@ class PromptResourceTest {
                     .environment(env)
                     .build();
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(request))) {
+            try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 PromptVersion retrieved = response.readEntity(PromptVersion.class);
                 assertThat(retrieved.id()).isEqualTo(saved.id());
@@ -5289,11 +5275,7 @@ class PromptResourceTest {
                     .commit("abcd1234")
                     .build();
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(request))) {
+            try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
@@ -5318,12 +5300,8 @@ class PromptResourceTest {
                     createPromptVersionRequest(prompt.name(), successor, prompt.templateStructure()),
                     API_KEY, TEST_WORKSPACE);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI)
-                    + "/%s/versions/%s/restore".formatted(promptId, savedOriginal.id()))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(""))) {
+            try (var response = promptResourceClient.callRestorePromptVersion(promptId, savedOriginal.id(),
+                    API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 PromptVersion restored = response.readEntity(PromptVersion.class);
                 assertThat(restored.id()).isNotEqualTo(savedOriginal.id());
@@ -5331,7 +5309,8 @@ class PromptResourceTest {
             }
 
             // original version still owns the env
-            assertThat(getVersionById(savedOriginal.id()).environment()).isEqualTo(env);
+            assertThat(promptResourceClient.getPromptVersion(savedOriginal.id(), API_KEY, TEST_WORKSPACE).environment())
+                    .isEqualTo(env);
         }
 
         private String uniqueEnvName(String prefix) {
@@ -5340,33 +5319,15 @@ class PromptResourceTest {
 
         private void patchVersionEnvironment(UUID versionId, String environment, int expectedStatus) {
             var update = PromptVersionEnvironmentUpdate.builder().environment(environment).build();
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/" + versionId)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.json(update))) {
+            try (var response = promptResourceClient.callSetPromptVersionEnvironment(versionId, update, API_KEY,
+                    TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(expectedStatus);
             }
         }
 
         private Response postVersionRaw(String name, PromptVersion version, TemplateStructure templateStructure) {
-            var request = createPromptVersionRequest(name, version, templateStructure);
-            return client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(request));
-        }
-
-        private PromptVersion getVersionById(UUID versionId) {
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/" + versionId)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                return response.readEntity(PromptVersion.class);
-            }
+            return promptResourceClient.callCreatePromptVersion(
+                    createPromptVersionRequest(name, version, templateStructure), API_KEY, TEST_WORKSPACE);
         }
 
         private void assertWorkspaceContainsEnvironment(String env) {
