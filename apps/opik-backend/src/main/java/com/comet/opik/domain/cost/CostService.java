@@ -13,8 +13,10 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -231,13 +233,17 @@ public class CostService {
             return;
         }
 
+        // Two-pass merge so the result is independent of overrides-file iteration order:
+        // a direct override for some key must be visible to aliases that resolve to that key.
+        List<Map.Entry<String, ModelCostData>> aliasEntries = new ArrayList<>();
         overrides.forEach((modelName, override) -> {
             if (StringUtils.isNotBlank(override.aliasOf())) {
-                applyAlias(prices, upstream, modelName, override);
+                aliasEntries.add(Map.entry(modelName, override));
             } else {
                 applyDirectOverride(prices, modelName, override);
             }
         });
+        aliasEntries.forEach(entry -> applyAlias(prices, upstream, entry.getKey(), entry.getValue()));
     }
 
     private static void applyAlias(Map<String, ModelPrice> prices, Map<String, ModelCostData> upstream,
