@@ -7,4 +7,6 @@
 export interface GetPromptByIdRequest {
     /** Optional mask version id; when set, requestedVersion is the mask row for that id */
     maskId?: string;
+    /** Optional environment name; when set, requestedVersion is the version mapped to that environment for the prompt */
+    environment?: string;
 }
