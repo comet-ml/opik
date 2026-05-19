@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
@@ -12,11 +13,13 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -52,11 +55,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.UUID;
@@ -99,20 +105,24 @@ public class OnlineScoringEngine {
      *         ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
-            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
-        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE);
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull List<Span> spans) {
+        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE, spans);
     }
 
     public static ChatRequest prepareLlmRequest(
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
-            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType) {
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
+            @NonNull List<Span> spans) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), promptType, spans);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
     /**
-     * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType)}
+     * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType, List)}
      * that caps each rendered variable substitution at {@code maxReplacementChars}. Values longer
      * than the cap are replaced with their first {@code maxReplacementChars} chars followed by
      * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path, so a 50K-token
@@ -122,11 +132,129 @@ public class OnlineScoringEngine {
     public static ChatRequest prepareLlmRequest(
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
-            int maxReplacementChars, @NonNull String drillDownHint) {
+            int maxReplacementChars, @NonNull String drillDownHint, @NonNull List<Span> spans) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), promptType, spans);
         Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Whether the rule needs the trace's spans list rendered into the prompt. Two ways to
+     * opt in:
+     * <ul>
+     *   <li>Sentinel-valued variable: any entry in {@code variables} whose value is the bare
+     *       string {@code "spans"} (no JSONPath prefix) — mirrors the Python-metric convention
+     *       and is what the FE writes when the user types {@code {{spans}}} in the prompt.
+     *   <li>Direct template reference: any message in {@code messages} references
+     *       {@code {{spans}}} (per {@code promptType}) without the variables map mapping it
+     *       to a custom path. Catches API-created rules where the caller put {@code {{spans}}}
+     *       in the prompt but didn't (or didn't know to) set the sentinel mapping.
+     * </ul>
+     *
+     * <p>Used by the trace scorer to opt-in to the {@code spanService.getByTraceIds(...)} fetch
+     * for inline LLM-as-judge evaluations whose template references {@code {{spans}}}.
+     */
+    public static boolean templateReferencesSpans(
+            @NonNull List<LlmAsJudgeMessage> messages,
+            @NonNull Map<String, String> variables,
+            @NonNull PromptType promptType) {
+        return variables.containsValue(SPANS_VARIABLE_NAME)
+                || messagesReferenceSpansDirectly(messages, variables, promptType);
+    }
+
+    /**
+     * True when at least one message template references {@code {{spans}}} (or the equivalent
+     * for {@code promptType}) AND the variables map does not bind {@code spans} to a custom
+     * path. The second clause respects explicit user mappings — e.g. a rule that maps
+     * {@code spans} to {@code input.something} keeps that mapping instead of being silently
+     * overridden by the spans-list injection.
+     *
+     * <p>Walks both message shapes: the simple-string {@code content} field, and the
+     * multimodal {@code contentArray} where each part exposes its own {@code text}. Scanning
+     * only {@code content} would miss {@code {{spans}}} in multimodal prompts, leaving the
+     * rendered text part unsubstituted because the spans fetch never fires.
+     */
+    private static boolean messagesReferenceSpansDirectly(
+            List<LlmAsJudgeMessage> messages, Map<String, String> variables, PromptType promptType) {
+        if (variables.containsKey(SPANS_VARIABLE_NAME)) {
+            return false;
+        }
+        return messages.stream()
+                .filter(Objects::nonNull)
+                .flatMap(OnlineScoringEngine::renderableTextOf)
+                .anyMatch(text -> TemplateParseUtils.extractVariables(text, promptType)
+                        .contains(SPANS_VARIABLE_NAME));
+    }
+
+    /**
+     * Stream of all variable-substitutable text in a message: the simple {@code content}
+     * string when present, otherwise each non-null {@code text} part inside {@code contentArray}.
+     * Mirrors what the renderer would substitute into — anything we should scan for
+     * {@code {{spans}}} references must also be scanned by this helper, or detection
+     * drifts from rendering.
+     */
+    private static Stream<String> renderableTextOf(LlmAsJudgeMessage message) {
+        if (message.isStringContent()) {
+            return Stream.of(message.content());
+        }
+        if (message.isStructuredContent()) {
+            return message.contentArray().stream()
+                    .filter(Objects::nonNull)
+                    .map(LlmAsJudgeMessageContent::text)
+                    .filter(Objects::nonNull);
+        }
+        return Stream.empty();
+    }
+
+    /**
+     * Replace any variable whose source path is the {@code "spans"} sentinel with the JSON-
+     * serialized spans list (sorted by start_time, matching the Python-metric convention).
+     * Mutates {@code replacements} in place. No-op when no variable references the sentinel
+     * and no message template references {@code {{spans}}} directly.
+     *
+     * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}) — without
+     * it, {@code toReplacements} leaves the bare {@code "spans"} value as a literal and the
+     * prompt renders the word "spans" instead of an empty array. <strong>Intentionally not
+     * gated by {@code isAgenticToolsEnabled}</strong>: when the toggle is off, the scorer
+     * skips the spans fetch and threads an empty list here, which still rewrites
+     * sentinel-mapped variables to {@code "[]"}. Gating this would resurrect the bare-word
+     * leak for rules whose variables map still carries the sentinel from before the toggle
+     * flipped. See {@code OnlineScoringLlmAsJudgeScorer.shouldFetchSpans} for the full
+     * toggle-semantics rationale.
+     *
+     * <p>Also handles the implicit-reference case (template uses {@code {{spans}}} but the
+     * variables map doesn't bind it): mirrors the FE auto-fill server-side so API-created
+     * rules get the same behavior without forcing every caller to know the sentinel convention.
+     */
+    private static void injectSpansIntoReplacements(
+            Map<String, String> replacements, Map<String, String> variables,
+            List<LlmAsJudgeMessage> messages, PromptType promptType, List<Span> spans) {
+        boolean sentinelMapped = variables.containsValue(SPANS_VARIABLE_NAME);
+        boolean templateOnly = messagesReferenceSpansDirectly(messages, variables, promptType);
+        if (!sentinelMapped && !templateOnly) {
+            return;
+        }
+        // Project to SpanForLlm and reconstruct parent → child hierarchy so the judge sees
+        // the call tree, not a flat list. Drops audit metadata, feedback scores, comments,
+        // cost data — none of which help the judge and all of which burn tokens. Siblings
+        // are sorted by start_time inside buildSpanTree.
+        String spansJson;
+        try {
+            spansJson = OBJECT_MAPPER.writeValueAsString(buildSpanTree(spans));
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
+        variables.forEach((name, path) -> {
+            if (SPANS_VARIABLE_NAME.equals(path)) {
+                replacements.put(name, spansJson);
+            }
+        });
+        if (templateOnly) {
+            replacements.put(SPANS_VARIABLE_NAME, spansJson);
+        }
     }
 
     static Map<String, String> capReplacements(Map<String, String> replacements,
@@ -178,9 +306,10 @@ public class OnlineScoringEngine {
      */
     public static ChatRequest prepareThreadLlmRequest(
             @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
-            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull StructuredOutputStrategy structuredOutputStrategy,
+            @NonNull List<Span> spans) {
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
-                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
+                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces, spans);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
@@ -288,15 +417,20 @@ public class OnlineScoringEngine {
     }
 
     static List<ChatMessage> renderThreadMessages(
-            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces,
+            List<Span> spans) {
         // prepare the map of replacements to use in all messages
         Map<String, String> replacements = variablesMap.keySet().stream()
                 .map(variableName -> switch (variableName) {
                     case TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME -> {
+                        // Always use the enriched shape — when `spans` is empty (toggle off),
+                        // the `spans` field is omitted via @JsonInclude(NON_NULL) and the
+                        // JSON is wire-identical to today's [{role, content}, ...] shape.
                         try {
                             yield MessageVariableMapping.builder()
                                     .variableName(variableName)
-                                    .valueToReplace(OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)))
+                                    .valueToReplace(OBJECT_MAPPER.writeValueAsString(
+                                            fromTraceToThreadEnriched(traces, spans)))
                                     .build();
                         } catch (JsonProcessingException ex) {
                             throw new UncheckedIOException(ex);
@@ -642,6 +776,161 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
+    /**
+     * Build the chat-message list that fills {@code {{context}}} on the LLM thread render
+     * path, optionally enriched with each trace's child spans attached to its assistant
+     * message. Backward-compatible: the {@code spans} field is omitted from the JSON whenever
+     * a trace has no spans (or the caller passed an empty list), so a rule written against
+     * today's {@code [{role, content}, ...]} shape sees no difference.
+     *
+     * <p>Spans within each trace are sorted by start_time so the wire order matches call
+     * order — same convention as the trace-scope {@code {{spans}}} path.
+     *
+     * <p>Separate from {@link #fromTraceToThread(List)} which keeps returning the bare
+     * Python-evaluator {@code ChatMessage} shape — the Python runner has its own contract
+     * and we don't want to leak the {@code spans} field into that path.
+     */
+    public static List<EnrichedThreadChatMessage> fromTraceToThreadEnriched(
+            @NonNull List<Trace> traces, @NonNull List<Span> spans) {
+        Map<UUID, List<Span>> spansByTrace = spans.stream()
+                .collect(Collectors.groupingBy(Span::traceId));
+        return traces.stream()
+                .flatMap(trace -> {
+                    // Reconstruct parent → child hierarchy per-trace so the assistant entry
+                    // carries a tree of spans, not a flat list. buildSpanTree handles sorting
+                    // siblings by start_time at every level.
+                    List<SpanForLlm> traceSpans = buildSpanTree(
+                            spansByTrace.getOrDefault(trace.id(), List.of()));
+                    return Stream.of(
+                            EnrichedThreadChatMessage.builder()
+                                    .role(TraceThreadPythonEvaluatorRequest.ROLE_USER)
+                                    .content(trace.input())
+                                    .build(),
+                            EnrichedThreadChatMessage.builder()
+                                    .role(TraceThreadPythonEvaluatorRequest.ROLE_ASSISTANT)
+                                    .content(trace.output())
+                                    .spans(traceSpans.isEmpty() ? null : traceSpans)
+                                    .build());
+                })
+                .toList();
+    }
+
+    /**
+     * Enriched chat-message shape for thread-scope {@code {{context}}} rendering. Extends
+     * the existing {@code {role, content}} contract with an optional {@code spans} field
+     * carrying the assistant turn's tool calls and other child spans. The field is omitted
+     * from the JSON when null (via {@link JsonInclude.Include#NON_NULL}) so existing rules
+     * that don't care about spans see the exact same wire shape they see today.
+     */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Builder(toBuilder = true)
+    public record EnrichedThreadChatMessage(String role, JsonNode content, List<SpanForLlm> spans) {
+    }
+
+    /**
+     * Lean projection of {@link Span} for the LLM-judge prompt. The raw {@code Span} record
+     * carries ~28 fields — audit metadata, feedback scores, comments, cost data, etc. — and
+     * pasting all of it into a prompt burns tokens on irrelevant content and can confuse the
+     * judge ("why is there a {@code feedback_scores} array? am I supposed to defer to that?").
+     *
+     * <p>Keep only what helps a judge reason about agent behavior:
+     * <ul>
+     *   <li>{@code name} / {@code type}: which tool or LLM ran
+     *   <li>{@code input} / {@code output}: what was passed and what came back
+     *   <li>{@code metadata}: user-provided context the agent attached
+     *   <li>{@code startTime} / {@code endTime} / {@code duration}: call order + how long
+     *   <li>{@code model} / {@code provider}: for LLM spans, which model
+     *   <li>{@code errorInfo}: if the call failed
+     *   <li>{@code spans}: nested child spans, recursively projected — lets the judge see the
+     *       call tree (planner → sub-agent → tool) instead of a flat list with parent-id refs
+     *       it would have to mentally resolve. Built by {@link #buildSpanTree}.
+     * </ul>
+     * Null fields are omitted via {@code @JsonInclude(NON_NULL)} so e.g. a successful tool
+     * span doesn't pad the JSON with {@code error_info: null}, and a leaf span doesn't pad
+     * with an empty {@code spans} array. Same shape is used by the trace-scope
+     * {@code {{spans}}} substitution and the thread-scope {@code {{context}}} per-assistant
+     * {@code spans} field — one projection, two render paths.
+     */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Builder(toBuilder = true)
+    public record SpanForLlm(
+            String name,
+            SpanType type,
+            Instant startTime,
+            Instant endTime,
+            Double duration,
+            JsonNode input,
+            JsonNode output,
+            JsonNode metadata,
+            String model,
+            String provider,
+            ErrorInfo errorInfo,
+            List<SpanForLlm> spans) {
+    }
+
+    /**
+     * Build a nested-tree projection of the given spans for inline LLM rendering.
+     *
+     * <p>Reconstructs parent → child hierarchy from {@code parentSpanId} links, projects each
+     * node to {@link SpanForLlm} (dropping the audit/score/cost noise that {@code Span}
+     * carries), and sorts siblings at every level by {@code startTime} so the wire order
+     * tracks call order within each branch. Returns the top-level roots.
+     *
+     * <p>Orphans (spans whose {@code parentSpanId} isn't in the input list) are promoted to
+     * roots — happens when the caller passes a subset of a trace's spans, or when a parent
+     * was dropped server-side. The tree stays well-formed instead of silently dropping the
+     * orphaned subtree.
+     */
+    public static List<SpanForLlm> buildSpanTree(@NonNull List<Span> spans) {
+        if (spans.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, List<Span>> childrenByParent = new HashMap<>();
+        Set<UUID> presentIds = new HashSet<>();
+        for (Span span : spans) {
+            if (span.id() != null) {
+                presentIds.add(span.id());
+            }
+            UUID parentId = span.parentSpanId();
+            if (parentId != null) {
+                childrenByParent.computeIfAbsent(parentId, k -> new ArrayList<>()).add(span);
+            }
+        }
+        // Roots: parent is null OR parent isn't in the visible set (orphan promotion).
+        List<Span> roots = spans.stream()
+                .filter(s -> s.parentSpanId() == null || !presentIds.contains(s.parentSpanId()))
+                .sorted(BY_SPAN_START_TIME)
+                .toList();
+        return roots.stream()
+                .map(root -> buildSpanNode(root, childrenByParent))
+                .toList();
+    }
+
+    private static SpanForLlm buildSpanNode(Span span, Map<UUID, List<Span>> childrenByParent) {
+        List<SpanForLlm> children = span.id() == null
+                ? List.of()
+                : childrenByParent.getOrDefault(span.id(), List.of()).stream()
+                        .sorted(BY_SPAN_START_TIME)
+                        .map(child -> buildSpanNode(child, childrenByParent))
+                        .toList();
+        return SpanForLlm.builder()
+                .name(span.name())
+                .type(span.type())
+                .startTime(span.startTime())
+                .endTime(span.endTime())
+                .duration(span.duration())
+                .input(span.input())
+                .output(span.output())
+                .metadata(span.metadata())
+                .model(span.model())
+                .provider(span.provider())
+                .errorInfo(span.errorInfo())
+                .spans(children.isEmpty() ? null : children)
+                .build();
+    }
+
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames) {
         public static ParsedFeedbackScores empty() {
             return new ParsedFeedbackScores(List.of(), List.of());
@@ -765,20 +1054,26 @@ public class OnlineScoringEngine {
 
     /**
      * Rough character-based token estimate for the thread context as it would be
-     * rendered on the inline path (full trace-list JSON, no spans). Used by
-     * {@code OnlineScoringTraceThreadLlmAsJudgeScorer} to decide whether a thread is
-     * big enough to switch to the agentic-tools path (skeleton + drill-down via
-     * ReadTool). The estimate is on the trace bodies only — spans aren't part of
-     * the inline thread render today, so factoring them in would over-trigger the
-     * tools branch.
+     * rendered on the inline path. Estimates the enriched shape — trace input/output
+     * plus the assistant turn's child spans (tool calls + I/O) — so the agentic-tools
+     * routing decision reflects what {@link #prepareThreadLlmRequest} will actually
+     * serialize. Pass an empty {@code spans} list when the toggle is off; the
+     * enriched serializer omits the {@code spans} field via {@code @JsonInclude(NON_NULL)},
+     * so the estimate then matches the original trace-bodies-only shape exactly.
+     *
+     * <p>Used by {@code OnlineScoringTraceThreadLlmAsJudgeScorer} to decide whether
+     * a thread is big enough to switch to the agentic-tools path (skeleton +
+     * drill-down via ReadTool).
      *
      * <p>Same {@code charsPerToken} contract as {@link #estimateTraceContextTokens}:
      * configurable via {@code onlineScoring.agenticToolsCharsPerToken}.
      */
-    public static int estimateThreadContextTokens(@NonNull List<Trace> traces, int charsPerToken) {
+    public static int estimateThreadContextTokens(
+            @NonNull List<Trace> traces, @NonNull List<Span> spans, int charsPerToken) {
         Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
         try {
-            return OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)).length() / charsPerToken;
+            return OBJECT_MAPPER.writeValueAsString(fromTraceToThreadEnriched(traces, spans)).length()
+                    / charsPerToken;
         } catch (JsonProcessingException ex) {
             throw new UncheckedIOException(ex);
         }
