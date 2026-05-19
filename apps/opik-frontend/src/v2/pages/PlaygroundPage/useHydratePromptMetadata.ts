@@ -62,19 +62,21 @@ export function useHydratePromptMetadata() {
       if (chatPromptId) {
         try {
           const promptData = await fetchPrompt({ promptId: chatPromptId });
-          if (!promptData?.latest_version?.id) return undefined;
+          const targetVersionId =
+            prompt.loadedChatPromptVersionId ?? promptData?.latest_version?.id;
+          if (!targetVersionId) return undefined;
 
           let versionData: PromptVersion | undefined;
           try {
             versionData = await fetchPromptVersion({
-              versionId: promptData.latest_version.id,
+              versionId: targetVersionId,
             });
           } catch {
             // Fall back to latest_version embedded in the prompt response
           }
 
           const templateToCompare =
-            versionData?.template ?? promptData.latest_version.template;
+            versionData?.template ?? promptData?.latest_version?.template;
           if (!templateToCompare) return undefined;
           if (
             !chatTemplatesEqual(
@@ -85,12 +87,12 @@ export function useHydratePromptMetadata() {
             return undefined;
 
           return buildMetadata(promptData, {
-            id: versionData?.id ?? promptData.latest_version.id,
+            id: versionData?.id ?? targetVersionId,
             template:
-              versionData?.template ?? promptData.latest_version.template,
-            commit: versionData?.commit ?? promptData.latest_version.commit,
+              versionData?.template ?? promptData?.latest_version?.template,
+            commit: versionData?.commit ?? promptData?.latest_version?.commit,
             metadata:
-              versionData?.metadata ?? promptData.latest_version.metadata,
+              versionData?.metadata ?? promptData?.latest_version?.metadata,
           });
         } catch {
           return undefined;

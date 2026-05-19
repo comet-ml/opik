@@ -15,6 +15,7 @@ import useAgentConfigCreateMutation from "@/api/agent-configs/useAgentConfigCrea
 import { LocalRunner } from "@/types/agent-sandbox";
 import AgentRunnerInputForm from "./AgentRunnerInputForm";
 import AgentRunnerLoading from "./AgentRunnerLoading";
+import AgentRunnerPromptsList from "./AgentRunnerPromptsList";
 import AgentConfigurationEditView, {
   AgentConfigurationEditViewHandle,
   AgentConfigurationEditViewState,
@@ -214,69 +215,76 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           forceMount
           hidden={activeTab !== "configuration"}
         >
-          {activeVersion ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <LoadableSelectBox
-                  value={selectedVersionId || activeVersion.id}
-                  onChange={setSelectedVersionId}
-                  options={versionOptions}
-                  buttonClassName="h-6 w-auto px-2 text-xs"
-                  align="start"
-                  minWidth={200}
-                  renderTitle={(option) => (
-                    <div className="flex items-center gap-1 truncate">
-                      <span>Configuration:</span>
-                      <span className="truncate">{option.label}</span>
-                    </div>
+          <div className="flex flex-col gap-3">
+            {activeVersion ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <LoadableSelectBox
+                    value={selectedVersionId || activeVersion.id}
+                    onChange={setSelectedVersionId}
+                    options={versionOptions}
+                    buttonClassName="h-6 w-auto px-2 text-xs"
+                    align="start"
+                    minWidth={200}
+                    renderTitle={(option) => (
+                      <div className="flex items-center gap-1 truncate">
+                        <span>Configuration:</span>
+                        <span className="truncate">{option.label}</span>
+                      </div>
+                    )}
+                  />
+                  {editState.isDirty && (
+                    <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
+                      <span className="size-1.5 rounded-full bg-destructive" />
+                      Edited
+                    </span>
                   )}
-                />
-                {editState.isDirty && (
-                  <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
-                    <span className="size-1.5 rounded-full bg-destructive" />
-                    Edited
-                  </span>
-                )}
-                <div className="ml-auto flex items-center gap-1">
-                  {editState.hasExpandableFields && (
-                    <ExpandAllToggle controller={controller} />
-                  )}
-                  <Button
-                    variant="outline"
-                    size="2xs"
-                    onClick={handleSaveConfiguration}
-                    disabled={
-                      editState.isSaving ||
-                      editState.hasErrors ||
-                      !editState.isDirty ||
-                      editState.isEmpty
-                    }
-                  >
-                    <Save className="mr-1 size-3.5" />
-                    {editState.isSaving ? "Saving…" : "Save configuration"}
-                    <ArrowUpRight className="ml-1 size-3.5" />
-                  </Button>
+                  <div className="ml-auto flex items-center gap-1">
+                    {editState.hasExpandableFields && (
+                      <ExpandAllToggle controller={controller} />
+                    )}
+                    <Button
+                      variant="outline"
+                      size="2xs"
+                      onClick={handleSaveConfiguration}
+                      disabled={
+                        editState.isSaving ||
+                        editState.hasErrors ||
+                        !editState.isDirty ||
+                        editState.isEmpty
+                      }
+                    >
+                      <Save className="mr-1 size-3.5" />
+                      {editState.isSaving ? "Saving…" : "Save configuration"}
+                      <ArrowUpRight className="ml-1 size-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
 
-              <AgentConfigurationEditView
-                key={`${activeVersion.id}-${resetKey}`}
-                ref={configEditRef}
-                item={activeVersion}
-                projectId={projectId}
-                onSaved={handleConfigSaved}
-                controller={controller}
-                onStateChange={setEditState}
-                blockNavigation={false}
-              />
+                <AgentConfigurationEditView
+                  key={`${activeVersion.id}-${resetKey}`}
+                  ref={configEditRef}
+                  item={activeVersion}
+                  projectId={projectId}
+                  onSaved={handleConfigSaved}
+                  controller={controller}
+                  onStateChange={setEditState}
+                  blockNavigation={false}
+                />
+              </>
+            ) : (
+              <div className="flex flex-col items-center py-8 text-muted-slate">
+                <p className="comet-body-s">
+                  No agent configuration found for this project.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-2 flex flex-col gap-2">
+              <h2 className="comet-body-s-accented text-foreground">Prompts</h2>
+              <AgentRunnerPromptsList projectId={projectId} />
             </div>
-          ) : (
-            <div className="flex flex-col items-center py-8 text-muted-slate">
-              <p className="comet-body-s">
-                No agent configuration found for this project.
-              </p>
-            </div>
-          )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

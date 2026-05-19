@@ -6,7 +6,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { PlusIcon } from "lucide-react";
+import { FileText, MessagesSquare, PlusIcon } from "lucide-react";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyPromptLibraryLightUrl from "/images/empty-prompt-library-light.svg";
@@ -23,6 +23,12 @@ import TagCell from "@/shared/DataTableCells/TagCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { Separator } from "@/ui/separator";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -40,7 +46,7 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/v2/pages/PromptsPage/PromptRowActionsCell";
-import AddEditPromptDialog from "@/v2/pages/PromptsPage/AddEditPromptDialog";
+import CreatePromptSheet from "@/v2/pages/PromptsPage/CreatePromptSheet";
 import PromptsActionsPanel from "@/v2/pages/PromptsPage/PromptsActionsPanel";
 import {
   generateActionsColumDef,
@@ -203,6 +209,8 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [createTemplateStructure, setCreateTemplateStructure] =
+    useState<PROMPT_TEMPLATE_STRUCTURE>(PROMPT_TEMPLATE_STRUCTURE.TEXT);
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -331,10 +339,14 @@ const PromptsPage: React.FunctionComponent = () => {
     [navigate, workspaceName, activeProjectId],
   );
 
-  const handleNewPromptClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
+  const handleNewPromptClick = useCallback(
+    (structure: PROMPT_TEMPLATE_STRUCTURE = PROMPT_TEMPLATE_STRUCTURE.TEXT) => {
+      setCreateTemplateStructure(structure);
+      setOpenDialog(true);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [],
+  );
 
   if (isPending || (isPlaceholderData && prompts.length === 0)) {
     return <Loader />;
@@ -349,10 +361,42 @@ const PromptsPage: React.FunctionComponent = () => {
           Prompt library
         </h1>
         {canCreatePrompts && (
-          <Button variant="default" size="xs" onClick={handleNewPromptClick}>
-            <PlusIcon className="mr-1 size-4" />
-            Create prompt
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="default" size="xs">
+                <PlusIcon className="mr-1 size-4" />
+                Prompt
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem
+                onClick={() =>
+                  handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.TEXT)
+                }
+              >
+                <FileText className="mr-2 size-4 shrink-0 text-light-slate" />
+                <div className="flex flex-col">
+                  <span className="comet-body-s-accented">Text prompt</span>
+                  <span className="comet-body-xs text-light-slate">
+                    Simple prompts with variable substitution.
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.CHAT)
+                }
+              >
+                <MessagesSquare className="mr-2 size-4 shrink-0 text-light-slate" />
+                <div className="flex flex-col">
+                  <span className="comet-body-s-accented">Chat prompt</span>
+                  <span className="comet-body-xs text-light-slate">
+                    Message-based prompts for conversational AI.
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       {isEmpty ? (
@@ -364,7 +408,7 @@ const PromptsPage: React.FunctionComponent = () => {
             "Create and manage prompts in one place.\nVersion them, improve and reuse, and keep your workflows consistent."
           }
           primaryActionLabel="Create your first prompt"
-          onPrimaryAction={handleNewPromptClick}
+          onPrimaryAction={() => handleNewPromptClick()}
           docsUrl={buildDocsUrl("/development/agent-configuration/overview")}
         />
       ) : (
@@ -416,7 +460,7 @@ const PromptsPage: React.FunctionComponent = () => {
             noData={
               <DataTableNoData title={noDataText}>
                 {noData && canCreatePrompts && (
-                  <Button variant="link" onClick={handleNewPromptClick}>
+                  <Button variant="link" onClick={() => handleNewPromptClick()}>
                     Create prompt
                   </Button>
                 )}
@@ -435,10 +479,11 @@ const PromptsPage: React.FunctionComponent = () => {
           </div>
         </>
       )}
-      <AddEditPromptDialog
+      <CreatePromptSheet
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        templateStructure={createTemplateStructure}
       />
     </div>
   );

@@ -26,7 +26,7 @@ import {
   PromptWithLatestVersion,
   PROMPT_TEMPLATE_STRUCTURE,
 } from "@/types/prompts";
-import Loader from "@/shared/Loader/Loader";
+import { Skeleton } from "@/ui/skeleton";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/shared/CodeHighlighter/CodeHighlighter";
@@ -94,7 +94,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   const editPromptResetKeyRef = useRef(0);
 
-  const { data } = usePromptVersionsById(
+  const { data, isLoading: isVersionsLoading } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
       page: 1,
@@ -129,10 +129,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     return prompt?.latest_version?.id ?? versions?.[0]?.id ?? "";
   }, [activeVersionId, versions, prompt?.latest_version?.id]);
 
-  const { data: activeVersion } = usePromptVersionById(
-    { versionId: effectiveVersionId },
-    { enabled: !!effectiveVersionId },
-  );
+  const { data: activeVersion, isLoading: isActiveVersionLoading } =
+    usePromptVersionById(
+      { versionId: effectiveVersionId },
+      { enabled: !!effectiveVersionId },
+    );
 
   const activeIndex = useMemo(
     () => versions?.findIndex((v) => v.id === effectiveVersionId) ?? -1,
@@ -198,8 +199,41 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     setOpenCompare(true);
   }, []);
 
-  if (!prompt) {
-    return <Loader />;
+  const isInitialLoading =
+    !prompt ||
+    isVersionsLoading ||
+    (!!effectiveVersionId && (isActiveVersionLoading || !activeVersion));
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex gap-6 px-6 pt-2">
+        <div className="min-w-0 flex-1">
+          <div className="rounded-md border bg-background">
+            <div className="flex items-center justify-between border-b p-4 py-3">
+              <Skeleton className="h-5 w-16" />
+              <Skeleton className="h-5 w-48" />
+            </div>
+            <div className="border-b p-4">
+              <Skeleton className="h-3 w-2/5" />
+            </div>
+            <div className="border-b p-4">
+              <Skeleton className="h-[140px] w-full" />
+            </div>
+            <div className="p-4">
+              <Skeleton className="h-[200px] w-full" />
+            </div>
+          </div>
+        </div>
+        <div className="w-[340px] shrink-0">
+          <p className="comet-body-s-accented ml-3 mt-1">Version history</p>
+          <div className="space-y-3 p-4">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
