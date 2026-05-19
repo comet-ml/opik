@@ -55,13 +55,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Delete ci-e2e-* images for closed PRs
+      - name: Delete ci-e2e-* images for closed PRs and old SHA tags
         env:
           GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || secrets.GITHUB_TOKEN }}
+          MAX_AGE_DAYS: 7
         run: |
           DELETED=0
           SKIPPED=0
           FAILED=0
+          CUTOFF=$(date -u -d "${MAX_AGE_DAYS} days ago" +%s 2>/dev/null \
+            || date -u -v-${MAX_AGE_DAYS}d +%s)
 
           for IMAGE in ${{ env.IMAGES }}; do
             echo "=== Scanning ${IMAGE} ==="
@@ -70,8 +73,9 @@ jobs:
               "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions" \
               --paginate --jq '.[]' 2>/dev/null) || continue
 
-            echo "$VERSIONS" | jq -c '{id: .id, tags: .metadata.container.tags}' | while read -r VERSION; do
+            echo "$VERSIONS" | jq -c '{id: .id, tags: .metadata.container.tags, created_at: .created_at}' | while read -r VERSION; do
               VERSION_ID=$(echo "$VERSION" | jq -r '.id')
+              CREATED_AT=$(echo "$VERSION" | jq -r '.created_at')
               TAGS=$(echo "$VERSION" | jq -r '.tags[]' 2>/dev/null)
 
               for TAG in $TAGS; do
@@ -82,8 +86,20 @@ jobs:
                 PR_NUM=$(echo "$TAG" | sed -n 's/^ci-e2e-\([0-9]*\)\(-guardrails\)\{0,1\}$/\1/p')
 
                 if [ -z "$PR_NUM" ]; then
-                  # SHA-based tag (workflow_dispatch/schedule/main) — delete if older than 7 days
-                  # These are handled by age below
+                  # SHA-based tag (workflow_dispatch/schedule/main) — delete if older than MAX_AGE_DAYS
+                  CREATED_TS=$(date -u -d "$CREATED_AT" +%s 2>/dev/null \
+                    || date -u -j -f "%Y-%m-%dT%H:%M:%S" "${CREATED_AT%%.*}" +%s 2>/dev/null \
+                    || echo "0")
+                  if [ "$CREATED_TS" -lt "$CUTOFF" ]; then
+                    echo "Deleting ${IMAGE}:${TAG} (SHA tag older than ${MAX_AGE_DAYS} days)"
+                    if gh api --method DELETE \
+                      "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>/dev/null; then
+                      DELETED=$((DELETED + 1))
+                    else
+                      FAILED=$((FAILED + 1))
+                    fi
+                    break
+                  fi
                   continue
                 fi
 
@@ -97,7 +113,7 @@ jobs:
                   else
                     FAILED=$((FAILED + 1))
                   fi
-                  break  # version deleted, no need to check other tags
+                  break
                 else
                   SKIPPED=$((SKIPPED + 1))
                 fi
