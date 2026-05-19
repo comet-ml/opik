@@ -1212,6 +1212,7 @@ export class OpikClient {
 
       const promptData = await this.api.prompts.getPromptById(
         versionResponse.promptId,
+        {},
         this.api.requestOptions
       );
 

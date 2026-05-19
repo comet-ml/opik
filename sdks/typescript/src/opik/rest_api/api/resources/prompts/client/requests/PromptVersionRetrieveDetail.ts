@@ -9,6 +9,8 @@
 export interface PromptVersionRetrieveDetail {
     name: string;
     commit?: string;
+    /** If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit */
+    environment?: string;
     /** If provided, scopes the search to the specified project */
     projectName?: string;
 }

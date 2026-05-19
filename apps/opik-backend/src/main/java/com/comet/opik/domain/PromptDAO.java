@@ -74,6 +74,7 @@ public interface PromptDAO {
                         'change_description', pv.change_description,
                         'type', pv.type,
                         'version_type', pv.version_type,
+                        'environment', pv.environment,
                         'tags', pv.tags,
                         'created_at', pv.created_at,
                         'created_by', pv.created_by,
@@ -87,7 +88,7 @@ public interface PromptDAO {
                     ORDER BY pv.id DESC
                     LIMIT 1
                 ) AS latest_version
-                <if(mask_id)>
+                <if(mask_id || environment)>
                 ,
                 (
                     SELECT JSON_OBJECT(
@@ -99,6 +100,7 @@ public interface PromptDAO {
                         'change_description', pv.change_description,
                         'type', pv.type,
                         'version_type', pv.version_type,
+                        'environment', pv.environment,
                         'tags', pv.tags,
                         'created_at', pv.created_at,
                         'created_by', pv.created_by,
@@ -108,8 +110,8 @@ public interface PromptDAO {
                     FROM prompt_versions pv
                     WHERE pv.prompt_id = p.id
                     AND pv.workspace_id = p.workspace_id
-                    AND pv.id = :mask_id
-                    AND pv.version_type = 'mask'
+                    <if(mask_id)> AND pv.id = :mask_id AND pv.version_type = 'mask' <endif>
+                    <if(environment)> AND pv.environment = :environment AND pv.version_type = 'prompt_version' <endif>
                 ) AS requested_version
                 <endif>
             FROM prompts p
@@ -119,10 +121,15 @@ public interface PromptDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Prompt findById(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId,
-            @Define("mask_id") @Bind("mask_id") UUID maskId);
+            @Define("mask_id") @Bind("mask_id") UUID maskId,
+            @Define("environment") @Bind("environment") String environment);
 
     default Prompt findById(UUID id, String workspaceId) {
-        return findById(id, workspaceId, null);
+        return findById(id, workspaceId, null, null);
+    }
+
+    default Prompt findById(UUID id, String workspaceId, UUID maskId) {
+        return findById(id, workspaceId, maskId, null);
     }
 
     @SqlQuery("""
@@ -181,6 +188,7 @@ public interface PromptDAO {
                 'change_description', change_description,
                 'type', type,
                 'version_type', version_type,
+                'environment', environment,
                 'tags', tags,
                 'created_at', created_at,
                 'created_by', created_by,
@@ -283,6 +291,7 @@ public interface PromptDAO {
                     'change_description', pv.change_description,
                     'type', pv.type,
                     'version_type', pv.version_type,
+                    'environment', pv.environment,
                     'tags', pv.tags,
                     'created_at', pv.created_at,
                     'created_by', pv.created_by,

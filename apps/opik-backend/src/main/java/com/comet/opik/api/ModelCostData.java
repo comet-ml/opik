@@ -16,5 +16,6 @@ public record ModelCostData(String litellmProvider,
         String cacheCreationInputTokenCost,
         String cacheReadInputTokenCost,
         String mode,
-        boolean supportsVision) {
+        boolean supportsVision,
+        String aliasOf) {
 }

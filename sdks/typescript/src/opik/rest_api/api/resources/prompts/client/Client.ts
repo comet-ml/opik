@@ -365,12 +365,13 @@ export class PromptsClient {
     }
 
     /**
-     * Get prompt by id; when mask_id is provided, requestedVersion is populated with that mask overlay
+     * Get prompt by id; when mask_id or environment is provided, requestedVersion is populated with the resolved version. mask_id and environment are mutually exclusive.
      *
      * @param {string} id
      * @param {OpikApi.GetPromptByIdRequest} request
      * @param {PromptsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
@@ -389,9 +390,10 @@ export class PromptsClient {
         request: OpikApi.GetPromptByIdRequest = {},
         requestOptions?: PromptsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.PromptDetail>> {
-        const { maskId } = request;
+        const { maskId, environment } = request;
         const _queryParams: Record<string, unknown> = {
             mask_id: maskId,
+            environment,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -432,6 +434,8 @@ export class PromptsClient {
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
                     throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
@@ -1268,6 +1272,95 @@ export class PromptsClient {
             _response.rawResponse,
             "POST",
             "/v1/private/prompts/versions/retrieve-by-ids",
+        );
+    }
+
+    /**
+     * Set or clear the environment owned by a prompt version.
+     * Setting a non-null environment moves ownership atomically: any previous owner of that
+     * environment for the same prompt has its environment cleared in the same transaction.
+     * Setting null clears the environment from the version.
+     * The environment must already exist in the workspace registry; unknown names return 404.
+     *
+     * @param {string} versionId
+     * @param {OpikApi.PromptVersionEnvironmentUpdate} request
+     * @param {PromptsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.prompts.setPromptVersionEnvironment("versionId")
+     */
+    public setPromptVersionEnvironment(
+        versionId: string,
+        request: OpikApi.PromptVersionEnvironmentUpdate = {},
+        requestOptions?: PromptsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__setPromptVersionEnvironment(versionId, request, requestOptions),
+        );
+    }
+
+    private async __setPromptVersionEnvironment(
+        versionId: string,
+        request: OpikApi.PromptVersionEnvironmentUpdate = {},
+        requestOptions?: PromptsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/prompts/versions/${core.url.encodePathParam(versionId)}/environments`,
+            ),
+            method: "PATCH",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.PromptVersionEnvironmentUpdate.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "PATCH",
+            "/v1/private/prompts/versions/{versionId}/environments",
         );
     }
 }
