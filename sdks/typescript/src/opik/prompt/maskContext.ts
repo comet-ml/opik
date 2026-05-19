@@ -4,11 +4,11 @@ type PromptMasks = Record<string, string>;
 
 const promptMaskStorage = new AsyncLocalStorage<PromptMasks | null>();
 
-export function promptMaskContext<T>(
+export function promptMaskContext<R>(
   masks: PromptMasks | null | undefined,
-  fn: () => T | Promise<T>
-): T | Promise<T> {
-  return promptMaskStorage.run(masks ?? null, fn) as T | Promise<T>;
+  fn: () => R
+): R {
+  return promptMaskStorage.run(masks ?? null, fn);
 }
 
 export function getActiveMaskForPrompt(promptId: string): string | null {
