@@ -68,6 +68,24 @@ class PromptCache:
         with self._lock:
             self._entries.clear()
 
+    def invalidate_for_prompt(
+        self, name: str, project_name: typing.Optional[str]
+    ) -> None:
+        """Drop every cached entry for the given prompt name + project scope.
+
+        Used after operations that change the env-to-version mapping (such as
+        ``Opik.set_prompt_environment``) so that subsequent
+        ``get_prompt(..., environment=...)`` calls cannot return a stale version.
+        """
+        with self._lock:
+            stale_keys = [
+                key
+                for key in self._entries
+                if key[0] == name and key[2] == project_name
+            ]
+            for key in stale_keys:
+                del self._entries[key]
+
     def get_or_fetch(
         self,
         key: _CacheKey,
@@ -193,3 +211,8 @@ def get_or_fetch(
         ttl_seconds=None if commit is not None else ttl,
     )
     return typing.cast(typing.Optional[_PromptT], result)
+
+
+def invalidate_for_prompt(name: str, project_name: typing.Optional[str]) -> None:
+    """Drop every cached entry for the given prompt name + project scope."""
+    _cache.invalidate_for_prompt(name=name, project_name=project_name)
