@@ -184,6 +184,72 @@ class TestPromptClientEndpointSelection:
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
 
 
+class TestInternalCreateMask:
+    """Tests for __internal__create_mask method."""
+
+    def test_create_mask_calls_create_prompt_version_with_mask_type(
+        self, client, mock_rest_client
+    ):
+        expected = _make_mock_version()
+        mock_rest_client.prompts.create_prompt_version.return_value = expected
+
+        result = client._PromptClient__internal_api__create_mask(
+            name="test-prompt",
+            prompt="masked template",
+        )
+
+        mock_rest_client.prompts.create_prompt_version.assert_called_once()
+        call_kwargs = mock_rest_client.prompts.create_prompt_version.call_args[1]
+        assert call_kwargs["name"] == "test-prompt"
+        assert call_kwargs["version"].template == "masked template"
+        assert call_kwargs["version"].version_type == "mask"
+        assert result == expected
+
+    def test_create_mask_passes_all_parameters(self, client, mock_rest_client):
+        mock_rest_client.prompts.create_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        client._PromptClient__internal_api__create_mask(
+            name="test-prompt",
+            prompt="masked template",
+            type=prompt_types.PromptType.JINJA2,
+            metadata={"key": "value"},
+            template_structure="chat",
+            project_name="my-project",
+            change_description="mask for testing",
+        )
+
+        call_kwargs = mock_rest_client.prompts.create_prompt_version.call_args[1]
+        assert call_kwargs["name"] == "test-prompt"
+        assert call_kwargs["template_structure"] == "chat"
+        assert call_kwargs["project_name"] == "my-project"
+        version = call_kwargs["version"]
+        assert version.template == "masked template"
+        assert version.version_type == "mask"
+        assert version.type == prompt_types.PromptType.JINJA2
+        assert version.metadata == {"key": "value"}
+        assert version.change_description == "mask for testing"
+
+    def test_create_mask_defaults(self, client, mock_rest_client):
+        mock_rest_client.prompts.create_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        client._PromptClient__internal_api__create_mask(
+            name="test-prompt",
+            prompt="template",
+        )
+
+        call_kwargs = mock_rest_client.prompts.create_prompt_version.call_args[1]
+        assert call_kwargs["template_structure"] == "text"
+        assert call_kwargs["project_name"] is None
+        version = call_kwargs["version"]
+        assert version.type == prompt_types.PromptType.MUSTACHE
+        assert version.metadata is None
+        assert version.change_description is None
+
+
 class TestGetPromptWithCacheBypass:
     """Tests for no_cache parameter in Opik.get_prompt()."""
 
