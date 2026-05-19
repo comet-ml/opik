@@ -92,10 +92,10 @@ public interface WorkspacesDAO {
             @Bind("reason") String reason,
             @Bind("userName") String userName);
 
-    @SqlQuery("SELECT id FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
+    @SqlQuery("SELECT id FROM workspaces WHERE migration_skipped_at IS NOT NULL")
     List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
+    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE migration_skipped_at IS NOT NULL")
     long countExperimentProjectMigrationSkipped();
 
     /**
