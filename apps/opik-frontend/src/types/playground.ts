@@ -31,6 +31,7 @@ export interface PlaygroundPromptType {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
+  loadedChatPromptVersionId?: string;
   skipInitialPromptLoad?: boolean;
 }
 

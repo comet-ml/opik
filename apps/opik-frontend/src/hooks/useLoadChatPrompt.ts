@@ -8,6 +8,7 @@ import { PromptWithLatestVersion } from "@/types/prompts";
 
 export interface UseLoadChatPromptOptions {
   selectedChatPromptId: string | undefined;
+  selectedChatPromptVersionId?: string;
   messages: LLMMessage[];
   onMessagesLoaded: (messages: LLMMessage[], promptName: string) => void;
   skipInitialLoad?: boolean;
@@ -25,6 +26,7 @@ export interface UseLoadChatPromptReturn {
 
 const useLoadChatPrompt = ({
   selectedChatPromptId,
+  selectedChatPromptVersionId,
   messages,
   onMessagesLoaded,
   skipInitialLoad = false,
@@ -42,15 +44,18 @@ const useLoadChatPrompt = ({
       },
     );
 
+  const effectiveVersionId =
+    selectedChatPromptVersionId || chatPromptData?.latest_version?.id || "";
+
   const {
     data: chatPromptVersionData,
     isSuccess: chatPromptVersionDataLoaded,
   } = usePromptVersionById(
     {
-      versionId: chatPromptData?.latest_version?.id || "",
+      versionId: effectiveVersionId,
     },
     {
-      enabled: !!chatPromptData?.latest_version?.id && chatPromptDataLoaded,
+      enabled: !!effectiveVersionId && chatPromptDataLoaded,
     },
   );
 
