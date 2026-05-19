@@ -15,6 +15,8 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { resolveTraceEvaluatorVariableDefault } from "@/lib/llm";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type PythonCodeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
@@ -32,6 +34,9 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
+  const agenticToolsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENTIC_TOOLS_ENABLED,
+  );
 
   // Determine the type for autocomplete based on scope
   const autocompleteType = isSpanScope
@@ -71,6 +76,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                                   v,
                                   currentArguments[v],
                                   scope,
+                                  agenticToolsEnabled,
                                 );
                             });
                         } catch (e) {
@@ -121,7 +127,11 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 datasetColumnNames={datasetColumnNames}
                 type={autocompleteType}
                 includeIntermediateNodes
-                reservedSentinels={RESERVED_TRACE_EVALUATOR_VARIABLES}
+                reservedSentinels={
+                  agenticToolsEnabled
+                    ? RESERVED_TRACE_EVALUATOR_VARIABLES
+                    : undefined
+                }
               />
             );
           }}

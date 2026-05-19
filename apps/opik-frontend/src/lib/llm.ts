@@ -311,16 +311,23 @@ export const parseChatTemplateToLLMMessages = (
  * picking a path); otherwise empty. Centralized so the four rule-detail editors
  * (v1+v2 × {LLMJudge, PythonCode}) stay in sync — adding a new reserved trace
  * variable to {@link RESERVED_TRACE_EVALUATOR_VARIABLES} propagates here.
+ *
+ * <p>The auto-fill is gated by {@code agenticToolsEnabled} (FT
+ * {@code agentic_tools_enabled}). When the feature is off, `spans` behaves like
+ * any other variable — no sentinel is filled in, leaving the user free to map
+ * it to a real path. Mirrors the BE: `shouldFetchSpans` and the `{{spans}}`
+ * substitution are also gated by the same toggle.
  */
 export const resolveTraceEvaluatorVariableDefault = (
   variableName: string,
   currentMapping: string | undefined,
   scope: EVALUATORS_RULE_SCOPE,
+  agenticToolsEnabled: boolean,
 ): string => {
   if (currentMapping) {
     return currentMapping;
   }
-  if (scope === EVALUATORS_RULE_SCOPE.trace) {
+  if (agenticToolsEnabled && scope === EVALUATORS_RULE_SCOPE.trace) {
     return RESERVED_TRACE_EVALUATOR_VARIABLES[variableName] ?? "";
   }
   return "";

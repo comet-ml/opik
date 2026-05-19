@@ -38,6 +38,8 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -78,6 +80,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
+  const agenticToolsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENTIC_TOOLS_ENABLED,
+  );
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
 
@@ -148,6 +153,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             v,
             variables[v],
             currentScope,
+            agenticToolsEnabled,
           );
         });
 
@@ -157,7 +163,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         parsingVariablesError,
       );
     },
-    [],
+    [agenticToolsEnabled],
   );
 
   return (
@@ -347,7 +353,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     datasetColumnNames={datasetColumnNames}
                     type={autocompleteType}
                     includeIntermediateNodes
-                    reservedSentinels={RESERVED_TRACE_EVALUATOR_VARIABLES}
+                    reservedSentinels={
+                      agenticToolsEnabled
+                        ? RESERVED_TRACE_EVALUATOR_VARIABLES
+                        : undefined
+                    }
                   />
                 </>
               );
