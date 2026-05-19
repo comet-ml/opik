@@ -246,27 +246,6 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Sets or clears the environment ownership for this prompt version.
-   *
-   * The environment must already be registered in the workspace; the backend
-   * returns 404 otherwise. Pass `null` to clear the current environment.
-   *
-   * @param environment - Environment name to assign, or `null` to clear ownership
-   * @returns Promise resolving to this prompt instance for method chaining
-   */
-  async setEnvironment(environment: string | null): Promise<this> {
-    await this.ready();
-    this.ensureSynced("setEnvironment");
-    await this.opik.api.prompts.setPromptVersionEnvironment(
-      this.versionId!,
-      { environment: environment ?? undefined },
-      this.opik.api.requestOptions,
-    );
-    this._environment = environment ?? undefined;
-    return this;
-  }
-
-  /**
    * Deletes this prompt from the backend.
    * Performs immediate deletion (no batching).
    */

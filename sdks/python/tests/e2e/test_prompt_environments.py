@@ -2,7 +2,7 @@
 
 Covers the user-facing surface added on top of the backend's per-version
 environment ownership: ``create_prompt(environment=...)``,
-``Prompt.set_environment(...)``, and ``get_prompt(name=..., environment=...)``.
+``Opik.set_prompt_environment(name, ...)``, and ``get_prompt(name=..., environment=...)``.
 """
 
 import uuid
@@ -73,8 +73,7 @@ def test_set_environment__moves_ownership__visible_after_refetch(
     )
     assert prompt.environment == environment_name
 
-    prompt.set_environment(second_environment_name)
-    assert prompt.environment == second_environment_name
+    opik_client.set_prompt_environment(prompt.name, second_environment_name)
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
@@ -93,8 +92,7 @@ def test_set_environment__none__clears_ownership(
         environment=environment_name,
     )
 
-    prompt.set_environment(None)
-    assert prompt.environment is None
+    opik_client.set_prompt_environment(prompt.name, None)
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
@@ -136,7 +134,9 @@ def test_set_environment__unknown_environment__raises_404(opik_client: opik.Opik
     prompt = opik_client.create_prompt(name=prompt_name, prompt=prompt_template)
 
     with pytest.raises(rest_api_core.ApiError) as exc_info:
-        prompt.set_environment(f"missing-env-{_generate_random_suffix()}")
+        opik_client.set_prompt_environment(
+            prompt.name, f"missing-env-{_generate_random_suffix()}"
+        )
 
     assert exc_info.value.status_code == 404
 

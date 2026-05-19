@@ -1699,6 +1699,45 @@ export class OpikClient {
   };
 
   /**
+   * Sets or clears the environment ownership for the latest version of a prompt.
+   *
+   * Resolves the latest version of the prompt by name (optionally scoped to a
+   * project), then assigns the supplied environment to that version. Pass
+   * `null` to clear the current environment. This method always targets the
+   * latest version of the prompt — cross-version targeting is not supported.
+   *
+   * The REST call is issued through this client's `api` instance, so the call
+   * always uses this client's configuration (no implicit global lookup).
+   *
+   * The environment must already be registered in the workspace; the backend
+   * returns 404 otherwise (also 404 when the prompt name does not exist). The
+   * backend returns 422 if the prompt version is a mask-type version
+   * (mask-type versions cannot own an environment).
+   *
+   * @param options.name - The name of the prompt whose latest version should be updated
+   * @param options.environment - Environment name to assign, or `null` to clear ownership
+   * @param options.projectName - Optional project to scope the prompt lookup to
+   * @returns Promise that resolves once the backend has applied the change
+   */
+  public setPromptEnvironment = async (
+    options: { name: string; environment: string | null; projectName?: string },
+  ): Promise<void> => {
+    const version = await this.api.prompts.retrievePromptVersion(
+      {
+        name: options.name,
+        projectName: this.resolveProjectName(options.projectName),
+      },
+      this.api.requestOptions,
+    );
+
+    await this.api.prompts.setPromptVersionEnvironment(
+      version.id!,
+      { environment: options.environment ?? undefined },
+      this.api.requestOptions,
+    );
+  };
+
+  /**
    * Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
    * to be found before returning within the specified timeout.
    *

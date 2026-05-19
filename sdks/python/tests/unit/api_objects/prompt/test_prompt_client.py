@@ -431,60 +431,52 @@ class TestPromptEnvironment:
         assert production.commit == "bbb"
         assert mock_rest_client.prompts.retrieve_prompt_version.call_count == 2
 
-    def test_set_environment__no_version_id__raises_value_error(self):
-        from opik.api_objects.prompt.text.prompt import Prompt
+    def test_set_prompt_environment__sets_via_latest_version(self, mock_rest_client):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
 
-        with (
-            mock.patch(
-                "opik.api_objects.opik_client.get_client_cached",
-                return_value=mock.MagicMock(),
-            ),
-            mock.patch(
-                "opik.api_objects.prompt.client.PromptClient.create_prompt",
-                side_effect=rest_api_core.ApiError(status_code=500),
-            ),
-        ):
-            prompt = Prompt(name="env-prompt", prompt="hello")
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
 
-        assert prompt.synced is False
-        assert prompt.version_id is None
+        opik_client.set_prompt_environment("env-prompt", "staging")
 
-        with pytest.raises(ValueError, match="has not been synced"):
-            prompt.set_environment("staging")
-
-    def test_set_environment__calls_rest_client_and_updates_local_state(self):
-        from opik.api_objects.prompt.text.prompt import Prompt
-
-        rest_client_mock = mock.MagicMock()
-
-        with (
-            mock.patch(
-                "opik.api_objects.opik_client.get_global_client",
-                return_value=mock.MagicMock(rest_client=rest_client_mock),
-            ),
-            mock.patch(
-                "opik.api_objects.opik_client.get_client_cached",
-                return_value=mock.MagicMock(),
-            ),
-            mock.patch(
-                "opik.api_objects.prompt.client.PromptClient.create_prompt",
-                return_value=_make_mock_version(),
-            ),
-        ):
-            prompt = Prompt(name="env-prompt", prompt="hello")
-            prompt.set_environment("staging")
-
-        rest_client_mock.prompts.set_prompt_version_environment.assert_called_once_with(
+        mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
+        retrieve_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
+        assert retrieve_kwargs["name"] == "env-prompt"
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
             environment="staging",
         )
-        assert prompt.environment == "staging"
 
-        with (
-            mock.patch(
-                "opik.api_objects.opik_client.get_global_client",
-                return_value=mock.MagicMock(rest_client=rest_client_mock),
-            ),
-        ):
-            prompt.set_environment(None)
-        assert prompt.environment is None
+    def test_set_prompt_environment__none_clears(self, mock_rest_client):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        opik_client.set_prompt_environment("env-prompt", None)
+
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environment=None,
+        )
+
+    def test_set_prompt_environment__forwards_project_name(self, mock_rest_client):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        opik_client.set_prompt_environment(
+            "env-prompt", "staging", project_name="my-project"
+        )
+
+        mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
+        retrieve_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
+        assert retrieve_kwargs["name"] == "env-prompt"
+        assert retrieve_kwargs["project_name"] == "my-project"

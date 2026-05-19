@@ -87,36 +87,6 @@ class BasePrompt(ABC):
         """The environment that currently owns this prompt version, or ``None`` if unowned."""
         pass
 
-    def set_environment(self, environment: Optional[str]) -> None:
-        """Set or clear the environment owning this prompt version.
-
-        Setting a non-null environment atomically moves ownership: any other version of the
-        same prompt that previously owned the environment is cleared by the backend. Passing
-        ``None`` clears the environment from this version.
-
-        Parameters:
-            environment: Name of an environment registered in the workspace, or ``None`` to clear.
-
-        Raises:
-            ValueError: If the prompt has not yet been synced with the backend (no version id).
-            ApiError: 404 if the environment name is not registered in the workspace; 422 if the
-                version is a mask version (which cannot own an environment).
-        """
-        if self.__internal_api__version_id__ is None:
-            raise ValueError(
-                "Prompt has not been synced with the backend; cannot set environment. "
-                "Call sync_with_backend() first or use Opik.create_prompt()."
-            )
-
-        from opik.api_objects import opik_client
-
-        opik_client_ = opik_client.get_global_client()
-        opik_client_.rest_client.prompts.set_prompt_version_environment(
-            version_id=self.__internal_api__version_id__,
-            environment=environment,
-        )
-        self._environment = environment
-
     # Internal API fields for backend synchronization
     __internal_api__prompt_id__: Optional[str]
     __internal_api__version_id__: Optional[str]
