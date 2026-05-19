@@ -26,6 +26,8 @@ LOGGER = logging.getLogger(__name__)
 
 EVALUATION_TASK_NAME = "evaluation_task"
 
+DEFAULT_STREAMER_DRAIN_TIMEOUT_SECONDS = 5.0
+
 
 def get_item_execution_policy(
     item: dataset_item.DatasetItem,
@@ -76,12 +78,16 @@ class EvaluationEngine:
         workers: int,
         verbose: int,
         source: TraceSource,
+        flush_timeout: Optional[float] = None,
     ) -> None:
         self._client = client
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
         self._source = source
+        if flush_timeout is None:
+            flush_timeout = DEFAULT_STREAMER_DRAIN_TIMEOUT_SECONDS
+        self._flush_timeout = flush_timeout
 
     # --- Private: metrics & scoring ---
 
@@ -230,7 +236,9 @@ class EvaluationEngine:
         # Bounded timeout so a stuck consumer doesn't block scoring
         # forever; on timeout we fall through with whatever state is
         # currently in the emulator (best-effort).
-        drained = self._client.__internal_api__drain_to_processors__(timeout=5.0)
+        drained = self._client.__internal_api__drain_to_processors__(
+            timeout=self._flush_timeout
+        )
         if not drained:
             LOGGER.debug(
                 "[engine] streamer drain timed out before agentic context build; "
