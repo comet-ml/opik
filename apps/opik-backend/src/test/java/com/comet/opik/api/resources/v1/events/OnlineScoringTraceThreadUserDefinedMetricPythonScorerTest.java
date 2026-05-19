@@ -242,6 +242,61 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void fetchesSpansAndEnrichesConversationWhenAgenticToolsEnabled() {
+            // Toggle on: scorer fetches every span across the thread and the captured
+            // ChatMessage list sent to the Python evaluator carries the spans nested under
+            // the assistant entry. Locks in the end-to-end enrichment contract — a future
+            // refactor that quietly drops the SpanService fetch or routes through
+            // fromTraceToThread (legacy) would break this test loudly.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("tool_use_score")
+                    .value(BigDecimal.valueOf(0.9))
+                    .reason("ok")
+                    .build();
+            var toolSpan = com.comet.opik.api.Span.builder()
+                    .id(UUID.randomUUID())
+                    .name("fetch_weather")
+                    .type(com.comet.opik.domain.SpanType.tool)
+                    .startTime(java.time.Instant.now())
+                    .traceId(trace.id())
+                    .projectId(projectId)
+                    .build();
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.just(toolSpan));
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage>> contextCaptor = ArgumentCaptor
+                    .forClass(List.class);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
+                    .thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verify(spanService).getByTraceIds(Set.of(trace.id()));
+            var captured = contextCaptor.getValue();
+            // Conversation contains user + assistant per trace (one trace here).
+            assertThat(captured).hasSize(2);
+            assertThat(captured.get(0).role()).isEqualTo("user");
+            assertThat(captured.get(0).spans()).isNull(); // user entry never carries spans
+            assertThat(captured.get(1).role()).isEqualTo("assistant");
+            assertThat(captured.get(1).spans()).isNotNull();
+            assertThat(captured.get(1).spans()).extracting(com.comet.opik.api.SpanForLlm::name)
+                    .containsExactly("fetch_weather");
+        }
+
+        @Test
         void skipsScoringWhenThreadHasNoTraces() {
             var message = sampleMessage();
 
