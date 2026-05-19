@@ -101,7 +101,6 @@ class BasePrompt(ABC):
     # Internal API fields for backend synchronization
     __internal_api__prompt_id__: Optional[str]
     __internal_api__version_id__: Optional[str]
-    _environment: Optional[str]
 
     @abstractmethod
     def format(self, *args: Any, **kwargs: Any) -> Any:
