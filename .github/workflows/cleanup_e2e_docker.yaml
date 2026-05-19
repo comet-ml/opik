@@ -22,6 +22,7 @@ env:
     opik-backend
     opik-python-backend
     opik-guardrails-backend
+    opik-frontend
 
 jobs:
   cleanup-pr:

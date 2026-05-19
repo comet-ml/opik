@@ -8,6 +8,11 @@ on:
         required: false
         default: false
         type: boolean
+      include_frontend:
+        description: "Build and include opik-frontend image"
+        required: false
+        default: false
+        type: boolean
     outputs:
       image_tag:
         description: "The GHCR image tag used for this build"
@@ -55,6 +60,9 @@ jobs:
           if [ "${{ inputs.include_guardrails }}" = "true" ]; then
             SERVICES="$SERVICES guardrails-backend"
           fi
+          if [ "${{ inputs.include_frontend }}" = "true" ]; then
+            SERVICES="$SERVICES frontend"
+          fi
           docker compose -f deployment/docker-compose/docker-compose.yaml \
             build $SERVICES
 
@@ -72,4 +80,10 @@ jobs:
             docker tag ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:latest \
               ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:$TAG
             docker push ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:$TAG
+          fi
+
+          if [ "${{ inputs.include_frontend }}" = "true" ]; then
+            docker tag ${{ env.DOCKER_REGISTRY }}/opik-frontend:latest \
+              ${{ env.DOCKER_REGISTRY }}/opik-frontend:$TAG
+            docker push ${{ env.DOCKER_REGISTRY }}/opik-frontend:$TAG
           fi
