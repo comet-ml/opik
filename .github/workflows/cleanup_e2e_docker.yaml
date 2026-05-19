@@ -6,6 +6,12 @@ on:
   schedule:
     - cron: "0 3 * * 6"  # Every Saturday at 03:00 UTC
   workflow_dispatch:
+    inputs:
+      max_age_days:
+        description: "Delete SHA-based tags older than this many days (0 = delete all)"
+        required: false
+        default: "7"
+        type: string
 
 permissions:
   contents: read
@@ -58,7 +64,7 @@ jobs:
       - name: Delete ci-e2e-* images for closed PRs and old SHA tags
         env:
           GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || secrets.GITHUB_TOKEN }}
-          MAX_AGE_DAYS: 7
+          MAX_AGE_DAYS: ${{ github.event.inputs.max_age_days || '7' }}
         run: |
           DELETED=0
           SKIPPED=0
