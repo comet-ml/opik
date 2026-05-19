@@ -2066,6 +2066,12 @@ class ExperimentAggregatesIntegrationTest {
 
         assertThat(afterAggregation).isNotNull();
 
+        assertThat(afterAggregation)
+                .as("Page metadata should match before/after aggregation for scenario: %s", scenarioName)
+                .usingRecursiveComparison()
+                .ignoringFields("content")
+                .isEqualTo(beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
