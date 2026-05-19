@@ -39,6 +39,7 @@ interface PromptVersionDAO {
                 metadata,
                 change_description,
                 type,
+                version_type,
                 tags,
                 created_by,
                 workspace_id
@@ -51,6 +52,7 @@ interface PromptVersionDAO {
                 :bean.metadata,
                 :bean.changeDescription,
                 :bean.type,
+                :bean.versionType,
                 :bean.tags,
                 :bean.createdBy,
                 :workspace_id
@@ -64,7 +66,7 @@ interface PromptVersionDAO {
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.workspace_id = :workspace_id
             <if(ids)> AND pv.id IN (<ids>) <endif>
-            <if(prompt_id)> AND pv.prompt_id = :prompt_id <endif>
+            <if(prompt_id)> AND pv.prompt_id = :prompt_id AND pv.version_type = 'prompt_version' <endif>
             <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             ORDER BY <if(sort_fields)><sort_fields>, <endif>pv.id DESC
@@ -112,7 +114,7 @@ interface PromptVersionDAO {
             FROM prompt_versions pv
             WHERE pv.workspace_id = :workspace_id
             <if(ids)> AND pv.id IN (<ids>) <endif>
-            <if(prompt_id)> AND pv.prompt_id = :prompt_id <endif>
+            <if(prompt_id)> AND pv.prompt_id = :prompt_id AND pv.version_type = 'prompt_version' <endif>
             <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             """)
@@ -140,6 +142,7 @@ interface PromptVersionDAO {
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.prompt_id = :prompt_id AND pv.commit = :commit AND pv.workspace_id = :workspace_id
+            AND pv.version_type = 'prompt_version'
             """)
     PromptVersion findByCommit(@Bind("prompt_id") UUID promptId, @Bind("commit") String commit,
             @Bind("workspace_id") String workspaceId);
