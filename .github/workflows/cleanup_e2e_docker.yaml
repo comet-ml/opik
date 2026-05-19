@@ -38,13 +38,10 @@ jobs:
           TAGS=("ci-e2e-${PR}" "ci-e2e-${PR}-guardrails")
 
           for IMAGE in ${{ env.IMAGES }}; do
-            VERSIONS=$(gh api \
-              "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions" \
-              --paginate --jq '.[]' 2>/dev/null) || continue
-
             for TAG in "${TAGS[@]}"; do
-              VERSION_ID=$(echo "$VERSIONS" | jq -r \
-                "select(.metadata.container.tags | index(\"${TAG}\")) | .id" 2>/dev/null)
+              VERSION_ID=$(gh api \
+                "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions" \
+                --paginate --jq ".[] | select(.metadata.container.tags | index(\"${TAG}\")) | .id" 2>/dev/null | head -1)
 
               if [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "null" ]; then
                 echo "Deleting ${IMAGE}:${TAG} (version ${VERSION_ID})"
@@ -75,63 +72,62 @@ jobs:
           for IMAGE in ${{ env.IMAGES }}; do
             echo "=== Scanning ${IMAGE} ==="
 
-            if ! VERSIONS=$(gh api \
+            # Fetch only versions that have ci-e2e-* tags (server-side jq filter)
+            if ! CI_VERSIONS=$(gh api \
               "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions" \
-              --paginate 2>&1); then
-              echo "  Failed to list versions: ${VERSIONS}"
+              --paginate \
+              --jq '.[] | select(.metadata.container.tags | any(startswith("ci-e2e-"))) | {id: .id, tags: .metadata.container.tags, created_at: .created_at}' 2>&1); then
+              echo "  Failed to list versions: ${CI_VERSIONS}"
               continue
             fi
 
-            COUNT=$(echo "$VERSIONS" | jq 'length')
-            echo "  Found ${COUNT} versions"
+            if [ -z "$CI_VERSIONS" ]; then
+              echo "  No ci-e2e-* versions found"
+              continue
+            fi
+
+            COUNT=$(echo "$CI_VERSIONS" | wc -l | tr -d ' ')
+            echo "  Found ${COUNT} ci-e2e-* versions"
 
             while read -r VERSION; do
               [ -z "$VERSION" ] && continue
               VERSION_ID=$(echo "$VERSION" | jq -r '.id')
               CREATED_AT=$(echo "$VERSION" | jq -r '.created_at')
-              TAGS=$(echo "$VERSION" | jq -r '.tags[]' 2>/dev/null)
+              CI_TAG=$(echo "$VERSION" | jq -r '.tags[] | select(startswith("ci-e2e-"))' | head -1)
 
-              for TAG in $TAGS; do
-                if [[ ! "$TAG" =~ ^ci-e2e- ]]; then
-                  continue
-                fi
+              PR_NUM=$(echo "$CI_TAG" | sed -n 's/^ci-e2e-\([0-9]*\)\(-guardrails\)\{0,1\}$/\1/p')
 
-                PR_NUM=$(echo "$TAG" | sed -n 's/^ci-e2e-\([0-9]*\)\(-guardrails\)\{0,1\}$/\1/p')
-
-                if [ -z "$PR_NUM" ]; then
-                  CREATED_TS=$(date -u -d "$CREATED_AT" +%s 2>/dev/null \
-                    || date -u -j -f "%Y-%m-%dT%H:%M:%S" "${CREATED_AT%%.*}" +%s 2>/dev/null \
-                    || echo "0")
-                  if [ "$CREATED_TS" -lt "$CUTOFF" ]; then
-                    echo "  Deleting ${IMAGE}:${TAG} (SHA tag older than ${MAX_AGE_DAYS} days)"
-                    if gh api --method DELETE \
-                      "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>/dev/null; then
-                      DELETED=$((DELETED + 1))
-                    else
-                      FAILED=$((FAILED + 1))
-                    fi
-                    break
-                  fi
-                  continue
-                fi
-
-                PR_STATE=$(gh api "/repos/comet-ml/opik/pulls/${PR_NUM}" --jq '.state' 2>/dev/null || echo "unknown")
-
-                if [ "$PR_STATE" = "closed" ]; then
-                  echo "  Deleting ${IMAGE}:${TAG} (PR #${PR_NUM} is closed)"
+              if [ -z "$PR_NUM" ]; then
+                CREATED_TS=$(date -u -d "$CREATED_AT" +%s 2>/dev/null \
+                  || date -u -j -f "%Y-%m-%dT%H:%M:%S" "${CREATED_AT%%.*}" +%s 2>/dev/null \
+                  || echo "0")
+                if [ "$CREATED_TS" -lt "$CUTOFF" ]; then
+                  echo "  Deleting ${IMAGE}:${CI_TAG} (SHA tag older than ${MAX_AGE_DAYS} days)"
                   if gh api --method DELETE \
                     "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>/dev/null; then
                     DELETED=$((DELETED + 1))
                   else
                     FAILED=$((FAILED + 1))
                   fi
-                  break
-                else
-                  echo "  Skipping ${IMAGE}:${TAG} (PR #${PR_NUM} is ${PR_STATE})"
-                  SKIPPED=$((SKIPPED + 1))
                 fi
-              done
-            done < <(echo "$VERSIONS" | jq -c '.[] | {id: .id, tags: .metadata.container.tags, created_at: .created_at}')
+                continue
+              fi
+
+              PR_STATE=$(gh api "/repos/comet-ml/opik/pulls/${PR_NUM}" --jq '.state' 2>/dev/null || echo "unknown")
+
+              if [ "$PR_STATE" = "closed" ]; then
+                echo "  Deleting ${IMAGE}:${CI_TAG} (PR #${PR_NUM} is closed)"
+                if gh api --method DELETE \
+                  "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>/dev/null; then
+                  DELETED=$((DELETED + 1))
+                else
+                  FAILED=$((FAILED + 1))
+                fi
+              else
+                echo "  Skipping ${IMAGE}:${CI_TAG} (PR #${PR_NUM} is ${PR_STATE})"
+                SKIPPED=$((SKIPPED + 1))
+              fi
+            done <<< "$CI_VERSIONS"
           done
 
           echo ""
