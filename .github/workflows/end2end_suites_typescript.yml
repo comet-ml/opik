@@ -200,13 +200,14 @@ jobs:
                 path: tests_end_to_end/typescript-tests/blob-report
                 retention-days: 1
 
-            - name: Upload Allure Results (shard ${{ matrix.shard }})
-              if: always()
+            - name: Upload test-results (shard ${{ matrix.shard }})
+              if: failure()
               uses: actions/upload-artifact@v7
               with:
-                name: allure-results-${{ matrix.shard }}
-                path: tests_end_to_end/typescript-tests/allure-results
+                name: test-results-${{ matrix.shard }}
+                path: tests_end_to_end/typescript-tests/test-results
                 retention-days: 7
+                if-no-files-found: ignore
 
             - name: Stop Opik server (Local)
               if: always()
