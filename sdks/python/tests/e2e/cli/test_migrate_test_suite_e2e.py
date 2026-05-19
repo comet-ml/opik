@@ -318,8 +318,6 @@ def test_test_suite_full_fidelity_round_trip(
         [
             "dataset",
             suite_name,
-            "--from-project",
-            source_project_name,
             "--to-project",
             target_project_name,
         ],

@@ -1,7 +1,7 @@
 """Planner + CLI-help tests for ``opik migrate dataset``.
 
-The planner cases (conflict, ambiguity, project-not-found, default flow
-ordering) live here; the meaty version-replay tests live in
+The planner cases (conflict, project-not-found, default flow ordering)
+live here; the meaty version-replay tests live in
 ``test_migrate_dataset_version_replay.py`` and the cascade tests live in
 ``test_migrate_dataset_experiments_cascade.py``.
 
@@ -17,7 +17,6 @@ from click.testing import CliRunner
 from opik.cli import cli
 from opik.cli.migrate.datasets import planner as planner_module
 from opik.cli.migrate.errors import (
-    AmbiguityError,
     ConflictError,
     DatasetNotFoundError,
     ProjectNotFoundError,
@@ -111,7 +110,6 @@ class TestPlanBuilding:
             client=_planner_client(rest_client),
             name="MyDataset",
             to_project="B",
-            from_project=None,
         )
 
         types = [type(a).__name__ for a in plan.actions]
@@ -149,7 +147,6 @@ class TestPlanBuilding:
             client=_planner_client(rest_client),
             name="MySuite",
             to_project="B",
-            from_project=None,
         )
 
         types = [type(a).__name__ for a in plan.actions]
@@ -181,7 +178,6 @@ class TestPlanBuilding:
                 client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="B",
-                from_project=None,
             )
         assert "MyDataset_v1" in str(exc_info.value)
 
@@ -201,7 +197,6 @@ class TestPlanBuilding:
             client=_planner_client(rest_client),
             name="MyDataset",
             to_project="B",
-            from_project=None,
         )
         assert plan.target_name == "MyDataset"
 
@@ -215,13 +210,16 @@ class TestPlanBuilding:
                 client=_planner_client(rest_client),
                 name="Missing",
                 to_project="B",
-                from_project=None,
             )
         assert "Missing" in str(exc_info.value)
 
-    def test_build_dataset_plan__source_name_resolves_to_many__raises_ambiguity(
+    def test_build_dataset_plan__source_name_resolves_to_many__raises_conflict(
         self,
     ) -> None:
+        # Workspace uniqueness is enforced by the BE (UNIQUE
+        # (workspace_id, name)); if the BE invariant is somehow
+        # violated, surface it as ConflictError rather than silently
+        # picking a row.
         rest_client = _planner_rest_client(
             [
                 _Page(
@@ -233,12 +231,11 @@ class TestPlanBuilding:
             ]
         )
 
-        with pytest.raises(AmbiguityError):
+        with pytest.raises(ConflictError):
             planner_module.build_dataset_plan(
                 client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="B",
-                from_project=None,
             )
 
     def test_build_dataset_plan__destination_project_missing__raises_project_not_found(
@@ -254,7 +251,6 @@ class TestPlanBuilding:
                 client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="DoesNotExist",
-                from_project=None,
             )
         assert "DoesNotExist" in str(exc_info.value)
 
@@ -272,7 +268,6 @@ class TestPlanBuilding:
                 client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="Beta",
-                from_project=None,
             )
         message = str(exc_info.value)
         assert "Beta" in message
