@@ -53,6 +53,7 @@ class _PerTraceState:
         "span_ids_mapping",
         "first_llm_input",
         "last_llm_output",
+        "lock",
     )
 
     def __init__(
@@ -69,6 +70,10 @@ class _PerTraceState:
         self.span_ids_mapping: Dict[str, str] = {}
         self.first_llm_input: Optional[Dict[str, Any]] = None
         self.last_llm_output: Optional[Dict[str, Any]] = None
+        # Guards the mutable fields above. Async span paths
+        # (``on_start_async``/``on_end_async``) within the same trace may
+        # interleave, so per-trace serialization is required.
+        self.lock = threading.Lock()
 
 
 class OpikSpanProcessor:
@@ -275,11 +280,12 @@ class OpikSpanProcessor:
         span_input = self._create_opik_span_inputs_from_span(span)
         span_output = self._create_opik_span_outputs_from_span(span)
 
-        if state.first_llm_input is None and span_input:
-            state.first_llm_input = span_input
+        with state.lock:
+            if state.first_llm_input is None and span_input:
+                state.first_llm_input = span_input
 
-        if span_output is not None:
-            state.last_llm_output = span_output
+            if span_output is not None:
+                state.last_llm_output = span_output
 
     def on_start(self, span: Span) -> None:
         """
@@ -294,8 +300,9 @@ class OpikSpanProcessor:
             state = self._get_state_for_active_trace()
             if state is None:
                 return
-            if span.id not in state.span_ids_mapping:
-                state.span_ids_mapping[span.id] = id_helpers.generate_id()
+            with state.lock:
+                if span.id not in state.span_ids_mapping:
+                    state.span_ids_mapping[span.id] = id_helpers.generate_id()
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.on_start`: {e}")
 
@@ -312,16 +319,17 @@ class OpikSpanProcessor:
             if state is None:
                 return
 
-            opik_span_id = (
-                state.span_ids_mapping.get(span.id) or id_helpers.generate_id()
-            )
-            state.span_ids_mapping[span.id] = opik_span_id
+            with state.lock:
+                opik_span_id = (
+                    state.span_ids_mapping.get(span.id) or id_helpers.generate_id()
+                )
+                state.span_ids_mapping[span.id] = opik_span_id
 
-            parent_span_id = (
-                state.span_ids_mapping.get(span._parent_span.id)
-                if span._parent_span
-                else None
-            )
+                parent_span_id = (
+                    state.span_ids_mapping.get(span._parent_span.id)
+                    if span._parent_span
+                    else None
+                )
 
             self.opik_client.span(
                 id=opik_span_id,
