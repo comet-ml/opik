@@ -390,14 +390,17 @@ class RawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_prompt_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, *, mask_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[PromptDetail]:
         """
-        Get prompt by id
+        Get prompt by id; when mask_id is provided, requestedVersion is populated with that mask overlay
 
         Parameters
         ----------
         id : str
+
+        mask_id : typing.Optional[str]
+            Optional mask version id; when set, requestedVersion is the mask row for that id
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -410,6 +413,9 @@ class RawPromptsClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/prompts/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "mask_id": mask_id,
+            },
             request_options=request_options,
         )
         try:
@@ -979,6 +985,62 @@ class RawPromptsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def retrieve_prompt_versions_by_ids(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[typing.List[PromptVersionDetail]]:
+        """
+        Retrieve a batch of prompt versions by their ids. Typically used by the UI to resolve mask overlays.
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[typing.List[PromptVersionDetail]]
+            OK
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/prompts/versions/retrieve-by-ids",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    typing.List[PromptVersionDetail],
+                    parse_obj_as(
+                        type_=typing.List[PromptVersionDetail],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawPromptsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -1341,14 +1403,17 @@ class AsyncRawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_prompt_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, *, mask_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[PromptDetail]:
         """
-        Get prompt by id
+        Get prompt by id; when mask_id is provided, requestedVersion is populated with that mask overlay
 
         Parameters
         ----------
         id : str
+
+        mask_id : typing.Optional[str]
+            Optional mask version id; when set, requestedVersion is the mask row for that id
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1361,6 +1426,9 @@ class AsyncRawPromptsClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/prompts/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "mask_id": mask_id,
+            },
             request_options=request_options,
         )
         try:
@@ -1918,6 +1986,62 @@ class AsyncRawPromptsClient:
                 )
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def retrieve_prompt_versions_by_ids(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[typing.List[PromptVersionDetail]]:
+        """
+        Retrieve a batch of prompt versions by their ids. Typically used by the UI to resolve mask overlays.
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[typing.List[PromptVersionDetail]]
+            OK
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/prompts/versions/retrieve-by-ids",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    typing.List[PromptVersionDetail],
+                    parse_obj_as(
+                        type_=typing.List[PromptVersionDetail],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

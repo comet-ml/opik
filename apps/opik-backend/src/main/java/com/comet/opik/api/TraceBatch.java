@@ -10,8 +10,8 @@ import lombok.Builder;
 import java.util.List;
 
 @Builder(toBuilder = true)
-public record TraceBatch(@NotNull @Size(min = 1, max = 1000) @JsonView( {
-        Trace.View.Write.class}) @Valid List<Trace> traces) implements RateEventContainer{
+public record TraceBatch(@NotNull @Size(min = 1, max = 1000) @JsonView({
+        Trace.View.Write.class}) @Valid List<Trace> traces) implements RateEventContainer {
 
     @Override
     public long eventCount() {

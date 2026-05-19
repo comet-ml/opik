@@ -8,6 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node import JsonNode
 from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
+from .prompt_version_version_type import PromptVersionVersionType
 
 
 class PromptVersion(UniversalBaseModel):
@@ -25,6 +26,11 @@ class PromptVersion(UniversalBaseModel):
     template: str
     metadata: typing.Optional[JsonNode] = None
     type: typing.Optional[PromptVersionType] = None
+    version_type: typing.Optional[PromptVersionVersionType] = pydantic.Field(default=None)
+    """
+    version type discriminator; defaults to prompt_version
+    """
+
     change_description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     variables: typing.Optional[typing.List[str]] = None

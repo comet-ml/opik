@@ -30,7 +30,7 @@ Storing these together gives you a single source of truth for how your agent was
 
 Every change creates a new immutable version (`v1`, `v2`, `v3`, etc.). Once created, a version can't be modified — so you always have a full audit trail and can roll back if needed.
 
-You can create new versions through the SDK or the Opik UI. See the [Getting started](/prompt_engineering/getting-started) guide for details.
+You can create new versions through the SDK or the Opik UI. See the [Getting started](/development/agent-configuration/getting-started) guide for details.
 
 ## Environments
 
@@ -62,7 +62,7 @@ You can check if the fallback was used by looking at `is_fallback` (Python) or `
 
 If you don't provide a `fallback` and the backend is unreachable (or no configuration exists), the SDK raises a `ConfigNotFound` error. We recommend always providing a fallback for production agents.
 
-See [Guaranteed availability](/prompt_engineering/advanced/guaranteed-availability) for more details.
+See [Guaranteed availability](/development/agent-configuration/guaranteed-availability) for more details.
 
 ## Configuration types
 

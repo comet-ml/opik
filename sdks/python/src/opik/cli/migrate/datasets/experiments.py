@@ -22,17 +22,17 @@ source dataset was referenced by experiments in multiple projects. Slice 4
 
 FK remap during recreation:
 
-  source dataset_id         -> dest_dataset_id            (Slice 1)
-  source dataset_version_id -> plan.version_remap[old]    (Slice 2)
-  source dataset_item_id    -> plan.item_id_remap[old]    (Slice 2)
-  source trace_id           -> built here as traces copy  (this slice)
-  source project_id         -> target_project_name        (this slice)
+  source dataset_id         -> dest_dataset_id                  (Slice 1)
+  source dataset_version_id -> plan.version_remap[old]          (Slice 2)
+  source dataset_item_id    -> plan.item_id_remap[old]          (Slice 2)
+  source trace_id           -> built here as traces copy        (this slice)
+  source project_id         -> target_project_name              (this slice)
+  source optimization_id    -> plan.optimization_id_remap[old]  (Slice 5)
 
 Stripped on the destination experiment (matches Jacques's "strip the link"
 policy from the epic discussion; the pointers would otherwise dangle):
 
   prompt_versions  -- prompt entity isn't cascaded in v1 (epic open question)
-  optimization_id  -- optimization entity is cascaded in Slice 4 (OPIK-6417)
 
 Spans cascade with their parent trace; tree ordering is preserved via
 ``sort_spans_topologically`` from the import path so ``parent_span_id``
@@ -50,7 +50,7 @@ import logging
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, cast
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple, cast
 
 import opik
 import opik.id_helpers as id_helpers_module
@@ -74,21 +74,26 @@ from ..errors import ExperimentCascadeError
 
 LOGGER = logging.getLogger(__name__)
 
-# Outer progress: ``(completed, total, label)`` -- fired once before each
-# experiment with ``completed`` = experiments done so far. ``label="done"``
-# signals the final tick (executor uses it to strip the ``(N/total)``
-# suffix and avoid an off-by-one display at completion).
-ProgressCallback = Callable[[int, int, str], None]
+# Outer + inner progress callback shapes are shared across all dataset
+# cascade phases (version_replay, optimizations, experiments) -- see
+# ``datasets/_progress.py`` for the single source of truth. Re-exported
+# from this module so existing call sites that ``from .experiments
+# import ProgressCallback`` keep working.
+from ._progress import InnerProgressCallback, ProgressCallback  # noqa: E402, F401
 
-# Inner progress: ``(completed, total, label)`` -- ticks within a single
-# experiment so the outer experiment-level bar isn't a frozen one-step-
-# per-experiment readout. ``total`` is the number of inner steps for THIS
-# experiment (recomputed per experiment, since experiments can have wildly
-# different trace counts). ``label`` describes the step that just
-# completed (e.g. ``"trace 47/150"``, ``"spans for trace 47/150"``,
-# ``"flush"``, ``"recreate"``). Executor renders this on a nested Rich
-# bar; tests use it to assert the cascade ticks every read/write phase.
-InnerProgressCallback = Callable[[int, int, str], None]
+# Notes specific to the experiment cascade's usage of these callbacks:
+#
+# - The outer ``ProgressCallback`` fires once before each experiment;
+#   ``label="done"`` signals the final tick with ``completed == total``.
+#
+# - The inner ``InnerProgressCallback`` ticks within a single experiment so
+#   the outer experiment-level bar isn't a frozen one-step-per-experiment
+#   readout. ``total`` is the number of inner steps for THIS experiment
+#   (recomputed per experiment, since experiments can have wildly different
+#   trace counts). ``label`` describes the step that just completed (e.g.
+#   ``"trace 47/150"``, ``"spans for trace 47/150"``, ``"flush"``,
+#   ``"recreate"``). Executor renders this on a nested Rich bar; tests use
+#   it to assert the cascade ticks every read/write phase.
 
 
 class _InnerProgress:
@@ -161,6 +166,12 @@ class ExperimentCascadeResult:
     span_comments_migrated: int = 0
     items_skipped_missing_trace: int = 0
     items_skipped_missing_item: int = 0
+    # Source experiments that carried an ``optimization_id`` but had no
+    # entry in ``optimization_id_remap`` -- defensive counter; should
+    # always be zero when ``CascadeOptimizations`` ran first as the
+    # planner guarantees. Non-zero values indicate a planning bug
+    # (e.g. action ordering broken) rather than a user-visible failure.
+    experiments_with_orphan_optimization_id: int = 0
     # Per-experiment skip reasons for the audit log. Each entry is
     # ``{"id": ..., "name": ..., "reason": ...}``; capped at the most
     # recent failures to keep the audit JSON bounded.
@@ -176,6 +187,7 @@ def cascade_experiments(
     target_project_name: str,
     version_remap: Dict[str, str],
     item_id_remap: Dict[str, str],
+    optimization_id_remap: Optional[Dict[str, str]] = None,
     audit: AuditLog,
     progress_callback: Optional[ProgressCallback] = None,
     inner_progress_callback: Optional[InnerProgressCallback] = None,
@@ -226,6 +238,13 @@ def cascade_experiments(
     result = ExperimentCascadeResult()
     del audit  # not currently used (umbrella action wraps via execute_plan_loop)
 
+    # Default to an empty remap so callers that haven't picked up the
+    # new kwarg (older tests, ad-hoc invocations) behave the same as
+    # before: any source ``optimization_id`` falls into the orphan path
+    # and the field is omitted from the destination payload.
+    if optimization_id_remap is None:
+        optimization_id_remap = {}
+
     source_experiments = list(_list_source_experiments(rest_client, source_dataset_id))
     total = len(source_experiments)
 
@@ -257,6 +276,7 @@ def cascade_experiments(
             target_project_name=target_project_name,
             version_remap=version_remap,
             item_id_remap=item_id_remap,
+            optimization_id_remap=optimization_id_remap,
             result=result,
             inner_progress_callback=inner_progress_callback,
         )
@@ -276,6 +296,7 @@ def cascade_one_experiment(
     target_project_name: str,
     version_remap: Dict[str, str],
     item_id_remap: Dict[str, str],
+    optimization_id_remap: Optional[Dict[str, str]] = None,
     result: ExperimentCascadeResult,
     inner_progress_callback: Optional[InnerProgressCallback] = None,
 ) -> None:
@@ -392,7 +413,12 @@ def cascade_one_experiment(
     # assertion_results/etc.) is READ-ONLY on the BE and reconstructs
     # from the underlying trace + span + assertion entities (which the
     # cascade copies in _copy_traces_and_spans).
-    experiment_data = _build_experiment_data(source_experiment, items)
+    experiment_data = _build_experiment_data(
+        source_experiment,
+        items,
+        optimization_id_remap=optimization_id_remap or {},
+        result=result,
+    )
 
     target_version_id = version_remap.get(source_experiment.dataset_version_id or "")
 
@@ -1427,7 +1453,11 @@ def _emit_spans_for_trace(
 
 
 def _build_experiment_data(
-    source: ExperimentPublic, items: List[experiment_item.ExperimentItemContent]
+    source: ExperimentPublic,
+    items: List[experiment_item.ExperimentItemContent],
+    *,
+    optimization_id_remap: Dict[str, str],
+    result: ExperimentCascadeResult,
 ) -> ExperimentData:
     """Adapt the REST ``ExperimentPublic`` + items into the
     ``ExperimentData`` dataclass that ``recreate_experiment`` consumes.
@@ -1436,6 +1466,14 @@ def _build_experiment_data(
     the BE schema field names; we mirror that here so ``recreate_experiment``
     can read fields like ``type`` / ``evaluation_method`` / ``optimization_id``
     / ``tags`` / ``metadata`` / ``dataset_name`` verbatim.
+
+    ``optimization_id`` is re-pointed at the destination optimization id
+    via ``optimization_id_remap`` (populated by the prior
+    ``CascadeOptimizations`` action). If the source experiment carries an
+    ``optimization_id`` but the remap doesn't have an entry, the field is
+    omitted to avoid a dangling-pointer write and
+    ``experiments_with_orphan_optimization_id`` is incremented for the
+    audit — this only happens if planner ordering was broken.
 
     Per-item payload carries only the FK fields. The BE's ``ExperimentItem``
     Write view accepts only ``id`` / ``experiment_id`` / ``dataset_item_id``
@@ -1450,12 +1488,6 @@ def _build_experiment_data(
     dedicated ``assertion_results.store_assertions_batch`` endpoint scoped
     to the new trace id); the BE surfaces the rest on read.
     """
-    # ``optimization_id`` is intentionally omitted from the payload: Slice 3
-    # doesn't cascade the optimization entity (Slice 4 owns it), so even if
-    # the source experiment carried one, forwarding it would produce a
-    # dangling pointer at the destination. ``recreate_experiment`` also
-    # drops it via the migrate-path guard; omitting it here keeps the
-    # intent visible at the call site too.
     experiment_dict: Dict[str, Any] = {
         "id": source.id,
         "name": source.name,
@@ -1469,6 +1501,25 @@ def _build_experiment_data(
             source.evaluation_method if source.evaluation_method else "dataset"
         ),
     }
+
+    source_optimization_id = source.optimization_id
+    if source_optimization_id:
+        destination_optimization_id = optimization_id_remap.get(source_optimization_id)
+        if destination_optimization_id:
+            experiment_dict["optimization_id"] = destination_optimization_id
+        else:
+            # Defensive: CascadeOptimizations runs before CascadeExperiments,
+            # so the remap should always contain this id. Log loudly and
+            # omit the field rather than write a dangling FK.
+            LOGGER.warning(
+                "Source experiment %s carries optimization_id %s with no "
+                "entry in optimization_id_remap; omitting from destination "
+                "payload. Planner ordering is likely broken.",
+                source.id,
+                source_optimization_id,
+            )
+            result.experiments_with_orphan_optimization_id += 1
+
     items_dicts = [
         {
             "id": item.id,
