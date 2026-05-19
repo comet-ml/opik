@@ -1,0 +1,75 @@
+name: Build E2E Docker Images
+
+on:
+  workflow_call:
+    inputs:
+      include_guardrails:
+        description: "Build and include guardrails-backend image"
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      image_tag:
+        description: "The GHCR image tag used for this build"
+        value: ${{ jobs.build.outputs.image_tag }}
+
+env:
+  DOCKER_REGISTRY: ghcr.io/comet-ml/opik
+
+jobs:
+  build:
+    name: Build E2E Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Set image tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            TAG="ci-e2e-${{ github.event.pull_request.number }}${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
+          else
+            TAG="ci-e2e-${{ github.sha }}${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build E2E Docker images
+        env:
+          COMPOSE_BAKE: false
+        run: |
+          SERVICES="backend python-backend"
+          if [ "${{ inputs.include_guardrails }}" = "true" ]; then
+            SERVICES="$SERVICES guardrails-backend"
+          fi
+          docker compose -f deployment/docker-compose/docker-compose.yaml \
+            build $SERVICES
+
+      - name: Push images to GHCR
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          for IMAGE in opik-backend opik-python-backend; do
+            docker tag ${{ env.DOCKER_REGISTRY }}/$IMAGE:latest \
+              ${{ env.DOCKER_REGISTRY }}/$IMAGE:$TAG
+            docker push ${{ env.DOCKER_REGISTRY }}/$IMAGE:$TAG
+          done
+
+          if [ "${{ inputs.include_guardrails }}" = "true" ]; then
+            docker tag ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:latest \
+              ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:$TAG
+            docker push ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:$TAG
+          fi
