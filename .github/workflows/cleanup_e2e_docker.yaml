@@ -28,7 +28,7 @@ jobs:
     name: Cleanup closed PR images
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Delete CI images for PR ${{ github.event.pull_request.number }}
         env:
