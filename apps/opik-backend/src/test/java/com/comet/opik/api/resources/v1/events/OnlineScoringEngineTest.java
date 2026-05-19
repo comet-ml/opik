@@ -31,6 +31,7 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
@@ -1015,7 +1016,7 @@ class OnlineScoringEngineTest {
         // we match on bare field names rather than full quoted-string fragments.
         var allText = request.messages().stream()
                 .map(Object::toString)
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(Collectors.joining("\n"));
         assertThat(allText).contains("role");
         assertThat(allText).contains("user");
         assertThat(allText).contains("assistant");
@@ -1035,12 +1036,12 @@ class OnlineScoringEngineTest {
                 .build();
         // Two spans on the same trace, out-of-order on input — the helper sorts by start_time
         // so the wire order tracks call order regardless of how the caller hands them in.
-        var spanLate = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("tool-late").type(com.comet.opik.domain.SpanType.tool)
+        var spanLate = Span.builder()
+                .id(generator.generate()).name("tool-late").type(SpanType.tool)
                 .startTime(java.time.Instant.now().plusMillis(10)).traceId(traceId).projectId(projectId)
                 .build();
-        var spanEarly = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("tool-early").type(com.comet.opik.domain.SpanType.tool)
+        var spanEarly = Span.builder()
+                .id(generator.generate()).name("tool-early").type(SpanType.tool)
                 .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
                 .build();
 
@@ -1049,7 +1050,7 @@ class OnlineScoringEngineTest {
 
         var allText = request.messages().stream()
                 .map(Object::toString)
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(Collectors.joining("\n"));
         // The `spans` array shows up nested under the assistant entry, with the earlier-started
         // span first — the LLM sees call order matching the trace's actual execution order.
         // Mustache HTML-escapes the substituted JSON, so we match on field/value substrings
@@ -1066,8 +1067,8 @@ class OnlineScoringEngineTest {
         var traceId = generator.generate();
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId);
-        var bigSpan = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("huge-tool-call").type(com.comet.opik.domain.SpanType.tool)
+        var bigSpan = Span.builder()
+                .id(generator.generate()).name("huge-tool-call").type(SpanType.tool)
                 .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
                 .input(JsonUtils.readTree("{\"payload\":\"" + "x".repeat(2000) + "\"}"))
                 .build();
@@ -1219,12 +1220,12 @@ class OnlineScoringEngineTest {
                 .schema(List.of())
                 .build();
         var trace = createTrace(generator.generate(), generator.generate());
-        var span1 = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("span-a").type(com.comet.opik.domain.SpanType.general)
+        var span1 = Span.builder()
+                .id(generator.generate()).name("span-a").type(SpanType.general)
                 .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
                 .build();
-        var span2 = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("span-b").type(com.comet.opik.domain.SpanType.general)
+        var span2 = Span.builder()
+                .id(generator.generate()).name("span-b").type(SpanType.general)
                 .startTime(java.time.Instant.now().plusMillis(1)).traceId(trace.id()).projectId(trace.projectId())
                 .build();
 
@@ -1236,7 +1237,7 @@ class OnlineScoringEngineTest {
         // earliest-start span comes first.
         var allText = request.messages().stream()
                 .map(Object::toString)
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(Collectors.joining("\n"));
         assertThat(allText).contains("span-a");
         assertThat(allText).contains("span-b");
         assertThat(allText.indexOf("span-a")).isLessThan(allText.indexOf("span-b"));
@@ -1265,7 +1266,7 @@ class OnlineScoringEngineTest {
 
         var allText = request.messages().stream()
                 .map(Object::toString)
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(Collectors.joining("\n"));
         // Empty list renders as [], not the literal sentinel "spans" — guards against
         // the bare "spans" value leaking through toVariableMapping when the trace has
         // no children.
@@ -1291,8 +1292,8 @@ class OnlineScoringEngineTest {
                 .schema(List.of())
                 .build();
         var trace = createTrace(generator.generate(), generator.generate());
-        var span = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("template-only-span").type(com.comet.opik.domain.SpanType.general)
+        var span = Span.builder()
+                .id(generator.generate()).name("template-only-span").type(SpanType.general)
                 .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
                 .build();
 
@@ -1301,7 +1302,7 @@ class OnlineScoringEngineTest {
 
         var allText = request.messages().stream()
                 .map(Object::toString)
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(Collectors.joining("\n"));
         assertThat(allText).contains("template-only-span");
         assertThat(allText).doesNotContain("{{spans}}");
     }
@@ -1323,8 +1324,8 @@ class OnlineScoringEngineTest {
                 .schema(List.of())
                 .build();
         var trace = createTrace(generator.generate(), generator.generate());
-        var span = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("should-not-appear").type(com.comet.opik.domain.SpanType.general)
+        var span = Span.builder()
+                .id(generator.generate()).name("should-not-appear").type(SpanType.general)
                 .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
                 .build();
 
@@ -1333,7 +1334,7 @@ class OnlineScoringEngineTest {
 
         var allText = request.messages().stream()
                 .map(Object::toString)
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(Collectors.joining("\n"));
         // The spans list should NOT leak in — the user mapped "spans" to a JSONPath.
         assertThat(allText).doesNotContain("should-not-appear");
     }
@@ -1343,8 +1344,8 @@ class OnlineScoringEngineTest {
     void prepareLlmRequestLeavesNonSpansVariablesAloneWhenSpansArePassed() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
-        var span = com.comet.opik.api.Span.builder()
-                .id(generator.generate()).name("ignored-span").type(com.comet.opik.domain.SpanType.general)
+        var span = Span.builder()
+                .id(generator.generate()).name("ignored-span").type(SpanType.general)
                 .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
                 .build();
 
@@ -1356,7 +1357,7 @@ class OnlineScoringEngineTest {
         // list so the assertion catches the span name wherever it might have landed.
         var allText = request.messages().stream()
                 .map(Object::toString)
-                .collect(java.util.stream.Collectors.joining("\n"));
+                .collect(Collectors.joining("\n"));
         assertThat(allText).doesNotContain("ignored-span");
     }
 

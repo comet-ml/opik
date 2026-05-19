@@ -50,6 +50,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -207,15 +208,21 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      */
     private Mono<Void> scoreThread(TraceThreadToScoreLlmAsJudge message, List<Trace> traces, UUID threadModelId,
             String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
-        // When the feature flag is on, fetch every span across every trace in the thread up
-        // front. Threading them into prepareEvaluation lets {{context}} render with the
-        // enriched per-assistant `spans` field AND lets the size estimate account for them,
-        // so big enriched threads still auto-route to the agentic-tools path. When the flag
-        // is off, an empty list is passed through and the rendered shape matches today's
-        // exactly (the enriched serializer omits the `spans` field when null).
+        // When the feature flag is on, fetch every span across every trace in the thread
+        // up front. We fetch BEFORE the inline-vs-tools path decision in prepareEvaluation
+        // (rather than only when the inline path wins) so estimateThreadContextTokens can
+        // serialize the enriched shape and route honestly — otherwise a thread with small
+        // trace bodies but huge spans would inline-render an oversized prompt. The cost is
+        // wasted I/O when the tools path ultimately wins: the prepared spans go unused on
+        // that path (which renders only the compact skeleton; the model uses ReadTool to
+        // re-fetch per-trace on demand). Acceptable trade-off — route correctness over a
+        // narrow over-fetch.
+        //
+        // When the flag is off, an empty list is passed through; the enriched serializer
+        // omits the `spans` field via @JsonInclude(NON_NULL), so the rendered JSON is
+        // byte-identical to today's [{role, content}, ...] shape.
         Mono<List<Span>> spansMono = serviceTogglesConfig.isAgenticToolsEnabled()
-                ? spanService.getByTraceIds(traces.stream().map(Trace::id)
-                        .collect(java.util.stream.Collectors.toSet()))
+                ? spanService.getByTraceIds(traces.stream().map(Trace::id).collect(Collectors.toSet()))
                         .collectList()
                         .contextWrite(ctx -> ctx
                                 .put(RequestContext.WORKSPACE_ID, message.workspaceId())
