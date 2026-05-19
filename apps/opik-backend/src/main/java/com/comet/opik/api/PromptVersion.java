@@ -2,10 +2,10 @@ package com.comet.opik.api;
 
 import com.comet.opik.api.validation.CommitValidation;
 import com.comet.opik.utils.ValidationUtils;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -99,8 +99,7 @@ public record PromptVersion(
     }
 
     @JsonIgnore
-    @AssertTrue(message = "environment cannot be set on a mask version")
-    public boolean isEnvironmentCompatibleWithVersionType() {
+    @AssertTrue(message = "environment cannot be set on a mask version") public boolean isEnvironmentCompatibleWithVersionType() {
         return environment == null || versionType() != PromptVersionType.MASK;
     }
 }
