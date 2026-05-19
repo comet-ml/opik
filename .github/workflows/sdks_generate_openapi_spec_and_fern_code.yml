@@ -65,7 +65,7 @@ jobs:
           cache: maven
 
       - name: Install Fern
-        run: npm install -g fern-api
+        run: npm install -g fern-api@4.71.5
 
       - name: Set up Python
         uses: actions/setup-python@v5

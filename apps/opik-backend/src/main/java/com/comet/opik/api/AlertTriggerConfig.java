@@ -16,7 +16,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AlertTriggerConfig(
-        @JsonView( {
+        @JsonView({
                 Alert.View.Public.class, Alert.View.Write.class}) UUID id,
 
         @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID alertTriggerId,
@@ -35,7 +35,7 @@ public record AlertTriggerConfig(
 
         @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
 
-        @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+        @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
     public static final String PROJECT_IDS_CONFIG_KEY = "project_ids";
     public static final String THRESHOLD_CONFIG_KEY = "threshold";

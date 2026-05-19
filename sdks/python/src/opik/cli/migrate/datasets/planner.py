@@ -84,6 +84,31 @@ class ReplayVersions:
 
 
 @dataclass(frozen=True)
+class CascadeOptimizations:
+    """Cascade every optimization referencing the source dataset.
+
+    Umbrella action ordered AFTER ``ReplayVersions`` and BEFORE
+    ``CascadeExperiments`` so the destination optimization ids are known
+    by the time experiments are recreated and can FK to them via
+    ``plan.optimization_id_remap``.
+
+    Source-side reads use ``find_optimizations(dataset_id=...)`` which is
+    project-agnostic: a single query returns every optimization tied to
+    the source dataset regardless of which project it lives in (mirrors
+    ``find_experiments(dataset_id=...)`` in Slice 3). Destination-side
+    each optimization is recreated under ``dest_project_name`` with a
+    fresh client-side UUID.
+
+    Empty optimizations (zero constituent experiments) are migrated as
+    well — they're still user-visible rows in the Optimization Studio UI.
+    """
+
+    source_dataset_id: str
+    dest_name: str
+    dest_project_name: str
+
+
+@dataclass(frozen=True)
 class CascadeExperiments:
     """Cascade every experiment referencing the source dataset.
 
@@ -91,8 +116,10 @@ class CascadeExperiments:
     over every experiment that referenced it. Reuses ``ReplayVersions``'s
     ``version_remap`` and ``item_id_remap`` (already populated on the plan)
     to rewrite each experiment's ``dataset_version_id`` /
-    ``dataset_item_id`` FK fields, and builds its own ``trace_id`` remap as
-    traces ride along with the experiments.
+    ``dataset_item_id`` FK fields, reads ``CascadeOptimizations``'s
+    ``optimization_id_remap`` to re-point each experiment's
+    ``optimization_id``, and builds its own ``trace_id`` remap as traces
+    ride along with the experiments.
 
     Per-experiment failures stop the cascade (the audit log captures
     partial progress on the ``failed`` entry). Per-item missing-trace /
@@ -134,6 +161,7 @@ class MigrationPlan(BaseMigrationPlan):
     version_remap: Dict[str, str] = field(default_factory=dict)
     item_id_remap: Dict[str, str] = field(default_factory=dict)
     trace_id_remap: Dict[str, str] = field(default_factory=dict)
+    optimization_id_remap: Dict[str, str] = field(default_factory=dict)
 
 
 def build_dataset_plan(
@@ -158,9 +186,14 @@ def build_dataset_plan(
       3. ``ReplayVersions`` — replays every source dataset version onto
          the target, populating ``plan.version_remap`` and
          ``plan.item_id_remap``.
-      4. ``CascadeExperiments`` — recreates every experiment referencing
+      4. ``CascadeOptimizations`` — recreates every optimization
+         referencing the source dataset under the destination project,
+         populating ``plan.optimization_id_remap`` so the next action can
+         re-point experiment FK references.
+      5. ``CascadeExperiments`` — recreates every experiment referencing
          the source dataset under the destination project, with traces +
-         spans riding along.
+         spans riding along, and re-points each experiment's
+         ``optimization_id`` via ``plan.optimization_id_remap``.
     """
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
@@ -232,9 +265,23 @@ def build_dataset_plan(
         )
     )
 
-    # Cascade experiments must run AFTER ReplayVersions so that
-    # plan.version_remap / plan.item_id_remap are populated when the
-    # cascade reads them.
+    # CascadeOptimizations runs AFTER ReplayVersions (the destination
+    # dataset exists by now) and BEFORE CascadeExperiments so the
+    # experiment-write phase can FK to the new destination optimization
+    # ids via plan.optimization_id_remap. Action is always emitted; it's
+    # a no-op when zero optimizations reference the source dataset.
+    plan.actions.append(
+        CascadeOptimizations(
+            source_dataset_id=source.id,
+            dest_name=source.name,
+            dest_project_name=to_project,
+        )
+    )
+
+    # Cascade experiments must run AFTER ReplayVersions and
+    # CascadeOptimizations so plan.version_remap / plan.item_id_remap /
+    # plan.optimization_id_remap are populated when the cascade reads
+    # them.
     plan.actions.append(
         CascadeExperiments(
             source_dataset_id=source.id,
