@@ -490,13 +490,15 @@ def recreate_experiment(
 
         # Create the experiment.
         # Migrate path forwards fidelity fields (evaluation_method, tags,
-        # dataset_version_id, project_name) verbatim; the import-from-disk
-        # path is unchanged to avoid silently altering historical import
-        # behavior. ``optimization_id`` is deliberately NOT forwarded on the
-        # migrate path: Slice 3 doesn't cascade the optimization entity, so
-        # the pointer would dangle. Same policy as ``prompt_versions`` above
-        # (strip rather than leave broken UI links). Slice 4 can repopulate
-        # via a remap when it ships the optimization cascade.
+        # dataset_version_id, project_name, optimization_id) verbatim;
+        # the import-from-disk path is unchanged to avoid silently
+        # altering historical import behavior. ``optimization_id`` was
+        # dropped on the migrate path through Slice 4 (no optimization
+        # cascade); Slice 5 (OPIK-6532) ships the cascade and the
+        # caller (``_build_experiment_data``) remaps the source id to
+        # the destination id before this function sees it, so by the
+        # time we get here ``experiment_info["optimization_id"]`` is
+        # already a destination-valid pointer.
         create_kwargs: Dict[str, Any] = {
             "dataset_name": destination_dataset_name,
             "name": experiment_name,
@@ -510,6 +512,9 @@ def recreate_experiment(
             create_kwargs["tags"] = experiment_info.get("tags")
             create_kwargs["dataset_version_id"] = target_dataset_version_id
             create_kwargs["project_name"] = target_project_name
+            optimization_id = experiment_info.get("optimization_id")
+            if optimization_id:
+                create_kwargs["optimization_id"] = optimization_id
 
         experiment = client.create_experiment(**create_kwargs)
 
@@ -653,8 +658,10 @@ def recreate_experiment(
                         debug,
                     )
                     rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                        lambda b=batch: client._rest_client.experiments.create_experiment_items(
-                            experiment_items=b
+                        lambda b=batch: (
+                            client._rest_client.experiments.create_experiment_items(
+                                experiment_items=b
+                            )
                         )
                     )
                 console.print(
