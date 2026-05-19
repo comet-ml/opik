@@ -1194,6 +1194,7 @@ export class OpikClient {
               template,
               metadata: options.metadata,
               type: normalizedType,
+              environment: options.environment,
             },
             templateStructure,
             projectName,
@@ -1204,6 +1205,25 @@ export class OpikClient {
         // Return existing version (idempotent)
         logger.debug(`Returning existing ${logContext} version`, { name });
         versionResponse = latestVersion!;
+      }
+
+      // If caller requested an environment that doesn't match the resolved
+      // version (e.g. idempotent path returning an existing version, or the
+      // backend ignored the field on creation), explicitly set ownership.
+      if (
+        options.environment !== undefined &&
+        versionResponse.environment !== options.environment &&
+        versionResponse.id
+      ) {
+        await this.api.prompts.setPromptVersionEnvironment(
+          versionResponse.id,
+          { environment: options.environment },
+          this.api.requestOptions
+        );
+        versionResponse = {
+          ...versionResponse,
+          environment: options.environment,
+        };
       }
 
       // Fetch full prompt data and create instance
@@ -1255,7 +1275,10 @@ export class OpikClient {
    * - Uses create_prompt_version endpoint (not create_prompt which is for containers)
    * - Synchronous: Returns immediately with the created/retrieved version
    *
-   * @param options - Prompt configuration
+   * @param options - Prompt configuration. Supports an optional `environment`
+   *   that, if provided, assigns ownership of the resulting version to that
+   *   workspace environment (must already be registered; backend returns 404
+   *   otherwise).
    * @returns Promise resolving to Prompt instance
    * @throws PromptValidationError if parameters invalid
    */
@@ -1284,6 +1307,7 @@ export class OpikClient {
             tags: options.tags,
             projectName: resolvedProjectName,
             synced: false,
+            environment: options.environment,
           },
           this
         ),
@@ -1297,7 +1321,10 @@ export class OpikClient {
    * Chat prompts use message arrays instead of string templates.
    * Idempotent: returns existing version if messages, metadata, and type match.
    *
-   * @param options - Chat prompt configuration with messages array
+   * @param options - Chat prompt configuration with messages array. Supports an
+   *   optional `environment` that, if provided, assigns ownership of the
+   *   resulting version to that workspace environment (must already be
+   *   registered; backend returns 404 otherwise).
    * @returns Promise resolving to ChatPrompt instance
    * @throws PromptTemplateStructureMismatch if a text prompt with same name exists
    *
@@ -1352,6 +1379,7 @@ export class OpikClient {
             tags: options.tags,
             projectName: resolvedProjectName,
             synced: false,
+            environment: options.environment,
           },
           this
         ),
@@ -1366,12 +1394,14 @@ export class OpikClient {
    * default 300s). When called inside a track() context the prompt reference
    * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional version pin
+   * @param options - Prompt name and optional version pin or environment
    * @param options.name - Name of the prompt
    * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
    *   provided, the latest version is returned.
    * @param options.commit - **Deprecated.** Use `version` instead.
    * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with `commit`.
    * @returns Promise resolving to Prompt or null if not found
    * @throws Error if both `commit` and `version` are provided
    * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
@@ -1394,12 +1424,14 @@ export class OpikClient {
    * default 300s). When called inside a track() context the prompt reference
    * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional version pin
+   * @param options - Prompt name and optional version pin or environment
    * @param options.name - Name of the prompt
    * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
    *   provided, the latest version is returned.
    * @param options.commit - **Deprecated.** Use `version` instead.
    * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with `commit`.
    * @returns Promise resolving to ChatPrompt or null if not found
    * @throws Error if both `commit` and `version` are provided
    * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
@@ -1543,7 +1575,8 @@ export class OpikClient {
       () => fetchFn(),
       this.config.promptCacheTtlSeconds,
       undefined,
-      options.version
+      options.version,
+      options.environment
     );
 
     const activeMaskId = unmasked?.id

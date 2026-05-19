@@ -24,6 +24,11 @@ export interface BasePromptData {
   templateStructure?: PromptTemplateStructure;
   synced?: boolean;
   projectName?: string;
+  /**
+   * Optional environment that owns this prompt version. Mutually exclusive
+   * with mask-type versions on the backend.
+   */
+  environment?: string;
 }
 
 /**
@@ -39,6 +44,7 @@ export abstract class BasePrompt {
   private _changeDescription: string | undefined;
 
   private _projectName: string | undefined;
+  private _environment: string | undefined;
 
   public readonly type: PromptType;
   public readonly templateStructure: PromptTemplateStructure;
@@ -62,6 +68,11 @@ export abstract class BasePrompt {
   get synced(): boolean { return this._synced; }
   get changeDescription(): string | undefined { return this._changeDescription; }
   get projectName(): string | undefined { return this._projectName; }
+  /**
+   * The environment that owns this prompt version, or undefined if the
+   * version is not associated with any environment.
+   */
+  get environment(): string | undefined { return this._environment; }
 
 
   constructor(data: BasePromptData, opik?: OpikClient) {
@@ -79,6 +90,7 @@ export abstract class BasePrompt {
     this._metadata = data.metadata;
     this.opik = opik ?? getGlobalClient();
     this._projectName = data.projectName;
+    this._environment = data.environment;
   }
 
   /**
@@ -92,6 +104,7 @@ export abstract class BasePrompt {
     changeDescription?: string;
     tags?: string[];
     projectName?: string;
+    environment?: string;
   }): void {
     this._id = result.promptId;
     this._versionId = result.versionId;
@@ -104,6 +117,7 @@ export abstract class BasePrompt {
     if (result.projectName !== undefined) {
       this._projectName = result.projectName;
     }
+    this._environment = result.environment;
     this._synced = true;
   }
 
@@ -154,6 +168,7 @@ export abstract class BasePrompt {
           changeDescription: result.changeDescription,
           tags: result.tags ? Array.from(result.tags) : undefined,
           projectName: result.projectName,
+          environment: result.environment,
         });
       } else {
         logger.warn(
@@ -234,6 +249,27 @@ export abstract class BasePrompt {
     this._description = updates.description ?? this._description;
     this._tags = updates.tags ?? this._tags;
 
+    return this;
+  }
+
+  /**
+   * Sets or clears the environment ownership for this prompt version.
+   *
+   * The environment must already be registered in the workspace; the backend
+   * returns 404 otherwise. Pass `null` to clear the current environment.
+   *
+   * @param environment - Environment name to assign, or `null` to clear ownership
+   * @returns Promise resolving to this prompt instance for method chaining
+   */
+  async setEnvironment(environment: string | null): Promise<this> {
+    await this.ready();
+    this.ensureSynced("setEnvironment");
+    await this.opik.api.prompts.setPromptVersionEnvironment(
+      this.versionId!,
+      { environment: environment ?? undefined },
+      this.opik.api.requestOptions,
+    );
+    this._environment = environment ?? undefined;
     return this;
   }
 

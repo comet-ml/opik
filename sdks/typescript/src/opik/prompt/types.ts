@@ -45,6 +45,15 @@ export interface CommonPromptOptions {
   type?: PromptType;
   /** Optional tags for categorization */
   tags?: string[];
+  /**
+   * Optional environment to own the newly created prompt version.
+   *
+   * The environment must already be registered in the workspace, otherwise
+   * the backend rejects the assignment with a 404. Note: setting `environment`
+   * is incompatible with mask-type versions and the backend will reject it
+   * with a 422 if used on a mask version.
+   */
+  environment?: string;
 }
 
 /**
