@@ -36,6 +36,7 @@ from typing import Any, Dict
 import pytest
 
 import opik
+from .. import verifiers
 from ...testlib import environment, generate_project_name
 
 PROJECT_NAME = generate_project_name("e2e", __name__)
@@ -94,19 +95,17 @@ def test_test_suite_agentic__assertion_about_span_name__passes(
         model=AGENTIC_JUDGE_MODEL,
     )
 
-    assert suite_result.pass_rate == 1.0
-    item_result = list(suite_result.item_results.values())[0]
-    assert item_result.passed is True
-    # The one assertion must surface in the feedback scores; agentic
-    # path uses the same ScoreResult shape as the one-shot path.
-    # ItemResult holds per-run TestResults; each TestResult carries its
-    # own list of ScoreResults (one per assertion).
-    assertion_names = {
-        score.name
-        for test_result_ in item_result.test_results
-        for score in test_result_.score_results
-    }
-    assert span_assertion in assertion_names
+    # The one assertion must surface in the feedback scores.
+    verifiers.verify_test_suite_result(
+        opik_client=opik_client,
+        suite_result=suite_result,
+        items_total=1,
+        items_passed=1,
+        experiment_items_count=1,
+        total_feedback_scores=1,
+        expected_score_names={span_assertion},
+        project_name=PROJECT_NAME,
+    )
 
 
 @pytest.mark.skipif(
@@ -162,9 +161,16 @@ def test_test_suite_agentic__assertion_about_span_error__detects_failure(
     # item must fail — proving the agentic judge saw the span's
     # `error_info`. A one-shot judge would see only `output="completed"`
     # and pass the assertion.
-    assert suite_result.pass_rate == 0.0
-    item_result = list(suite_result.item_results.values())[0]
-    assert item_result.passed is False
+    verifiers.verify_test_suite_result(
+        opik_client=opik_client,
+        suite_result=suite_result,
+        items_total=1,
+        items_passed=0,
+        experiment_items_count=1,
+        total_feedback_scores=1,
+        expected_score_names={no_errors_assertion},
+        project_name=PROJECT_NAME,
+    )
 
 
 @pytest.mark.skipif(
@@ -213,7 +219,7 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
         # × 70 = 560 chars; with the ~13-char JSON prefix the marker
         # starts past offset 573, so it sits beyond the overview cap by
         # construction. Mixed-in noop_step guarantees more than one
-        # span exists so the judge can't trivially infer "must be the
+        # span exists, so the judge can't trivially infer "must be the
         # only span."
         filler = "padding " * 70
         process_step(payload=f"{filler}{secret_marker} trailer")
@@ -246,6 +252,13 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
     # truncated string (no marker) and could only have guessed at the
     # assertion. A passing verdict means it drilled into span content
     # via one of read / scan / search.
-    assert suite_result.pass_rate == 1.0
-    item_result = list(suite_result.item_results.values())[0]
-    assert item_result.passed is True
+    verifiers.verify_test_suite_result(
+        opik_client=opik_client,
+        suite_result=suite_result,
+        items_total=1,
+        items_passed=1,
+        experiment_items_count=1,
+        total_feedback_scores=1,
+        expected_score_names={keyword_assertion},
+        project_name=PROJECT_NAME,
+    )
