@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import opik.id_helpers as id_helpers_module
 from opik.api_objects import rest_helpers
@@ -53,6 +53,13 @@ LOGGER = logging.getLogger(__name__)
 # request flood (production has tens to low-hundreds of optimizations
 # per dataset at most).
 _OPTIMIZATION_PAGE_SIZE = 100
+
+# Progress callback: ``(completed, total, label)`` -- fired once before
+# each optimization with ``completed`` = optimizations done so far.
+# ``label="done"`` signals the final tick (executor uses it to mark the
+# bar at 100% cleanly). Mirrors the shape used by ``replay_all_versions``
+# and the Slice 3 experiment cascade.
+ProgressCallback = Callable[[int, int, str], None]
 
 
 @dataclass
@@ -79,9 +86,14 @@ def cascade_optimizations(
     target_dataset_name: str,
     target_project_name: str,
     audit: AuditLog,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> OptimizationCascadeResult:
     """Enumerate source optimizations referencing ``source_dataset_id``
     and recreate each one at the destination with a fresh id.
+
+    ``progress_callback(completed, total, label)`` fires once before each
+    optimization so callers can drive a progress bar; matches the shape
+    used by ``replay_all_versions`` and the experiment cascade.
 
     Returns
     -------
@@ -104,9 +116,19 @@ def cascade_optimizations(
             "No optimizations reference dataset %s; cascade is a no-op.",
             source_dataset_id,
         )
+        # Fire one terminal callback so callers can finalize a progress
+        # display (e.g. close a Rich Progress block) even when there's
+        # nothing to migrate.
+        if progress_callback is not None:
+            progress_callback(0, 0, "done")
         return result
 
-    for optimization in source_optimizations:
+    total = len(source_optimizations)
+    for index, optimization in enumerate(source_optimizations):
+        label = optimization.name or optimization.id or f"<optimization[{index}]>"
+        if progress_callback is not None:
+            progress_callback(index, total, label)
+
         source_id = optimization.id
         if not source_id:
             # Defensive: the BE should always return an id. Skip rather
@@ -167,6 +189,9 @@ def cascade_optimizations(
                 "optimization_status": optimization.status,
             },
         )
+
+    if progress_callback is not None:
+        progress_callback(total, total, "done")
 
     return result
 

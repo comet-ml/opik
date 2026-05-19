@@ -25,6 +25,7 @@ from .audit import AuditLog, default_audit_path
 from .datasets.executor import execute_plan, record_planned
 from .datasets.planner import (
     CascadeExperiments,
+    CascadeOptimizations,
     CreateDestination,
     MigrationPlan,
     RenameSource,
@@ -307,6 +308,12 @@ def _print_plan(plan: MigrationPlan) -> None:
                 str(idx),
                 "replay versions",
                 f"{action.source_name_after_rename} → {action.dest_name} (full history)",
+            )
+        elif isinstance(action, CascadeOptimizations):
+            table.add_row(
+                str(idx),
+                "cascade optimizations",
+                f"optimizations → project {action.dest_project_name}",
             )
         elif isinstance(action, CascadeExperiments):
             table.add_row(

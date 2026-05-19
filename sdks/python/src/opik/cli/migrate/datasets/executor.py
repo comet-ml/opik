@@ -201,19 +201,52 @@ def _cascade_optimizations(
     ``CascadeExperiments`` action can re-point each experiment's
     ``optimization_id`` FK at the new destination optimization id.
 
-    No Rich progress bar: production has tens to low-hundreds of
-    optimizations per dataset at most, so the audit's per-optimization
-    ``migrate_optimization`` records (emitted inside
-    ``cascade_optimizations``) give users enough granular feedback
-    without the executor needing to drive an extra nested bar.
+    Drives a Rich progress bar that ticks once per optimization. The
+    algorithmic core in ``cascade_optimizations`` stays console-agnostic
+    -- the bar is driven by the per-optimization callback. Production
+    datasets carry tens to low-hundreds of optimizations at most, so a
+    simple single-level bar is plenty (no nested per-optimization detail
+    bar like the experiment cascade has).
     """
-    result = cascade_optimizations(
-        rest_client,
-        source_dataset_id=action.source_dataset_id,
-        target_dataset_name=action.dest_name,
-        target_project_name=action.dest_project_name,
-        audit=audit,
-    )
+    with Progress(
+        TextColumn("[bold blue]Cascading optimizations"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("{task.description}"),
+        console=_console,
+        transient=False,
+    ) as progress:
+        task_id: Optional[int] = None
+
+        def _on_optimization_start(completed: int, total: int, label: str) -> None:
+            nonlocal task_id
+            # ``label == "done"`` signals the final tick (completed=total).
+            # Drop the "(N/total)" suffix in that frame so the bar doesn't
+            # render "(total+1/total)" from the +1 offset that helps mid-
+            # loop ticks read as "currently processing the (Nth+1) item".
+            if label == "done":
+                description = f"→ {action.dest_project_name} · done"
+            else:
+                description = (
+                    f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
+                )
+            if task_id is None:
+                # Create the task lazily on the first callback. ``total``
+                # might be 0 on a zero-optimization dataset; clamp to >= 1
+                # so the Rich bar doesn't render as divide-by-zero NaN%.
+                task_id = progress.add_task(description, total=max(total, 1))
+            else:
+                progress.update(task_id, completed=completed, description=description)
+
+        result = cascade_optimizations(
+            rest_client,
+            source_dataset_id=action.source_dataset_id,
+            target_dataset_name=action.dest_name,
+            target_project_name=action.dest_project_name,
+            audit=audit,
+            progress_callback=_on_optimization_start,
+        )
+
     plan.optimization_id_remap.update(result.id_remap)
 
 
