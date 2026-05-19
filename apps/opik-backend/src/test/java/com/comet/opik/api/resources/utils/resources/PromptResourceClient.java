@@ -5,6 +5,8 @@ import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionEnvironmentUpdate;
+import com.comet.opik.api.PromptVersionIdsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.filter.PromptFilter;
@@ -117,18 +119,33 @@ public class PromptResourceClient {
     }
 
     public Prompt getPrompt(UUID id, String apiKey, String workspaceName) {
+        return getPrompt(id, null, apiKey, workspaceName);
+    }
 
-        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
-                .path(id.toString())
+    public Prompt getPrompt(UUID id, UUID maskId, String apiKey, String workspaceName) {
+        try (var response = callGetPrompt(id, maskId, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Prompt.class);
+        }
+    }
+
+    public Response callGetPrompt(UUID id, UUID maskId, String apiKey, String workspaceName) {
+        return callGetPrompt(id, maskId, null, apiKey, workspaceName);
+    }
+
+    public Response callGetPrompt(UUID id, UUID maskId, String environment, String apiKey, String workspaceName) {
+        WebTarget target = client.target(PROMPT_PATH.formatted(baseURI)).path(id.toString());
+        if (maskId != null) {
+            target = target.queryParam("mask_id", maskId);
+        }
+        if (environment != null) {
+            target = target.queryParam("environment", environment);
+        }
+        return target
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-            return response.readEntity(Prompt.class);
-        }
+                .get();
     }
 
     public void deletePrompt(UUID id, String apiKey, String workspaceName) {
@@ -162,19 +179,28 @@ public class PromptResourceClient {
     }
 
     public Prompt getPromptByCommit(String commit, String apiKey, String workspaceName) {
+        try (var response = callGetPromptByCommit(commit, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Prompt.class);
+        }
+    }
 
-        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
+    public Response callGetPromptByCommit(String commit, String apiKey, String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI))
                 .path("by-commit")
                 .path(commit)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get()) {
+                .get();
+    }
 
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-            return response.readEntity(Prompt.class);
-        }
+    public Response callRetrieveVersionsByIds(PromptVersionIdsRequest request, String apiKey, String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI) + "/versions/retrieve-by-ids")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 
     public List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
@@ -213,15 +239,52 @@ public class PromptResourceClient {
                 .version(podamFactory.manufacturePojo(PromptVersion.class))
                 .build();
 
-        try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
+        try (var response = callCreatePromptVersion(request, apiKey, workspaceName)) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             return response.readEntity(PromptVersion.class);
         }
+    }
+
+    public Response callCreatePromptVersion(CreatePromptVersion request, String apiKey, String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI) + "/versions")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public Response callGetPromptVersion(UUID versionId, String apiKey, String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI) + "/versions/" + versionId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public PromptVersion getPromptVersion(UUID versionId, String apiKey, String workspaceName) {
+        try (var response = callGetPromptVersion(versionId, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(PromptVersion.class);
+        }
+    }
+
+    public Response callSetPromptVersionEnvironment(UUID versionId, PromptVersionEnvironmentUpdate update,
+            String apiKey, String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI) + "/versions/" + versionId + "/environments")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(update));
+    }
+
+    public Response callRestorePromptVersion(UUID promptId, UUID versionId, String apiKey, String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI)
+                + "/%s/versions/%s/restore".formatted(promptId, versionId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(""));
     }
 }

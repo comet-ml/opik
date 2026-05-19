@@ -1,3 +1,4 @@
+import dataclasses
 import inspect
 import logging
 from typing import Any, Dict, Optional, Callable
@@ -107,14 +108,4 @@ def apply_opik_args_to_start_span_params(
     merged_tags = data_helpers.merge_tags(params.tags, span_config.tags)
     merged_metadata = data_helpers.merge_metadata(params.metadata, span_config.metadata)
 
-    # Create updated parameters
-    return arguments_helpers.StartSpanParameters(
-        type=params.type,
-        name=params.name,
-        tags=merged_tags,
-        metadata=merged_metadata,
-        input=params.input,
-        project_name=params.project_name,
-        model=params.model,
-        provider=params.provider,
-    )
+    return dataclasses.replace(params, tags=merged_tags, metadata=merged_metadata)
