@@ -1149,14 +1149,16 @@ public class ExperimentDAO {
             """;
 
     /**
-     * Query to get target project IDs for experiment queries.
-     * Used to optimize FIND, FIND_COUNT, FIND_GROUPS, and FIND_GROUPS_AGGREGATIONS queries
-     * by pre-computing project IDs, reducing traces, spans, and feedback_scores table scans.
+     * Target project IDs for FIND / FIND_COUNT / FIND_GROUPS / FIND_GROUPS_AGGREGATIONS scoping.
+     * Fast path reads {@code project_id} from {@code experiment_aggregates} (skipping the ZERO_UUID
+     * placeholder that the aggregation job writes when no traces exist yet). Experiments without a
+     * valid aggregate project_id fall back to the {@code experiment_items -> traces} traversal.
      */
     private static final String SELECT_TARGET_PROJECTS = """
             WITH experiments_final AS (
                 SELECT
-                    id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+                    id,
+                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM (
                     SELECT *
                     FROM experiments
@@ -1173,16 +1175,42 @@ public class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(prompt_ids)>AND hasAny(arrayConcat([prompt_id], mapKeys(prompt_versions)), :prompt_ids)<endif>
                 <if(filters)> AND <filters> <endif>
-            ), experiment_items_trace_scope AS (
+            ),
+            eia_projects AS (
+                SELECT id, project_id
+                FROM (
+                    SELECT workspace_id, dataset_id, id, project_id
+                    FROM experiment_aggregates
+                    WHERE workspace_id = :workspace_id
+                      AND id IN (SELECT id FROM experiments_final)
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY (workspace_id, dataset_id, id)
+                )
+                WHERE project_id != :zero_uuid
+            ),
+            legacy_scope AS (
+                SELECT id
+                FROM experiments_final
+                WHERE id NOT IN (SELECT id FROM eia_projects)
+            ),
+            legacy_trace_scope AS (
                 SELECT DISTINCT ei.trace_id
                 FROM experiment_items ei
                 WHERE ei.workspace_id = :workspace_id
-                AND ei.experiment_id IN (SELECT id FROM experiments_final)
+                  AND ei.experiment_id IN (SELECT id FROM legacy_scope)
+            ),
+            legacy_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                  AND id IN (SELECT trace_id FROM legacy_trace_scope)
             )
             SELECT DISTINCT project_id
-            FROM traces
-            WHERE workspace_id = :workspace_id
-            AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+            FROM (
+                SELECT project_id FROM eia_projects
+                UNION DISTINCT SELECT project_id FROM legacy_projects
+            )
+            WHERE project_id != ''
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2659,6 +2687,8 @@ public class ExperimentDAO {
                             .ifPresent(filters -> {
                                 filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
                             });
+
+                    statement.bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID.toString());
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                             .flatMap(result -> result.map((row, metadata) -> {
