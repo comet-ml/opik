@@ -1,4 +1,6 @@
+import contextvars
 import logging
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Collection, Dict, Generator, Optional, Set
@@ -6,11 +8,14 @@ from typing import Any, Collection, Dict, Generator, Optional, Set
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor  # type: ignore
 from pyagentspec.tracing.events import Event, ExceptionRaised, LlmGenerationResponse
 from pyagentspec.tracing.spans import LlmGenerationSpan, Span, ToolExecutionSpan
+from pyagentspec.tracing.trace import Trace as AgentSpecTrace
 from pyagentspec.tracing.trace import get_trace
 
 import opik
+import opik.datetime_helpers as datetime_helpers
 import opik.id_helpers as id_helpers
 import opik.llm_usage as llm_usage
+from opik.api_objects import opik_client
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +25,50 @@ def _ns_to_datetime(ns: Optional[int]) -> Optional[datetime]:
     if not ns:
         return None
     return datetime.fromtimestamp(ns / 1_000_000_000, tz=timezone.utc)
+
+
+# AgentSpec clears its own trace contextvar BEFORE calling ``span_processor.shutdown()``,
+# so by the time we reach shutdown ``get_trace()`` returns ``None``. We mirror the
+# active AgentSpec trace id into our own ContextVar at startup so shutdown can still
+# find the right state bucket. Since pyagentspec disallows nested traces in the same
+# context, a plain ContextVar is sufficient.
+_ACTIVE_AGENTSPEC_TRACE_ID: contextvars.ContextVar[Optional[str]] = (
+    contextvars.ContextVar("opik_agentspec_active_trace_id", default=None)
+)
+
+
+class _PerTraceState:
+    """Per-AgentSpec-trace state held by ``OpikSpanProcessor``.
+
+    Keeping state on the instance directly would race when the same processor
+    is shared across concurrent traces. We key state by ``AgentSpecTrace.id``
+    instead so each active trace has its own bucket.
+    """
+
+    __slots__ = (
+        "opik_trace_id",
+        "name",
+        "start_time",
+        "thread_id",
+        "span_ids_mapping",
+        "first_llm_input",
+        "last_llm_output",
+    )
+
+    def __init__(
+        self,
+        opik_trace_id: str,
+        name: Optional[str],
+        start_time: datetime,
+        thread_id: Optional[str],
+    ) -> None:
+        self.opik_trace_id = opik_trace_id
+        self.name = name
+        self.start_time = start_time
+        self.thread_id = thread_id
+        self.span_ids_mapping: Dict[str, str] = {}
+        self.first_llm_input: Optional[Dict[str, Any]] = None
+        self.last_llm_output: Optional[Dict[str, Any]] = None
 
 
 class OpikSpanProcessor:
@@ -53,21 +102,28 @@ class OpikSpanProcessor:
             api_key: The API key to use in the Opik client.
             mask_sensitive_information: Whether to mask potentially sensitive
                 information from the span and its events.
-            thread_id: Thread ID used to group multiple traces into a conversation thread.
+            thread_id: Default thread ID used to group multiple traces into a
+                conversation thread. Can be overridden per-trace via
+                :meth:`AgentSpecInstrumentor.instrument_context`.
         """
         self.mask_sensitive_information = mask_sensitive_information
-        self.opik_client = opik.Opik(
-            project_name=project_name, host=host, workspace=workspace, api_key=api_key
-        )
-        self.thread_id = thread_id
-        self.opik_trace: Optional[opik.Trace] = None
-        self._trace_name: Optional[str] = None
-        self._trace_start_time: Optional[datetime] = None
-        # Mapping from Agent Spec Span ID to pre-assigned Opik Span ID
-        self.opik_span_ids_mapping: Dict[str, str] = {}
-        # Accumulated trace-level data from LLM spans
-        self._trace_first_llm_input: Optional[Dict[str, Any]] = None
-        self._trace_last_llm_output: Optional[Dict[str, Any]] = None
+        # Reuse the shared Opik client unless caller explicitly customizes it.
+        # Building a fresh ``opik.Opik`` per processor instance is expensive
+        # and pointless when the global config already matches.
+        if any(v is not None for v in (project_name, host, workspace, api_key)):
+            self.opik_client = opik.Opik(
+                project_name=project_name,
+                host=host,
+                workspace=workspace,
+                api_key=api_key,
+            )
+        else:
+            self.opik_client = opik_client.get_client_cached()
+        self.default_thread_id = thread_id
+        # State keyed by AgentSpec trace id so concurrent traces sharing this
+        # processor instance do not corrupt each other.
+        self._states: Dict[str, _PerTraceState] = {}
+        self._states_lock = threading.Lock()
 
     def _get_opik_span_type_from_agentspec_span_type(
         self, span: Span
@@ -204,29 +260,42 @@ class OpikSpanProcessor:
             ]
         }
 
-    def _accumulate_llm_trace_data(self, span: LlmGenerationSpan) -> None:
+    def _get_state_for_active_trace(self) -> Optional[_PerTraceState]:
+        trace = get_trace()
+        trace_id = trace.id if trace is not None else _ACTIVE_AGENTSPEC_TRACE_ID.get()
+        if trace_id is None:
+            return None
+        with self._states_lock:
+            return self._states.get(trace_id)
+
+    def _accumulate_llm_trace_data(
+        self, state: _PerTraceState, span: LlmGenerationSpan
+    ) -> None:
         """Collect LLM span data to populate trace-level input/output."""
         span_input = self._create_opik_span_inputs_from_span(span)
         span_output = self._create_opik_span_outputs_from_span(span)
 
-        if self._trace_first_llm_input is None and span_input:
-            self._trace_first_llm_input = span_input
+        if state.first_llm_input is None and span_input:
+            state.first_llm_input = span_input
 
         if span_output is not None:
-            self._trace_last_llm_output = span_output
+            state.last_llm_output = span_output
 
     def on_start(self, span: Span) -> None:
         """
         Handle the start of an AgentSpec span.
 
-        We pre-assign an Opik span ID here so child spans can reference us as a parent,
-        but we defer the actual span emission to ``on_end`` to send a single full-payload
-        message (avoiding the Create+Update race that batching introduces for short-lived
-        spans).
+        Pre-assign an Opik span ID here so child spans can reference us as a
+        parent, but defer the actual span emission to ``on_end`` to send a
+        single full-payload message (avoiding the Create+Update race that
+        batching introduces for short-lived spans).
         """
         try:
-            if span.id not in self.opik_span_ids_mapping:
-                self.opik_span_ids_mapping[span.id] = id_helpers.generate_id()
+            state = self._get_state_for_active_trace()
+            if state is None:
+                return
+            if span.id not in state.span_ids_mapping:
+                state.span_ids_mapping[span.id] = id_helpers.generate_id()
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.on_start`: {e}")
 
@@ -234,25 +303,29 @@ class OpikSpanProcessor:
         """
         Handle the end of an AgentSpec span.
 
-        Emit the Opik span as a single full-payload write using the pre-assigned ID so
-        the backend always sees a complete record, even with batching enabled.
+        Emit the Opik span as a single full-payload write using the
+        pre-assigned ID so the backend always sees a complete record, even
+        with batching enabled.
         """
         try:
-            if self.opik_trace is None:
+            state = self._get_state_for_active_trace()
+            if state is None:
                 return
 
-            opik_span_id = self.opik_span_ids_mapping.get(span.id) or id_helpers.generate_id()
-            self.opik_span_ids_mapping[span.id] = opik_span_id
+            opik_span_id = (
+                state.span_ids_mapping.get(span.id) or id_helpers.generate_id()
+            )
+            state.span_ids_mapping[span.id] = opik_span_id
 
             parent_span_id = (
-                self.opik_span_ids_mapping.get(span._parent_span.id)
+                state.span_ids_mapping.get(span._parent_span.id)
                 if span._parent_span
                 else None
             )
 
             self.opik_client.span(
                 id=opik_span_id,
-                trace_id=self.opik_trace.id,
+                trace_id=state.opik_trace_id,
                 parent_span_id=parent_span_id,
                 name=self._get_opik_span_name(span),
                 type=self._get_opik_span_type_from_agentspec_span_type(span),
@@ -267,132 +340,95 @@ class OpikSpanProcessor:
             )
 
             if isinstance(span, LlmGenerationSpan):
-                self._accumulate_llm_trace_data(span)
+                self._accumulate_llm_trace_data(state, span)
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.on_end`: {e}")
 
     def on_event(self, event: Event, span: Span) -> None:
-        """
-        Handle an event emitted for an AgentSpec span.
-
-        Args:
-            event: The event emitted by AgentSpec.
-            span: The AgentSpec span associated with the event.
-
-        Returns:
-            None
-        """
         # Nothing to do on events, they are simply part of the span
         pass
+
+    def _resolve_thread_id(self, trace: AgentSpecTrace) -> Optional[str]:
+        """Return the thread_id for the given trace.
+
+        ``AgentSpecInstrumentor`` may stash a per-trace thread_id on the trace
+        object itself (``_opik_thread_id``); fall back to the processor's
+        default ``thread_id`` if none is set.
+        """
+        return getattr(trace, "_opik_thread_id", None) or self.default_thread_id
 
     def startup(self) -> None:
         """
         Initialize Opik state when an AgentSpec trace starts.
-
-        Returns:
-            None
         """
         try:
             trace = get_trace()
-            self._trace_name = trace.name
-            self._trace_start_time = datetime.now(timezone.utc)
-            # Cannot use the Agent Spec trace ID, as Opik requires the ID to be UUIDv7 compliant
-            self.opik_trace = self.opik_client.trace(
-                name=self._trace_name,
-                start_time=self._trace_start_time,
-                thread_id=self.thread_id,
+            if trace is None:
+                return
+            start_time = datetime_helpers.local_timestamp()
+            opik_trace = self.opik_client.trace(
+                name=trace.name,
+                start_time=start_time,
+                thread_id=self._resolve_thread_id(trace),
             )
+            state = _PerTraceState(
+                opik_trace_id=opik_trace.id,
+                name=trace.name,
+                start_time=start_time,
+                thread_id=self._resolve_thread_id(trace),
+            )
+            with self._states_lock:
+                self._states[trace.id] = state
+            _ACTIVE_AGENTSPEC_TRACE_ID.set(trace.id)
         except Exception as e:
-            self.opik_trace = None
             logger.warning(f"Exception raised during `OpikSpanProcessor.startup`: {e}")
 
     def shutdown(self) -> None:
         """
         Finalize Opik state when an AgentSpec trace ends.
-
-        Returns:
-            None
         """
+        # AgentSpec clears its trace contextvar before invoking shutdown, so we
+        # rely on our own ContextVar set during startup.
+        trace_id = _ACTIVE_AGENTSPEC_TRACE_ID.get()
+        if trace_id is None:
+            return
+        with self._states_lock:
+            state = self._states.pop(trace_id, None)
+        _ACTIVE_AGENTSPEC_TRACE_ID.set(None)
+        if state is None:
+            return
         try:
-            if self.opik_trace is not None:
-                # Re-send the full trace payload with the same ID instead of calling
-                # trace.end(): with batching enabled, an UpdateTraceMessage shortly after
-                # CreateTraceMessage can be lost. Re-sending overwrites at the backend.
-                # https://www.comet.com/docs/opik/tracing/batching_and_updates
-                self.opik_client.trace(
-                    id=self.opik_trace.id,
-                    name=self._trace_name,
-                    start_time=self._trace_start_time,
-                    end_time=datetime.now(timezone.utc),
-                    input=self._trace_first_llm_input,
-                    output=self._trace_last_llm_output,
-                    thread_id=self.thread_id,
-                )
+            # Re-send the full trace payload with the same ID instead of calling
+            # trace.end(): with batching enabled, an UpdateTraceMessage shortly
+            # after CreateTraceMessage can be lost. Re-sending overwrites at the
+            # backend. https://www.comet.com/docs/opik/tracing/batching_and_updates
+            self.opik_client.trace(
+                id=state.opik_trace_id,
+                name=state.name,
+                start_time=state.start_time,
+                end_time=datetime_helpers.local_timestamp(),
+                input=state.first_llm_input,
+                output=state.last_llm_output,
+                thread_id=state.thread_id,
+            )
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.shutdown`: {e}")
-        finally:
-            self.opik_trace = None
-            self._trace_name = None
-            self._trace_start_time = None
-            self._trace_first_llm_input = None
-            self._trace_last_llm_output = None
-            self.opik_span_ids_mapping.clear()
 
     # Async methods just call the sync versions
 
     async def on_start_async(self, span: Span) -> None:
-        """
-        Handle the start of an AgentSpec span asynchronously.
-
-        Args:
-            span: The AgentSpec span being started.
-
-        Returns:
-            None
-        """
         self.on_start(span)
 
     async def on_end_async(self, span: Span) -> None:
-        """
-        Handle the end of an AgentSpec span asynchronously.
-
-        Args:
-            span: The AgentSpec span being ended.
-
-        Returns:
-            None
-        """
         self.on_end(span)
 
     async def on_event_async(self, event: Event, span: Span) -> None:
-        """
-        Handle an event emitted for an AgentSpec span asynchronously.
-
-        Args:
-            event: The event emitted by AgentSpec.
-            span: The AgentSpec span associated with the event.
-
-        Returns:
-            None
-        """
         self.on_event(event, span)
 
     async def startup_async(self) -> None:
-        """
-        Initialize Opik state asynchronously when an AgentSpec trace starts.
-
-        Returns:
-            None
-        """
         self.startup()
 
     async def shutdown_async(self) -> None:
-        """
-        Finalize Opik state asynchronously when an AgentSpec trace ends.
-
-        Returns:
-            None
-        """
         self.shutdown()
 
 
@@ -400,12 +436,6 @@ class AgentSpecInstrumentor(BaseInstrumentor):  # type: ignore
     """Instrument AgentSpec tracing with Opik."""
 
     def instrumentation_dependencies(self) -> Collection[str]:
-        """
-        Return the package dependencies required by this instrumentor.
-
-        Returns:
-            A collection of dependency specifiers understood by OpenTelemetry.
-        """
         return ["pyagentspec >= 26.1.0"]
 
     def _instrument(self, **kwargs: Any) -> None:
@@ -433,6 +463,10 @@ class AgentSpecInstrumentor(BaseInstrumentor):  # type: ignore
             thread_id=thread_id,
         )
         trace = Trace(span_processors=[opik_span_processor])
+        # Attach the thread_id to the trace itself so the processor can resolve
+        # it per-trace — important when one processor is shared across traces.
+        if thread_id is not None:
+            trace._opik_thread_id = thread_id  # type: ignore[attr-defined]
         trace._start()
 
     def _uninstrument(self, **kwargs: Any) -> None:
