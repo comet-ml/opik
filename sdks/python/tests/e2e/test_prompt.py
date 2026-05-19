@@ -1372,7 +1372,7 @@ def _create_mask_version(
     )
 
 
-def test_prompt_mask__get_prompt_returns_masked_template(opik_client: opik.Opik):
+def test_prompt__mask_get_prompt__returns_masked_template(opik_client: opik.Opik):
     """When a mask context is active, get_prompt returns the mask overlay instead of the original.
     Mask versions must not appear in get_prompt_history."""
     name = f"mask-test-{_generate_random_suffix()}"
@@ -1404,7 +1404,7 @@ def test_prompt_mask__get_prompt_returns_masked_template(opik_client: opik.Opik)
     assert unmasked.prompt == original_template
 
 
-def test_prompt_mask__chat_prompt_returns_masked_messages(opik_client: opik.Opik):
+def test_prompt__mask_chat_prompt__returns_masked_messages(opik_client: opik.Opik):
     """Mask context also works for chat prompts."""
     name = f"mask-chat-{_generate_random_suffix()}"
     original_messages = [
