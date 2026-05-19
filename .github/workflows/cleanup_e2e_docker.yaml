@@ -32,7 +32,7 @@ jobs:
     steps:
       - name: Delete CI images for PR ${{ github.event.pull_request.number }}
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR="${{ github.event.pull_request.number }}"
           TAGS=("ci-e2e-${PR}" "ci-e2e-${PR}-guardrails")
@@ -63,7 +63,7 @@ jobs:
     steps:
       - name: Delete ci-e2e-* images for closed PRs and old SHA tags
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAX_AGE_DAYS: ${{ github.event.inputs.max_age_days || '7' }}
         run: |
           DELETED=0
