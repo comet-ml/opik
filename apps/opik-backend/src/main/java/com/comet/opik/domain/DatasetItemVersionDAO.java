@@ -430,6 +430,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Counts dataset items with experiment items. The {@code slim_count} branch routes the count
      * through {@code experiment_item_aggregates}; the legacy branch keeps the full CTE chain for
      * search and raw-only inputs. OPIK-6177 stable-id resolution shape is preserved in both.
+     *
+     * <p>The slim branch's {@code dataset_items_filtered_ids} CTE mirrors the one in
+     * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS}'s {@code push_top_limit} branch,
+     * minus the {@code dataset_version_id} predicate (the slim path doesn't have
+     * {@code experiment_aggregated_scope_ids} in scope). Keep the column list and dataset scoping
+     * aligned across both call sites.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
             <if(slim_count)>
