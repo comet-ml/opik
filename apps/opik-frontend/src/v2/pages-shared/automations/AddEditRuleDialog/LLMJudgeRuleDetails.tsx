@@ -26,13 +26,11 @@ import {
 import {
   generateDefaultLLMPromptMessage,
   getAllTemplateStringsFromContent,
+  resolveTraceEvaluatorVariableDefault,
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import {
-  RESERVED_TRACE_EVALUATOR_VARIABLES,
-  RESERVED_TRACE_EVALUATOR_VARIABLE_NAMES,
-} from "@/constants/llm";
+import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -125,7 +123,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       // recalculate variables
       const variables = formInstance.getValues("llmJudgeDetails.variables");
       const currentScope = formInstance.getValues("scope");
-      const isTraceScope = currentScope === EVALUATORS_RULE_SCOPE.trace;
       const localVariables: Record<string, string> = {};
       let parsingVariablesError: boolean = false;
       messages
@@ -145,14 +142,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         }, [])
         .filter((v) => v !== "")
         .forEach((v: string) => {
-          // Auto-fill reserved trace variables (e.g. `{{spans}}`) with their sentinel
-          // path so the user doesn't have to pick one in the variable mapping dropdown.
-          // Preserve any existing user-supplied path if they already mapped this name
-          // to something else.
-          const reservedDefault = isTraceScope
-            ? RESERVED_TRACE_EVALUATOR_VARIABLES[v]
-            : undefined;
-          localVariables[v] = variables[v] || reservedDefault || "";
+          localVariables[v] = resolveTraceEvaluatorVariableDefault(
+            v,
+            variables[v],
+            currentScope,
+          );
         });
 
       formInstance.setValue("llmJudgeDetails.variables", localVariables);
@@ -350,7 +344,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     datasetColumnNames={datasetColumnNames}
                     type={autocompleteType}
                     includeIntermediateNodes
-                    hiddenVariableNames={RESERVED_TRACE_EVALUATOR_VARIABLE_NAMES}
+                    reservedSentinels={RESERVED_TRACE_EVALUATOR_VARIABLES}
                   />
                 </>
               );

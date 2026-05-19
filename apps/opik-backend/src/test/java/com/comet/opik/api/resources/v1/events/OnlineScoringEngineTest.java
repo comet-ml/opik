@@ -1039,7 +1039,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("templateReferencesSpans detects the 'spans' sentinel anywhere in the variables map")
-    void testTemplateReferencesSpans() {
+    void templateReferencesSpansDetectsSentinelInVariablesMap() {
         var noMessages = List.<com.comet.opik.api.evaluators.LlmAsJudgeMessage>of();
         var mustache = com.comet.opik.api.PromptType.MUSTACHE;
         assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of(), mustache)).isFalse();
@@ -1060,7 +1060,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("templateReferencesSpans detects {{spans}} inside a multimodal message's contentArray text part")
-    void testTemplateReferencesSpansInMultimodalContentArray() {
+    void templateReferencesSpansDetectsSpansInMultimodalContentArrayText() {
         var mustache = com.comet.opik.api.PromptType.MUSTACHE;
         var multimodalMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
                 .role(dev.langchain4j.data.message.ChatMessageType.USER)
@@ -1098,7 +1098,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("templateReferencesSpans detects implicit {{spans}} references in messages when variables omits the binding")
-    void testTemplateReferencesSpansFromMessageTemplate() {
+    void templateReferencesSpansDetectsImplicitMessageTemplateReference() {
         var mustache = com.comet.opik.api.PromptType.MUSTACHE;
         var spansMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
                 .role(dev.langchain4j.data.message.ChatMessageType.USER)
@@ -1120,7 +1120,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepareLlmRequest substitutes {{spans}}-referencing variables with the serialized spans list")
-    void testPrepareLlmRequestInjectsSpansFromSentinel() {
+    void prepareLlmRequestInjectsSpansFromSentinelVariable() {
         var evaluatorCode = LlmAsJudgeCode.builder()
                 .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
                         .name("gpt-4o").temperature(0.3).build())
@@ -1160,7 +1160,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepareLlmRequest renders {{spans}} as [] when the trace has no spans, not the literal sentinel")
-    void testPrepareLlmRequestRendersEmptySpansAsJsonArray() {
+    void prepareLlmRequestRendersEmptySpansAsJsonArrayWhenTraceHasNoChildren() {
         var evaluatorCode = LlmAsJudgeCode.builder()
                 .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
                         .name("gpt-4o").temperature(0.3).build())
@@ -1190,7 +1190,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepareLlmRequest substitutes {{spans}} from a template-only reference (no sentinel in variables)")
-    void testPrepareLlmRequestInjectsSpansFromTemplateReference() {
+    void prepareLlmRequestInjectsSpansFromImplicitTemplateReference() {
         // No "spans" key in variables. Mirrors an API-created rule where the caller put
         // {{spans}} in the prompt but didn't (or didn't know to) set the sentinel mapping.
         var evaluatorCode = LlmAsJudgeCode.builder()
@@ -1222,7 +1222,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepareLlmRequest respects an explicit variables mapping over the template-only spans injection")
-    void testPrepareLlmRequestRespectsExplicitSpansMapping() {
+    void prepareLlmRequestRespectsExplicitSpansMappingOverImplicitInjection() {
         // The user explicitly mapped "spans" to input.foo. Their intent overrides the
         // template-only fallback: substitute the JSONPath value, not the spans list.
         var evaluatorCode = LlmAsJudgeCode.builder()
@@ -1254,7 +1254,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepareLlmRequest leaves non-spans variables alone when spans are passed")
-    void testPrepareLlmRequestIgnoresSpansWhenNoSentinel() {
+    void prepareLlmRequestLeavesNonSpansVariablesAloneWhenSpansArePassed() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
         var span = com.comet.opik.api.Span.builder()

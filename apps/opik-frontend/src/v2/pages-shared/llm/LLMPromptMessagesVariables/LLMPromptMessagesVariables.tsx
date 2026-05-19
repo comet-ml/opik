@@ -32,12 +32,13 @@ interface LLMPromptMessagesVariablesProps {
   type?: TRACE_DATA_TYPE;
   includeIntermediateNodes?: boolean;
   /**
-   * Names that should be hidden from the rendered mapping list. The underlying
-   * `variables` map still carries them (so the backend receives the sentinel),
-   * but the user doesn't see a row they don't need to interact with — used for
-   * reserved trace evaluators like `{{spans}}` whose path is fixed.
+   * Variable-name → sentinel-value map. A row is hidden from the rendered list
+   * only when the variable's *current value* equals the sentinel for that name
+   * — so the default `spans → "spans"` auto-fill is hidden, but a custom
+   * override (e.g. `spans → "input.spans"` set via the API) stays visible and
+   * editable. Hiding purely by name would make user-set values write-only.
    */
-  hiddenVariableNames?: readonly string[];
+  reservedSentinels?: Readonly<Record<string, string>>;
 }
 
 const LLMPromptMessagesVariables = ({
@@ -51,18 +52,17 @@ const LLMPromptMessagesVariables = ({
   datasetColumnNames,
   type = TRACE_DATA_TYPE.traces,
   includeIntermediateNodes = false,
-  hiddenVariableNames,
+  reservedSentinels,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     if (!variables || typeof variables !== "object") {
       return [];
     }
-    const hidden = new Set(hiddenVariableNames ?? []);
     return Object.entries(variables)
-      .filter(([name]) => !hidden.has(name))
+      .filter(([name, value]) => reservedSentinels?.[name] !== value)
       .map((e) => ({ label: e[0], value: e[1] }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [variables, hiddenVariableNames]);
+  }, [variables, reservedSentinels]);
 
   const handleChangeVariables = useCallback(
     (changes: DropdownOption<string>) => {

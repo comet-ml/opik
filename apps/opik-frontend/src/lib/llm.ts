@@ -7,6 +7,8 @@ import {
   MessageContent,
   TextPart,
 } from "@/types/llm";
+import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { generateRandomString } from "@/lib/utils";
 
 export const generateDefaultLLMPromptMessage = (
@@ -300,4 +302,26 @@ export const parseChatTemplateToLLMMessages = (
   } catch {
     return [];
   }
+};
+
+/**
+ * Resolve the value for one template variable in an LLM-as-judge / Python-metric
+ * rule. Existing user-supplied mapping wins; otherwise on trace scope a `spans`
+ * variable auto-fills to its sentinel value (so {{spans}} works without the user
+ * picking a path); otherwise empty. Centralized so the four rule-detail editors
+ * (v1+v2 × {LLMJudge, PythonCode}) stay in sync — adding a new reserved trace
+ * variable to {@link RESERVED_TRACE_EVALUATOR_VARIABLES} propagates here.
+ */
+export const resolveTraceEvaluatorVariableDefault = (
+  variableName: string,
+  currentMapping: string | undefined,
+  scope: EVALUATORS_RULE_SCOPE,
+): string => {
+  if (currentMapping) {
+    return currentMapping;
+  }
+  if (scope === EVALUATORS_RULE_SCOPE.trace) {
+    return RESERVED_TRACE_EVALUATOR_VARIABLES[variableName] ?? "";
+  }
+  return "";
 };
