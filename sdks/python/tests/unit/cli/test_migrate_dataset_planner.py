@@ -79,11 +79,8 @@ class TestMigrateHelp:
         result = runner.invoke(cli, ["migrate", "dataset", "--help"])
         assert result.exit_code == 0
         assert "--to-project" in result.output
+        assert "--from-project" in result.output
         assert "--dry-run" in result.output
-        # Dataset names are workspace-unique; no --from-project flag in
-        # the Options block.
-        options_block = result.output.split("Options:")[-1]
-        assert "--from-project" not in options_block
 
 
 # ---------------------------------------------------------------------------

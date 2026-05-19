@@ -43,6 +43,52 @@ _PROJECT_SUGGESTION_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 100
 
 
+def _name_matches(row_name: str, lookup_name: str) -> bool:
+    """Case-insensitive name equality, matching the BE's collation.
+
+    The BE state database uses ``utf8mb4_unicode_ci`` (case-insensitive)
+    on every table, so:
+
+    * ``UNIQUE (workspace_id, name)`` forbids ``"MyData"`` and
+      ``"mydata"`` from coexisting.
+    * ``WHERE name LIKE '%mydata%'`` returns rows stored as ``"MyData"``.
+
+    Python's default ``!=`` is case-sensitive, so the previous Slice 1
+    code would receive a case-different row from the BE and then
+    discard it client-side — raising ``*NotFoundError`` for a row that
+    legitimately exists, or missing a collision in the rename pre-flight.
+    ``str.casefold`` is the right Python primitive for Unicode-aware
+    case-insensitive comparison (handles e.g. German ß → ss).
+    """
+    return row_name.casefold() == lookup_name.casefold()
+
+
+def make_list_fn(
+    find_fn: Callable[..., Any],
+    *,
+    name: Optional[str],
+    project_id: Optional[str],
+) -> Callable[[int, int], Any]:
+    """Bind ``find_fn`` to a ``(page, size) -> response`` closure.
+
+    Most Fern paginated endpoints share the same shape:
+    ``find_fn(page, size, name=..., project_id=..., ...)``. Entity
+    resolvers use this helper to build the ``list_fn`` that
+    ``iter_pages`` / ``name_taken_in_workspace`` /
+    ``resolve_unique_source_by_name`` accept, without each entity
+    rewriting the closure pattern.
+
+    ``find_fn`` is the bound Fern method (e.g.
+    ``client.rest_client.datasets.find_datasets`` or
+    ``client.rest_client.prompts.get_prompts``).
+    """
+
+    def _list(page: int, size: int) -> Any:
+        return find_fn(page=page, size=size, name=name, project_id=project_id)
+
+    return _list
+
+
 def iter_pages(
     list_fn: Callable[[int, int], Any],
     *,
@@ -180,7 +226,7 @@ def name_taken_in_workspace(
     collision found.
     """
     for row in iter_pages(list_fn):
-        if row.name != name:
+        if not _name_matches(row.name, name):
             continue
         if ignore_id is not None and row.id == ignore_id:
             continue
@@ -199,6 +245,7 @@ def resolve_unique_source_by_name(
     not_found_error: Type[MigrationError],
     invariant_violated_error: Type[MigrationError],
     entity_label: str,
+    scope_label: str = "the workspace",
 ) -> Any:
     """Resolve ``name`` to the single matching row, or raise.
 
@@ -207,18 +254,23 @@ def resolve_unique_source_by_name(
     raised on zero matches; ``invariant_violated_error`` is raised on
     >1 matches (the BE constraint has been bypassed somehow).
 
+    ``scope_label`` controls the not-found error wording so callers can
+    pass e.g. ``"project 'A'"`` when the lookup was scoped via
+    ``--from-project``. Defaults to ``"the workspace"`` for the
+    workspace-wide lookup case.
+
     Returns the raw row object so the per-entity ``resolve_source_*``
     function can build its ``Resolved*`` dataclass from it.
     """
     matches: List[Any] = []
     for row in iter_pages(list_fn):
-        if row.name != name:
+        if not _name_matches(row.name, name):
             continue
         matches.append(row)
 
     if not matches:
         raise not_found_error(
-            f"{entity_label.capitalize()} '{name}' not found in the workspace."
+            f"{entity_label.capitalize()} '{name}' not found in {scope_label}."
         )
 
     if len(matches) > 1:

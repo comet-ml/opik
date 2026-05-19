@@ -140,12 +140,16 @@ def build_dataset_plan(
     client: opik.Opik,
     name: str,
     to_project: str,
+    from_project: Optional[str] = None,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
     Ordering invariant: the source rename always precedes the destination
     create, so the workspace-unique-name constraint never trips. The target
     keeps the source's original name.
+
+    ``from_project`` is an optional source-scope hint (perf + clearer
+    error message); ``None`` does a workspace-wide source lookup.
 
     The plan emits, in order:
 
@@ -162,7 +166,7 @@ def build_dataset_plan(
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(client, to_project)
 
-    source = resolve_source(client, name)
+    source = resolve_source(client, name, from_project)
 
     if source.type not in SUPPORTED_DATASET_TYPES:
         raise UnsupportedDatasetTypeError(

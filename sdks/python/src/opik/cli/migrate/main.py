@@ -193,6 +193,18 @@ def _finalize_and_fail(
     help="Destination project name (required).",
 )
 @click.option(
+    "--from-project",
+    type=str,
+    default=None,
+    help=(
+        "Optional source project name. Omit to look up workspace-scoped "
+        "datasets (V1 entities, or anything left at workspace scope after "
+        "auto-migration). When provided, scopes the lookup to the named "
+        "project for a smaller BE result set and a clearer not-found "
+        "message."
+    ),
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -208,6 +220,7 @@ def migrate_dataset_command(
     ctx: click.Context,
     name: str,
     to_project: str,
+    from_project: Optional[str],
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -220,13 +233,15 @@ def migrate_dataset_command(
         3. Replay every source version onto the destination (full history)
         4. Cascade experiments + traces + spans into the destination project
 
-    Dataset names are workspace-unique (BE constraint
-    ``UNIQUE (workspace_id, name)``), so the source is resolved by name
-    alone — no ``--from-project`` flag is needed.
+    Dataset names are workspace-unique on the BE
+    (``UNIQUE (workspace_id, name)``); ``--from-project`` is an
+    optional source-scope hint that yields a smaller BE result set and
+    a clearer not-found error message.
     """
     args = {
         "name": name,
         "to_project": to_project,
+        "from_project": from_project,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
@@ -240,6 +255,7 @@ def migrate_dataset_command(
             client=client,
             name=name,
             to_project=to_project,
+            from_project=from_project,
         )
 
         _print_plan(plan)
@@ -290,6 +306,18 @@ def migrate_dataset_command(
     help="Destination project name (required).",
 )
 @click.option(
+    "--from-project",
+    type=str,
+    default=None,
+    help=(
+        "Optional source project name. Omit to look up workspace-scoped "
+        "prompts (V1 entities, or anything left at workspace scope after "
+        "auto-migration). When provided, scopes the lookup to the named "
+        "project for a smaller BE result set and a clearer not-found "
+        "message."
+    ),
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -305,6 +333,7 @@ def migrate_prompt_command(
     ctx: click.Context,
     name: str,
     to_project: str,
+    from_project: Optional[str],
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -317,12 +346,15 @@ def migrate_prompt_command(
         3. Replay every source version onto the destination (full history,
            with source commit hashes preserved verbatim)
 
-    Prompt names are workspace-unique, so no ``--from-project`` flag is
-    needed: the source is resolved by name alone.
+    Prompt names are workspace-unique on the BE
+    (``UNIQUE (workspace_id, name)``); ``--from-project`` is an optional
+    source-scope hint that yields a smaller BE result set and a clearer
+    not-found error message.
     """
     args = {
         "name": name,
         "to_project": to_project,
+        "from_project": from_project,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate prompt", args=args)
@@ -336,6 +368,7 @@ def migrate_prompt_command(
             client=client,
             name=name,
             to_project=to_project,
+            from_project=from_project,
         )
 
         _print_plan(plan)

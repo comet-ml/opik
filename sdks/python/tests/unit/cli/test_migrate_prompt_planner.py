@@ -38,13 +38,8 @@ class TestMigratePromptHelp:
         result = runner.invoke(cli, ["migrate", "prompt", "--help"])
         assert result.exit_code == 0
         assert "--to-project" in result.output
+        assert "--from-project" in result.output
         assert "--dry-run" in result.output
-        # Prompt names are workspace-unique; no --from-project flag in
-        # the Options block. (The docstring may mention "no
-        # --from-project flag needed" but it must not be a registered
-        # Click option.)
-        options_block = result.output.split("Options:")[-1]
-        assert "--from-project" not in options_block
 
 
 class TestPlanBuilding:
@@ -207,6 +202,27 @@ class TestPreflightErrors:
 
         assert "Missing" in str(excinfo.value)
         assert "workspace" in str(excinfo.value).lower()
+
+    def test_build_prompt_plan__from_project_set_and_missing__raises_with_project_scope(
+        self,
+    ) -> None:
+        # When --from-project is passed and the source prompt is not in that
+        # project, the not-found error should name the project (not "the
+        # workspace") so the user knows where we looked.
+        rest_client = _planner_rest_client(
+            [_Page([])]  # source lookup returns no matches in the project
+        )
+
+        with pytest.raises(PromptNotFoundError) as excinfo:
+            prompt_planner.build_prompt_plan(
+                client=_planner_client(rest_client),
+                name="MyPrompt",
+                to_project="B",
+                from_project="A",
+            )
+
+        assert "MyPrompt" in str(excinfo.value)
+        assert "project 'A'" in str(excinfo.value)
 
     def test_build_prompt_plan__rename_collision__raises(self) -> None:
         # Source resolves, but the rename target ``MyPrompt_v1`` is already

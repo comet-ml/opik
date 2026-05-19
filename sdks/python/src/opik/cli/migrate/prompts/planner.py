@@ -129,6 +129,7 @@ def build_prompt_plan(
     client: opik.Opik,
     name: str,
     to_project: str,
+    from_project: Optional[str] = None,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one prompt.
 
@@ -136,6 +137,9 @@ def build_prompt_plan(
     create, so the workspace-unique-name constraint
     (``unique(workspace_id, name)``) never trips. The destination keeps
     the source's original name.
+
+    ``from_project`` is an optional source-scope hint (perf + clearer
+    error message); ``None`` does a workspace-wide source lookup.
 
     The plan emits, in order:
 
@@ -149,7 +153,7 @@ def build_prompt_plan(
     # rename/create work and prevents auto-creating a stray project.
     ensure_destination_project_exists(client, to_project)
 
-    source = resolve_source_prompt(client, name)
+    source = resolve_source_prompt(client, name, from_project)
 
     name_after_rename = f"{source.name}{SOURCE_SUFFIX}"
 
