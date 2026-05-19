@@ -280,7 +280,7 @@ class PromptClient:
                 commit=commit,
                 project_name=project_name,
                 template_structure=template_structure,
-                fetch_fn=lambda: _fetch(mask_id=mask_id) if mask_id else _fetch(),
+                fetch_fn=lambda: _fetch(mask_id=mask_id),
                 mask_id=mask_id,
             )
 
