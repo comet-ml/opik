@@ -12,7 +12,7 @@ execution is fully traced — you get LLM calls, latencies, token usage, and the
 graph, all visible in the Opik UI.
 
 Beyond running your agent, the playground lets you tweak prompts and parameters from
-[Agent Configuration](/prompt_engineering/agent-configuration) without changing your code. Once
+[Agent Configuration](/development/agent-configuration) without changing your code. Once
 you're happy with the results, save the new configuration and your agent picks it up automatically.
 
 <video
@@ -135,7 +135,7 @@ UI, check that the process is still running locally and that your network connec
   <Accordion title="What is the difference between opik connect and opik endpoint?">
     They serve different purposes:
 
-    - **`opik connect`** starts a lightweight bridge daemon that gives [Ollie](/tracing/ollie)
+    - **`opik connect`** starts a lightweight bridge daemon that gives [Ollie](/ollie)
       remote access to your repository. Ollie can then read your source files, propose code
       changes, and rerun your agent — all from the Opik UI. It does not run your agent process
       itself.
@@ -151,6 +151,6 @@ UI, check that the process is still running locally and that your network connec
 
 ## Next steps
 
-- [Ollie](/tracing/ollie) — Use Ollie with `opik connect` to debug and improve your agent's code
+- [Ollie](/ollie) — Use Ollie with `opik connect` to debug and improve your agent's code
 - [Debugging agents with Ollie](/tracing/debug-agents) — The debug-fix-verify workflow
 - [Getting started with Observability](/tracing/getting-started) — Configure your Opik environment
