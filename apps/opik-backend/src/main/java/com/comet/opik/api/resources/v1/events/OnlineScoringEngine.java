@@ -211,7 +211,13 @@ public class OnlineScoringEngine {
      *
      * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}) — without
      * it, {@code toReplacements} leaves the bare {@code "spans"} value as a literal and the
-     * prompt renders the word "spans" instead of an empty array.
+     * prompt renders the word "spans" instead of an empty array. <strong>Intentionally not
+     * gated by {@code isAgenticToolsEnabled}</strong>: when the toggle is off, the scorer
+     * skips the spans fetch and threads an empty list here, which still rewrites
+     * sentinel-mapped variables to {@code "[]"}. Gating this would resurrect the bare-word
+     * leak for rules whose variables map still carries the sentinel from before the toggle
+     * flipped. See {@code OnlineScoringLlmAsJudgeScorer.shouldFetchSpans} for the full
+     * toggle-semantics rationale.
      *
      * <p>Also handles the implicit-reference case (template uses {@code {{spans}}} but the
      * variables map doesn't bind it): mirrors the FE auto-fill server-side so API-created

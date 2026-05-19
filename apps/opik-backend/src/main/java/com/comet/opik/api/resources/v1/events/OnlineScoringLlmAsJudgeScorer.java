@@ -346,16 +346,27 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      *       cache so the in-loop {@code get_trace_spans} call doesn't redo the fetch.
      *   <li>The inline prompt template references {@code {{spans}}} — see
      *       {@link OnlineScoringEngine#templateReferencesSpans} for both opt-in shapes
-     *       (sentinel-valued variable AND implicit template reference). <strong>Gated by the
-     *       same {@code isAgenticToolsEnabled} toggle</strong>: both pathways ship as one
-     *       feature, so a single flip turns spans-in-prompts on or off org-wide. When the
-     *       toggle is off and no experimentId branch is active, the fetch is skipped and
-     *       {@code injectSpansIntoReplacements} substitutes an empty array into {@code {{spans}}}
-     *       via the empty list threaded through {@code prepareLlmRequest}.
+     *       (sentinel-valued variable AND implicit template reference). <strong>Gated by
+     *       {@code isAgenticToolsEnabled}</strong>: both pathways ship under the same flag.
      * </ul>
      *
-     * <p>Skipping the fetch otherwise avoids a {@code spanService.getByTraceIds} call per
-     * scored trace on rules that don't need spans.
+     * <p><strong>Toggle semantics — important and not symmetric:</strong> this method gates
+     * the {@code spanService.getByTraceIds} I/O. It does <em>not</em> gate the substitution
+     * itself — {@link OnlineScoringEngine#injectSpansIntoReplacements} runs unconditionally
+     * inside {@code prepareLlmRequest}. When the toggle is off and a rule still carries a
+     * sentinel-mapped {@code spans} variable (e.g. saved by an older FE before the toggle
+     * flipped), {@code {{spans}}} renders as the empty JSON array {@code []} via the empty
+     * spans list threaded through. We do <em>not</em> gate the substitution because doing so
+     * would let the sentinel value {@code "spans"} leak through {@code toReplacements}'
+     * literal-value fallback and render the bare word {@code spans} in the prompt — worse
+     * UX than {@code []}. Net behavior with toggle off:
+     * <ul>
+     *   <li>Existing rules with sentinel mapping → {@code Spans: []}
+     *   <li>New rules created via the FE → FE skips the auto-fill, user maps {@code spans}
+     *       like any other variable, BE renders whatever path they pick.
+     *   <li>Experiment-id (test-suite assertion) path → agentic-tools fires regardless, so
+     *       spans are still fetched and {@code {{spans}}} substitutes the actual JSON.
+     * </ul>
      */
     // Package-private for unit tests.
     boolean shouldFetchSpans(TraceToScoreLlmAsJudge message) {

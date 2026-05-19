@@ -324,7 +324,11 @@ export const resolveTraceEvaluatorVariableDefault = (
   scope: EVALUATORS_RULE_SCOPE,
   agenticToolsEnabled: boolean,
 ): string => {
-  if (currentMapping) {
+  // Preserve any value the user already set — including an explicit empty
+  // string. Treating `""` as "not set" and re-applying the sentinel auto-fill
+  // would silently clobber an API caller's deliberate `spans: ""` on every
+  // prompt re-parse.
+  if (currentMapping !== undefined) {
     return currentMapping;
   }
   if (agenticToolsEnabled && scope === EVALUATORS_RULE_SCOPE.trace) {
