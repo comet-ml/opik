@@ -262,6 +262,10 @@ class PromptClient:
         Returns:
             Prompt: The details of the specified prompt.
         """
+        if commit and environment:
+            raise ValueError(
+                "'commit' and 'environment' are mutually exclusive; pass at most one."
+            )
         try:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,

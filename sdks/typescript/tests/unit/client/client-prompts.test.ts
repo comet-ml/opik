@@ -512,6 +512,19 @@ describe("Opik prompt operations", () => {
       expect(result?.prompt).toBe("Specific version");
     });
 
+    it("should reject when both commit and environment are provided", async () => {
+      await expect(
+        client.getPrompt({
+          name: "test-prompt",
+          commit: "abc12345",
+          environment: "staging",
+        })
+      ).rejects.toThrow(/mutually exclusive/);
+
+      expect(getPromptsSpy).not.toHaveBeenCalled();
+      expect(retrievePromptVersionSpy).not.toHaveBeenCalled();
+    });
+
     it("should return null when prompt doesn't exist", async () => {
       const mockSearchResponse = {
         content: [],

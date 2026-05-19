@@ -382,6 +382,16 @@ class TestPromptEnvironment:
         call_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
         assert call_kwargs["environment"] == "staging"
 
+    def test_get_prompt__commit_and_environment__raises_value_error(
+        self, client, mock_rest_client
+    ):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            client.get_prompt(
+                name="env-prompt", commit="abc12345", environment="staging"
+            )
+
+        mock_rest_client.prompts.retrieve_prompt_version.assert_not_called()
+
     def test_get_prompt_with_cache__different_environments__not_cached_together(
         self, mock_rest_client
     ):
