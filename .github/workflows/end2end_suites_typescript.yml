@@ -2,7 +2,7 @@ name: Application E2E Tests (TypeScript)
 env:
   OPIK_SENTRY_ENABLE: False
   ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
-  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID || github.run_id }}
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
   ALLURE_ENDPOINT: https://comet.testops.cloud/
   ALLURE_PROJECT_ID: 1
   ALLURE_RESULTS: allure-results
@@ -59,9 +59,31 @@ jobs:
         with:
           include_frontend: true
 
+    setup-allure:
+        name: "Create Allure launch"
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        outputs:
+          launch_id: ${{ steps.create.outputs.launch_id }}
+        steps:
+            - name: Install allurectl
+              uses: allure-framework/setup-allurectl@v1
+
+            - name: Create launch
+              id: create
+              run: |
+                SUITE="${{ github.event.inputs.suite || 'fullregression' }}"
+                LAUNCH_NAME="TS E2E ${SUITE} - PR #${{ github.event.pull_request.number || github.run_id }}"
+                LAUNCH_ID=$(allurectl launch create \
+                  --launch-name "${LAUNCH_NAME}" \
+                  --no-header \
+                  --format ID | tail -n1)
+                echo "Created Allure launch ${LAUNCH_ID} (${LAUNCH_NAME})"
+                echo "launch_id=${LAUNCH_ID}" >> "$GITHUB_OUTPUT"
+
     run_suite:
         name: "Run TS suite shard ${{ matrix.shard }}/4: ${{ github.event.inputs.suite || 'fullregression' }}"
-        needs: [build-opik]
+        needs: [build-opik, setup-allure]
         runs-on: ubuntu-latest
         timeout-minutes: 30
         permissions:
@@ -162,6 +184,7 @@ jobs:
                 OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
                 ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
                 TEST_SUITE: ${{ github.event.inputs.suite || 'fullregression' }}
+                ALLURE_LAUNCH_ID: ${{ needs.setup-allure.outputs.launch_id }}
                 PLAYWRIGHT_BLOB_OUTPUT_FILE: blob-report/report-${{ matrix.shard }}.zip
               run: |
                 export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/typescript-tests/${ALLURE_RESULTS}"
@@ -232,3 +255,19 @@ jobs:
                 name: playwright-report
                 path: tests_end_to_end/typescript-tests/playwright-report
                 retention-days: 7
+
+    close-allure-launch:
+        name: "Close Allure launch"
+        if: always() && needs.setup-allure.outputs.launch_id != ''
+        needs: [setup-allure, run_suite]
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - name: Install allurectl
+              uses: allure-framework/setup-allurectl@v1
+
+            - name: Close launch
+              env:
+                LAUNCH_ID: ${{ needs.setup-allure.outputs.launch_id }}
+              run: |
+                allurectl launch close "${LAUNCH_ID}"
