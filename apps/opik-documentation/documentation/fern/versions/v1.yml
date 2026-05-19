@@ -157,6 +157,9 @@ navigation:
               - page: G-Eval
                 path: ../docs/evaluation/metrics/g_eval.mdx
                 slug: g_eval
+              - page: Conversation-level GEval
+                path: ../docs/evaluation/metrics/g_eval_conversation_metrics.mdx
+                slug: g_eval_conversation_metrics
               - page: Compliance risk
                 path: ../docs/evaluation/metrics/compliance_risk.mdx
                 slug: compliance_risk
@@ -214,6 +217,9 @@ navigation:
               - page: Custom conversation metric
                 path: ../docs/evaluation/metrics/custom_conversation_metric.mdx
                 slug: custom_conversation_metric
+              - page: Structured Output Compliance
+                path: ../docs/evaluation/metrics/structure_output_compliance.mdx
+                slug: structure_output_compliance
               - page: Task span metrics
                 path: ../docs/evaluation/metrics/task_span_metrics.mdx
                 slug: task_span_metrics
@@ -561,9 +567,6 @@ navigation:
           - section: Dataset Management
             skip-slug: true
             contents:
-              - page: Gretel
-                path: ../docs/tracing/integrations/gretel.mdx
-                slug: gretel
               - page: Hugging Face Datasets
                 path: ../docs/tracing/integrations/huggingface-datasets.mdx
                 slug: huggingface-datasets
