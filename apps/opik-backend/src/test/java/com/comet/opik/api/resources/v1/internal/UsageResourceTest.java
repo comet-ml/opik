@@ -404,6 +404,84 @@ class UsageResourceTest {
         }
 
         @Test
+        @DisplayName("Span count includes activity in demo projects created after the demo cutoff")
+        void spansCountIncludesPostCutoffActivityInDemoProjects() {
+            var demoSpans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(0))
+                            .build())
+                    .toList();
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            demoSpans.forEach(span -> createEntity(span, apiKey, workspaceName, SPANS_RESOURCE_URL_TEMPLATE));
+
+            // Project created today → cutoff = today + 1 min, in the future. Push the project two days back so
+            // cutoff lands ~2 days ago, then move spans to yesterday — they end up post-cutoff and must be counted.
+            backdateDemoProjectsCreatedAtTwoDays();
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-span-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, SpansCountResponse.class);
+                    var spanCount = getMatch(response.workspacesSpansCount(),
+                            spanInfo -> spanInfo.workspace().equals(workspaceId));
+
+                    return spanCount
+                            .map(info -> info.spanCount() == demoSpans.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Trace count includes activity in demo projects created after the demo cutoff")
+        void tracesCountIncludesPostCutoffActivityInDemoProjects() {
+            var demoTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(0))
+                            .build())
+                    .toList();
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            demoTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+
+            backdateDemoProjectsCreatedAtTwoDays();
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-trace-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, TraceCountResponse.class);
+                    var traceCount = getMatch(response.workspacesTracesCount(),
+                            traceInfo -> traceInfo.workspace().equals(workspaceId));
+
+                    return traceCount
+                            .map(info -> info.traceCount() == demoTraces.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
         @DisplayName("Mixed workspace with demo and regular data - only regular data counted")
         void mixedWorkspaceExcludesDemoData() {
             var regularTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
@@ -517,5 +595,21 @@ class UsageResourceTest {
                 return null;
             });
         };
+    }
+
+    private void backdateDemoProjectsCreatedAtTwoDays() {
+        // Push demo-named project creation timestamps far enough into the past that the
+        // computed demoDataCreatedAt cutoff (= max(project.created_at) + 1 min) precedes
+        // spans/traces backdated to yesterday — exercising the `OR created_at > cutoff`
+        // branch of the rewritten exclusion predicate. The service resolves demo projects
+        // by global name across all workspaces, so the update must span workspaces too.
+        mySqlTemplate.inTransaction(WRITE, handle -> {
+            handle.createUpdate(
+                    "UPDATE projects SET created_at = TIMESTAMPADD(DAY, -2, created_at) WHERE name IN (<names>)")
+                    .bindList("names", DemoData.PROJECTS)
+                    .execute();
+
+            return null;
+        });
     }
 }
