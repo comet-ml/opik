@@ -1246,6 +1246,72 @@ class OnlineScoringEngineTest {
     }
 
     @Test
+    @DisplayName("substituted {{spans}} carries only the LLM-relevant fields — not feedback scores, comments, audit metadata")
+    void prepareLlmRequestRendersSpansWithLeanProjection() {
+        // Build a Span with the full kitchen sink — every field that SpanForLlm intentionally
+        // drops gets populated here so the assertion can verify they're absent from the JSON.
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Inspect: {{mySpans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("mySpans", "spans")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var feedback = com.comet.opik.api.FeedbackScore.builder()
+                .name("relevance").value(java.math.BigDecimal.valueOf(0.9)).source(ScoreSource.UI).build();
+        var comment = com.comet.opik.api.Comment.builder()
+                .id(generator.generate()).text("audit-noise").build();
+        var fatSpan = Span.builder()
+                .id(generator.generate())
+                .name("inspect-tool")
+                .type(SpanType.tool)
+                .startTime(java.time.Instant.now())
+                .traceId(trace.id())
+                .projectId(trace.projectId())
+                .projectName("audit-project-name")
+                .createdBy("audit-creator")
+                .lastUpdatedBy("audit-updater")
+                .createdAt(java.time.Instant.now())
+                .lastUpdatedAt(java.time.Instant.now())
+                .feedbackScores(List.of(feedback))
+                .comments(List.of(comment))
+                .totalEstimatedCost(java.math.BigDecimal.valueOf(0.0042))
+                .totalEstimatedCostVersion("v2")
+                .tags(java.util.Set.of("audit-tag"))
+                .usage(Map.of("prompt_tokens", 42))
+                .environment("audit-env")
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(fatSpan));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        // Kept fields: name + type land in the rendered JSON.
+        assertThat(allText).contains("inspect-tool");
+        assertThat(allText).contains("tool");
+        // Dropped fields: not a single audit/score/cost field leaks through. These substring
+        // checks are deliberately tight against unique tokens the test set above so they can't
+        // accidentally collide with template/system-prompt text.
+        assertThat(allText).doesNotContain("audit-noise");
+        assertThat(allText).doesNotContain("audit-creator");
+        assertThat(allText).doesNotContain("audit-updater");
+        assertThat(allText).doesNotContain("audit-project-name");
+        assertThat(allText).doesNotContain("audit-tag");
+        assertThat(allText).doesNotContain("audit-env");
+        assertThat(allText).doesNotContain("feedback_scores");
+        assertThat(allText).doesNotContain("comments");
+        assertThat(allText).doesNotContain("total_estimated_cost");
+        assertThat(allText).doesNotContain("prompt_tokens");
+    }
+
+    @Test
     @DisplayName("prepareLlmRequest renders {{spans}} as [] when the trace has no spans, not the literal sentinel")
     void prepareLlmRequestRendersEmptySpansAsJsonArrayWhenTraceHasNoChildren() {
         var evaluatorCode = LlmAsJudgeCode.builder()

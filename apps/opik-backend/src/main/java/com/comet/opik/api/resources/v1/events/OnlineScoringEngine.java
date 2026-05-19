@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
@@ -12,6 +13,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.log.LogContextAware;
@@ -232,9 +234,16 @@ public class OnlineScoringEngine {
         if (!sentinelMapped && !templateOnly) {
             return;
         }
+        // Project to SpanForLlm so the prompt only carries fields a judge actually uses
+        // (name, type, in/out, timing, model/provider, errorInfo). Drops audit metadata,
+        // feedback scores, comments, cost data — none of which help the judge and all of
+        // which burn tokens. Sort first so the projection preserves call order.
         String spansJson;
         try {
-            spansJson = OBJECT_MAPPER.writeValueAsString(spans.stream().sorted(BY_SPAN_START_TIME).toList());
+            spansJson = OBJECT_MAPPER.writeValueAsString(spans.stream()
+                    .sorted(BY_SPAN_START_TIME)
+                    .map(SpanForLlm::from)
+                    .toList());
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException(e);
         }
@@ -787,8 +796,9 @@ public class OnlineScoringEngine {
                 .collect(Collectors.groupingBy(Span::traceId));
         return traces.stream()
                 .flatMap(trace -> {
-                    List<Span> traceSpans = spansByTrace.getOrDefault(trace.id(), List.of()).stream()
+                    List<SpanForLlm> traceSpans = spansByTrace.getOrDefault(trace.id(), List.of()).stream()
                             .sorted(BY_SPAN_START_TIME)
+                            .map(SpanForLlm::from)
                             .toList();
                     return Stream.of(
                             EnrichedThreadChatMessage.builder()
@@ -814,7 +824,60 @@ public class OnlineScoringEngine {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @Builder(toBuilder = true)
-    public record EnrichedThreadChatMessage(String role, JsonNode content, List<Span> spans) {
+    public record EnrichedThreadChatMessage(String role, JsonNode content, List<SpanForLlm> spans) {
+    }
+
+    /**
+     * Lean projection of {@link Span} for the LLM-judge prompt. The raw {@code Span} record
+     * carries ~28 fields — audit metadata, feedback scores, comments, cost data, etc. — and
+     * pasting all of it into a prompt burns tokens on irrelevant content and can confuse the
+     * judge ("why is there a {@code feedback_scores} array? am I supposed to defer to that?").
+     *
+     * <p>Keep only what helps a judge reason about agent behavior:
+     * <ul>
+     *   <li>{@code name} / {@code type}: which tool or LLM ran
+     *   <li>{@code input} / {@code output}: what was passed and what came back
+     *   <li>{@code metadata}: user-provided context the agent attached
+     *   <li>{@code startTime} / {@code endTime} / {@code duration}: call order + how long
+     *   <li>{@code model} / {@code provider}: for LLM spans, which model
+     *   <li>{@code errorInfo}: if the call failed
+     * </ul>
+     * Null fields are omitted via {@code @JsonInclude(NON_NULL)} so e.g. a successful tool
+     * span doesn't pad the JSON with {@code error_info: null}. Same shape is used by the
+     * trace-scope {@code {{spans}}} substitution and the thread-scope {@code {{context}}}
+     * per-assistant {@code spans} field — one projection, two render paths.
+     */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Builder(toBuilder = true)
+    public record SpanForLlm(
+            String name,
+            SpanType type,
+            Instant startTime,
+            Instant endTime,
+            Double duration,
+            JsonNode input,
+            JsonNode output,
+            JsonNode metadata,
+            String model,
+            String provider,
+            ErrorInfo errorInfo) {
+
+        public static SpanForLlm from(Span span) {
+            return SpanForLlm.builder()
+                    .name(span.name())
+                    .type(span.type())
+                    .startTime(span.startTime())
+                    .endTime(span.endTime())
+                    .duration(span.duration())
+                    .input(span.input())
+                    .output(span.output())
+                    .metadata(span.metadata())
+                    .model(span.model())
+                    .provider(span.provider())
+                    .errorInfo(span.errorInfo())
+                    .build();
+        }
     }
 
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames) {
