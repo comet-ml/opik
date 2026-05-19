@@ -9,6 +9,7 @@ from pyagentspec.tracing.spans import LlmGenerationSpan, Span, ToolExecutionSpan
 from pyagentspec.tracing.trace import get_trace
 
 import opik
+import opik.id_helpers as id_helpers
 import opik.llm_usage as llm_usage
 
 logger = logging.getLogger(__name__)
@@ -62,10 +63,8 @@ class OpikSpanProcessor:
         self.opik_trace: Optional[opik.Trace] = None
         self._trace_name: Optional[str] = None
         self._trace_start_time: Optional[datetime] = None
-        # Mapping from Agent Spec Span ID to Opik Span ID
+        # Mapping from Agent Spec Span ID to pre-assigned Opik Span ID
         self.opik_span_ids_mapping: Dict[str, str] = {}
-        # Collection of Agent Spec Span ID -> Opik Span
-        self.opik_spans: Dict[str, opik.Span] = {}
         # Accumulated trace-level data from LLM spans
         self._trace_first_llm_input: Optional[Dict[str, Any]] = None
         self._trace_last_llm_output: Optional[Dict[str, Any]] = None
@@ -205,33 +204,6 @@ class OpikSpanProcessor:
             ]
         }
 
-    def _get_or_create_opik_span(self, span: Span) -> Optional[opik.Span]:
-        # Get the Opik Span corresponding to the given Agent Spec Span if it already exists
-        # in the registry, otherwise create one, register it for future gets, and return it
-        opik_span = self.opik_spans.get(span.id, None)
-        if opik_span is None and self.opik_trace:
-            opik_span = self.opik_trace.span(
-                # Cannot use the AgentSpec span ID, as Opik requires the ID to be UUIDv7 compliant
-                name=self._get_opik_span_name(span),
-                parent_span_id=(
-                    self.opik_span_ids_mapping.get(span._parent_span.id, None)
-                    if span._parent_span
-                    else None
-                ),
-                start_time=_ns_to_datetime(span.start_time),
-                end_time=_ns_to_datetime(span.end_time),
-                type=self._get_opik_span_type_from_agentspec_span_type(span),
-                model=self._get_opik_model_from_agentspec_span(span),
-                input=self._create_opik_span_inputs_from_span(span),
-                output=self._create_opik_span_outputs_from_span(span),
-                usage=self._create_opik_span_usage_from_span(span),
-                metadata=self._create_opik_span_metadata_from_span(span),
-                error_info=self._create_opik_span_error_info_from_span(span),
-            )
-            self.opik_span_ids_mapping[span.id] = opik_span.id
-            self.opik_spans[span.id] = opik_span
-        return opik_span
-
     def _accumulate_llm_trace_data(self, span: LlmGenerationSpan) -> None:
         """Collect LLM span data to populate trace-level input/output."""
         span_input = self._create_opik_span_inputs_from_span(span)
@@ -247,15 +219,14 @@ class OpikSpanProcessor:
         """
         Handle the start of an AgentSpec span.
 
-        Args:
-            span: The AgentSpec span being started.
-
-        Returns:
-            None
+        We pre-assign an Opik span ID here so child spans can reference us as a parent,
+        but we defer the actual span emission to ``on_end`` to send a single full-payload
+        message (avoiding the Create+Update race that batching introduces for short-lived
+        spans).
         """
         try:
-            # Creating the span if it does not exist, we don't need to start it
-            self._get_or_create_opik_span(span)
+            if span.id not in self.opik_span_ids_mapping:
+                self.opik_span_ids_mapping[span.id] = id_helpers.generate_id()
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.on_start`: {e}")
 
@@ -263,35 +234,42 @@ class OpikSpanProcessor:
         """
         Handle the end of an AgentSpec span.
 
-        Args:
-            span: The AgentSpec span being ended.
-
-        Returns:
-            None
+        Emit the Opik span as a single full-payload write using the pre-assigned ID so
+        the backend always sees a complete record, even with batching enabled.
         """
         try:
-            opik_span = self._get_or_create_opik_span(span)
-            if opik_span is not None:
-                # This should only happen if the trace is none, i.e., there's no trace active
-                opik_span.end(
-                    # Update the span attributes with the new data we have
-                    end_time=_ns_to_datetime(span.end_time),
-                    model=self._get_opik_model_from_agentspec_span(span),
-                    input=self._create_opik_span_inputs_from_span(span),
-                    output=self._create_opik_span_outputs_from_span(span),
-                    usage=self._create_opik_span_usage_from_span(span),
-                    metadata=self._create_opik_span_metadata_from_span(span),
-                    error_info=self._create_opik_span_error_info_from_span(span),
-                )
+            if self.opik_trace is None:
+                return
+
+            opik_span_id = self.opik_span_ids_mapping.get(span.id) or id_helpers.generate_id()
+            self.opik_span_ids_mapping[span.id] = opik_span_id
+
+            parent_span_id = (
+                self.opik_span_ids_mapping.get(span._parent_span.id)
+                if span._parent_span
+                else None
+            )
+
+            self.opik_client.span(
+                id=opik_span_id,
+                trace_id=self.opik_trace.id,
+                parent_span_id=parent_span_id,
+                name=self._get_opik_span_name(span),
+                type=self._get_opik_span_type_from_agentspec_span_type(span),
+                start_time=_ns_to_datetime(span.start_time),
+                end_time=_ns_to_datetime(span.end_time),
+                model=self._get_opik_model_from_agentspec_span(span),
+                input=self._create_opik_span_inputs_from_span(span),
+                output=self._create_opik_span_outputs_from_span(span),
+                usage=self._create_opik_span_usage_from_span(span),
+                metadata=self._create_opik_span_metadata_from_span(span),
+                error_info=self._create_opik_span_error_info_from_span(span),
+            )
 
             if isinstance(span, LlmGenerationSpan):
                 self._accumulate_llm_trace_data(span)
         except Exception as e:
             logger.warning(f"Exception raised during `OpikSpanProcessor.on_end`: {e}")
-        finally:
-            # Remove the span from the internal registries as we don't need it anymore
-            self.opik_spans.pop(span.id, None)
-            self.opik_span_ids_mapping.pop(span.id, None)
 
     def on_event(self, event: Event, span: Span) -> None:
         """
@@ -358,6 +336,7 @@ class OpikSpanProcessor:
             self._trace_start_time = None
             self._trace_first_llm_input = None
             self._trace_last_llm_output = None
+            self.opik_span_ids_mapping.clear()
 
     # Async methods just call the sync versions
 
