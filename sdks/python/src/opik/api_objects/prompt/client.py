@@ -17,6 +17,33 @@ LOGGER = logging.getLogger(__name__)
 _PromptT = TypeVar("_PromptT", bound=BasePrompt)
 
 
+def _with_environment(
+    version: prompt_version_detail.PromptVersionDetail,
+    environment: Optional[str],
+) -> prompt_version_detail.PromptVersionDetail:
+    """Return a copy of ``version`` with its ``environment`` replaced.
+
+    ``PromptVersionDetail`` is a frozen pydantic model, so a new instance must
+    be constructed to reflect the updated environment value locally after a
+    successful backend write.
+    """
+    return prompt_version_detail.PromptVersionDetail(
+        id=version.id,
+        prompt_id=version.prompt_id,
+        commit=version.commit,
+        template=version.template,
+        metadata=version.metadata,
+        type=version.type,
+        environment=environment,
+        change_description=version.change_description,
+        tags=version.tags,
+        variables=version.variables,
+        template_structure=version.template_structure,
+        created_at=version.created_at,
+        created_by=version.created_by,
+    )
+
+
 @dataclasses.dataclass
 class PromptSearchResult:
     """Result from searching prompts, containing name, template structure, and latest version details."""
@@ -43,6 +70,7 @@ class PromptClient:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -58,6 +86,8 @@ class PromptClient:
         - change_description: Optional description of changes in this version.
         - tags: Optional list of tags to associate with the prompt.
         - project_name: Optional project name to associate with the prompt. If not provided, the default project will be used.
+        - environment: Optional environment name to own this prompt version. The environment must already be
+          registered in the workspace; otherwise the backend returns 404.
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -114,7 +144,14 @@ class PromptClient:
                 description=description,
                 change_description=change_description,
                 tags=tags,
+                environment=environment,
             )
+        elif environment is not None and prompt_version.environment != environment:
+            self._rest_client.prompts.set_prompt_version_environment(
+                version_id=prompt_version.id,
+                environment=environment,
+            )
+            prompt_version = _with_environment(prompt_version, environment)
 
         return prompt_version
 
@@ -131,6 +168,7 @@ class PromptClient:
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        environment: Optional[str] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         # If it's a new prompt and container-level params are provided, use create_prompt endpoint
         # which creates both the container and first version in one call
@@ -171,12 +209,23 @@ class PromptClient:
                     created_at=new_prompt_version_detail.created_at,
                     created_by=new_prompt_version_detail.created_by,
                 )
+            # The create_prompt container endpoint does not accept environment,
+            # so apply it via the dedicated environment endpoint after creation.
+            if environment is not None:
+                self._rest_client.prompts.set_prompt_version_environment(
+                    version_id=new_prompt_version_detail.id,
+                    environment=environment,
+                )
+                new_prompt_version_detail = _with_environment(
+                    new_prompt_version_detail, environment
+                )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version
             new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
                 template=prompt,
                 metadata=metadata,
                 type=type,
+                environment=environment,
             )
             new_prompt_version_detail = self._rest_client.prompts.create_prompt_version(
                 name=name,
@@ -197,6 +246,7 @@ class PromptClient:
         commit: Optional[str] = None,
         raise_if_not_template_structure: Optional[str] = None,
         project_name: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
@@ -206,6 +256,8 @@ class PromptClient:
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
             raise_if_not_template_structure: Optional template structure validation. If provided and doesn't match, raises PromptTemplateStructureMismatch.
             project_name: The name of the project to which the prompt belongs. If not provided, the default project is used.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``commit``.
 
         Returns:
             Prompt: The details of the specified prompt.
@@ -214,6 +266,7 @@ class PromptClient:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
+                environment=environment,
                 project_name=project_name,
             )
 
@@ -250,6 +303,7 @@ class PromptClient:
         template_structure: str,
         prompt_cls: Type[_PromptT],
         no_cache: bool = False,
+        environment: Optional[str] = None,
     ) -> Optional[_PromptT]:
         def _fetch() -> Optional[_PromptT]:
             prompt_version = self.get_prompt(
@@ -257,6 +311,7 @@ class PromptClient:
                 commit=commit,
                 raise_if_not_template_structure=template_structure,
                 project_name=project_name,
+                environment=environment,
             )
             if prompt_version is None:
                 return None
@@ -273,6 +328,7 @@ class PromptClient:
                 project_name=project_name,
                 template_structure=template_structure,
                 fetch_fn=_fetch,
+                environment=environment,
             )
         if result is not None:
             from opik import opik_context

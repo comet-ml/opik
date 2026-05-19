@@ -201,9 +201,16 @@ export function buildCacheKey(
   name: string,
   commit: string | undefined,
   projectName: string | undefined,
-  templateStructure: string
+  templateStructure: string,
+  environment?: string
 ): string {
-  return JSON.stringify([name, commit ?? "", projectName ?? "", templateStructure]);
+  return JSON.stringify([
+    name,
+    commit ?? "",
+    projectName ?? "",
+    templateStructure,
+    environment ?? "",
+  ]);
 }
 
 export async function getOrFetch<T extends BasePrompt>(
@@ -212,9 +219,10 @@ export async function getOrFetch<T extends BasePrompt>(
   projectName: string | undefined,
   templateStructure: string,
   fetchFn: () => Promise<T | null>,
-  ttlSeconds: number = DEFAULT_TTL_SECONDS
+  ttlSeconds: number = DEFAULT_TTL_SECONDS,
+  environment?: string
 ): Promise<T | null> {
-  const key = buildCacheKey(name, commit, projectName, templateStructure);
+  const key = buildCacheKey(name, commit, projectName, templateStructure, environment);
   const result = await globalCache.getOrFetch(key, fetchFn, commit != null ? null : ttlSeconds);
   return result as T | null;
 }

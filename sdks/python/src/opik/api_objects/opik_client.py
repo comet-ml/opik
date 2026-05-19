@@ -2168,6 +2168,7 @@ class Opik:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> prompt_module.Prompt:
         """
         Creates a new text prompt with the given name and template.
@@ -2183,6 +2184,8 @@ class Opik:
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name to associate with the prompt. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            environment: Optional environment name to own this prompt version. The environment must already
+                be registered in the workspace; otherwise the backend returns 404.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -2203,6 +2206,7 @@ class Opik:
             change_description=change_description,
             tags=tags,
             project_name=project_name,
+            environment=environment,
         )
         return prompt_module.Prompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
@@ -2219,6 +2223,7 @@ class Opik:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
@@ -2234,6 +2239,8 @@ class Opik:
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name for the prompt.
+            environment: Optional environment name to own this prompt version. The environment must already
+                be registered in the workspace; otherwise the backend returns 404.
 
         Returns:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
@@ -2260,6 +2267,7 @@ class Opik:
             change_description=change_description,
             tags=tags,
             project_name=project_name,
+            environment=environment,
         )
         return prompt_module.ChatPrompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
@@ -2271,6 +2279,7 @@ class Opik:
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
         no_cache: bool = False,
+        environment: Optional[str] = None,
     ) -> Optional[prompt_module.Prompt]:
         """
         Retrieve a text prompt by name and optional commit version.
@@ -2285,6 +2294,8 @@ class Opik:
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``commit``.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
@@ -2299,6 +2310,7 @@ class Opik:
             template_structure="text",
             prompt_cls=text_prompt_module.Prompt,
             no_cache=no_cache,
+            environment=environment,
         )
 
     def get_chat_prompt(
@@ -2307,6 +2319,7 @@ class Opik:
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
         no_cache: bool = False,
+        environment: Optional[str] = None,
     ) -> Optional[prompt_module.ChatPrompt]:
         """
         Retrieve a chat prompt by name and optional commit version.
@@ -2321,6 +2334,8 @@ class Opik:
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``commit``.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
@@ -2335,6 +2350,7 @@ class Opik:
             template_structure="chat",
             prompt_cls=chat_prompt_module.ChatPrompt,
             no_cache=no_cache,
+            environment=environment,
         )
 
     def get_prompt_history(

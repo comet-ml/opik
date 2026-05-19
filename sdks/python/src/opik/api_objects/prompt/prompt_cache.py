@@ -12,7 +12,13 @@ logger = logging.getLogger(__name__)
 
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
-_CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str], str]
+_CacheKey = typing.Tuple[
+    str,
+    typing.Optional[str],
+    typing.Optional[str],
+    str,
+    typing.Optional[str],
+]
 
 _RefreshCallback = typing.Callable[[], typing.Optional[BasePrompt]]
 
@@ -168,6 +174,7 @@ def get_or_fetch(
     project_name: typing.Optional[str],
     template_structure: str,
     fetch_fn: typing.Callable[[], typing.Optional[_PromptT]],
+    environment: typing.Optional[str] = None,
 ) -> typing.Optional[_PromptT]:
     """Return a cached prompt or fetch, cache, and return it.
 
@@ -178,7 +185,7 @@ def get_or_fetch(
     For unpinned prompts (commit is None), *fetch_fn* is also registered as
     the background-refresh callback so the cache stays fresh.
     """
-    key: _CacheKey = (name, commit, project_name, template_structure)
+    key: _CacheKey = (name, commit, project_name, template_structure, environment)
     ttl = opik_config.OpikConfig().prompt_cache_ttl_seconds
     result = _cache.get_or_fetch(
         key=key,
