@@ -1360,10 +1360,8 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) as trace_count
              FROM traces
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)> AND id NOT IN (
-                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
-                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
-             )
+             <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
+                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
              <endif>
              GROUP BY workspace_id
             SETTINGS log_comment = '<log_comment>'
@@ -1377,10 +1375,8 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) AS trace_count
             FROM traces
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)> AND id NOT IN (
-                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
-                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
-            )
+            <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
+                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
             <endif>
             GROUP BY workspace_id, created_by
             SETTINGS log_comment = '<log_comment>'
