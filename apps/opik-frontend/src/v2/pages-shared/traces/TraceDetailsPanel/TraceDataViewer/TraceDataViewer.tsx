@@ -21,6 +21,7 @@ import TagList from "../TagList/TagList";
 import MessagesTab from "./MessagesTab";
 import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
+import PromptsTab, { getRawPrompts } from "./PromptsTab";
 import ErrorCallout from "./ErrorCallout";
 import { formatDate } from "@/lib/date";
 import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
@@ -75,6 +76,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
 
+  const hasPrompts = Boolean(getRawPrompts(data));
+
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
   // Show Messages tab when at least one field is supported and neither is invalid
@@ -105,16 +108,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     const legacyTabMap: Record<string, string> = {
       input: canShowMessagesTab ? "messages" : "details",
       metadata: "details",
-      prompts: "details",
     };
     const normalizedTab = legacyTabMap[tab] ?? tab;
 
     // Fall back when a tab is not available
     if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
     if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
+    if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
 
     return normalizedTab;
-  }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph]);
+  }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph, hasPrompts]);
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
@@ -272,6 +275,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
               />
             </TabsTrigger>
+            {hasPrompts && (
+              <TabsTrigger variant="segmented" value="prompts">
+                Prompts
+              </TabsTrigger>
+            )}
             {hasSpanAgentGraph && (
               <TabsTrigger variant="segmented" value="graph">
                 Agent graph
@@ -334,6 +342,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               )}
             </div>
           </TabsContent>
+          {hasPrompts && (
+            <TabsContent value="prompts">
+              <PromptsTab data={data} search={search} />
+            </TabsContent>
+          )}
           {hasSpanAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />

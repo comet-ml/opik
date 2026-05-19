@@ -21,6 +21,11 @@ export const isProdTag = (tag: string) =>
 export const isBasicStage = (tag: string) =>
   BASIC_STAGE_ORDER.some((s) => s === tag);
 
+export const pickHighestStage = (
+  tags: string[] | undefined,
+): AgentConfigurationBasicStage | undefined =>
+  BASIC_STAGE_ORDER.find((stage) => tags?.some((t) => t === stage));
+
 export const isStageTag = (tag: string, stage: string) => tag === stage;
 
 export const sortTags = (tags: string[]) => [

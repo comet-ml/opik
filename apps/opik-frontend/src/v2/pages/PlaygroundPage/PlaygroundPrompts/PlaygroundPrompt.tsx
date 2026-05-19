@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Trash, Save } from "lucide-react";
+import { FileTerminal, Trash, Save, XCircle } from "lucide-react";
 import last from "lodash/last";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -48,7 +48,7 @@ import {
 } from "@/hooks/useLLMProviderModelsData";
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
+import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
@@ -107,6 +107,7 @@ const PlaygroundPrompt = ({
     useState<string>("");
 
   const selectedChatPromptId = prompt?.loadedChatPromptId;
+  const selectedChatPromptVersionId = prompt?.loadedChatPromptVersionId;
 
   const handleChatPromptMessagesLoaded = useCallback(
     (newMessages: LLMMessage[], promptName: string) => {
@@ -123,6 +124,7 @@ const PlaygroundPrompt = ({
     hasUnsavedChatPromptChanges,
   } = useLoadChatPrompt({
     selectedChatPromptId,
+    selectedChatPromptVersionId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
     skipInitialLoad: prompt?.skipInitialPromptLoad,
@@ -269,8 +271,11 @@ const PlaygroundPrompt = ({
   ]);
 
   const handleImportChatPrompt = useCallback(
-    (loadedPromptId?: string) => {
-      updatePrompt(promptId, { loadedChatPromptId: loadedPromptId });
+    (loadedPromptId?: string, loadedVersionId?: string) => {
+      updatePrompt(promptId, {
+        loadedChatPromptId: loadedPromptId,
+        loadedChatPromptVersionId: loadedVersionId,
+      });
     },
     [promptId, updatePrompt],
   );
@@ -342,16 +347,54 @@ const PlaygroundPrompt = ({
         </div>
 
         <div className="flex min-w-0 items-center overflow-hidden pl-4 [@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4">
-          <PromptsSelectBox
-            compact
-            projectId={activeProjectId!}
-            value={selectedChatPromptId}
-            onValueChange={handleImportChatPrompt}
-            onClear={() => handleImportChatPrompt(undefined)}
-            hasUnsavedChanges={hasUnsavedChatPromptChanges}
-            promptName={chatPromptData?.name}
-            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-          />
+          {selectedChatPromptId ? (
+            <div className="flex min-w-0 items-center px-1">
+              <TooltipWrapper
+                content={
+                  hasUnsavedChatPromptChanges
+                    ? "Unsaved changes"
+                    : chatPromptData?.name ?? "Loaded prompt"
+                }
+              >
+                <div className="flex min-w-0 items-center gap-1">
+                  <FileTerminal className="size-3.5 shrink-0 text-library-loaded" />
+                  <span className="comet-body-xs-accented truncate text-light-slate">
+                    {chatPromptData?.name ?? "Loaded prompt"}
+                  </span>
+                  {hasUnsavedChatPromptChanges && (
+                    <span className="mb-auto size-1 shrink-0 rounded-full bg-warning" />
+                  )}
+                </div>
+              </TooltipWrapper>
+              <TooltipWrapper content="Detach loaded prompt">
+                <Button
+                  variant="minimal"
+                  size="icon-xs"
+                  className="shrink-0"
+                  onClick={() => handleImportChatPrompt(undefined, undefined)}
+                >
+                  <XCircle />
+                </Button>
+              </TooltipWrapper>
+            </div>
+          ) : (
+            <PromptLibraryMenu
+              projectId={activeProjectId!}
+              filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+              onSelect={({ promptId: pId, versionId }) =>
+                handleImportChatPrompt(pId, versionId)
+              }
+              trigger={
+                <div>
+                  <TooltipWrapper content="Load prompt">
+                    <Button variant="minimal" size="icon-sm">
+                      <FileTerminal />
+                    </Button>
+                  </TooltipWrapper>
+                </div>
+              }
+            />
+          )}
 
           <div className="flex shrink-0 items-center">
             {hasMessageContent && (
@@ -424,7 +467,10 @@ const PlaygroundPrompt = ({
           setShowSaveChatPromptDialog(false);
 
           if (savedPromptId) {
-            updatePrompt(promptId, { loadedChatPromptId: savedPromptId });
+            updatePrompt(promptId, {
+              loadedChatPromptId: savedPromptId,
+              loadedChatPromptVersionId: version.id,
+            });
 
             const newChatPromptKey = `${savedPromptId}-${version.id}`;
             loadedChatPromptRef.current = newChatPromptKey;
