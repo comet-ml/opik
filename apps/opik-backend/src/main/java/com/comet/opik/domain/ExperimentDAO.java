@@ -2688,7 +2688,7 @@ public class ExperimentDAO {
                                 filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
                             });
 
-                    statement.bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID.toString());
+                    statement.bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID);
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                             .flatMap(result -> result.map((row, metadata) -> {
