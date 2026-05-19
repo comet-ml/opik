@@ -224,7 +224,7 @@ public class CostService {
             overrides = JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE, new TypeReference<>() {
             });
         } catch (IOException | NullPointerException e) {
-            log.info("No model price overrides loaded ({}): {}", MODEL_PRICES_OVERRIDES_FILE, e.getMessage());
+            log.warn("No model price overrides loaded ('{}'): '{}'", MODEL_PRICES_OVERRIDES_FILE, e.getMessage());
             return;
         }
         if (overrides == null || overrides.isEmpty()) {
