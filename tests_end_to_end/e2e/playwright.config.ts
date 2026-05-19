@@ -27,4 +27,20 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
+  webServer: [
+    {
+      command: 'uv run uvicorn opik_sdk_driver.main:app --port 5175',
+      cwd: 'services/opik-sdk-driver',
+      url: 'http://localhost:5175/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        ...(process.env as Record<string, string>),
+        OPIK_URL_OVERRIDE: env.apiBaseUrl,
+        OPIK_WORKSPACE: env.workspace,
+      },
+    },
+  ],
 });
