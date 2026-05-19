@@ -215,8 +215,15 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
         return spansMono
+                // boundedElastic so the blocking JDBC call inside prepareScoring
+                // (projectService.get) doesn't pin the upstream thread — could be the consumer
+                // loop when spansMono is Mono.just(empty), or the spanService DB thread when
+                // spansMono is the getByTraceIds fetch. Either way, blocking on those threads
+                // is bad; boundedElastic is the standard pick for wrapping blocking calls in a
+                // reactive chain.
                 .flatMap(spans -> Mono.fromCallable(
-                        () -> prepareScoring(message, traces, spans, threadId, rule, mdc)))
+                        () -> prepareScoring(message, traces, spans, threadId, rule, mdc))
+                        .subscribeOn(Schedulers.boundedElastic()))
                 .flatMap(context -> evaluateAndStore(message, threadModelId, threadId, context, mdc))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
                         .error("Unexpected error while scoring threadId '{}' with rule '{}': \n\n{}",
