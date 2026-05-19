@@ -9,6 +9,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionIdsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
@@ -133,20 +134,21 @@ public class PromptResource {
 
     @GET
     @Path("{id}")
-    @Operation(operationId = "getPromptById", summary = "Get prompt by id", description = "Get prompt by id", responses = {
+    @Operation(operationId = "getPromptById", summary = "Get prompt by id", description = "Get prompt by id; when mask_id is provided, requestedVersion is populated with that mask overlay", responses = {
             @ApiResponse(responseCode = "200", description = "Prompt resource", content = @Content(schema = @Schema(implementation = Prompt.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({Prompt.View.Detail.class})
-    public Response getPromptById(@PathParam("id") UUID id) {
+    public Response getPromptById(@PathParam("id") UUID id,
+            @Parameter(description = "Optional mask version id; when set, requestedVersion is the mask row for that id") @QueryParam("mask_id") UUID maskId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting prompt by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Getting prompt by id '{}', mask_id '{}' on workspace_id '{}'", id, maskId, workspaceId);
 
-        Prompt prompt = promptService.getById(id);
+        Prompt prompt = promptService.getById(id, maskId);
 
-        log.info("Got prompt by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Got prompt by id '{}', mask_id '{}' on workspace_id '{}'", id, maskId, workspaceId);
 
         return Response.ok(prompt).build();
     }
@@ -204,6 +206,29 @@ public class PromptResource {
         promptService.delete(batchDelete.ids());
         log.info("Deleted prompts by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/versions/retrieve-by-ids")
+    @Operation(operationId = "retrievePromptVersionsByIds", summary = "Retrieve prompt versions by ids", description = "Retrieve a batch of prompt versions by their ids. Typically used by the UI to resolve mask overlays.", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersion.class)))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @JsonView({PromptVersion.View.Detail.class})
+    public Response retrievePromptVersionsByIds(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionIdsRequest.class))) @Valid PromptVersionIdsRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieving prompt versions by ids, count '{}', on workspace_id '{}'",
+                request.ids().size(), workspaceId);
+
+        List<PromptVersion> versions = promptService.retrieveVersionsByIds(request.ids());
+
+        log.info("Retrieved prompt versions by ids, requested '{}', returned '{}', on workspace_id '{}'",
+                request.ids().size(), versions.size(), workspaceId);
+
+        return Response.ok(versions).build();
     }
 
     @POST
