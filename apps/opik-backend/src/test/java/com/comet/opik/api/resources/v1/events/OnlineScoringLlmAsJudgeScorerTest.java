@@ -149,25 +149,38 @@ class OnlineScoringLlmAsJudgeScorerTest {
     @Nested
     class ShouldFetchSpansTests {
 
-        // Truth table for the spans-fetch gate. Spans are fetched when EITHER the agentic-tools
-        // path is possible (provider supports tools AND (experimentId OR toggle)) OR the inline
-        // template references {{spans}}. The point of the gate: skip the SpanService.getByTraceIds
-        // I/O on rules that don't need spans, since most rules don't.
+        // Truth table for the spans-fetch gate. Spans are fetched when EITHER:
+        //   (a) the agentic-tools path is possible (provider supports tools AND (experimentId
+        //       OR isAgenticToolsEnabled)), OR
+        //   (b) the inline {{spans}} template path applies — AND ALSO gated by
+        //       isAgenticToolsEnabled, so both pathways ship as one feature behind one toggle.
+        // Goal of the gate: skip the SpanService.getByTraceIds I/O on rules that don't need
+        // spans, and let ops kill the spans-in-prompts feature org-wide via a single flip.
         @ParameterizedTest(name = "expId={0}, toggle={1}, provider={2}, sentinelInVars={3}, templateHasSpans={4} → expected={5}")
         @CsvSource({
                 // Agentic-tools branch: provider supports tools AND (experimentId OR toggle).
                 "true,  false, OPEN_AI, false, false, true",
                 "false, true,  OPEN_AI, false, false, true",
-                // Provider doesn't support tools → agentic-tools branch off; only template path matters.
+                // Provider doesn't support tools → agentic-tools branch off; with the new
+                // gating the template path also requires the toggle, so toggle=false means no
+                // fetch regardless of variables/template content.
                 "true,  true,  OLLAMA,  false, false, false",
                 "false, true,  OLLAMA,  false, false, false",
                 // Toggle off + no experimentId + no template → no fetch.
                 "false, false, OPEN_AI, false, false, false",
-                // Template references {{spans}} alone → fetch even when agentic-tools branch is off.
-                "false, false, OPEN_AI, false, true,  true",
-                "false, false, OLLAMA,  false, true,  true",
-                // Sentinel-valued variable alone → fetch.
-                "false, false, OPEN_AI, true,  false, true",
+                // Toggle off + template-only — feature gated, no fetch (regression test for the
+                // new isAgenticToolsEnabled gate on the template path).
+                "false, false, OPEN_AI, false, true,  false",
+                "false, false, OLLAMA,  false, true,  false",
+                // Toggle off + sentinel-in-variables — same gating applies: no fetch.
+                "false, false, OPEN_AI, true,  false, false",
+                // Toggle on + template-only on a non-tool-calling provider → fetch via template path.
+                "false, true,  OLLAMA,  false, true,  true",
+                // Toggle on + sentinel-in-variables on a non-tool-calling provider → fetch.
+                "false, true,  OLLAMA,  true,  false, true",
+                // Toggle off + experimentId path → spans fetched for the agentic-tools cache
+                // seed; the template substitution piggy-backs on the already-fetched data.
+                "true,  false, OPEN_AI, false, true,  true",
                 // Both branches on → still just one fetch (idempotent OR).
                 "true,  true,  OPEN_AI, true,  true,  true",
         })

@@ -346,7 +346,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      *       cache so the in-loop {@code get_trace_spans} call doesn't redo the fetch.
      *   <li>The inline prompt template references {@code {{spans}}} — see
      *       {@link OnlineScoringEngine#templateReferencesSpans} for both opt-in shapes
-     *       (sentinel-valued variable AND implicit template reference).
+     *       (sentinel-valued variable AND implicit template reference). <strong>Gated by the
+     *       same {@code isAgenticToolsEnabled} toggle</strong>: both pathways ship as one
+     *       feature, so a single flip turns spans-in-prompts on or off org-wide. When the
+     *       toggle is off and no experimentId branch is active, the fetch is skipped and
+     *       {@code injectSpansIntoReplacements} substitutes an empty array into {@code {{spans}}}
+     *       via the empty list threaded through {@code prepareLlmRequest}.
      * </ul>
      *
      * <p>Skipping the fetch otherwise avoids a {@code spanService.getByTraceIds} call per
@@ -359,10 +364,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 llmProviderFactory.getLlmProvider(modelName))
                 && (LlmAsJudgeToolsMode.shouldUseTools(message)
                         || serviceTogglesConfig.isAgenticToolsEnabled());
-        boolean templateNeedsSpans = OnlineScoringEngine.templateReferencesSpans(
-                message.llmAsJudgeCode().messages(),
-                message.llmAsJudgeCode().variables(),
-                message.promptType());
+        boolean templateNeedsSpans = serviceTogglesConfig.isAgenticToolsEnabled()
+                && OnlineScoringEngine.templateReferencesSpans(
+                        message.llmAsJudgeCode().messages(),
+                        message.llmAsJudgeCode().variables(),
+                        message.promptType());
         return agenticToolsPathPossible || templateNeedsSpans;
     }
 
