@@ -4,4 +4,7 @@
  * @example
  *     {}
  */
-export type GetPromptByIdRequest = {};
+export interface GetPromptByIdRequest {
+    /** Optional mask version id; when set, requestedVersion is the mask row for that id */
+    maskId?: string;
+}
