@@ -1057,45 +1057,20 @@ class OpenTelemetryMapperTest {
             return spanBuilder.build();
         }
 
-        @Test
-        void anthropicPrefixStripsAndRewritesProvider() {
-            var span = mapEis("anthropic-claude-4.5-sonnet");
+        // Jina row keeps the "jina-" prefix in the model key, so the resolver must not strip it.
+        @ParameterizedTest(name = "EIS prefix ''{0}'' -> provider=''{1}'', model=''{2}''")
+        @CsvSource({
+                "anthropic-claude-4.5-sonnet, anthropic,  claude-4.5-sonnet",
+                "openai-gpt-oss-120b,         openai,     gpt-oss-120b",
+                "jina-embeddings-v3,          jina_ai,    jina-embeddings-v3",
+                "google-gemini-3-flash,       google_ai,  gemini-3-flash",
+                "microsoft-multilingual-e5-large, azure,  multilingual-e5-large",
+        })
+        void prefixStripsAndRewritesProvider(String modelId, String expectedProvider, String expectedModel) {
+            var span = mapEis(modelId);
 
-            assertThat(span.provider()).isEqualTo("anthropic");
-            assertThat(span.model()).isEqualTo("claude-4.5-sonnet");
-        }
-
-        @Test
-        void openaiPrefixStripsAndRewritesProvider() {
-            var span = mapEis("openai-gpt-oss-120b");
-
-            assertThat(span.provider()).isEqualTo("openai");
-            assertThat(span.model()).isEqualTo("gpt-oss-120b");
-        }
-
-        @Test
-        void jinaPrefixKeepsModelAndMapsProviderToJinaAi() {
-            var span = mapEis("jina-embeddings-v3");
-
-            assertThat(span.provider()).isEqualTo("jina_ai");
-            // Jina pricing rows keep the "jina-" prefix in the model key, so the resolver must not strip it
-            assertThat(span.model()).isEqualTo("jina-embeddings-v3");
-        }
-
-        @Test
-        void googlePrefixMapsToGoogleAi() {
-            var span = mapEis("google-gemini-3-flash");
-
-            assertThat(span.provider()).isEqualTo("google_ai");
-            assertThat(span.model()).isEqualTo("gemini-3-flash");
-        }
-
-        @Test
-        void microsoftPrefixMapsToAzure() {
-            var span = mapEis("microsoft-multilingual-e5-large");
-
-            assertThat(span.provider()).isEqualTo("azure");
-            assertThat(span.model()).isEqualTo("multilingual-e5-large");
+            assertThat(span.provider()).isEqualTo(expectedProvider);
+            assertThat(span.model()).isEqualTo(expectedModel);
         }
 
         @Test
