@@ -5148,7 +5148,7 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("PATCH /versions/{id} sets the environment on a version and auto-creates it in registry")
+        @DisplayName("PATCH /versions/{id} sets the environment on a version when the env exists in the workspace")
         void patchSetsEnvironmentOnVersion() {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -5160,10 +5160,27 @@ class PromptResourceTest {
                     API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("patch");
+            environmentsResourceClient.createEnvironment(
+                    Environment.builder().name(env).build(), API_KEY, TEST_WORKSPACE);
+
             patchVersionEnvironment(saved.id(), env, HttpStatus.SC_NO_CONTENT);
 
             assertThat(getVersionById(saved.id()).environment()).isEqualTo(env);
-            assertWorkspaceContainsEnvironment(env);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} with an unknown environment returns 404 Not Found")
+        void patchOnUnknownEnvironmentReturnsNotFound() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environment(null).build();
+            var saved = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            patchVersionEnvironment(saved.id(), uniqueEnvName("ghost"), HttpStatus.SC_NOT_FOUND);
         }
 
         @Test

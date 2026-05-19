@@ -55,6 +55,8 @@ public interface EnvironmentService {
 
     void bulkCreate(Set<String> names, String workspaceId, String userName);
 
+    boolean existsByName(String name, String workspaceId);
+
     Environment update(UUID id, EnvironmentUpdate environmentUpdate);
 
     Environment get(UUID id);
@@ -187,6 +189,14 @@ class EnvironmentServiceImpl implements EnvironmentService {
 
         Instant now = Instant.now();
         created.forEach(env -> trackEnvironmentCreatedEvent(env, workspaceId, userName, SOURCE_INGESTION, now));
+    }
+
+    @Override
+    public boolean existsByName(@NonNull String name, @NonNull String workspaceId) {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(EnvironmentDAO.class);
+            return repository.countByName(workspaceId, name) > 0;
+        });
     }
 
     private void trackEnvironmentCreatedEvent(Environment environment, String workspaceId, String userName,

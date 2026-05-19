@@ -16,7 +16,7 @@ import lombok.Builder;
         Set or clear the environment owned by a prompt version.
         - non-null name: maps the environment to this version; if another version of the same prompt currently owns the environment, ownership is moved atomically.
         - null: clears the environment from this version.
-        Auto-creates the environment in the workspace registry when set.
+        The environment must already exist in the workspace registry; unknown names return 404.
         """)
 public record PromptVersionEnvironmentUpdate(
         @Nullable @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment) {

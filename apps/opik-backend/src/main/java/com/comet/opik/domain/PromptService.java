@@ -736,7 +736,6 @@ class PromptServiceImpl implements PromptService {
     @Override
     public void setVersionEnvironment(@NonNull UUID versionId, String environment) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
         String env = StringUtils.trimToNull(environment);
 
         PromptVersion version = getVersionById(versionId);
@@ -747,8 +746,9 @@ class PromptServiceImpl implements PromptService {
 
         UUID promptId = version.promptId();
 
-        if (env != null) {
-            environmentService.bulkCreate(Set.of(env), workspaceId, userName);
+        if (env != null && !environmentService.existsByName(env, workspaceId)) {
+            throw new NotFoundException(
+                    "Environment '%s' does not exist in the workspace".formatted(env));
         }
 
         lockService.executeWithLock(

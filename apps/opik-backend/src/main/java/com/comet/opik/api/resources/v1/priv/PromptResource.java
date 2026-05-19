@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
+import com.comet.opik.api.Environment;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
@@ -42,6 +43,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -143,7 +145,7 @@ public class PromptResource {
     @JsonView({Prompt.View.Detail.class})
     public Response getPromptById(@PathParam("id") UUID id,
             @Parameter(description = "Optional mask version id; when set, requestedVersion is the mask row for that id") @QueryParam("mask_id") UUID maskId,
-            @Parameter(description = "Optional environment name; when set, requestedVersion is the version mapped to that environment for the prompt") @QueryParam("environment") String environment) {
+            @Parameter(description = "Optional environment name; when set, requestedVersion is the version mapped to that environment for the prompt") @QueryParam("environment") @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -388,7 +390,7 @@ public class PromptResource {
             Setting a non-null environment moves ownership atomically: any previous owner of that
             environment for the same prompt has its environment cleared in the same transaction.
             Setting null clears the environment from the version.
-            The environment is auto-created in the workspace registry when set.
+            The environment must already exist in the workspace registry; unknown names return 404.
             """, responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
