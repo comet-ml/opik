@@ -180,8 +180,6 @@ class TestMigrateDatasetVersionReplay:
             [
                 "dataset",
                 dataset_name,
-                "--from-project",
-                source_project_name,
                 "--to-project",
                 target_project_name,
             ],
