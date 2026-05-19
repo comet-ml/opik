@@ -1476,6 +1476,12 @@ export class OpikClient {
 
     logger.debug(`Getting ${logContext}`, options);
 
+    if (options.commit && options.environment) {
+      throw new Error(
+        "'commit' and 'environment' are mutually exclusive; pass at most one.",
+      );
+    }
+
     const resolvedProjectName = this.resolveProjectName(options.projectName);
 
     const fetchFn = async (maskId?: string | null): Promise<T | null> => {
