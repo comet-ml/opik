@@ -25,7 +25,7 @@ env:
 
 jobs:
   cleanup-pr:
-    name: Cleanup merged PR images
+    name: Cleanup closed PR images
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -45,15 +45,18 @@ jobs:
 
               if [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "null" ]; then
                 echo "Deleting ${IMAGE}:${TAG} (version ${VERSION_ID})"
-                gh api --method DELETE \
-                  "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" \
-                  2>/dev/null && echo "  Deleted" || echo "  Failed (may need admin token)"
+                if gh api --method DELETE \
+                  "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}"; then
+                  echo "  Deleted"
+                else
+                  echo "  Failed to delete ${IMAGE}:${TAG}"
+                fi
               fi
             done
           done
 
   cleanup-stale:
-    name: Cleanup stale CI images
+    name: Cleanup old CI images
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -100,11 +103,16 @@ jobs:
               if [ -z "$PR_NUM" ]; then
                 CREATED_TS=$(date -u -d "$CREATED_AT" +%s 2>/dev/null \
                   || date -u -j -f "%Y-%m-%dT%H:%M:%S" "${CREATED_AT%%.*}" +%s 2>/dev/null \
-                  || echo "0")
+                  || echo "")
+                if [ -z "$CREATED_TS" ]; then
+                  echo "  Skipping ${IMAGE}:${CI_TAG} (could not parse created_at: ${CREATED_AT})"
+                  SKIPPED=$((SKIPPED + 1))
+                  continue
+                fi
                 if [ "$CREATED_TS" -lt "$CUTOFF" ]; then
                   echo "  Deleting ${IMAGE}:${CI_TAG} (SHA tag older than ${MAX_AGE_DAYS} days)"
                   if gh api --method DELETE \
-                    "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>/dev/null; then
+                    "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}"; then
                     DELETED=$((DELETED + 1))
                   else
                     FAILED=$((FAILED + 1))
@@ -118,7 +126,7 @@ jobs:
               if [ "$PR_STATE" = "closed" ]; then
                 echo "  Deleting ${IMAGE}:${CI_TAG} (PR #${PR_NUM} is closed)"
                 if gh api --method DELETE \
-                  "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>/dev/null; then
+                  "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}"; then
                   DELETED=$((DELETED + 1))
                 else
                   FAILED=$((FAILED + 1))
