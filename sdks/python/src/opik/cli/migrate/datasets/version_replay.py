@@ -42,7 +42,7 @@ import json
 import logging
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from opik.api_objects import rest_helpers, rest_stream_parser
 from opik.rest_api import OpikApi
@@ -55,6 +55,7 @@ from opik.rest_api.types import (
 
 from ..audit import AuditLog
 from ..errors import ReplayError
+from ._progress import ProgressCallback
 
 LOGGER = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ def replay_all_versions(
     dest_name: str,
     dest_project_name: str,
     audit: AuditLog,
-    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> ReplayResult:
     """Replay every source version onto the destination in chronological order.
 

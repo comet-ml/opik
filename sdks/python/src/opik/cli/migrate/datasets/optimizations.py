@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import opik.id_helpers as id_helpers_module
 from opik.api_objects import rest_helpers
@@ -44,6 +44,7 @@ from opik.rest_api.types.optimization_studio_config_write import (
 )
 
 from ..audit import AuditLog
+from ._progress import ProgressCallback
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,13 +54,6 @@ LOGGER = logging.getLogger(__name__)
 # request flood (production has tens to low-hundreds of optimizations
 # per dataset at most).
 _OPTIMIZATION_PAGE_SIZE = 100
-
-# Progress callback: ``(completed, total, label)`` -- fired once before
-# each optimization with ``completed`` = optimizations done so far.
-# ``label="done"`` signals the final tick (executor uses it to mark the
-# bar at 100% cleanly). Mirrors the shape used by ``replay_all_versions``
-# and the Slice 3 experiment cascade.
-ProgressCallback = Callable[[int, int, str], None]
 
 
 @dataclass

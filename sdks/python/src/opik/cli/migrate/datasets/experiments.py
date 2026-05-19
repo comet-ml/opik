@@ -50,7 +50,7 @@ import logging
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, cast
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple, cast
 
 import opik
 import opik.id_helpers as id_helpers_module
@@ -74,21 +74,26 @@ from ..errors import ExperimentCascadeError
 
 LOGGER = logging.getLogger(__name__)
 
-# Outer progress: ``(completed, total, label)`` -- fired once before each
-# experiment with ``completed`` = experiments done so far. ``label="done"``
-# signals the final tick (executor uses it to strip the ``(N/total)``
-# suffix and avoid an off-by-one display at completion).
-ProgressCallback = Callable[[int, int, str], None]
+# Outer + inner progress callback shapes are shared across all dataset
+# cascade phases (version_replay, optimizations, experiments) -- see
+# ``datasets/_progress.py`` for the single source of truth. Re-exported
+# from this module so existing call sites that ``from .experiments
+# import ProgressCallback`` keep working.
+from ._progress import InnerProgressCallback, ProgressCallback  # noqa: E402, F401
 
-# Inner progress: ``(completed, total, label)`` -- ticks within a single
-# experiment so the outer experiment-level bar isn't a frozen one-step-
-# per-experiment readout. ``total`` is the number of inner steps for THIS
-# experiment (recomputed per experiment, since experiments can have wildly
-# different trace counts). ``label`` describes the step that just
-# completed (e.g. ``"trace 47/150"``, ``"spans for trace 47/150"``,
-# ``"flush"``, ``"recreate"``). Executor renders this on a nested Rich
-# bar; tests use it to assert the cascade ticks every read/write phase.
-InnerProgressCallback = Callable[[int, int, str], None]
+# Notes specific to the experiment cascade's usage of these callbacks:
+#
+# - The outer ``ProgressCallback`` fires once before each experiment;
+#   ``label="done"`` signals the final tick with ``completed == total``.
+#
+# - The inner ``InnerProgressCallback`` ticks within a single experiment so
+#   the outer experiment-level bar isn't a frozen one-step-per-experiment
+#   readout. ``total`` is the number of inner steps for THIS experiment
+#   (recomputed per experiment, since experiments can have wildly different
+#   trace counts). ``label`` describes the step that just completed (e.g.
+#   ``"trace 47/150"``, ``"spans for trace 47/150"``, ``"flush"``,
+#   ``"recreate"``). Executor renders this on a nested Rich bar; tests use
+#   it to assert the cascade ticks every read/write phase.
 
 
 class _InnerProgress:

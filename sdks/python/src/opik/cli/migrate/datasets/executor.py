@@ -224,17 +224,25 @@ def _cascade_optimizations(
             # Drop the "(N/total)" suffix in that frame so the bar doesn't
             # render "(total+1/total)" from the +1 offset that helps mid-
             # loop ticks read as "currently processing the (Nth+1) item".
-            if label == "done":
+            is_done = label == "done"
+            if is_done:
                 description = f"→ {action.dest_project_name} · done"
             else:
                 description = (
                     f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
                 )
+            # ``total`` might be 0 on a zero-optimization dataset; clamp to
+            # >= 1 so the Rich bar doesn't render as divide-by-zero NaN%.
+            # The same value is used for the bar's ``completed`` on the
+            # "done" tick so the zero-optimization path still renders as
+            # 100% (otherwise the bar would lazily add the task at total=1
+            # and never advance, leaving an already-finished migration
+            # stuck at 0%).
+            bar_total = max(total, 1)
             if task_id is None:
-                # Create the task lazily on the first callback. ``total``
-                # might be 0 on a zero-optimization dataset; clamp to >= 1
-                # so the Rich bar doesn't render as divide-by-zero NaN%.
-                task_id = progress.add_task(description, total=max(total, 1))
+                task_id = progress.add_task(description, total=bar_total)
+            if is_done:
+                progress.update(task_id, completed=bar_total, description=description)
             else:
                 progress.update(task_id, completed=completed, description=description)
 
