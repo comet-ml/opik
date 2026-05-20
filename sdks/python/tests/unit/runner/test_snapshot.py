@@ -1,6 +1,9 @@
 import platform
 import sys
 from pathlib import Path
+from typing import Dict
+
+import pytest
 
 from opik.runner.snapshot import build_checklist
 
@@ -61,25 +64,91 @@ class TestBuildChecklist:
 
         assert result["command"] is None
 
-    def test_build_checklist__prompts_usage__flag_set(self, tmp_path: Path) -> None:
-        (tmp_path / "app.py").write_text(
-            "import opik\nclient = opik.Opik()\nclient.get_prompt('hello')\n"
-        )
-        (tmp_path / "main.ts").write_text(
-            "import {Opik} from 'opik';\nawait client.prompts.createPrompt({});\n"
-        )
-
-        result = build_checklist(tmp_path, command=None)
-
-        assert result["instrumentation"]["prompts"] is True
-
-    def test_build_checklist__no_prompts_usage__flag_false(
-        self, tmp_path: Path
+    @pytest.mark.parametrize(
+        "files,expected",
+        [
+            pytest.param(
+                {"app.py": "x = 1\n"},
+                {"tracing": False, "entrypoint": False, "prompts": False},
+                id="empty_repo",
+            ),
+            pytest.param(
+                {"app.py": "import opik\n@opik.track\ndef f():\n    pass\n"},
+                {"tracing": True, "entrypoint": False, "prompts": False},
+                id="tracing_only",
+            ),
+            pytest.param(
+                {"agent.py": "entrypoint = True\n"},
+                {"tracing": False, "entrypoint": True, "prompts": False},
+                id="entrypoint_python",
+            ),
+            pytest.param(
+                {"agent.ts": "export const config = { entrypoint: true };\n"},
+                {"tracing": False, "entrypoint": True, "prompts": False},
+                id="entrypoint_ts",
+            ),
+            pytest.param(
+                {"app.py": "client.get_prompt('hello')\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="get_prompt_python",
+            ),
+            pytest.param(
+                {"app.py": "client.create_prompt('hello', 'tmpl')\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="create_prompt_python",
+            ),
+            pytest.param(
+                {"app.py": "client.get_chat_prompt('hello')\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="get_chat_prompt_python",
+            ),
+            pytest.param(
+                {"app.py": "client.create_chat_prompt('hello', [])\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="create_chat_prompt_python",
+            ),
+            pytest.param(
+                {"main.ts": "await client.getPrompt('hello');\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="get_prompt_ts",
+            ),
+            pytest.param(
+                {"main.ts": "await client.prompts.createPrompt({});\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="create_prompt_ts",
+            ),
+            pytest.param(
+                {"main.ts": "await client.getChatPrompt('hello');\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="get_chat_prompt_ts",
+            ),
+            pytest.param(
+                {"main.ts": "await client.createChatPrompt({});\n"},
+                {"tracing": False, "entrypoint": False, "prompts": True},
+                id="create_chat_prompt_ts",
+            ),
+            pytest.param(
+                {
+                    "app.py": (
+                        "import opik\n"
+                        "entrypoint = True\n"
+                        "client.get_chat_prompt('hello')\n"
+                    ),
+                },
+                {"tracing": True, "entrypoint": True, "prompts": True},
+                id="all_flags_set",
+            ),
+        ],
+    )
+    def test_build_checklist__instrumentation_flags(
+        self,
+        tmp_path: Path,
+        files: Dict[str, str],
+        expected: Dict[str, bool],
     ) -> None:
-        (tmp_path / "app.py").write_text(
-            "import opik\n@opik.track\ndef f():\n    pass\n"
-        )
+        for name, content in files.items():
+            (tmp_path / name).write_text(content)
 
         result = build_checklist(tmp_path, command=None)
 
-        assert result["instrumentation"]["prompts"] is False
+        assert result["instrumentation"] == expected

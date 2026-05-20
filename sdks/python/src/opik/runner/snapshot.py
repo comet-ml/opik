@@ -38,8 +38,12 @@ _ENTRYPOINT_PATTERNS = [
 _PROMPT_PATTERNS = [
     re.compile(r"\.get_prompt\("),
     re.compile(r"\.create_prompt\("),
+    re.compile(r"\.get_chat_prompt\("),
+    re.compile(r"\.create_chat_prompt\("),
     re.compile(r"\.getPrompt\("),
     re.compile(r"\.createPrompt\("),
+    re.compile(r"\.getChatPrompt\("),
+    re.compile(r"\.createChatPrompt\("),
 ]
 
 _ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _PROMPT_PATTERNS
