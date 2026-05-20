@@ -38,7 +38,7 @@ def eval_task(item: dict):
 
 def _run_evaluate(experiment_name: str, dataset_name: str, project_name: str = None):
     client = get_opik_client()
-    dataset = client.get_dataset(name=dataset_name)
+    dataset = client.get_dataset(name=dataset_name, project_name=project_name)
     if not dataset:
         abort(404, f"Dataset not found: {dataset_name}")
     kwargs = {}
