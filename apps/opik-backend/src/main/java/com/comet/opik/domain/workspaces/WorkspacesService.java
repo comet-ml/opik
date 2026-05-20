@@ -146,10 +146,8 @@ class WorkspacesServiceImpl implements WorkspacesService {
 
     /**
      * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
-     * to the {@code experiment_project_migration_skipped_at} flag (which also keeps
-     * {@code migration_skipped_at} in sync for old pods still in the rolling deployment window).
-     * Idempotent: returns {@code false} when this caller loses the race or the workspace was
-     * already trapped.
+     * to the {@code experiment_project_migration_skipped_at} flag. Idempotent: returns
+     * {@code false} when this caller loses the race or the workspace was already trapped.
      */
     @Override
     public boolean markExperimentProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {

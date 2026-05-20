@@ -263,6 +263,18 @@ public class PromptResourceClient {
                 .get();
     }
 
+    public Response callGetPromptVersionByNumber(UUID promptId, String versionNumber, String apiKey,
+            String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI))
+                .path(promptId.toString())
+                .path("versions/by-number")
+                .path(versionNumber)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
     public PromptVersion getPromptVersion(UUID versionId, String apiKey, String workspaceName) {
         try (var response = callGetPromptVersion(versionId, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);

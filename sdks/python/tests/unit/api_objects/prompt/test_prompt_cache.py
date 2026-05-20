@@ -6,11 +6,16 @@ from unittest import mock
 
 import pytest
 
+from opik import config as opik_config
 from opik.api_objects.prompt import prompt_cache
 from opik.api_objects.prompt.prompt_cache import (
     PromptCache,
     get_global_cache,
 )
+
+
+def _get_ttl() -> int:
+    return opik_config.OpikConfig().prompt_cache_ttl_seconds
 
 
 @pytest.fixture(autouse=True)
@@ -115,32 +120,34 @@ class TestPromptCache:
 
 
 class TestBackgroundRefresh:
-    def test_refresh__stale_entry__updates_prompt(self, cache):
-        new_prompt = _make_mock_prompt(commit="refreshed")
+    def test_refresh__stale_entry__updates_prompt(self):
+        new_prompt = _make_mock_prompt(commit=None)
         callback = mock.Mock(return_value=new_prompt)
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=0)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
             callback.reset_mock()
             callback.return_value = new_prompt
 
-            mock_time.monotonic.return_value = base + 0.1
+            mock_time.monotonic.return_value = base + _get_ttl() + 1
             mock_time.sleep = mock.Mock()
             cache._refresh_stale_entries()
 
             assert callback.call_count >= 1
-            assert cache.get(("p", None, None, "text")) is new_prompt
+            assert cache.get(("p", None, None, "text", None)) is new_prompt
 
-    def test_refresh__non_stale_entry__skips_callback(self, cache):
-        p = _make_mock_prompt()
+    def test_refresh__non_stale_entry__skips_callback(self):
+        p = _make_mock_prompt(commit=None)
         callback = mock.Mock(return_value=p)
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=300)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
             callback.reset_mock()
 
             mock_time.monotonic.return_value = base + 0.2
@@ -148,16 +155,17 @@ class TestBackgroundRefresh:
 
             callback.assert_not_called()
 
-    def test_refresh__callback_raises__thread_survives(self, cache):
-        p = _make_mock_prompt()
+    def test_refresh__callback_raises__thread_survives(self):
+        p = _make_mock_prompt(commit=None)
         callback = mock.Mock(side_effect=[p, RuntimeError("boom")])
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=0)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
 
-            mock_time.monotonic.return_value = base + 0.1
+            mock_time.monotonic.return_value = base + _get_ttl() + 1
             cache._refresh_stale_entries()
 
             assert cache._thread.is_alive()
@@ -259,19 +267,20 @@ class TestPromptCacheEdgeCases:
         cache.get_or_fetch(("p", None, None, "text"), fetch_fn, ttl_seconds=300)
         assert cache.get(("p", None, None, "text")) is None
 
-    def test_refresh__callback_returns_none__preserves_original_prompt(self, cache):
-        original = _make_mock_prompt(commit="original")
+    def test_refresh__callback_returns_none__preserves_original_prompt(self):
+        original = _make_mock_prompt(commit=None)
         callback = mock.Mock(side_effect=[original, None])
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=0)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
 
-            mock_time.monotonic.return_value = base + 0.1
+            mock_time.monotonic.return_value = base + _get_ttl() + 1
             cache._refresh_stale_entries()
 
-        assert cache.get(("p", None, None, "text")) is original
+        assert cache.get(("p", None, None, "text", None)) is original
 
     def test_lru_eviction__oldest_entry_removed_when_max_size_exceeded(self):
         cache = PromptCache(max_size=3)
