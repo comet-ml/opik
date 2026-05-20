@@ -23,7 +23,7 @@ export interface ServiceTogglesConfig {
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
     ollieEnabled: boolean;
-    agenticToolsEnabled?: boolean;
+    agenticToolsEnabled: boolean;
     v2WorkspaceAllowlistIds: string[];
     v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
