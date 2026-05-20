@@ -37,6 +37,15 @@ _REQUEST_TID_EXT_KEY = "opik_migrate_debug_tid"
 _in_flight_by_host: Dict[str, int] = defaultdict(int)
 _in_flight_lock = threading.Lock()
 
+# Idempotency guard for ``install_if_debug``: once the migrate-time httpx
+# hook is registered on the SDK's global hook list, a second call must
+# not register it again -- the SDK's ``add_httpx_client_hook`` only
+# appends and ``apply_httpx_client_hooks`` invokes every entry, so a
+# double registration would fire ``_on_request`` / ``_on_response``
+# twice per request and double-count ``in_flight``.
+_install_lock = threading.Lock()
+_installed = False
+
 
 def _on_request(request: httpx.Request) -> None:
     tid = threading.get_ident()
@@ -88,32 +97,42 @@ def _on_response(response: httpx.Response) -> None:
 def install_if_debug() -> None:
     """Register the migrate http hook iff the ``opik`` logger is at DEBUG.
 
-    Idempotent: calling more than once installs the same hook list each
-    time but the hooks themselves de-dupe by identity, and ``add_httpx_client_hook``
-    just appends to a list -- the second registration would only fire
-    the same logging callbacks twice, doubling log lines. The migrate
-    CLI calls this exactly once at startup, so the simple check below
-    is enough to guard ``opik migrate`` invocation while keeping other
-    test paths (which import the module) safe.
+    Idempotent across repeat calls: the first call (when DEBUG is on)
+    appends a single ``HttpxClientHook`` to the SDK's global list and
+    flips ``_installed`` to True; subsequent calls short-circuit. The
+    guard is essential because ``add_httpx_client_hook`` only appends
+    and ``apply_httpx_client_hooks`` fans every registered entry over
+    each new ``httpx.Client``, so a second registration would fire
+    ``_on_request`` / ``_on_response`` twice per request and corrupt
+    the ``in_flight`` counter.
+
+    Re-entrancy and threading: the lock makes two concurrent callers
+    (e.g. tests importing the module from multiple threads) safe.
     """
     if not LOGGER.isEnabledFor(logging.DEBUG):
         return
 
-    def _modifier(client: httpx.Client) -> None:
-        # Append rather than overwrite so any pre-existing hooks
-        # (e.g. set by integrations) keep firing.
-        existing = client.event_hooks
-        existing.setdefault("request", []).append(_on_request)
-        existing.setdefault("response", []).append(_on_response)
-        client.event_hooks = existing
+    global _installed
+    with _install_lock:
+        if _installed:
+            return
 
-    opik_hooks.add_httpx_client_hook(
-        opik_hooks.HttpxClientHook(
-            client_modifier=_modifier,
-            client_init_arguments=None,
+        def _modifier(client: httpx.Client) -> None:
+            # Append rather than overwrite so any pre-existing hooks
+            # (e.g. set by integrations) keep firing.
+            existing = client.event_hooks
+            existing.setdefault("request", []).append(_on_request)
+            existing.setdefault("response", []).append(_on_response)
+            client.event_hooks = existing
+
+        opik_hooks.add_httpx_client_hook(
+            opik_hooks.HttpxClientHook(
+                client_modifier=_modifier,
+                client_init_arguments=None,
+            )
         )
-    )
-    LOGGER.debug(
-        "migrate.http hook installed (DEBUG logging detected); future "
-        "opik.Opik() httpx clients will trace requests"
-    )
+        _installed = True
+        LOGGER.debug(
+            "migrate.http hook installed (DEBUG logging detected); future "
+            "opik.Opik() httpx clients will trace requests"
+        )
