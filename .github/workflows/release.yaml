@@ -100,10 +100,6 @@ jobs:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
       skip_commit_push: true
-      # Pin checkout to the tag so the published tarball is reproducible from the
-      # version label, regardless of where main has moved since the tag was created
-      # (or where the dispatch ref happens to point). Required for replay safety.
-      git_ref: refs/tags/${{needs.set-version.outputs.version}}
 
   release-typescript-sdk-integrations:
     needs:
@@ -115,7 +111,6 @@ jobs:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
       skip_commit_push: true
-      git_ref: refs/tags/${{needs.set-version.outputs.version}}
 
   publish-helm-chart:
     needs:
