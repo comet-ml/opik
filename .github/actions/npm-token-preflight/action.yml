@@ -1,0 +1,75 @@
+---
+name: NPM Token Preflight
+description: |
+  Validate NPM_TOKEN before publish: confirms the token authenticates against
+  the registry and is authorized to publish the named package. Fails fast with
+  an actionable message so we never reach `npm publish` with a bad token.
+inputs:
+  npm_token:
+    required: true
+    description: NPM_TOKEN secret value (passed via env, never echoed)
+  package_name:
+    required: true
+    description: Package name to verify publish access for (e.g. opik, opik-openai)
+  registry_url:
+    required: false
+    description: NPM registry URL
+    default: "https://registry.npmjs.org"
+
+runs:
+  using: composite
+  steps:
+    - name: NPM token preflight (${{ inputs.package_name }})
+      shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.npm_token }}
+        PACKAGE_NAME: ${{ inputs.package_name }}
+        REGISTRY_URL: ${{ inputs.registry_url }}
+      run: |
+        set -e
+
+        if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+          echo "::error title=NPM preflight::NPM_TOKEN is empty. The secret is not configured or not exposed to this job."
+          exit 1
+        fi
+
+        REGISTRY_HOST="${REGISTRY_URL#https://}"
+        REGISTRY_HOST="${REGISTRY_HOST#http://}"
+        REGISTRY_HOST="${REGISTRY_HOST%/}"
+
+        TMP_NPMRC="$(mktemp)"
+        trap 'rm -f "$TMP_NPMRC"' EXIT
+        # shellcheck disable=SC2016
+        # Intentional literal ${NODE_AUTH_TOKEN}: npm expands it at .npmrc read time,
+        # keeping the token out of process args and shell history.
+        printf '//%s/:_authToken=${NODE_AUTH_TOKEN}\nregistry=%s\n' "$REGISTRY_HOST" "$REGISTRY_URL" > "$TMP_NPMRC"
+
+        echo "==> npm whoami"
+        if ! WHOAMI_OUT=$(npm --userconfig "$TMP_NPMRC" whoami 2>&1); then
+          echo "::error title=NPM preflight::npm whoami failed. NPM_TOKEN is invalid, expired, or revoked."
+          echo "Output:"
+          echo "$WHOAMI_OUT"
+          exit 1
+        fi
+        echo "Authenticated as: $WHOAMI_OUT"
+
+        echo "==> npm access list packages (filtering for ${PACKAGE_NAME})"
+        if ! ACCESS_OUT=$(npm --userconfig "$TMP_NPMRC" access list packages 2>&1); then
+          echo "::warning title=NPM preflight::npm access list packages failed; skipping authorization check."
+          echo "Output:"
+          echo "$ACCESS_OUT"
+          echo "Proceeding — publish step will be the source of truth."
+          exit 0
+        fi
+
+        if echo "$ACCESS_OUT" | grep -qE "^[[:space:]]*\"?${PACKAGE_NAME}\"?[[:space:]:]+\"?(read-write|write)\"?"; then
+          echo "Token has write access to ${PACKAGE_NAME}."
+          exit 0
+        fi
+
+        # Classic (legacy) tokens don't always return per-package scopes via this command.
+        # If the package is missing from the list but whoami succeeded, treat as pass-with-warning
+        # rather than block — publish will still surface a real auth error if it exists.
+        echo "::warning title=NPM preflight::Could not confirm write access to ${PACKAGE_NAME} from \`npm access list packages\` output."
+        echo "This is expected for classic automation tokens; granular tokens should list the package explicitly."
+        echo "Continuing — publish step will surface any real authorization error."
