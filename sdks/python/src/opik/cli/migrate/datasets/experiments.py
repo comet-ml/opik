@@ -473,33 +473,44 @@ def cascade_one_experiment(
     # Per-(experiment, reason) audit records are emitted at the end with
     # the affected source ids (capped at ``_SKIP_SAMPLE_LIMIT``) so the
     # CLI can fail loud with a machine-readable breakdown -- see OPIK-6599.
-    missing_trace_ids: List[str] = []
-    missing_item_ids: List[str] = []
+    # Cap the per-reason sample lists during collection -- ``_record_skip``
+    # would slice them anyway, but trimming early bounds peak memory in
+    # the pathological case (e.g. 10k items all missing the same remap).
+    # ``count`` comes from the always-fully-incremented counters so the
+    # audit record carries the true total even when the sample is capped.
+    missing_trace_count = 0
+    missing_item_count = 0
+    missing_trace_sample: List[str] = []
+    missing_item_sample: List[str] = []
     for item in items:
         if item.trace_id and item.trace_id not in result.trace_id_remap:
             result.items_skipped_missing_trace += 1
-            missing_trace_ids.append(item.trace_id)
+            missing_trace_count += 1
+            if len(missing_trace_sample) < _SKIP_SAMPLE_LIMIT:
+                missing_trace_sample.append(item.trace_id)
         if item.dataset_item_id and item.dataset_item_id not in item_id_remap:
             result.items_skipped_missing_item += 1
-            missing_item_ids.append(item.dataset_item_id)
+            missing_item_count += 1
+            if len(missing_item_sample) < _SKIP_SAMPLE_LIMIT:
+                missing_item_sample.append(item.dataset_item_id)
 
-    if missing_trace_ids:
+    if missing_trace_count:
         _record_skip(
             audit,
             reason="items_missing_trace_remap",
             experiment_id=experiment_id,
             experiment_name=source_experiment.name,
-            count=len(missing_trace_ids),
-            sample_source_ids=missing_trace_ids,
+            count=missing_trace_count,
+            sample_source_ids=missing_trace_sample,
         )
-    if missing_item_ids:
+    if missing_item_count:
         _record_skip(
             audit,
             reason="items_missing_dataset_item_remap",
             experiment_id=experiment_id,
             experiment_name=source_experiment.name,
-            count=len(missing_item_ids),
-            sample_source_ids=missing_item_ids,
+            count=missing_item_count,
+            sample_source_ids=missing_item_sample,
         )
 
 

@@ -124,6 +124,11 @@ class TestFinalizeWithSkipsOrOk:
         assert "experiments_skipped=0" in captured.err
         assert "items_skipped_missing_trace=0" in captured.err
         assert "NOT rolled back" in captured.err
+        # Rollback hint names the entities the operator must remove,
+        # the destination project, and the rename-back step on the source.
+        assert "roll back manually" in captured.err
+        assert "DestProject" in captured.err
+        assert "MyDataset_v1" in captured.err
 
         # AC 2: audit finalized to failed with skip record intact
         on_disk = json.loads(audit_path.read_text())

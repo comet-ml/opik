@@ -256,6 +256,21 @@ def _finalize_with_skips_or_ok(
         f"items_skipped_missing_trace={totals['items_skipped_missing_trace']} "
         f"items_skipped_missing_item={totals['items_skipped_missing_item']}"
     )
+    # High-level rollback hint. We deliberately don't ship a step-by-step
+    # CLI playbook here -- the audit log is the source of truth for what
+    # was actually created. Each ``ok`` action in ``audit.actions`` carries
+    # the destination entity id; an operator can grep the audit JSON to
+    # see exactly what landed in the destination project before deciding
+    # what to delete. Auto-rollback (a one-flag clean reverse) is tracked
+    # as a follow-up; this PR is the loud-fail mechanic only.
+    _stderr_console.print(
+        f"[yellow]To roll back manually: in project "
+        f"'{target_project}', delete the destination dataset "
+        f"'{target_label}' along with any experiments, optimizations, "
+        f"traces, and spans that were cascaded into it (the audit log "
+        f"lists each created entity id); then rename the source "
+        f"'{name}_v1' back to '{name}'.[/yellow]"
+    )
     _stderr_console.print(f"[dim](after {elapsed})[/dim]")
     sys.exit(1)
 
