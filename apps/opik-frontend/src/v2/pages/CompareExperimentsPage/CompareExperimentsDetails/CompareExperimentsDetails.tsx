@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isNumber from "lodash/isNumber";
-import { CircleCheck, Database } from "lucide-react";
+import { CircleCheck, Database, GitCommitVertical } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { Experiment } from "@/types/datasets";
@@ -107,19 +107,36 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
         )}
         {experiment?.dataset_id && (
-          <Tag
-            size="md"
-            variant="transparent"
-            className="flex shrink-0 items-center gap-1"
+          <TooltipWrapper
+            content={[
+              isTestSuiteExperiment(experiment) ? "Test suite" : "Dataset",
+              ": ",
+              experiment.dataset_name || "Deleted",
+              experiment.dataset_version_summary?.version_name
+                ? ` ${experiment.dataset_version_summary.version_name}`
+                : "",
+            ].join("")}
           >
-            <Database
-              className="size-3 shrink-0"
-              style={{ color: "var(--color-yellow)" }}
-            />
-            <span className="comet-body-s-accented truncate text-muted-slate">
-              {experiment.dataset_name || "Deleted test suite"}
-            </span>
-          </Tag>
+            <Tag
+              size="md"
+              variant="transparent"
+              className="flex shrink-0 items-center gap-1"
+            >
+              <Database
+                className="size-3 shrink-0"
+                style={{ color: "var(--color-yellow)" }}
+              />
+              <span className="comet-body-s-accented truncate text-muted-slate">
+                {experiment.dataset_name || "Deleted test suite"}
+              </span>
+              {experiment.dataset_version_summary?.version_name && (
+                <span className="flex items-center gap-0 pt-px text-muted-slate" style={{ fontSize: "12px" }}>
+                  <GitCommitVertical className="size-[10px]" />
+                  {experiment.dataset_version_summary.version_name}
+                </span>
+              )}
+            </Tag>
+          </TooltipWrapper>
         )}
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (

@@ -1,19 +1,26 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Database, ListChecks } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Database,
+  GitCommitVertical,
+  ListChecks,
+} from "lucide-react";
 import get from "lodash/get";
 import isFunction from "lodash/isFunction";
 import isNumber from "lodash/isNumber";
 
 import { Button } from "@/ui/button";
 import { Checkbox } from "@/ui/checkbox";
+import { Tag } from "@/ui/tag";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/shared/ResourceLink/ResourceLink";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { CELL_TEXT_CLASS_MAP } from "@/constants/shared";
+import { CELL_TEXT_CLASS_MAP, getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import { Explainer, ROW_HEIGHT } from "@/types/shared";
 import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
 import { cn } from "@/lib/utils";
@@ -40,6 +47,11 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
   const evaluationMethod = get(cellData, "evaluation_method", undefined) as
     | EVALUATION_METHOD
     | undefined;
+  const versionName = get(
+    cellData,
+    "dataset_version_summary.version_name",
+    undefined,
+  ) as string | undefined;
   const isDeleted = isFunction(getIsDeleted)
     ? getIsDeleted(cellData)
     : undefined;
@@ -50,6 +62,8 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     ? RESOURCE_TYPE.testSuite
     : RESOURCE_TYPE.dataset;
 
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -57,11 +71,11 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       className="items-center py-1.5"
     >
       <TooltipWrapper content={name}>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
           <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-muted-slate">
             <Icon className="size-3" />
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 shrink overflow-hidden">
             {id ? (
               <ResourceLink
                 id={id}
@@ -73,6 +87,16 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
               "-"
             )}
           </div>
+          {versionName && (
+            <Tag
+              size={tagSize}
+              variant="transparent"
+              className="flex shrink-0 items-center gap-0 border-0 p-0 text-muted-slate"
+            >
+              <GitCommitVertical className="size-[10px] text-muted-slate" />
+              {versionName}
+            </Tag>
+          )}
         </div>
       </TooltipWrapper>
     </CellWrapper>
