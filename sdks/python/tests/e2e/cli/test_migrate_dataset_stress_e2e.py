@@ -39,6 +39,7 @@ import pytest
 
 import opik
 from opik import id_helpers
+from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
 from opik.rest_api.types.dataset_item_write import DatasetItemWrite
 from opik.rest_api.types.experiment_item import ExperimentItem
@@ -152,20 +153,32 @@ def _seed_experiment_with_traces(
             )
         )
 
+    # Wrap bulk writes with the SDK's 429-aware retry helper so this test
+    # is runnable on rate-limited environments (staging enforces per-user
+    # general_events limits that local Docker does not).
     for chunk in _chunked(trace_writes, _BULK_INSERT_CHUNK):
-        rest.traces.create_traces(traces=chunk)
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda c=chunk: rest.traces.create_traces(traces=c),
+            operation_name="stress E2E seed: create_traces",
+        )
     for chunk in _chunked(span_writes, _BULK_INSERT_CHUNK):
-        rest.spans.create_spans(spans=chunk)
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda c=chunk: rest.spans.create_spans(spans=c),
+            operation_name="stress E2E seed: create_spans",
+        )
 
     new_experiment_id = id_helpers.generate_id()
-    rest.experiments.create_experiment(
-        id=new_experiment_id,
-        name=experiment_name,
-        dataset_name=dataset_name,
-        type="regular",
-        evaluation_method="dataset",
-        dataset_version_id=dataset_version_id,
-        project_name=project_name,
+    rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: rest.experiments.create_experiment(
+            id=new_experiment_id,
+            name=experiment_name,
+            dataset_name=dataset_name,
+            type="regular",
+            evaluation_method="dataset",
+            dataset_version_id=dataset_version_id,
+            project_name=project_name,
+        ),
+        operation_name="stress E2E seed: create_experiment",
     )
 
     experiment_items = [
@@ -178,7 +191,12 @@ def _seed_experiment_with_traces(
         for item_id, trace_id in zip(experiment_item_ids, trace_ids)
     ]
     for chunk in _chunked(experiment_items, _BULK_INSERT_CHUNK):
-        rest.experiments.create_experiment_items(experiment_items=chunk)
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda c=chunk: rest.experiments.create_experiment_items(
+                experiment_items=c
+            ),
+            operation_name="stress E2E seed: create_experiment_items",
+        )
 
     return new_experiment_id, trace_ids
 
@@ -226,10 +244,13 @@ def test_migrate_dataset__stress__no_silent_data_loss(
     ]
     batch_group_id = id_helpers.generate_id()
     for chunk in _chunked(v1_payloads, _BULK_INSERT_CHUNK):
-        rest.datasets.create_or_update_dataset_items(
-            dataset_id=source_id,
-            items=chunk,
-            batch_group_id=batch_group_id,
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda c=chunk: rest.datasets.create_or_update_dataset_items(
+                dataset_id=source_id,
+                items=c,
+                batch_group_id=batch_group_id,
+            ),
+            operation_name="stress E2E seed: create_or_update_dataset_items",
         )
     base_version_id = (
         rest.datasets.list_dataset_versions(id=source_id, page=1, size=1).content[0].id
@@ -244,12 +265,15 @@ def test_migrate_dataset__stress__no_silent_data_loss(
             for i in range(items_added_per_version)
         ]
         assert items_added_per_version <= _BULK_INSERT_CHUNK
-        base_version_id = apply_changes(
-            rest,
-            source_id,
-            base_version_id=base_version_id,
-            added_items=added_items,
-            change_description=f"v{v}",
+        base_version_id = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: apply_changes(
+                rest,
+                source_id,
+                base_version_id=base_version_id,
+                added_items=added_items,
+                change_description=f"v{v}",
+            ),
+            operation_name="stress E2E seed: apply_changes (v2..vN)",
         )
 
     # ── Pre-migration: verify the source itself is healthy. ──
