@@ -15,6 +15,7 @@ export interface BasePromptData {
   versionId?: string;
   name: string;
   commit?: string;
+  version?: string;
   metadata?: OpikApi.JsonNode;
   type?: PromptType;
   changeDescription?: string;
@@ -33,6 +34,7 @@ export abstract class BasePrompt {
   private _id: string | undefined;
   private _versionId: string | undefined;
   private _commit: string | undefined;
+  private _version: string | undefined;
   private _synced: boolean;
   private _changeDescription: string | undefined;
 
@@ -55,6 +57,7 @@ export abstract class BasePrompt {
   get id(): string | undefined { return this._id; }
   get versionId(): string | undefined { return this._versionId; }
   get commit(): string | undefined { return this._commit; }
+  get version(): string | undefined { return this._version; }
   /** Whether the prompt has been successfully synced with the backend. */
   get synced(): boolean { return this._synced; }
   get changeDescription(): string | undefined { return this._changeDescription; }
@@ -65,6 +68,7 @@ export abstract class BasePrompt {
     this._id = data.promptId;
     this._versionId = data.versionId;
     this._commit = data.commit;
+    this._version = data.version;
     this.type = data.type ?? "mustache";
     this._changeDescription = data.changeDescription;
     this.templateStructure = data.templateStructure ?? "text";
@@ -84,6 +88,7 @@ export abstract class BasePrompt {
     promptId?: string;
     versionId?: string;
     commit?: string;
+    version?: string;
     changeDescription?: string;
     tags?: string[];
     projectName?: string;
@@ -91,6 +96,7 @@ export abstract class BasePrompt {
     this._id = result.promptId;
     this._versionId = result.versionId;
     this._commit = result.commit;
+    this._version = result.version;
     this._changeDescription = result.changeDescription;
     if (result.tags) {
       this._tags = result.tags;
@@ -144,6 +150,7 @@ export abstract class BasePrompt {
           promptId: result.id,
           versionId: result.versionId,
           commit: result.commit,
+          version: result.version,
           changeDescription: result.changeDescription,
           tags: result.tags ? Array.from(result.tags) : undefined,
           projectName: result.projectName,

@@ -194,6 +194,7 @@ export class ChatPrompt extends BasePrompt {
         name: promptData.name,
         messages,
         commit: apiResponse.commit,
+        version: apiResponse.versionNumber,
         metadata: apiResponse.metadata,
         type: promptType,
         changeDescription: apiResponse.changeDescription,

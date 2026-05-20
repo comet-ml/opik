@@ -689,6 +689,54 @@ def test_get_prompt__nonexistent__returns_none(opik_client: opik.Opik):
     assert result is None
 
 
+def test_get_prompt__with_version__string_prompt(opik_client: opik.Opik):
+    """Test that get_prompt() with the sequential ``version`` selector
+    (e.g. ``"v1"``, ``"v2"``, ...) returns the correct prompt content."""
+    unique_id = str(uuid.uuid4())[-6:]
+    prompt_name = f"string-prompt-version-{unique_id}"
+    project_name = f"get_prompt_version-project-{unique_id}"
+
+    # Create three versions of the same prompt.
+    opik_client.create_prompt(
+        name=prompt_name, prompt="Version 1", project_name=project_name
+    )
+    opik_client.create_prompt(
+        name=prompt_name, prompt="Version 2", project_name=project_name
+    )
+    latest = opik_client.create_prompt(
+        name=prompt_name, prompt="Version 3", project_name=project_name
+    )
+
+    expected_by_version = {
+        "v1": "Version 1",
+        "v2": "Version 2",
+        "v3": "Version 3",
+    }
+
+    for selector, expected_template in expected_by_version.items():
+        retrieved = opik_client.get_prompt(
+            name=prompt_name,
+            version=selector,
+            project_name=project_name,
+            no_cache=True,
+        )
+        assert retrieved is not None, f"expected prompt for version {selector}"
+        assert isinstance(retrieved, opik.Prompt)
+        assert retrieved.prompt == expected_template
+        assert retrieved.version == selector
+        assert retrieved.name == prompt_name
+        assert retrieved.project_name == project_name
+
+    # The latest prompt (no version selector) should expose version="v3".
+    latest_fetched = opik_client.get_prompt(
+        name=prompt_name, project_name=project_name, no_cache=True
+    )
+    assert latest_fetched is not None
+    assert latest_fetched.version == "v3"
+    # The create_prompt return value should also surface the version_number now.
+    assert latest.version == "v3"
+
+
 def test_prompt__format_playground_chat_prompt__returns_json(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
 

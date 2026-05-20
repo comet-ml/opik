@@ -156,6 +156,7 @@ export class Prompt extends BasePrompt {
         name: promptData.name,
         prompt: apiResponse.template,
         commit: apiResponse.commit,
+        version: apiResponse.versionNumber,
         metadata: apiResponse.metadata,
         type: promptType,
         changeDescription: apiResponse.changeDescription,
