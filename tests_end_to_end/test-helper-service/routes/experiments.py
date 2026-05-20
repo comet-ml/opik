@@ -102,7 +102,7 @@ def create_test_suite_experiment():
     project_name = data["project_name"]
     client = get_opik_client()
 
-    dataset = client.get_dataset(name=dataset_name)
+    dataset = client.get_dataset(name=dataset_name, project_name=project_name)
 
     if not dataset:
         abort(404, f"Dataset not found: {dataset_name}")
