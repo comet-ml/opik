@@ -121,8 +121,8 @@ public class AutomationRuleProjectMigrationService {
                 .setDescription("Number of new rule rows inserted during split")
                 .build();
         this.rulesSkipped = meter
-                .counterBuilder("%s.rules.skipped".formatted(METRIC_NAMESPACE))
-                .setDescription("Number of rules skipped during migration, tagged by reason")
+                .counterBuilder("%s.project_associations.skipped".formatted(METRIC_NAMESPACE))
+                .setDescription("Number of project associations skipped during migration, tagged by reason")
                 .build();
     }
 
@@ -158,20 +158,20 @@ public class AutomationRuleProjectMigrationService {
         log.info("Found workspaces with multi-project automation rules, count='{}'", eligibleWorkspaces.size());
 
         for (var workspace : eligibleWorkspaces) {
+            var startMillis = System.currentTimeMillis();
             try {
-                migrateWorkspace(workspace.workspaceId(), workspace.multiProjectRuleCount());
+                migrateWorkspace(workspace.workspaceId(), workspace.multiProjectRuleCount(), startMillis);
             } catch (Exception e) {
                 log.error("Workspace automation rule migration failed, will retry next cycle, workspaceId='{}'",
                         workspace.workspaceId(), e);
-                recordWorkspaceDuration(RESULT_ERROR, System.currentTimeMillis());
+                recordWorkspaceDuration(RESULT_ERROR, startMillis);
             }
         }
     }
 
-    private void migrateWorkspace(String workspaceId, long multiProjectRuleCount) {
+    private void migrateWorkspace(String workspaceId, long multiProjectRuleCount, long workspaceStartMillis) {
         log.info("Starting workspace automation rule migration, workspaceId='{}', multiProjectRuleCount='{}'",
                 workspaceId, multiProjectRuleCount);
-        var workspaceStartMillis = System.currentTimeMillis();
 
         var multiProjectRuleIds = transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AutomationRuleMigrationDAO.class)
@@ -285,7 +285,12 @@ public class AutomationRuleProjectMigrationService {
     private void evictAutomationRuleCache(String workspaceId) {
         try {
             var key = CACHE_KEY_PATTERN.formatted(workspaceId);
-            cacheManager.evictAsync(key, true);
+            cacheManager.evictAsync(key, true)
+                    .whenComplete((result, error) -> {
+                        if (error != null) {
+                            log.warn("Async cache eviction failed, workspaceId='{}'", workspaceId, error);
+                        }
+                    });
             log.debug("Evicted automation rule cache for workspace, workspaceId='{}'", workspaceId);
         } catch (Exception e) {
             log.warn("Failed to evict automation rule cache, workspaceId='{}'", workspaceId, e);
