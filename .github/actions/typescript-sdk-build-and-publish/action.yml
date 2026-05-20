@@ -163,40 +163,49 @@ runs:
         while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
           echo "Publish attempt $ATTEMPT of $MAX_ATTEMPTS (timeout: ${TIMEOUT_SECONDS}s)..."
 
-          # Run the publish, streaming output live AND capturing it for inspection.
-          # Capture timeout/npm's exit code via PIPESTATUS[0] directly — don't rely on
-          # the pipeline's overall exit status.
-          # `|| true` shields the pipeline from `set -e` (GitHub Actions `shell: bash`
-          # uses `bash --noprofile --norc -eo pipefail`, so a non-zero pipeline would
-          # otherwise abort the step before we can read PIPESTATUS or evaluate the
-          # 403-already-published skip below).
-          timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG" || true
-          EXIT_CODE=${PIPESTATUS[0]}
-
-          if [ "$EXIT_CODE" -eq 0 ]; then
+          # Run the publish via `if pipeline; then ... else ...; fi`. This shape is
+          # load-bearing for three reasons; do not rewrite to a bare pipeline:
+          #   1. The `if` condition shields the pipeline from `set -e` (GitHub Actions
+          #      `shell: bash` uses `bash --noprofile --norc -eo pipefail`; without
+          #      this shield, a non-zero pipeline kills the step before we evaluate
+          #      the 403-skip below).
+          #   2. PIPESTATUS is preserved inside the `else` branch (a trailing
+          #      `|| true` would clobber PIPESTATUS to reflect only `true`, masking
+          #      every failure as exit-0 and silently turning real publish failures
+          #      into false-green CI).
+          #   3. `tee` streams output live AND captures it to PUBLISH_LOG for the
+          #      grep-based 403-already-published check.
+          if timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"; then
             SUCCESS=true
             break
-          fi
-
-          if [ "$EXIT_CODE" -eq 124 ]; then
-            echo "Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
           else
-            echo "Attempt $ATTEMPT failed with exit code $EXIT_CODE"
-          fi
+            EXIT_CODE=${PIPESTATUS[0]}
 
-          # Non-retryable: version already published. The desired end state is achieved;
-          # treat as a skip-with-warning so concurrent / replay dispatches don't fail CI.
-          if grep -q "E403" "$PUBLISH_LOG" && grep -qi "cannot publish over" "$PUBLISH_LOG"; then
-            ALREADY_PUBLISHED=true
-            echo "::warning title=NPM publish skipped::${PACKAGE_NAME}@${NEW_VERSION} is already published; treating as success."
-            break
-          fi
+            if [ "$EXIT_CODE" -eq 124 ]; then
+              echo "Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
+            else
+              echo "Attempt $ATTEMPT failed with exit code $EXIT_CODE"
+            fi
 
-          if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-            echo "Retrying in 10 seconds..."
-            sleep 10
+            # Non-retryable: version already published. The desired end state is
+            # achieved; treat as a skip-with-warning so concurrent / replay
+            # dispatches don't fail CI. Match BOTH `E403` and the specific phrase
+            # `cannot publish over` so we don't accidentally treat other 403s
+            # (e.g. `You may not perform that action with these credentials`, which
+            # means the token lacks publish scope on this package) as already-
+            # published — those must still fail loudly.
+            if grep -q "E403" "$PUBLISH_LOG" && grep -qi "cannot publish over" "$PUBLISH_LOG"; then
+              ALREADY_PUBLISHED=true
+              echo "::warning title=NPM publish skipped::${PACKAGE_NAME}@${NEW_VERSION} is already published; treating as success."
+              break
+            fi
+
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              echo "Retrying in 10 seconds..."
+              sleep 10
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
           fi
-          ATTEMPT=$((ATTEMPT + 1))
         done
 
         if [ "$SUCCESS" = false ] && [ "$ALREADY_PUBLISHED" = false ]; then
