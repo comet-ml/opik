@@ -70,20 +70,30 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
 
-          for IMAGE in opik-backend opik-python-backend; do
-            docker tag ${{ env.DOCKER_REGISTRY }}/$IMAGE:latest \
-              ${{ env.DOCKER_REGISTRY }}/$IMAGE:$TAG
-            docker push ${{ env.DOCKER_REGISTRY }}/$IMAGE:$TAG
+          IMAGES="opik-backend opik-python-backend"
+          if [ "${{ inputs.include_guardrails }}" = "true" ]; then
+            IMAGES="${IMAGES} opik-guardrails-backend"
+          fi
+          if [ "${{ inputs.include_frontend }}" = "true" ]; then
+            IMAGES="${IMAGES} opik-frontend"
+          fi
+
+          # Tag all images first (cheap, sequential)
+          for IMAGE in ${IMAGES}; do
+            docker tag "${{ env.DOCKER_REGISTRY }}/${IMAGE}:latest" \
+              "${{ env.DOCKER_REGISTRY }}/${IMAGE}:${TAG}"
           done
 
-          if [ "${{ inputs.include_guardrails }}" = "true" ]; then
-            docker tag ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:latest \
-              ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:$TAG
-            docker push ${{ env.DOCKER_REGISTRY }}/opik-guardrails-backend:$TAG
-          fi
+          # Push all images in parallel
+          PIDS=()
+          for IMAGE in ${IMAGES}; do
+            docker push "${{ env.DOCKER_REGISTRY }}/${IMAGE}:${TAG}" &
+            PIDS+=($!)
+          done
 
-          if [ "${{ inputs.include_frontend }}" = "true" ]; then
-            docker tag ${{ env.DOCKER_REGISTRY }}/opik-frontend:latest \
-              ${{ env.DOCKER_REGISTRY }}/opik-frontend:$TAG
-            docker push ${{ env.DOCKER_REGISTRY }}/opik-frontend:$TAG
-          fi
+          # Wait for all pushes, fail if any fails
+          FAILED=0
+          for PID in "${PIDS[@]}"; do
+            wait "${PID}" || FAILED=1
+          done
+          exit "${FAILED}"
