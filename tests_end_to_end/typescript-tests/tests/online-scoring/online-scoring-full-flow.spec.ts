@@ -5,58 +5,19 @@ import { ProjectsPage } from '../../page-objects/projects.page';
 import { AIProviderSetupHelper } from '../../helpers/ai-provider-setup-helper';
 import { modelConfigLoader } from '../../helpers/model-config-loader';
 
-// Timeout constants
-const RULE_ACTIVATION_TIMEOUT = 10000; // 10 seconds for rule to fully activate in backend
-const TABLE_READY_TIMEOUT = 4000; // 4 seconds per attempt for table to render rows / Moderation header after reload
-const POST_RELOAD_TIMEOUT = 1000; // 1 second wait after page reload
+const RULE_ACTIVATION_TIMEOUT = 10000;
+const TABLE_READY_TIMEOUT = 4000;
+const POST_RELOAD_TIMEOUT = 1000;
 const EXPECTED_ROW_COUNT = 10;
 
 const enabledModels = modelConfigLoader.getEnabledModelsForOnlineScoring();
 
-test.describe('Online Scoring Tests', () => {
+test.describe('Online Scoring Tests - Full Moderation Flow', () => {
   if (enabledModels.length === 0) {
     test.skip('No enabled models found for online scoring testing', () => {});
   }
 
   for (const { providerName, modelConfig, providerConfig } of enabledModels) {
-    test(`Create moderation rule with ${providerConfig.display_name} ${modelConfig.name} @fullregression @onlinescoring`, async ({
-      page,
-      projectName,
-      helperClient,
-      createProjectApi,
-    }) => {
-      const providerSetupHelper = new AIProviderSetupHelper(page);
-      const rulesPage = new RulesPage(page);
-
-      console.log(`Testing moderation rule creation with ${providerConfig.display_name} - ${modelConfig.name}`);
-
-      await test.step('Setup AI provider if needed', async () => {
-        await providerSetupHelper.setupProviderIfNeeded(providerName, providerConfig);
-      });
-
-      await test.step('Navigate to project and rules tab', async () => {
-        const projectsPage = new ProjectsPage(page);
-        await projectsPage.goto();
-        await projectsPage.clickProject(createProjectApi);
-        await rulesPage.navigateToRulesTab();
-      });
-
-      await test.step('Create moderation rule', async () => {
-        const ruleName = `Test Moderation Rule - ${modelConfig.name}`;
-        await rulesPage.createModerationRule(ruleName, providerConfig.display_name, modelConfig.ui_selector);
-
-        // Verify rule was created
-        await expect(page.getByText(ruleName)).toBeVisible();
-        console.log(`Successfully created and verified moderation rule: ${ruleName}`);
-      });
-
-      await test.step('Cleanup provider', async () => {
-        await providerSetupHelper.cleanupProvider(providerConfig);
-      });
-
-      console.log(`Moderation rule creation test completed successfully for ${providerConfig.display_name} - ${modelConfig.name}`);
-    });
-
     test(`Online scoring full moderation flow with ${providerConfig.display_name} ${modelConfig.name} @sanity @happypaths @fullregression @onlinescoring`, async ({
       page,
       projectName,
@@ -84,7 +45,6 @@ test.describe('Online Scoring Tests', () => {
         await rulesPage.createModerationRule(ruleName, providerConfig.display_name, modelConfig.ui_selector);
 
         console.log('Rule created successfully - waiting for rule to fully activate before creating traces');
-        // CRITICAL: Wait for the rule to fully activate in the backend before creating traces
         await page.waitForTimeout(RULE_ACTIVATION_TIMEOUT);
       });
 
@@ -99,19 +59,12 @@ test.describe('Online Scoring Tests', () => {
         await projectsPage.clickProject(createProjectApi);
         console.log('Successfully navigated to project traces');
 
-        // Ensure we're on the Traces view
         const tracesToggle = page.getByRole('radio', { name: 'Traces' });
         if ((await tracesToggle.getAttribute('aria-checked')) !== 'true') {
           await tracesToggle.click();
           await page.waitForTimeout(500);
         }
 
-        // Retry loop: wait for Moderation column header in the table, then check score value.
-        // Scoring is async and Anthropic models can take longer, so we allow generous retries.
-        // Critical: each iteration must wait for the table to FULLY render (rows + dynamic
-        // feedback-score columns) before scanning the header — header cells are appended
-        // after a second API call resolves, so a fresh DOM snapshot right after reload
-        // contains only the static columns and the Moderation header will be missing.
         const maxAttempts = 25;
         const tableRows = page.locator('table tbody tr');
         const headerCells = page.locator('table thead th, table thead td');
@@ -182,7 +135,6 @@ test.describe('Online Scoring Tests', () => {
         console.log(`Found ${rowCount} rows in traces table`);
         expect(rowCount).toBeGreaterThanOrEqual(EXPECTED_ROW_COUNT);
 
-        // The value should be "0" (safe content)
         expect(moderationValue).toBe('0');
         console.log(`Successfully verified moderation scoring with value: ${moderationValue}`);
       });
