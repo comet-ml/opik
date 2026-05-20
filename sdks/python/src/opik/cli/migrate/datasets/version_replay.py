@@ -191,6 +191,22 @@ def replay_all_versions(
             version_hash=source_version.version_hash,
         )
 
+        # OPIK-6602 diagnostic: per-version source-side counts. When a
+        # post-write fetch later shows fewer items on the target than the
+        # source had, the source-side debug line lets the operator confirm
+        # the bug is on the WRITE path, not a phantom-read on the source.
+        LOGGER.debug(
+            "migrate.replay v%d/%d source: dataset=%r version=%s (id=%s) "
+            "items_streamed=%d items_total=%s",
+            index + 1,
+            total,
+            source_name_after_rename,
+            source_version.version_name,
+            source_version.id,
+            len(curr_items_by_id),
+            getattr(source_version, "items_total", None),
+        )
+
         if index == 0:
             new_version_id, new_item_ids, delta = _replay_first_version(
                 rest_client,
@@ -243,6 +259,37 @@ def replay_all_versions(
             if queue:
                 result.item_id_remap[added.id] = queue.pop(0)
 
+        # OPIK-6602 diagnostic: re-fetch the target version we just wrote
+        # and compare against the source counts. Surfaces three failure
+        # shapes the QA stress run hit:
+        #
+        #   (a) target items_total < source items_total — BE silently
+        #       truncated during the carry-over copy (OPIK-6601 window),
+        #       confirmed when the post-apply read returns a number lower
+        #       than what we sent + the source streamed.
+        #   (b) target streamed-count != target items_total — BE metadata
+        #       and storage disagree (BE has cached aggregate, items table
+        #       is the truth or vice-versa).
+        #   (c) target streamed-count != source streamed-count — same as
+        #       (a) but observed through the stream rather than metadata.
+        #
+        # All three reads run AFTER the apply returns; if any of them
+        # disagree with the source we mark the line a warning so it stands
+        # out in mixed output. Debug-level by default so production users
+        # see nothing without OPIK_CONSOLE_LOGGING_LEVEL=DEBUG.
+        _log_post_apply_verification(
+            rest_client,
+            dest_dataset_id=dest_dataset_id,
+            dest_name=dest_name,
+            dest_project_name=dest_project_name,
+            source_version=source_version,
+            source_items_streamed=len(curr_items_by_id),
+            delta=delta,
+            new_version_id=new_version_id,
+            index=index,
+            total=total,
+        )
+
         result.versions_replayed += 1
 
         audit.record(
@@ -264,6 +311,122 @@ def replay_all_versions(
         base_version_id = new_version_id
 
     return result
+
+
+def _log_post_apply_verification(
+    rest_client: OpikApi,
+    *,
+    dest_dataset_id: str,
+    dest_name: str,
+    dest_project_name: str,
+    source_version: dataset_version_public.DatasetVersionPublic,
+    source_items_streamed: int,
+    delta: "VersionDelta",
+    new_version_id: str,
+    index: int,
+    total: int,
+) -> None:
+    """Re-fetch the destination version just written and compare counts.
+
+    OPIK-6602 / OPIK-6601 diagnostic. Short-circuits when the ``opik``
+    logger isn't at DEBUG so production callers pay zero extra HTTP cost.
+
+    Three sources of truth are compared:
+
+      * source streamed count (passed in, ``source_items_streamed``)
+      * target version's ``items_total`` (BE metadata) — fetched via
+        ``list_dataset_versions`` filtered to ``new_version_id``
+      * target streamed count — paginated ``stream_dataset_items`` at
+        the just-written version_hash
+
+    A mismatch between any pair is logged at WARNING so it surfaces in
+    mixed logs; matching counts go out at DEBUG.
+
+    All reads are wrapped with the SDK's rate-limit-aware retry helper
+    so a transient 429 mid-verification doesn't blow up the migrate
+    itself.
+    """
+    if not LOGGER.isEnabledFor(logging.DEBUG):
+        return
+
+    try:
+        # Find the just-written version row by id. ``list_dataset_versions``
+        # is paginated newest-first; the one we want is the latest, so a
+        # size=1 fetch is usually enough -- but we defensively page a few
+        # if we don't see our id at the top (some other writer raced us in,
+        # which is exactly the scenario this diagnostic exists to detect).
+        target_version: Optional[dataset_version_public.DatasetVersionPublic] = None
+        for page_idx in (1, 2, 3):
+            page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda p=page_idx: rest_client.datasets.list_dataset_versions(
+                    id=dest_dataset_id, page=p, size=_VERSIONS_PAGE_SIZE
+                )
+            )
+            for v in page.content or []:
+                if v.id == new_version_id:
+                    target_version = v
+                    break
+            if target_version is not None or not page.content:
+                break
+
+        if target_version is None:
+            LOGGER.warning(
+                "migrate.replay v%d/%d POST-APPLY: dataset=%r target version "
+                "id=%s NOT FOUND on the destination after apply returned -- "
+                "BE write/read inconsistency (OPIK-6601 visibility window?)",
+                index + 1,
+                total,
+                dest_name,
+                new_version_id,
+            )
+            return
+
+        target_items_total = target_version.items_total
+        target_stream = _stream_version_items_raw(
+            rest_client,
+            dataset_name=dest_name,
+            project_name=dest_project_name,
+            version_hash=target_version.version_hash,
+        )
+        target_streamed = sum(1 for _ in target_stream)
+
+        adds = len(delta.adds)
+        mods = len(delta.modifications)
+        dels = len(delta.deletions)
+
+        mismatched = (
+            target_items_total != source_items_streamed
+            or target_streamed != source_items_streamed
+            or target_streamed != target_items_total
+        )
+        level = logging.WARNING if mismatched else logging.DEBUG
+
+        LOGGER.log(
+            level,
+            "migrate.replay v%d/%d POST-APPLY: dataset=%r src_ver=%s -> "
+            "tgt_ver=%s | source_streamed=%d | target_items_total=%s | "
+            "target_streamed=%d | delta(+%d ~%d -%d)%s",
+            index + 1,
+            total,
+            dest_name,
+            source_version.version_name,
+            target_version.version_name,
+            source_items_streamed,
+            target_items_total,
+            target_streamed,
+            adds,
+            mods,
+            dels,
+            " <<< COUNT MISMATCH" if mismatched else "",
+        )
+    except Exception as exc:
+        # Diagnostic must never break the migrate. Log at debug + move on.
+        LOGGER.debug(
+            "migrate.replay v%d/%d POST-APPLY verification failed: %s",
+            index + 1,
+            total,
+            exc,
+        )
 
 
 def _replay_first_version(

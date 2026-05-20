@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -21,6 +22,7 @@ from rich.table import Table
 
 import opik
 
+from . import _debug_http
 from .audit import AuditLog, default_audit_path
 from .datasets.executor import execute_plan, record_planned
 from .datasets.planner import (
@@ -130,7 +132,31 @@ def _build_client(ctx: click.Context) -> opik.Opik:
 
     ``workspace=None`` means defer to the SDK's resolution chain
     (OPIK_WORKSPACE env -> ~/.opik.config -> 'default').
+
+    OPIK-6602: forces the streamer to a single consumer thread for the
+    duration of the migrate process so it never has multiple in-flight
+    HTTP writes against the same workspace. Migrate's dataset writes are
+    already serialized on the main thread (raw Fern client) -- this
+    change collapses the trace/span/feedback streamer to one consumer
+    too, removing manufactured workspace-level concurrency on the
+    experiment cascade phase. Tradeoff: the cascade gives up ~3x
+    parallelism on trace/span POSTs, so very large cascades migrate
+    slower. For a one-shot tool that's acceptable; the property the
+    ticket wants is "no concurrent same-workspace writes", and this is
+    the smallest change that delivers it.
+
+    ``setdefault`` rather than overwrite so an operator who needs to
+    benchmark / pre-empt the default can still set
+    ``OPIK_BACKGROUND_WORKERS`` on the shell before invoking migrate.
+
+    Installs the OPIK-6602 httpx-trace hook before constructing the
+    client so the new ``opik.Opik()``'s internal httpx client picks it
+    up via ``hooks.apply_httpx_client_hooks``. No-op unless the ``opik``
+    logger is at DEBUG.
     """
+    os.environ.setdefault("OPIK_BACKGROUND_WORKERS", "1")
+    _debug_http.install_if_debug()
+
     workspace = ctx.obj.get("workspace")
     api_key = ctx.obj.get("api_key")
     kwargs = {}
