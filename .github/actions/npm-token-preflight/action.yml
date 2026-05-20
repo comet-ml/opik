@@ -62,7 +62,11 @@ runs:
           exit 0
         fi
 
-        if echo "$ACCESS_OUT" | grep -qE "^[[:space:]]*\"?${PACKAGE_NAME}\"?[[:space:]:]+\"?(read-write|write)\"?"; then
+        # Escape ERE metacharacters in PACKAGE_NAME so e.g. a future name containing
+        # `.` doesn't match a different package with any char at that position.
+        PACKAGE_NAME_ERE=$(printf '%s' "$PACKAGE_NAME" | sed -e 's/[][\.*+?(){}|^$\\]/\\&/g')
+
+        if echo "$ACCESS_OUT" | grep -qE "^[[:space:]]*\"?${PACKAGE_NAME_ERE}\"?[[:space:]:]+\"?(read-write|write)\"?"; then
           echo "Token has write access to ${PACKAGE_NAME}."
           exit 0
         fi
