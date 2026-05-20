@@ -3178,6 +3178,11 @@ class PromptResourceTest {
                                     .build())
                     .isEqualTo(expectedPromptVersions);
 
+            assertThat(promptVersionPage.content())
+                    .allSatisfy(v -> assertThat(v.versionNumber()).matches("^v\\d+$"));
+            assertThat(promptVersionPage.content().stream().map(PromptVersion::versionNumber).toList())
+                    .doesNotHaveDuplicates();
+
             assertThat(promptVersionPage.content().stream().map(PromptVersion::promptId).toList())
                     .allMatch(id -> id.equals(promptId));
         }

@@ -511,10 +511,12 @@ class PromptServiceImpl implements PromptService {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            PromptVersion toSave = promptVersion;
+            PromptVersion toSave;
             if (promptVersion.versionType() != PromptVersionType.MASK) {
                 int nextNumber = promptVersionDAO.findMaxVersionNumber(workspaceId, promptVersion.promptId()) + 1;
                 toSave = promptVersion.toBuilder().versionNumber("v" + nextNumber).build();
+            } else {
+                toSave = promptVersion.toBuilder().versionNumber(null).build();
             }
 
             promptVersionDAO.save(workspaceId, toSave);

@@ -9,3 +9,4 @@ CREATE UNIQUE INDEX idx_prompt_versions_workspace_prompt_version_number
 
 --rollback DROP INDEX idx_prompt_versions_workspace_prompt_version_number ON prompt_versions;
 --rollback ALTER TABLE prompt_versions DROP COLUMN version_number;
+
