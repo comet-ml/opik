@@ -796,16 +796,11 @@ datasetProjectMigration:
   # idle window and don't churn on every tick.
   schedulerThreadTtl: 10s
 
-# Prompt Project Migration configuration (D4)
-# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Runs as a recurring job.
 promptProjectMigration:
-  # Master switch — disabled in tests by default; tests opt in via CustomConfig overrides.
   enabled: false
   workspacesPerRun: 20
   promptBatchSize: 1000
   interval: 5s
-  # Non-zero so the first scheduled fire lands after the JobTest's initial seed + prime.
-  # ServiceTest disables the job entirely and drives the cycle directly via runMigrationCycle().
   startupDelay: 5s
   lockTimeout: 5s
   lockWaitTime: 100ms
@@ -813,6 +808,15 @@ promptProjectMigration:
   schedulerThreadCap: 2
   schedulerQueuedTaskCap: 50
   schedulerThreadTtl: 10s
+
+automationRuleProjectMigration:
+  enabled: false
+  workspacesPerRun: 20
+  interval: 5s
+  startupDelay: 0s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list

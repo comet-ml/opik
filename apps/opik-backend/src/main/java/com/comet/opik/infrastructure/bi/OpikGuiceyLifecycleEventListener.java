@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.AutomationRuleProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
@@ -63,6 +64,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 scheduleExperimentProjectMigrationJobIfEnabled();
                 scheduleDatasetProjectMigrationJobIfEnabled();
                 schedulePromptProjectMigrationJobIfEnabled();
+                scheduleAutomationRuleProjectMigrationJobIfEnabled();
             }
 
             case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
@@ -338,6 +340,17 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
         scheduleRepeatingJob(PromptProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleAutomationRuleProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getAutomationRuleProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Automation rule project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(AutomationRuleProjectMigrationJob.class,
                 config.interval().toJavaDuration(),
                 config.startupDelay().toJavaDuration());
     }
