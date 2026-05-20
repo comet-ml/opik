@@ -77,4 +77,12 @@ public interface Field {
         return false;
     }
 
+    /**
+     * Hook for fields that need to normalize a client-supplied filter value before validation
+     * and SQL binding (e.g. stripping a display-only prefix). Defaults to identity.
+     */
+    default String normalizeValue(String value) {
+        return value;
+    }
+
 }

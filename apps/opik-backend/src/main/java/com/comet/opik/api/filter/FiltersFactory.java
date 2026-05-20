@@ -156,6 +156,14 @@ public class FiltersFactory {
             }
         }
 
+        // Field-specific value normalization (e.g. strip display-only prefixes) before validation.
+        if (filter.value() != null && !Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
+            var normalized = filter.field().normalizeValue(filter.value());
+            if (!normalized.equals(filter.value())) {
+                filter = filter.build(normalized);
+            }
+        }
+
         if (filterQueryBuilder.toAnalyticsDbOperator(filter) == null) {
             throw new BadRequestException("Invalid operator '%s' for field '%s' of type '%s'"
                     .formatted(filter.operator().getQueryParamOperator(), filter.field().getQueryParamField(),

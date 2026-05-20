@@ -435,8 +435,15 @@ public class FilterQueryBuilder {
             Map.entry(PromptVersionField.CREATED_BY, CREATED_BY_DB)).entrySet().stream()
             .collect(Collectors.toUnmodifiableMap(
                     Map.Entry::getKey,
-                    // Add the table alias as prefix to the db field name
-                    entry -> PROMPT_VERSIONS_FIELDS_PATTERN.formatted(entry.getValue())));
+                    entry -> {
+                        // Add the table alias as prefix to the db field name
+                        var aliased = PROMPT_VERSIONS_FIELDS_PATTERN.formatted(entry.getValue());
+                        // version_number is stored as VARCHAR (e.g. "v1", "v2"); strip the "v" prefix
+                        // and cast to integer so NUMBER filter operators apply correct numeric ordering.
+                        return entry.getKey() == PromptVersionField.VERSION_NUMBER
+                                ? "CAST(SUBSTRING(%s, 2) AS UNSIGNED)".formatted(aliased)
+                                : aliased;
+                    }));
 
     private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<DatasetField, String>builder()
