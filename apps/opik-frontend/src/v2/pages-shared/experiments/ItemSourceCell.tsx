@@ -97,7 +97,7 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
               variant="transparent"
               className="flex shrink-0 items-center gap-0 border-0 p-0 text-muted-slate"
             >
-              <GitCommitVertical className="size-[10px] text-muted-slate" />
+              <GitCommitVertical className="size-[10px]" />
               {versionName}
             </Tag>
           )}
