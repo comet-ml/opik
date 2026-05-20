@@ -2269,9 +2269,9 @@ class Opik:
         self,
         name: str,
         commit: Optional[str] = None,
-        version: Optional[str] = None,
         project_name: Optional[str] = None,
         no_cache: bool = False,
+        version: Optional[str] = None,
     ) -> Optional[prompt_module.Prompt]:
         """
         Retrieve a text prompt by name, optionally targeting a specific ``version``.
@@ -2283,12 +2283,11 @@ class Opik:
 
         Parameters:
             name: The name of the prompt.
-            version: Optional sequential version selector in the wire format
-                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest
-                version is retrieved.
             commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
@@ -2311,9 +2310,9 @@ class Opik:
         self,
         name: str,
         commit: Optional[str] = None,
-        version: Optional[str] = None,
         project_name: Optional[str] = None,
         no_cache: bool = False,
+        version: Optional[str] = None,
     ) -> Optional[prompt_module.ChatPrompt]:
         """
         Retrieve a chat prompt by name, optionally targeting a specific ``version``.
@@ -2325,12 +2324,11 @@ class Opik:
 
         Parameters:
             name: The name of the prompt.
-            version: Optional sequential version selector in the wire format
-                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest
-                version is retrieved.
             commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
