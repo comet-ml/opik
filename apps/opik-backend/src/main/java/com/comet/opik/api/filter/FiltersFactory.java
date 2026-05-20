@@ -23,6 +23,7 @@ import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -159,7 +160,7 @@ public class FiltersFactory {
         // Field-specific value normalization (e.g. strip display-only prefixes) before validation.
         if (filter.value() != null && !Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
             var normalized = filter.field().normalizeValue(filter.value());
-            if (!normalized.equals(filter.value())) {
+            if (!Objects.equals(normalized, filter.value())) {
                 filter = filter.build(normalized);
             }
         }
