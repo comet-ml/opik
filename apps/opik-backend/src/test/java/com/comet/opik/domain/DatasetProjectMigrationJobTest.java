@@ -251,9 +251,7 @@ class DatasetProjectMigrationJobTest {
 
         // Trapped workspaces persist via the workspaces.dataset_migration_skipped_at column; the next
         // cycle reads that list to assemble its exclusion set, so the workspace must appear here.
-        Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
-                () -> assertThat(workspacesService.findDatasetProjectMigrationSkippedWorkspaceIds())
-                        .contains(workspaceId));
+        assertWorkspaceTrappedWith(workspacesService, workspaceId, "deleted_project");
     }
 
     /** No-inference orphan + Default Project → orphan migrates to Default Project. */
@@ -292,9 +290,7 @@ class DatasetProjectMigrationJobTest {
 
         assertDatasetUnchanged(apiKey, workspaceName, datasetId);
 
-        Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
-                () -> assertThat(workspacesService.findDatasetProjectMigrationSkippedWorkspaceIds())
-                        .contains(workspaceId));
+        assertWorkspaceTrappedWith(workspacesService, workspaceId, "default_project_missing");
     }
 
     /**
@@ -328,9 +324,7 @@ class DatasetProjectMigrationJobTest {
         assertDatasetUnchanged(apiKey, workspaceName, noInferenceDatasetId);
 
         // Workspace is trapped with default_project_missing so future cycles skip it.
-        Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
-                () -> assertThat(workspacesService.findDatasetProjectMigrationSkippedWorkspaceIds())
-                        .contains(workspaceId));
+        assertWorkspaceTrappedWith(workspacesService, workspaceId, "default_project_missing");
     }
 
     /** All orphans ambiguous (multi-project) → workspace trapped (all_ambiguous). */
@@ -359,9 +353,7 @@ class DatasetProjectMigrationJobTest {
 
         assertDatasetUnchanged(apiKey, workspaceName, datasetId);
 
-        Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
-                () -> assertThat(workspacesService.findDatasetProjectMigrationSkippedWorkspaceIds())
-                        .contains(workspaceId));
+        assertWorkspaceTrappedWith(workspacesService, workspaceId, "all_ambiguous");
     }
 
     /** Re-running cycles after a successful migration must not touch the dataset again. */
@@ -524,5 +516,19 @@ class DatasetProjectMigrationJobTest {
     private void assertDatasetUnchanged(String apiKey, String workspaceName, UUID datasetId) {
         var actual = datasetResourceClient.getDatasetById(datasetId, apiKey, workspaceName);
         assertThat(actual.projectId()).isNull();
+    }
+
+    // Asserts the workspace appears in the trapped list AND that the persisted skip reason matches.
+    // Reads the row via findById so the test catches regressions where the trap fires but writes
+    // the wrong reason (or none at all).
+    private void assertWorkspaceTrappedWith(WorkspacesService workspacesService, String workspaceId,
+            String expectedReason) {
+        Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(workspacesService.findDatasetProjectMigrationSkippedWorkspaceIds())
+                    .contains(workspaceId);
+            assertThat(workspacesService.findById(workspaceId))
+                    .hasValueSatisfying(w -> assertThat(w.datasetProjectMigrationSkipReason())
+                            .isEqualTo(expectedReason));
+        });
     }
 }
