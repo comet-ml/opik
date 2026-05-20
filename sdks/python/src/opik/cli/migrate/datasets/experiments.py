@@ -368,6 +368,19 @@ def cascade_one_experiment(
                 item.assertion_results
             )
 
+    # OPIK-6602 diagnostic: per-experiment counts before the cascade runs.
+    # Pairs with the post-cascade summary line below so a failing run can
+    # be grepped for the experiment id and the source-vs-target deltas.
+    LOGGER.debug(
+        "migrate.cascade experiment=%r (id=%s) source_items=%d distinct_trace_ids=%d "
+        "assertion_results_traces=%d",
+        experiment_name,
+        experiment_id,
+        len(items),
+        len(source_trace_ids),
+        len(assertion_results_by_source_trace),
+    )
+
     # Inner progress total = 1 (read items, just completed)
     # + 1 (bulk-read traces via search_traces(filter=experiment_id))
     # + N (per-trace emit ticks; the writes are streamer-batched so each
@@ -437,6 +450,24 @@ def cascade_one_experiment(
     # bit hot or cold (e.g. fewer ticks fired because idempotent-skip
     # removed traces from this experiment).
     inner.finish(label="recreated" if recreated else "skipped")
+
+    # OPIK-6602 diagnostic: post-cascade summary. ``recreate_experiment``
+    # returns True iff the experiment item batch was issued; the counts
+    # below are what we ATTEMPTED to send -- the target counts in the
+    # BE are what the test/E2E asserts on, but matching these against
+    # source on a failing run pinpoints whether we lost data on the
+    # READ path (source counts low), the WRITE path (target counts low
+    # despite source healthy), or the cascade scheduling.
+    LOGGER.debug(
+        "migrate.cascade experiment=%r recreated=%s traces_attempted=%d "
+        "spans_attempted=%d trace_comments=%d span_comments=%d",
+        experiment_name,
+        recreated,
+        traces_copied,
+        spans_copied,
+        trace_comments_copied,
+        span_comments_copied,
+    )
 
     if recreated:
         result.experiments_migrated += 1
