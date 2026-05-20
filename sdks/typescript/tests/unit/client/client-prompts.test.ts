@@ -1,6 +1,11 @@
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
 import { Prompt, PromptType } from "@/prompt";
+import {
+  EnvironmentNotFoundError,
+  PromptNotFoundError,
+  PromptVersionNotAssignableToEnvironmentError,
+} from "@/prompt/errors";
 import { OpikApiError } from "@/rest_api";
 import { logger } from "@/utils/logger";
 import {
@@ -1059,6 +1064,162 @@ describe("Opik prompt operations", () => {
           error: apiError,
         })
       );
+    });
+  });
+
+  describe("setPromptEnvironment error mapping", () => {
+    const versionResponse: OpikApi.PromptVersionDetail = {
+      id: "version-id",
+      promptId: "prompt-id",
+      commit: "abc123de",
+      template: "Hello",
+      type: "mustache",
+      createdAt: new Date("2024-01-01"),
+    };
+
+    it("maps 404 on retrieve_prompt_version (no commit) to PromptNotFoundError", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+
+      await expect(
+        client.setPromptEnvironment({
+          name: "missing-prompt",
+          environment: "staging",
+        })
+      ).rejects.toMatchObject({
+        name: "PromptNotFoundError",
+        message: expect.stringContaining("missing-prompt"),
+      });
+    });
+
+    it("maps 404 on retrieve_prompt_version (with commit) to PromptNotFoundError mentioning the commit", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+
+      await expect(
+        client.setPromptEnvironment({
+          name: "env-prompt",
+          environment: "staging",
+          commit: "deadbeef",
+        })
+      ).rejects.toMatchObject({
+        name: "PromptNotFoundError",
+        message: expect.stringContaining("deadbeef"),
+      });
+    });
+
+    it("maps 404 on set_prompt_version_environment to EnvironmentNotFoundError", async () => {
+      retrievePromptVersionSpy.mockImplementation(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() => {
+          throw new OpikApiError({ message: "Not found", statusCode: 404 });
+        });
+
+      try {
+        await expect(
+          client.setPromptEnvironment({
+            name: "env-prompt",
+            environment: "unknown-env",
+          })
+        ).rejects.toThrow(EnvironmentNotFoundError);
+        await expect(
+          client.setPromptEnvironment({
+            name: "env-prompt",
+            environment: "unknown-env",
+          })
+        ).rejects.toMatchObject({
+          message: expect.stringContaining("unknown-env"),
+        });
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("maps 422 on set_prompt_version_environment to PromptVersionNotAssignableToEnvironmentError", async () => {
+      retrievePromptVersionSpy.mockImplementation(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() => {
+          throw new OpikApiError({
+            message: "Unprocessable",
+            statusCode: 422,
+          });
+        });
+
+      try {
+        await expect(
+          client.setPromptEnvironment({
+            name: "mask-prompt",
+            environment: "staging",
+          })
+        ).rejects.toThrow(PromptVersionNotAssignableToEnvironmentError);
+        await expect(
+          client.setPromptEnvironment({
+            name: "mask-prompt",
+            environment: "staging",
+          })
+        ).rejects.toMatchObject({
+          message: expect.stringContaining("internal-only"),
+        });
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("rethrows non-mapped errors unchanged", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const apiError = new OpikApiError({
+        message: "Boom",
+        statusCode: 500,
+      });
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementationOnce(() => {
+          throw apiError;
+        });
+
+      try {
+        await expect(
+          client.setPromptEnvironment({
+            name: "env-prompt",
+            environment: "staging",
+          })
+        ).rejects.toBe(apiError);
+        expect(setEnvSpy).toHaveBeenCalledOnce();
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("does not call set_prompt_version_environment when the prompt is not found", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+      const setEnvSpy = vi.spyOn(
+        client.api.prompts,
+        "setPromptVersionEnvironment"
+      );
+
+      try {
+        await expect(
+          client.setPromptEnvironment({
+            name: "missing-prompt",
+            environment: "staging",
+          })
+        ).rejects.toThrow(PromptNotFoundError);
+        expect(setEnvSpy).not.toHaveBeenCalled();
+      } finally {
+        setEnvSpy.mockRestore();
+      }
     });
   });
 
