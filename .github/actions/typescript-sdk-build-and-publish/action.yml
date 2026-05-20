@@ -86,7 +86,15 @@ runs:
       if: ${{ inputs.is_release == 'true' }}
       shell: bash
       working-directory: ${{ inputs.working_directory }}
-      run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+      # `--allow-same-version` treats "package.json already at this version" as a
+      # successful no-op instead of erroring `Version not changed`. The operator's
+      # intent on dispatch is "publish this version" — package.json already being
+      # at the target value is bookkeeping that npm publish doesn't care about, so
+      # the bump step shouldn't either. Without this, replay/re-dispatch of an
+      # already-released version (where the prior run's commit-version step landed
+      # on the dispatched ref) fails here before reaching the publish step's own
+      # already-published skip.
+      run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
 
     - name: Build package
       shell: bash
