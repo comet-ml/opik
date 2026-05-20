@@ -11,10 +11,13 @@ come from ``_migrate_helpers``.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
 from opik.cli import cli
+from opik.cli.migrate.audit import AuditLog
 from opik.cli.migrate.datasets import planner as planner_module
 from opik.cli.migrate.errors import (
     ConflictError,
@@ -59,6 +62,142 @@ class TestFormatElapsed:
 
         assert _format_elapsed(3600.0) == "1h 0m 0s"
         assert _format_elapsed(3725.0) == "1h 2m 5s"
+
+
+# ---------------------------------------------------------------------------
+# OPIK-6599: loud-fail on skipped items
+#
+# When the cascade emits any ``skip`` audit record, the migrate must:
+#   1. Finalize the audit log to ``failed`` (not ``ok``)
+#   2. Print a SKIP_SUMMARY line to stderr (not stdout) so CI gates can
+#      grep without parsing the JSON
+#   3. Exit non-zero
+#
+# Tests below cover ``_finalize_with_skips_or_ok`` directly so they don't
+# need a fully-wired Opik client + REST server stub. The CLI is only the
+# wrapper around this helper.
+# ---------------------------------------------------------------------------
+
+
+class TestFinalizeWithSkipsOrOk:
+    def _make_audit_with_skips(self) -> AuditLog:
+        audit = AuditLog(command="opik migrate dataset", args={})
+        audit.record(
+            type="skip",
+            status="skipped",
+            details={
+                "reason": "items_missing_dataset_item_remap",
+                "experiment_id": "src-exp-1",
+                "experiment_name": "exp-1",
+                "count": 2500,
+                "sample_source_ids": ["src-ds-item-1", "src-ds-item-2"],
+            },
+        )
+        return audit
+
+    def test_skips_present__finalizes_failed_exits_1_stderr_summary(
+        self, tmp_path, capsys
+    ) -> None:
+        from opik.cli.migrate.main import _finalize_with_skips_or_ok
+
+        audit = self._make_audit_with_skips()
+        audit_path = tmp_path / "audit.json"
+
+        with pytest.raises(SystemExit) as exc:
+            _finalize_with_skips_or_ok(
+                audit,
+                audit_path,
+                name="MyDataset",
+                target_label="MyDataset",
+                target_project="DestProject",
+                elapsed_seconds=12.3,
+            )
+
+        # AC 1: non-zero exit code
+        assert exc.value.code == 1
+
+        captured = capsys.readouterr()
+        # AC 3: skip message on stderr (not stdout), with the
+        # machine-parseable SKIP_SUMMARY suffix
+        assert "SKIP_SUMMARY:" in captured.err
+        assert "items_skipped_missing_item=2500" in captured.err
+        assert "experiments_skipped=0" in captured.err
+        assert "items_skipped_missing_trace=0" in captured.err
+        assert "NOT rolled back" in captured.err
+
+        # AC 2: audit finalized to failed with skip record intact
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "failed"
+        assert any(a.get("status") == "skipped" for a in on_disk["actions"])
+
+    def test_no_skips__finalizes_ok_no_exit_no_stderr(self, tmp_path, capsys) -> None:
+        from opik.cli.migrate.main import _finalize_with_skips_or_ok
+
+        audit = AuditLog(command="opik migrate dataset", args={})
+        audit.record(type="rename_source", status="ok", details={})
+        audit_path = tmp_path / "audit.json"
+
+        # Happy path returns without raising; happy-path message goes to
+        # stdout, stderr stays clean.
+        _finalize_with_skips_or_ok(
+            audit,
+            audit_path,
+            name="MyDataset",
+            target_label="MyDataset",
+            target_project="DestProject",
+            elapsed_seconds=5.0,
+        )
+
+        captured = capsys.readouterr()
+        assert "SKIP_SUMMARY:" not in captured.err
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "ok"
+
+    def test_multiple_skip_records__totals_aggregated_by_reason(
+        self, tmp_path, capsys
+    ) -> None:
+        from opik.cli.migrate.main import _finalize_with_skips_or_ok
+
+        # Two experiments, each contributing skips for both reasons.
+        audit = AuditLog(command="opik migrate dataset", args={})
+        for exp_id in ("src-exp-1", "src-exp-2"):
+            audit.record(
+                type="skip",
+                status="skipped",
+                details={
+                    "reason": "items_missing_trace_remap",
+                    "experiment_id": exp_id,
+                    "experiment_name": exp_id,
+                    "count": 7,
+                    "sample_source_ids": [],
+                },
+            )
+            audit.record(
+                type="skip",
+                status="skipped",
+                details={
+                    "reason": "items_missing_dataset_item_remap",
+                    "experiment_id": exp_id,
+                    "experiment_name": exp_id,
+                    "count": 3,
+                    "sample_source_ids": [],
+                },
+            )
+
+        with pytest.raises(SystemExit):
+            _finalize_with_skips_or_ok(
+                audit,
+                tmp_path / "audit.json",
+                name="MyDataset",
+                target_label="MyDataset",
+                target_project="DestProject",
+                elapsed_seconds=1.0,
+            )
+
+        captured = capsys.readouterr()
+        # 7 + 7 = 14 trace skips, 3 + 3 = 6 dataset-item skips
+        assert "items_skipped_missing_trace=14" in captured.err
+        assert "items_skipped_missing_item=6" in captured.err
 
 
 # ---------------------------------------------------------------------------
