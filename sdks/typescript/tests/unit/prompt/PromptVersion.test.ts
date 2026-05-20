@@ -265,6 +265,7 @@ describe("PromptVersion", () => {
         name: "full-info-prompt",
         prompt: "Test",
         commit: "abc123de",
+        version: "v3",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
         createdAt: new Date("2024-01-15T10:30:00Z"),
@@ -275,8 +276,21 @@ describe("PromptVersion", () => {
       const info = version.getVersionInfo();
 
       expect(info).toBe(
-        "[abc123de] 2024-01-15 by user@example.com - Added new feature",
+        "[v3] 2024-01-15 by user@example.com - Added new feature",
       );
+    });
+
+    it("should fall back to commit when version is absent (e.g. mask version)", () => {
+      const version = new PromptVersion({
+        versionId: "version-123",
+        name: "mask-prompt",
+        prompt: "Test",
+        commit: "abc123de",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      expect(version.getVersionInfo()).toBe("[abc123de]");
     });
 
     it("should format version info with partial fields", () => {
@@ -381,12 +395,13 @@ describe("PromptVersion", () => {
   });
 
   describe("compareTo", () => {
-    it("should return unified diff output", () => {
+    it("should return unified diff output with version labels", () => {
       const version1 = new PromptVersion({
         versionId: "version-1",
         name: "test-prompt",
         prompt: "Hello {{name}}!",
         commit: "commit1",
+        version: "v2",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
       });
@@ -396,6 +411,7 @@ describe("PromptVersion", () => {
         name: "test-prompt",
         prompt: "Hi {{name}}!",
         commit: "commit2",
+        version: "v1",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
       });
@@ -404,6 +420,31 @@ describe("PromptVersion", () => {
 
       expect(diff).toContain("Current version");
       expect(diff).toContain("Other version");
+      expect(diff).toContain("[v2]");
+      expect(diff).toContain("[v1]");
+    });
+
+    it("should fall back to commit in diff labels when version is absent", () => {
+      const version1 = new PromptVersion({
+        versionId: "version-1",
+        name: "mask-prompt",
+        prompt: "Hello!",
+        commit: "commit1",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const version2 = new PromptVersion({
+        versionId: "version-2",
+        name: "mask-prompt",
+        prompt: "Hi!",
+        commit: "commit2",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const diff = version1.compareTo(version2);
+
       expect(diff).toContain("[commit1]");
       expect(diff).toContain("[commit2]");
     });

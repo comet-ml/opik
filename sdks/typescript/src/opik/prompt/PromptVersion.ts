@@ -70,11 +70,12 @@ export class PromptVersion {
   }
 
   /**
-   * Get formatted version information string
-   * Format: "[commitHash] YYYY-MM-DD by user@email.com - Change description"
+   * Get formatted version information string.
+   * Format: "[v3] YYYY-MM-DD by user@email.com - Change description"
+   * (falls back to the commit hash for mask versions, which have no version number).
    */
   getVersionInfo(): string {
-    const parts: string[] = [`[${this.commit}]`];
+    const parts: string[] = [`[${this.version ?? this.commit}]`];
 
     if (this.createdAt) {
       const date = new Date(this.createdAt);
@@ -104,17 +105,18 @@ export class PromptVersion {
    *
    * @example
    * ```typescript
-   * const currentVersion = await prompt.getVersion("commit123");
-   * const previousVersion = await prompt.getVersion("commit456");
+   * const versions = await prompt.getVersions();
+   * const [current, previous] = versions;
    *
    * // Logs diff to terminal and returns it
-   * const diff = currentVersion.compareTo(previousVersion);
+   * const diff = current.compareTo(previous);
    * ```
    */
   compareTo(other: PromptVersion): string {
-    // Use descriptive labels that include version identifiers
-    const thisLabel = `Current version [${this.commit}]`;
-    const otherLabel = `Other version [${other.commit}]`;
+    // Prefer the sequential version identifier in labels (e.g. "v3"); fall back
+    // to the legacy commit hash when version is absent (e.g. mask versions).
+    const thisLabel = `Current version [${this.version ?? this.commit}]`;
+    const otherLabel = `Other version [${other.version ?? other.commit}]`;
 
     // Check if this is a chat prompt (template structure is chat)
     let thisFormatted = this.prompt;
