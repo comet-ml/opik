@@ -60,3 +60,26 @@ class TestBuildChecklist:
         result = build_checklist(tmp_path, command=None)
 
         assert result["command"] is None
+
+    def test_build_checklist__prompts_usage__flag_set(self, tmp_path: Path) -> None:
+        (tmp_path / "app.py").write_text(
+            "import opik\nclient = opik.Opik()\nclient.get_prompt('hello')\n"
+        )
+        (tmp_path / "main.ts").write_text(
+            "import {Opik} from 'opik';\nawait client.prompts.createPrompt({});\n"
+        )
+
+        result = build_checklist(tmp_path, command=None)
+
+        assert result["instrumentation"]["prompts"] is True
+
+    def test_build_checklist__no_prompts_usage__flag_false(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "app.py").write_text(
+            "import opik\n@opik.track\ndef f():\n    pass\n"
+        )
+
+        result = build_checklist(tmp_path, command=None)
+
+        assert result["instrumentation"]["prompts"] is False
