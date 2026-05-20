@@ -158,6 +158,8 @@ anthropic:
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
+  - id: "gemini-3.5-flash"
+    label: "Gemini 3.5 Flash"
   - id: "gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
     structuredOutput: true
@@ -523,6 +525,8 @@ openrouter:
     structuredOutput: true
   - id: "google/gemini-3.1-pro-preview-customtools"
     label: "google/gemini-3.1-pro-preview-customtools"
+  - id: "google/gemini-3.5-flash"
+    label: "google/gemini-3.5-flash"
   - id: "google/gemma-2-27b-it"
     label: "google/gemma-2-27b-it"
   - id: "google/gemma-2-9b-it"
