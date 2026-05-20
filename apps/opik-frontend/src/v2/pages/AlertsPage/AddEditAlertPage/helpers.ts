@@ -152,18 +152,18 @@ const getAllThresholdConditionGroupsFromTriggerConfigs = (
   const groupBuckets = new Map<string, FeedbackScoreConditionType[]>();
   let fallbackKey = 0;
 
+  // Load every matching config (don't filter out partial ones) so existing
+  // alerts open in the editor — schema validation will flag any missing
+  // fields and the user can complete them.
   matching.forEach((config) => {
-    const rawOperator = config.config_value?.operator;
+    if (!config.config_value) return;
+    const rawOperator = config.config_value.operator;
     const condition: FeedbackScoreConditionType = {
-      threshold: config.config_value?.threshold || "",
-      window: config.config_value?.window || "",
-      name: config.config_value?.name || "",
+      threshold: config.config_value.threshold || "",
+      window: config.config_value.window || "",
+      name: config.config_value.name || "",
       operator: rawOperator === "<" ? "<" : ">",
     };
-
-    if (!condition.threshold || !condition.window || !condition.name) {
-      return;
-    }
 
     const key =
       config.group_index === null || config.group_index === undefined

@@ -3,7 +3,7 @@ import { Path, useFieldArray, UseFormReturn } from "react-hook-form";
 import { LayoutGrid, Plus, Trash } from "lucide-react";
 import get from "lodash/get";
 
-import { FormControl, FormField } from "@/ui/form";
+import { FormControl, FormField, FormItem } from "@/ui/form";
 import { Input } from "@/ui/input";
 import { Button } from "@/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -277,18 +277,20 @@ const ConditionRow: React.FC<ConditionRowProps> = ({
             control={form.control}
             name={fieldPath(triggerIndex, groupIndex, conditionIndex, "name")}
             render={({ field }) => (
-              <FormControl>
-                <FeedbackDefinitionsAndScoresSelectBox
-                  value={field.value as string}
-                  onChange={field.onChange}
-                  scoreSource={scoreSource}
-                  entityIds={[projectId]}
-                  multiselect={false}
-                  className={cn("h-8 min-w-[160px] flex-1", {
-                    "border-destructive": Boolean(errors.name),
-                  })}
-                />
-              </FormControl>
+              <FormItem className="flex min-w-[160px] flex-1">
+                <FormControl>
+                  <FeedbackDefinitionsAndScoresSelectBox
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    scoreSource={scoreSource}
+                    entityIds={[projectId]}
+                    multiselect={false}
+                    className={cn("h-8 w-full", {
+                      "border-destructive": Boolean(errors.name),
+                    })}
+                  />
+                </FormControl>
+              </FormItem>
             )}
           />
           <FormField
@@ -300,28 +302,30 @@ const ConditionRow: React.FC<ConditionRowProps> = ({
               "operator",
             )}
             render={({ field }) => (
-              <FormControl>
-                <ToggleGroup
-                  type="single"
-                  variant="secondary"
-                  value={field.value as string}
-                  onValueChange={(v) => v && field.onChange(v)}
-                  className={cn("h-8 shrink-0", {
-                    "border-destructive": Boolean(errors.operator),
-                  })}
-                >
-                  {OPERATOR_VALUES.map((op) => (
-                    <ToggleGroupItem
-                      key={op}
-                      value={op}
-                      size="sm"
-                      aria-label={op === ">" ? "greater than" : "less than"}
-                    >
-                      {op}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </FormControl>
+              <FormItem className="shrink-0">
+                <FormControl>
+                  <ToggleGroup
+                    type="single"
+                    variant="secondary"
+                    value={field.value as string}
+                    onValueChange={(v) => v && field.onChange(v)}
+                    className={cn("h-8", {
+                      "border-destructive": Boolean(errors.operator),
+                    })}
+                  >
+                    {OPERATOR_VALUES.map((op) => (
+                      <ToggleGroupItem
+                        key={op}
+                        value={op}
+                        size="sm"
+                        aria-label={op === ">" ? "greater than" : "less than"}
+                      >
+                        {op}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </FormControl>
+              </FormItem>
             )}
           />
           <FormField
@@ -333,47 +337,51 @@ const ConditionRow: React.FC<ConditionRowProps> = ({
               "threshold",
             )}
             render={({ field }) => (
-              <FormControl>
-                <Input
-                  className={cn("h-8 w-[87px] shrink-0 text-right", {
-                    "border-destructive": Boolean(errors.threshold),
-                  })}
-                  type="number"
-                  step="0.01"
-                  placeholder="0.7"
-                  value={field.value as string}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  name={field.name}
-                />
-              </FormControl>
+              <FormItem className="w-[87px] shrink-0">
+                <FormControl>
+                  <Input
+                    className={cn("h-8 text-right", {
+                      "border-destructive": Boolean(errors.threshold),
+                    })}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.7"
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                  />
+                </FormControl>
+              </FormItem>
             )}
           />
           <FormField
             control={form.control}
             name={fieldPath(triggerIndex, groupIndex, conditionIndex, "window")}
             render={({ field }) => (
-              <FormControl>
-                <SelectBox
-                  value={field.value as string}
-                  onChange={field.onChange}
-                  options={WINDOW_OPTIONS}
-                  className={cn("h-8 min-w-[160px] flex-1 text-left", {
-                    "border-destructive": Boolean(errors.window),
-                  })}
-                  placeholder="Select time window"
-                  renderTrigger={(value) => {
-                    const label = WINDOW_LABEL_BY_VALUE[value];
-                    if (!label) return null;
-                    return (
-                      <span className="truncate">
-                        <span className="text-muted-slate">In the last</span>{" "}
-                        {label}
-                      </span>
-                    );
-                  }}
-                />
-              </FormControl>
+              <FormItem className="flex min-w-[160px] flex-1">
+                <FormControl>
+                  <SelectBox
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    options={WINDOW_OPTIONS}
+                    className={cn("h-8 w-full text-left", {
+                      "border-destructive": Boolean(errors.window),
+                    })}
+                    placeholder="Select time window"
+                    renderTrigger={(value) => {
+                      const label = WINDOW_LABEL_BY_VALUE[value];
+                      if (!label) return null;
+                      return (
+                        <span className="truncate">
+                          <span className="text-muted-slate">In the last</span>{" "}
+                          {label}
+                        </span>
+                      );
+                    }}
+                  />
+                </FormControl>
+              </FormItem>
             )}
           />
         </div>
