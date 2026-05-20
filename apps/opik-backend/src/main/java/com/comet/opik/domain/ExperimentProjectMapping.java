@@ -6,5 +6,5 @@ import lombok.NonNull;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
-public record ExperimentProjectMapping(@NonNull UUID experimentId, @NonNull UUID projectId) {
+public record ExperimentProjectMapping(@NonNull UUID experimentId, UUID projectId, long projectCount) {
 }
