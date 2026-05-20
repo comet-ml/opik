@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000074_add_dataset_migration_columns_to_workspaces
+--changeset thiagohora:000075_add_dataset_migration_columns_to_workspaces
 --comment: Add dataset-project migration skip tracking columns to workspaces table, mirroring the experiment_project_migration_skipped_at/skip_reason columns renamed in 000073.
 
 ALTER TABLE workspaces
