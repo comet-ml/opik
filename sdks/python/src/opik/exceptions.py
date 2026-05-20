@@ -205,6 +205,25 @@ class EnvironmentConfigurationError(OpikException):
     pass
 
 
+class PromptNotFoundError(OpikException):
+    """Raised when no prompt with the given name (or commit) exists in the project."""
+
+    pass
+
+
+class EnvironmentNotFoundError(OpikException):
+    """Raised when referencing an environment that is not registered in the workspace."""
+
+    pass
+
+
+class PromptVersionNotAssignableToEnvironment(OpikException):
+    """Raised when attempting to assign an environment to a prompt version that
+    is not user-addressable (for example an internal mask version)."""
+
+    pass
+
+
 class LLMJudgeParseError(OpikException):
     """Raised when LLMJudge output fails validation.
 

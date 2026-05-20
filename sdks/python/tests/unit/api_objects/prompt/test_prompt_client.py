@@ -5,6 +5,7 @@ from typing import Optional
 
 import pytest
 
+from opik import exceptions
 from opik.api_objects import opik_client as opik_client_module
 from opik.api_objects.prompt import client as prompt_client
 from opik.api_objects.prompt import prompt_cache
@@ -716,6 +717,89 @@ class TestPromptEnvironment:
             version_id="version-id",
             environment="staging",
         )
+
+    def test_set_prompt_environment__prompt_not_found__raises_prompt_not_found(
+        self, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = (
+            rest_api_core.ApiError(status_code=404, body=None)
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        with pytest.raises(exceptions.PromptNotFoundError, match="missing-prompt"):
+            opik_client.set_prompt_environment("missing-prompt", "staging")
+
+        mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
+
+    def test_set_prompt_environment__commit_not_found__raises_prompt_not_found_with_commit(
+        self, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = (
+            rest_api_core.ApiError(status_code=404, body=None)
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        with pytest.raises(exceptions.PromptNotFoundError, match="deadbeef"):
+            opik_client.set_prompt_environment(
+                "env-prompt", "staging", commit="deadbeef"
+            )
+
+        mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
+
+    def test_set_prompt_environment__environment_not_found__raises_environment_not_found(
+        self, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+        mock_rest_client.prompts.set_prompt_version_environment.side_effect = (
+            rest_api_core.ApiError(status_code=404, body=None)
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        with pytest.raises(exceptions.EnvironmentNotFoundError, match="unknown-env"):
+            opik_client.set_prompt_environment("env-prompt", "unknown-env")
+
+    def test_set_prompt_environment__mask_version__raises_not_assignable(
+        self, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+        mock_rest_client.prompts.set_prompt_version_environment.side_effect = (
+            rest_api_core.ApiError(status_code=422, body=None)
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        with pytest.raises(
+            exceptions.PromptVersionNotAssignableToEnvironment,
+            match="internal-only",
+        ):
+            opik_client.set_prompt_environment("env-prompt", "staging")
+
+    def test_set_prompt_environment__other_api_error__bubbles_up(
+        self, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+        mock_rest_client.prompts.set_prompt_version_environment.side_effect = (
+            rest_api_core.ApiError(status_code=500, body=None)
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        with pytest.raises(rest_api_core.ApiError):
+            opik_client.set_prompt_environment("env-prompt", "staging")
 
     def test_set_prompt_environment__invalidates_cache(self, mock_rest_client):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (

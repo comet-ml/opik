@@ -32,6 +32,32 @@ export class PromptValidationError extends Error {
 }
 
 /**
+ * Thrown when referencing an environment that is not registered in the workspace.
+ */
+export class EnvironmentNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EnvironmentNotFoundError";
+    Object.setPrototypeOf(this, EnvironmentNotFoundError.prototype);
+  }
+}
+
+/**
+ * Thrown when attempting to assign an environment to a prompt version that is
+ * not user-addressable (for example an internal mask version).
+ */
+export class PromptVersionNotAssignableToEnvironmentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PromptVersionNotAssignableToEnvironmentError";
+    Object.setPrototypeOf(
+      this,
+      PromptVersionNotAssignableToEnvironmentError.prototype
+    );
+  }
+}
+
+/**
  * Thrown when attempting to access a prompt with a different template structure
  * than what exists. Template structure (text vs chat) is immutable after creation.
  */
