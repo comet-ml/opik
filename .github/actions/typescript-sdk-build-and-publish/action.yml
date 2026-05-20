@@ -148,9 +148,12 @@ runs:
 
           # Run the publish, streaming output live AND capturing it for inspection.
           # Capture timeout/npm's exit code via PIPESTATUS[0] directly — don't rely on
-          # the pipeline's overall exit status, since `tee` masks failures when pipefail
-          # is off, and we don't want to depend on the shell's default flags.
-          timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"
+          # the pipeline's overall exit status.
+          # `|| true` shields the pipeline from `set -e` (GitHub Actions `shell: bash`
+          # uses `bash --noprofile --norc -eo pipefail`, so a non-zero pipeline would
+          # otherwise abort the step before we can read PIPESTATUS or evaluate the
+          # 403-already-published skip below).
+          timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG" || true
           EXIT_CODE=${PIPESTATUS[0]}
 
           if [ "$EXIT_CODE" -eq 0 ]; then
