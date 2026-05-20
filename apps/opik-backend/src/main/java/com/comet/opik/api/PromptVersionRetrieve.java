@@ -12,6 +12,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.stream.Stream;
+
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
@@ -26,9 +28,8 @@ public record PromptVersionRetrieve(
 
     @JsonIgnore
     @AssertTrue(message = "commit, environment and version_number are mutually exclusive") public boolean isResolutionMutuallyExclusive() {
-        long provided = (StringUtils.isNotBlank(commit) ? 1 : 0)
-                + (StringUtils.isNotBlank(environment) ? 1 : 0)
-                + (StringUtils.isNotBlank(versionNumber) ? 1 : 0);
-        return provided <= 1;
+        return Stream.of(commit, environment, versionNumber)
+                .filter(StringUtils::isNotBlank)
+                .count() <= 1;
     }
 }
