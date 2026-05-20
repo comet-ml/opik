@@ -58,20 +58,16 @@ public interface WorkspacesDAO {
 
     /**
      * Atomic NULL → timestamp transition for the experiment-project-migration-skipped flag.
-     * Writes to both {@code experiment_project_migration_skipped_at} (new column) and
-     * {@code migration_skipped_at} (legacy column kept in sync during rolling deployment).
-     * Returns 1 only when this caller flipped the new column from NULL; returns 0 if no row
-     * exists or the column was already non-null.
-     * Pair with {@link #insertExperimentProjectMigrationSkipped} for the missing-row case.
+     * Returns 1 only when this caller flipped the column from NULL; returns 0 if no row exists
+     * or the column was already non-null. Pair with {@link #insertExperimentProjectMigrationSkipped}
+     * for the missing-row case.
      */
     @SqlUpdate("""
             UPDATE workspaces
             SET experiment_project_migration_skipped_at = :skippedAt,
                 experiment_project_migration_skip_reason = :reason,
-                migration_skipped_at = :skippedAt,
-                migration_skipped_reason = :reason,
                 last_updated_by = :userName
-            WHERE id = :id AND migration_skipped_at IS NULL
+            WHERE id = :id AND experiment_project_migration_skipped_at IS NULL
             """)
     int updateExperimentProjectMigrationSkippedIfNull(@Bind("id") String id,
             @Bind("skippedAt") Instant skippedAt,
@@ -81,21 +77,20 @@ public interface WorkspacesDAO {
     /**
      * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
      * branch via the {@link #updateExperimentProjectMigrationSkippedIfNull} attempt that precedes it.
-     * Writes to both new and legacy columns to keep them in sync.
      */
     @SqlUpdate("""
-            INSERT INTO workspaces (id, experiment_project_migration_skipped_at, experiment_project_migration_skip_reason, migration_skipped_at, migration_skipped_reason, created_by, last_updated_by)
-            VALUES (:id, :skippedAt, :reason, :skippedAt, :reason, :userName, :userName)
+            INSERT INTO workspaces (id, experiment_project_migration_skipped_at, experiment_project_migration_skip_reason, created_by, last_updated_by)
+            VALUES (:id, :skippedAt, :reason, :userName, :userName)
             """)
     void insertExperimentProjectMigrationSkipped(@Bind("id") String id,
             @Bind("skippedAt") Instant skippedAt,
             @Bind("reason") String reason,
             @Bind("userName") String userName);
 
-    @SqlQuery("SELECT id FROM workspaces WHERE migration_skipped_at IS NOT NULL")
+    @SqlQuery("SELECT id FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
     List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE migration_skipped_at IS NOT NULL")
+    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
     long countExperimentProjectMigrationSkipped();
 
     /**

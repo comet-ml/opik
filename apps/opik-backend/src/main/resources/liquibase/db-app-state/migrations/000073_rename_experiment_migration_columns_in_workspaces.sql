@@ -1,18 +1,11 @@
 --liquibase formatted sql
 --changeset thiagohora:000073_rename_experiment_migration_columns_in_workspaces
---comment: Add experiment-project-scoped migration skip columns alongside the existing generic migration_skipped_at/reason columns, and copy any existing data into the new columns. The old columns are kept alive for backward compatibility during rolling deployment; a follow-up migration will drop them after all pods are on the new code.
+--comment: Rename the generic migration_skipped_at/migration_skipped_reason columns to experiment_project_migration_skipped_at/experiment_project_migration_skip_reason to disambiguate from the dataset-project migration columns added in 000074. The migration job is idle outside of migration windows, so an in-place rename is safe.
 
 ALTER TABLE workspaces
-    ADD COLUMN experiment_project_migration_skipped_at TIMESTAMP(6) NULL AFTER migration_skipped_reason,
-    ADD COLUMN experiment_project_migration_skip_reason VARCHAR(100) NULL AFTER experiment_project_migration_skipped_at;
+    CHANGE COLUMN migration_skipped_at experiment_project_migration_skipped_at TIMESTAMP(6) NULL,
+    CHANGE COLUMN migration_skipped_reason experiment_project_migration_skip_reason VARCHAR(255) NULL,
+    RENAME INDEX workspaces_migration_skipped_idx TO workspaces_exp_proj_migration_skipped_idx;
 
-UPDATE workspaces
-SET experiment_project_migration_skipped_at = migration_skipped_at,
-    experiment_project_migration_skip_reason = migration_skipped_reason
-WHERE migration_skipped_at IS NOT NULL;
-
-CREATE INDEX workspaces_exp_proj_migration_skipped_idx ON workspaces (experiment_project_migration_skipped_at);
-
---rollback DROP INDEX workspaces_exp_proj_migration_skipped_idx ON workspaces;
---rollback ALTER TABLE workspaces DROP COLUMN experiment_project_migration_skipped_at, DROP COLUMN experiment_project_migration_skip_reason;
+--rollback ALTER TABLE workspaces CHANGE COLUMN experiment_project_migration_skipped_at migration_skipped_at TIMESTAMP(6) NULL, CHANGE COLUMN experiment_project_migration_skip_reason migration_skipped_reason VARCHAR(255) NULL, RENAME INDEX workspaces_exp_proj_migration_skipped_idx TO workspaces_migration_skipped_idx;
 

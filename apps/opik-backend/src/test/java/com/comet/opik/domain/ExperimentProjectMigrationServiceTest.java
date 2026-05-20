@@ -523,6 +523,6 @@ class ExperimentProjectMigrationServiceTest {
     private void assertWorkspaceTrapped(WorkspacesService workspacesService, String workspaceId, String reason) {
         assertThat(workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds()).contains(workspaceId);
         assertThat(workspacesService.findById(workspaceId))
-                .hasValueSatisfying(w -> assertThat(w.migrationSkippedReason()).isEqualTo(reason));
+                .hasValueSatisfying(w -> assertThat(w.experimentProjectMigrationSkipReason()).isEqualTo(reason));
     }
 }
