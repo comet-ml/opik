@@ -93,6 +93,34 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
     long countExperimentProjectMigrationSkipped();
 
+    @SqlUpdate("""
+            UPDATE workspaces
+            SET automation_rule_project_migration_skipped_at = :skippedAt,
+                automation_rule_project_migration_skip_reason = :reason,
+                last_updated_by = :userName
+            WHERE id = :id AND automation_rule_project_migration_skipped_at IS NULL
+            """)
+    int updateAutomationRuleMigrationSkippedIfNull(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    @SqlUpdate("""
+            INSERT INTO workspaces (id, automation_rule_project_migration_skipped_at,
+                                    automation_rule_project_migration_skip_reason, created_by, last_updated_by)
+            VALUES (:id, :skippedAt, :reason, :userName, :userName)
+            """)
+    void insertAutomationRuleMigrationSkipped(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    @SqlQuery("SELECT id FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
+    List<String> findAutomationRuleMigrationSkippedWorkspaceIds();
+
+    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
+    long countAutomationRuleMigrationSkipped();
+
     /**
      * Atomic NULL → timestamp transition for the dataset-project-migration-skipped flag. Returns 1 only when
      * this caller flipped {@code dataset_project_migration_skipped_at} from NULL to {@code :skippedAt}; returns
