@@ -135,6 +135,15 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE dataset_project_migration_skipped_at IS NOT NULL")
     long countDatasetProjectMigrationSkipped();
 
+    @SqlQuery("""
+            SELECT dataset_project_migration_skip_reason AS reason, COUNT(*) AS count
+            FROM workspaces
+            WHERE dataset_project_migration_skipped_at IS NOT NULL
+            GROUP BY dataset_project_migration_skip_reason
+            """)
+    @RegisterConstructorMapper(MigrationSkipReasonCount.class)
+    List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
+
     /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the
      * workspace row doesn't exist yet — callers treat it as TRUE (safe-include UNION), same as

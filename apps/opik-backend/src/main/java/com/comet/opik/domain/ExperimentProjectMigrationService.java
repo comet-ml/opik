@@ -358,7 +358,8 @@ public class ExperimentProjectMigrationService implements Managed {
     }
 
     private Mono<Boolean> markMigrationSkipped(String workspaceId, long workspaceStartMillis, Mono<Boolean> result) {
-        return Mono.fromRunnable(() -> workspacesService.markMigrationSkipped(workspaceId, REASON_ALL_AMBIGUOUS))
+        return Mono.fromRunnable(
+                () -> workspacesService.markExperimentProjectMigrationSkipped(workspaceId, REASON_ALL_AMBIGUOUS))
                 .subscribeOn(migrationScheduler)
                 .doFinally(signalType -> recordWorkspaceDuration(RESULT_ALL_AMBIGUOUS, workspaceStartMillis))
                 .then(result);

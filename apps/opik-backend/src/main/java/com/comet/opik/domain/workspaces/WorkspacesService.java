@@ -68,6 +68,8 @@ public interface WorkspacesService {
 
     long countDatasetProjectMigrationSkipped();
 
+    List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
+
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
      * table. Runs the blocking JDBI lookup on a bounded-elastic worker; defaults to {@code true}
@@ -220,6 +222,12 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public long countDatasetProjectMigrationSkipped() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).countDatasetProjectMigrationSkipped());
+    }
+
+    @Override
+    public List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).countDatasetProjectMigrationSkippedByReason());
     }
 
     @Override

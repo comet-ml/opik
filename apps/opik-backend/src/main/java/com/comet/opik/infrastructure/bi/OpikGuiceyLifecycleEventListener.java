@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.DatasetProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentProjectMigrationJob;
@@ -59,6 +60,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setLlmModelRegistryRefreshJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
                 scheduleExperimentProjectMigrationJobIfEnabled();
+                scheduleDatasetProjectMigrationJobIfEnabled();
             }
 
             case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
@@ -312,6 +314,17 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
         scheduleRepeatingJob(ExperimentProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleDatasetProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getDatasetProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Dataset project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(DatasetProjectMigrationJob.class,
                 config.interval().toJavaDuration(),
                 config.startupDelay().toJavaDuration());
     }

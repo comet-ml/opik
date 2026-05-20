@@ -1819,6 +1819,42 @@ public class ExperimentDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * For one workspace, returns each dataset_id and the (single) project_id that all
+     * non-demo experiments for that dataset's traces resolve to. Groups by {@code e.dataset_id}
+     * and exposes {@code distinct_project_count} so the service can branch on the four-bucket
+     * classification. {@code any(t.project_id)} is only meaningful when count = 1.
+     *
+     * <p>No {@code FINAL} or {@code LIMIT 1 BY id} dedup is needed even though all three joined
+     * tables are {@code ReplacingMergeTree}: {@code count(DISTINCT t.project_id)} and {@code any}
+     * are invariant under row duplication of the same {@code (dataset_id, project_id)} tuples
+     * that ReplacingMergeTree may transiently expose pre-merge.
+     *
+     * <p>The {@code workspace_id} predicate is repeated on every joined alias because ClickHouse
+     * does not push the JOIN predicate down through INNER JOINs reliably — validated against
+     * prod, the worst-case workspace (120k experiments, 520k traces) reads 175M rows without
+     * the per-alias filter (hits the 20M row cap) versus 1.16M rows with it.
+     */
+    private static final String COMPUTE_DATASET_PROJECT_MAPPING = """
+            SELECT
+                e.dataset_id AS dataset_id,
+                count(DISTINCT t.project_id) AS distinct_project_count,
+                any(t.project_id) AS project_id
+            FROM experiments e
+            INNER JOIN experiment_items ei
+                ON e.workspace_id = ei.workspace_id AND e.id = ei.experiment_id
+            INNER JOIN traces t
+                ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
+            WHERE e.workspace_id = :workspace_id
+            AND ei.workspace_id = :workspace_id
+            AND t.workspace_id = :workspace_id
+            AND e.name NOT IN :demo_experiment_names
+            AND e.dataset_id != ''
+            AND t.project_id != ''
+            GROUP BY e.dataset_id
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -2900,5 +2936,20 @@ public class ExperimentDAO {
         }))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
+    }
+
+    Flux<DatasetProjectMapping> computeDatasetProjectMapping() {
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(COMPUTE_DATASET_PROJECT_MAPPING,
+                    "compute_dataset_project_mapping", workspaceId, userName, "");
+            var statement = connection.createStatement(template.render())
+                    .bind("demo_experiment_names", DemoData.EXPERIMENTS);
+            return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
+        }))
+                .flatMap(result -> result.map((row, metadata) -> DatasetProjectMapping.builder()
+                        .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                        .build()));
     }
 }
