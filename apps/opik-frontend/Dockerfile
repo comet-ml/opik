@@ -28,6 +28,9 @@ RUN printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 # Using nginx alpine image with OpenTelemetry support
 FROM nginx:1.29.8-alpine-otel AS nginx
 
+# Upgrade nghttp2-libs to mitigate CVE-2026-27135 (HTTP/2 DoS)
+RUN apk add --no-cache --upgrade nghttp2-libs
+
 # Add label for later inspection
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
