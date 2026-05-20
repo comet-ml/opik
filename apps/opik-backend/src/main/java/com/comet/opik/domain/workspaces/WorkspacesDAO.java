@@ -118,9 +118,6 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT id FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
     List<String> findAutomationRuleMigrationSkippedWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
-    long countAutomationRuleMigrationSkipped();
-
     /**
      * Atomic NULL → timestamp transition for the dataset-project-migration-skipped flag. Returns 1 only when
      * this caller flipped {@code dataset_project_migration_skipped_at} from NULL to {@code :skippedAt}; returns
