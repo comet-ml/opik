@@ -38,6 +38,8 @@ public record AnnotationQueue(
                 AnnotationQueue.View.Write.class}) @Nullable Boolean commentsEnabled,
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable List<String> feedbackDefinitionNames,
+        @JsonView({AnnotationQueue.View.Public.class,
+                AnnotationQueue.View.Write.class}) @Nullable Integer annotatorsPerItem,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<AnnotationQueueReviewer> reviewers,
         @JsonView({

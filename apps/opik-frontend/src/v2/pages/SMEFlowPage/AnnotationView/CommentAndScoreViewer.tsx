@@ -80,11 +80,11 @@ const CommentAndScoreViewer: React.FC = () => {
   );
 
   return (
-    <div className="pl-4">
+    <div>
       {canAnnotateTraceSpanThread && (
         <>
           <div className="flex items-center justify-between gap-1 pb-2">
-            <span className="comet-body-s-accented truncate">Comment</span>
+            <span className="comet-body-s-accented truncate">Comments</span>
             <TooltipWrapper
               content={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].description}
               hotkeys={[SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display]}
@@ -106,14 +106,19 @@ const CommentAndScoreViewer: React.FC = () => {
         </>
       )}
       {hasFeedbackDefinitions && (
-        <div ref={feedbackScoresRef} className="relative mt-6">
+        <div
+          ref={feedbackScoresRef}
+          className="relative mt-4 border-t border-border pt-4"
+        >
           <FeedbackScoresEditor
             key={currentItem?.id}
             feedbackScores={currentAnnotationState.scores}
             onUpdateFeedbackScore={updateFeedbackScore}
             onDeleteFeedbackScore={deleteFeedbackScore}
-            feedbackDefinitionNames={annotationQueue?.feedback_definition_names}
-            className="mt-4 px-0"
+            feedbackDefinitionNames={
+              annotationQueue?.feedback_definition_names
+            }
+            className="px-0"
             header={
               <div className="flex items-center gap-1 pb-2">
                 <span className="comet-body-s-accented truncate">
