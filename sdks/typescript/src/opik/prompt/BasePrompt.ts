@@ -361,18 +361,27 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Helper method to retrieve a version by commit hash.
-   * Used by subclasses in their getVersion implementations.
+   * Helper method to retrieve a version by its sequential version identifier
+   * (e.g. `"v3"`) or, for backwards compatibility, by its commit hash.
    *
-   * @param commit - Commit hash (8-char short form or full)
+   * Input matching `/^v\d+$/` is dispatched to the `versionNumber` endpoint;
+   * anything else is treated as a commit hash. Commit-based fetching is
+   * deprecated — pass a `"v<N>"` identifier instead.
+   *
+   * @param versionOrCommit - Sequential version (`"v3"`) or commit hash (deprecated)
    * @returns Promise resolving to the API response or null if not found
    */
-  protected async retrieveVersionByCommit(
-    commit: string,
+  protected async retrieveVersion(
+    versionOrCommit: string,
   ): Promise<OpikApi.PromptVersionDetail | null> {
+    const isVersionNumber = /^v\d+$/.test(versionOrCommit);
+    const request = isVersionNumber
+      ? { name: this.name, versionNumber: versionOrCommit }
+      : { name: this.name, commit: versionOrCommit };
+
     try {
       const response = await this.opik.api.prompts.retrievePromptVersion(
-        { name: this.name, commit },
+        request,
         this.opik.api.requestOptions,
       );
       return response;
@@ -389,7 +398,7 @@ export abstract class BasePrompt {
 
       logger.error("Failed to retrieve prompt version", {
         promptName: this.name,
-        commit,
+        versionOrCommit,
         error,
       });
       throw error;
@@ -410,13 +419,14 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Get a specific version by commit hash.
-   * Returns a new instance of the appropriate prompt type.
+   * Get a specific version by its sequential version identifier (e.g. `"v3"`)
+   * or, for backwards compatibility, by its commit hash. Returns a new instance
+   * of the appropriate prompt type.
    *
-   * @param commit - Commit hash (8-char short form or full)
+   * @param versionOrCommit - Sequential version (`"v<N>"`) — preferred; or commit hash (deprecated)
    * @returns Promise resolving to prompt instance or null if not found
    */
-  abstract getVersion(commit: string): Promise<BasePrompt | null>;
+  abstract getVersion(versionOrCommit: string): Promise<BasePrompt | null>;
 
   /**
    * Restores a specific version by creating a new version with content from the specified version.
