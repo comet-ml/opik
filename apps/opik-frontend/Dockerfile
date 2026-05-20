@@ -26,11 +26,14 @@ RUN printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.30.1-alpine-otel AS nginx
+FROM nginx:1.29.8-alpine-otel AS nginx
 
-# Defense-in-depth: ensure latest nghttp2-libs for CVE-2026-27135 (HTTP/2 DoS).
-# The 1.30.1-alpine-otel base (rebuilt 2026-05-19) should already include the fix,
-# but this guarantees it across future builds without bumping nginx itself.
+# Pull patched nghttp2-libs from the Alpine 3.23 package index to mitigate
+# CVE-2026-27135 (HTTP/2 DoS). Bumping nginx itself to 1.30.1-alpine-otel
+# was tried for consistency with comet-react, but the equivalent bump in
+# comet-react/docker/Dockerfile broke the comet-mini integration test
+# (frontend pod failed to come up). opik's CI doesn't run the same
+# integration test, so safer to stay on 1.29.8.
 RUN apk add --no-cache --upgrade nghttp2-libs
 
 # Add label for later inspection
