@@ -1,5 +1,6 @@
 --liquibase formatted sql
 --changeset DanielCreao:add_automation_rule_migration_columns
+--comment: Add dedicated migration tracking columns for automation rule project splitting (D6)
 
 ALTER TABLE workspaces
     ADD COLUMN automation_rule_project_migration_skipped_at TIMESTAMP(6) DEFAULT NULL,
