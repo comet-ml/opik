@@ -130,7 +130,10 @@ const CompareExperimentsDetails: React.FunctionComponent<
                 {experiment.dataset_name || "Deleted test suite"}
               </span>
               {experiment.dataset_version_summary?.version_name && (
-                <span className="flex items-center gap-0 pt-px text-muted-slate" style={{ fontSize: "12px" }}>
+                <span
+                  className="flex items-center gap-0 pt-px text-muted-slate"
+                  style={{ fontSize: "12px" }}
+                >
                   <GitCommitVertical className="size-[10px]" />
                   {experiment.dataset_version_summary.version_name}
                 </span>

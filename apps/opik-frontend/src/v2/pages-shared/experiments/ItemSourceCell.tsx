@@ -20,7 +20,11 @@ import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/shared/ResourceLink/ResourceLink";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { CELL_TEXT_CLASS_MAP, getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
+import {
+  CELL_TEXT_CLASS_MAP,
+  getCellTagSize,
+  TAG_SIZE_MAP,
+} from "@/constants/shared";
 import { Explainer, ROW_HEIGHT } from "@/types/shared";
 import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
 import { cn } from "@/lib/utils";
