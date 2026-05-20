@@ -180,8 +180,6 @@ def test_migrate_dataset__evaluate_shape__round_trips(
         [
             "dataset",
             dataset_name,
-            "--from-project",
-            source_project_name,
             "--to-project",
             target_project_name,
         ],
@@ -383,8 +381,6 @@ def test_migrate_dataset__cascade_trace_and_span_comments__round_trip(
         [
             "dataset",
             dataset_name,
-            "--from-project",
-            source_project_name,
             "--to-project",
             target_project_name,
         ],
