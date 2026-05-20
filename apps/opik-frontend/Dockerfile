@@ -26,9 +26,11 @@ RUN printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.29.8-alpine-otel AS nginx
+FROM nginx:1.30.1-alpine-otel AS nginx
 
-# Upgrade nghttp2-libs to mitigate CVE-2026-27135 (HTTP/2 DoS)
+# Defense-in-depth: ensure latest nghttp2-libs for CVE-2026-27135 (HTTP/2 DoS).
+# The 1.30.1-alpine-otel base (rebuilt 2026-05-19) should already include the fix,
+# but this guarantees it across future builds without bumping nginx itself.
 RUN apk add --no-cache --upgrade nghttp2-libs
 
 # Add label for later inspection
