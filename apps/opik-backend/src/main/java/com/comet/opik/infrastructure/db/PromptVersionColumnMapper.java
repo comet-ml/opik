@@ -41,11 +41,16 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .filter(node -> !node.isNull())
                 .map(JsonNode::asText)
                 .orElse(null);
+        String versionNumber = Optional.ofNullable(jsonNode.get("version_number"))
+                .filter(node -> !node.isNull())
+                .map(JsonNode::asText)
+                .orElse(null);
 
         return PromptVersion.builder()
                 .id(UUID.fromString(jsonNode.get("id").asText()))
                 .promptId(UUID.fromString(jsonNode.get("prompt_id").asText()))
                 .commit(jsonNode.get("commit").asText())
+                .versionNumber(versionNumber)
                 .template(template)
                 .metadata(jsonNode.get("metadata"))
                 .changeDescription(jsonNode.get("change_description").asText())
