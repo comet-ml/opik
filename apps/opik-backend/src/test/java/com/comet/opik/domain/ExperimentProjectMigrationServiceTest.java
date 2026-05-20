@@ -390,7 +390,7 @@ class ExperimentProjectMigrationServiceTest {
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        workspacesService.markMigrationSkipped(workspaceId, "test-pre-marked-trap");
+        workspacesService.markExperimentProjectMigrationSkipped(workspaceId, "test-pre-marked-trap");
 
         var seeded = seedCertainExperiment(apiKey, workspaceName, randomName("project"));
         var experimentId = seeded.getLeft();
@@ -521,7 +521,7 @@ class ExperimentProjectMigrationServiceTest {
     }
 
     private void assertWorkspaceTrapped(WorkspacesService workspacesService, String workspaceId, String reason) {
-        assertThat(workspacesService.findMigrationSkippedWorkspaceIds()).contains(workspaceId);
+        assertThat(workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds()).contains(workspaceId);
         assertThat(workspacesService.findById(workspaceId))
                 .hasValueSatisfying(w -> assertThat(w.migrationSkippedReason()).isEqualTo(reason));
     }

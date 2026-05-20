@@ -277,17 +277,7 @@ public class ExperimentProjectMigrationService implements Managed {
                         log.info(
                                 "All remaining experiments are ambiguous, marking workspace as trapped, workspaceId='{}'",
                                 workspaceId);
-<<<<<<< thiaghora/OPIK-6186-workspace-migration-columns
-                        return Mono
-                                .fromRunnable(() -> workspacesService.markExperimentProjectMigrationSkipped(
-                                        workspaceId, TRAPPED_REASON_DELETED_PROJECT))
-                                .subscribeOn(migrationScheduler)
-                                .doFinally(signalType -> recordWorkspaceDuration(
-                                        RESULT_ALL_SKIPPED, workspaceStartMillis))
-                                .then(Mono.empty());
-=======
                         return markMigrationSkipped(workspaceId, workspaceStartMillis, Mono.empty());
->>>>>>> main
                     }
                     var byProject = validated.stream()
                             .collect(Collectors.groupingBy(ExperimentProjectMapping::projectId));
@@ -368,7 +358,9 @@ public class ExperimentProjectMigrationService implements Managed {
     }
 
     private Mono<Boolean> markMigrationSkipped(String workspaceId, long workspaceStartMillis, Mono<Boolean> result) {
-        return Mono.fromRunnable(() -> workspacesService.markMigrationSkipped(workspaceId, REASON_ALL_AMBIGUOUS))
+        return Mono
+                .fromRunnable(() -> workspacesService.markExperimentProjectMigrationSkipped(
+                        workspaceId, REASON_ALL_AMBIGUOUS))
                 .subscribeOn(migrationScheduler)
                 .doFinally(signalType -> recordWorkspaceDuration(RESULT_ALL_AMBIGUOUS, workspaceStartMillis))
                 .then(result);
