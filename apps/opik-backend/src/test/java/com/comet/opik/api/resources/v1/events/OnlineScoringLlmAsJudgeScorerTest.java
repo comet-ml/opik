@@ -147,6 +147,94 @@ class OnlineScoringLlmAsJudgeScorerTest {
     }
 
     @Nested
+    class ShouldFetchSpansTests {
+
+        // Truth table for the spans-fetch gate. Spans are fetched when EITHER:
+        //   (a) the agentic-tools path is possible (provider supports tools AND (experimentId
+        //       OR isAgenticToolsEnabled)), OR
+        //   (b) the inline {{spans}} template path applies — AND ALSO gated by
+        //       isAgenticToolsEnabled, so both pathways ship as one feature behind one toggle.
+        // Goal of the gate: skip the SpanService.getByTraceIds I/O on rules that don't need
+        // spans, and let ops kill the spans-in-prompts feature org-wide via a single flip.
+        @ParameterizedTest(name = "expId={0}, toggle={1}, provider={2}, sentinelInVars={3}, templateHasSpans={4} → expected={5}")
+        @CsvSource({
+                // Agentic-tools branch: provider supports tools AND (experimentId OR toggle).
+                "true,  false, OPEN_AI, false, false, true",
+                "false, true,  OPEN_AI, false, false, true",
+                // Provider doesn't support tools → agentic-tools branch off; with the new
+                // gating the template path also requires the toggle, so toggle=false means no
+                // fetch regardless of variables/template content.
+                "true,  true,  OLLAMA,  false, false, false",
+                "false, true,  OLLAMA,  false, false, false",
+                // Toggle off + no experimentId + no template → no fetch.
+                "false, false, OPEN_AI, false, false, false",
+                // Toggle off + template-only — feature gated, no fetch (regression test for the
+                // new isAgenticToolsEnabled gate on the template path).
+                "false, false, OPEN_AI, false, true,  false",
+                "false, false, OLLAMA,  false, true,  false",
+                // Toggle off + sentinel-in-variables — same gating applies: no fetch.
+                "false, false, OPEN_AI, true,  false, false",
+                // Toggle on + template-only on a non-tool-calling provider → fetch via template path.
+                "false, true,  OLLAMA,  false, true,  true",
+                // Toggle on + sentinel-in-variables on a non-tool-calling provider → fetch.
+                "false, true,  OLLAMA,  true,  false, true",
+                // Toggle off + experimentId path → spans fetched for the agentic-tools cache
+                // seed; the template substitution piggy-backs on the already-fetched data.
+                "true,  false, OPEN_AI, false, true,  true",
+                // Both branches on → still just one fetch (idempotent OR).
+                "true,  true,  OPEN_AI, true,  true,  true",
+        })
+        void gateMatchesTruthTable(
+                boolean hasExperimentId, boolean toggleEnabled, LlmProvider provider,
+                boolean sentinelInVariables, boolean templateHasSpans, boolean expected) {
+            String modelName = "gpt-test";
+            TraceToScoreLlmAsJudge message = buildSpansFetchMessage(
+                    hasExperimentId, sentinelInVariables, templateHasSpans);
+            // Both lenient: the agenticToolsPathPossible expression short-circuits, so
+            // !supportsToolCalling AND experimentIdPath both skip the toggle check; the
+            // provider lookup is also skipped when the agentic-tools branch isn't probed.
+            lenient().when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
+            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+
+            assertThat(scorer.shouldFetchSpans(message)).isEqualTo(expected);
+        }
+
+        private TraceToScoreLlmAsJudge buildSpansFetchMessage(
+                boolean hasExperimentId, boolean sentinelInVariables, boolean templateHasSpans) {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .build();
+            LlmAsJudgeCode code = mock(LlmAsJudgeCode.class);
+            LlmAsJudgeModelParameters modelParams = mock(LlmAsJudgeModelParameters.class);
+            lenient().when(code.model()).thenReturn(modelParams);
+            lenient().when(modelParams.name()).thenReturn("gpt-test");
+            lenient().when(code.variables()).thenReturn(sentinelInVariables
+                    ? Map.of("mySpans", "spans")
+                    : Map.of());
+            lenient().when(code.messages()).thenReturn(templateHasSpans
+                    ? List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                            .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                            .content("Spans: {{spans}}")
+                            .build())
+                    : List.of());
+            return new TraceToScoreLlmAsJudge(
+                    trace,
+                    UUID.randomUUID(),
+                    "rule",
+                    code,
+                    "ws-1",
+                    "user-1",
+                    null,
+                    Map.of(),
+                    PromptType.MUSTACHE,
+                    hasExperimentId ? UUID.randomUUID() : null);
+        }
+    }
+
+    @Nested
     class RoutingGateTests {
 
         // Truth table: experimentId × toggle × tokens >= threshold × provider supports tools → useTools.
