@@ -3944,7 +3944,35 @@ class PromptResourceTest {
                             (Function<PromptVersion, String>) PromptVersion::template,
                             (BiFunction<PromptVersion, String, String>) (v, field) -> field,
                             (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.template()
-                                    .equals(filterValue)));
+                                    .equals(filterValue)),
+                    // EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.EQUAL,
+                            "exact version_number match",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .equals(filterValue)),
+                    // NOT_EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.NOT_EQUAL,
+                            "not equal to version_number",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.versionNumber()
+                                    .equals(filterValue)),
+                    // ENDS_WITH - VERSION_NUMBER (matches the numeric suffix of v1's version_number)
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.ENDS_WITH,
+                            "version_number ends with suffix",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field
+                                    .substring(field.length() - 1),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .endsWith(filterValue)));
         }
 
         @ParameterizedTest(name = "Success: filter by {0} - {1}")
