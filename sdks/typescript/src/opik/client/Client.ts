@@ -35,7 +35,12 @@ import {
 import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { BasePrompt, PROMPT_SYNC_TIMEOUT_MS } from "@/prompt/BasePrompt";
 import { PromptTemplateStructure, type CreateChatPromptOptions, type CommonPromptOptions } from "@/prompt/types";
-import { PromptTemplateStructureMismatch } from "@/prompt/errors";
+import {
+  EnvironmentNotFoundError,
+  PromptNotFoundError,
+  PromptTemplateStructureMismatch,
+  PromptVersionNotAssignableToEnvironmentError,
+} from "@/prompt/errors";
 import {
   fetchLatestPromptVersion,
   shouldCreateNewVersion,
@@ -1765,27 +1770,22 @@ export class OpikClient {
   };
 
   /**
-   * Sets or clears the environment ownership for a prompt version.
+   * Assigns a prompt version to an environment, or clears the assignment.
    *
-   * Resolves a version of the prompt by name (optionally scoped to a project),
-   * then assigns the supplied environment to that version. Pass `null` to
-   * clear the current environment. By default the latest version is targeted;
-   * supply `commit` to target a specific version instead.
+   * Setting a non-null environment moves ownership: any other version of the
+   * same prompt that previously owned the environment is cleared. Pass `null`
+   * to remove the assignment from the resolved version. Existing prompt
+   * objects already in memory are not mutated — re-fetch with
+   * `client.getPrompt(...)` to see the change.
    *
-   * The REST call is issued through this client's `api` instance, so the call
-   * always uses this client's configuration (no implicit global lookup).
+   * @param options.name - Name of the prompt
+   * @param options.environment - Environment registered in the workspace, or `null` to clear
+   * @param options.commit - 8-char short commit hash to target a specific version. Defaults to the latest version.
+   * @param options.projectName - Project the prompt belongs to. Defaults to the client's project.
    *
-   * The environment must already be registered in the workspace; the backend
-   * returns 404 otherwise (also 404 when the prompt name does not exist, or
-   * when the supplied `commit` does not match any version of the prompt). The
-   * backend returns 422 if the prompt version is a mask-type version
-   * (mask-type versions cannot own an environment).
-   *
-   * @param options.name - The name of the prompt whose version should be updated
-   * @param options.environment - Environment name to assign, or `null` to clear ownership
-   * @param options.commit - If provided, target this specific version (8-char short commit hash). Defaults to the latest version. The backend returns 404 if the commit does not exist.
-   * @param options.projectName - Optional project to scope the prompt lookup to
-   * @returns Promise that resolves once the backend has applied the change
+   * @throws {PromptNotFoundError} The prompt name (or the supplied `commit`) does not exist in the resolved project.
+   * @throws {EnvironmentNotFoundError} `environment` is not registered in the workspace.
+   * @throws {PromptVersionNotAssignableToEnvironmentError} The resolved version is internal-only (for example a mask version) and cannot be assigned to an environment.
    */
   public setPromptEnvironment = async (
     options: {
@@ -1795,20 +1795,51 @@ export class OpikClient {
       projectName?: string;
     },
   ): Promise<void> => {
-    const version = await this.api.prompts.retrievePromptVersion(
-      {
-        name: options.name,
-        commit: options.commit,
-        projectName: this.resolveProjectName(options.projectName),
-      },
-      this.api.requestOptions,
-    );
+    let version;
+    try {
+      version = await this.api.prompts.retrievePromptVersion(
+        {
+          name: options.name,
+          commit: options.commit,
+          projectName: this.resolveProjectName(options.projectName),
+        },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        if (options.commit !== undefined) {
+          throw new PromptNotFoundError(
+            `No version with commit '${options.commit}' found for prompt '${options.name}'.`,
+          );
+        }
+        throw new PromptNotFoundError(
+          `No prompt found with name '${options.name}'.`,
+        );
+      }
+      throw error;
+    }
 
-    await this.api.prompts.setPromptVersionEnvironment(
-      version.id!,
-      { environment: options.environment ?? undefined },
-      this.api.requestOptions,
-    );
+    try {
+      await this.api.prompts.setPromptVersionEnvironment(
+        version.id!,
+        { environment: options.environment ?? undefined },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError) {
+        if (error.statusCode === 404) {
+          throw new EnvironmentNotFoundError(
+            `Environment '${options.environment}' is not registered in this workspace.`,
+          );
+        }
+        if (error.statusCode === 422) {
+          throw new PromptVersionNotAssignableToEnvironmentError(
+            `Prompt '${options.name}' (commit '${version.commit}') is an internal-only version and cannot be assigned to an environment. Target a regular prompt version instead.`,
+          );
+        }
+      }
+      throw error;
+    }
   };
 
   /**
