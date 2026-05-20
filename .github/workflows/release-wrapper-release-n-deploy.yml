@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       resumeUrl:
-        description: 'URL to call to resume n8n'
+        description: 'URL to call to resume release n deploy'
         required: true
       trackingId:
         description: 'UUID for tracking this release step'
