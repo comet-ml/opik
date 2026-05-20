@@ -48,7 +48,7 @@ jobs:
           echo "Merge base: $MERGE_BASE"
           
           # Get the tag at or before the merge-base
-          BASE_TAG=$(git describe --tags --abbrev=0 $MERGE_BASE 2>/dev/null || echo "")
+          BASE_TAG=$(git describe --tags --abbrev=0 "$MERGE_BASE" 2>/dev/null || echo "")
           
           if [ -z "$BASE_TAG" ]; then
             echo "❌ No tag found at merge-base"
@@ -56,8 +56,8 @@ jobs:
           fi
           
           echo "The tag at merge-base: $BASE_TAG"
-          echo "version=${BASE_TAG}" | tee -a $GITHUB_OUTPUT
-          echo "**Base Version**: \`${BASE_TAG}\`" >> $GITHUB_STEP_SUMMARY
+          echo "version=${BASE_TAG}" | tee -a "$GITHUB_OUTPUT"
+          echo "**Base Version**: \`${BASE_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on PR - Deployment Started
         uses: actions/github-script@v7
