@@ -19,9 +19,8 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import TagCell from "@/shared/DataTableCells/TagCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
-import Loader from "@/shared/Loader/Loader";
+import PromptTypeCell from "@/v2/pages/PromptsPage/PromptTypeCell";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
@@ -82,7 +81,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: "template_structure",
     label: "Type",
     type: COLUMN_TYPE.category,
-    cell: TagCell as never,
+    cell: PromptTypeCell as never,
     size: 80,
     accessorFn: (row) => {
       const structure =
@@ -91,7 +90,6 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
         ? PROMPT_TEMPLATE_STRUCTURE.CHAT
         : PROMPT_TEMPLATE_STRUCTURE.TEXT;
     },
-    customMeta: { colored: false },
   },
   {
     id: "description",
@@ -348,11 +346,9 @@ const PromptsPage: React.FunctionComponent = () => {
     [],
   );
 
-  if (isPending || (isPlaceholderData && prompts.length === 0)) {
-    return <Loader />;
-  }
-
-  const isEmpty = noData && prompts.length === 0;
+  const isTableLoading =
+    isPending || (isPlaceholderData && prompts.length === 0);
+  const isEmpty = !isTableLoading && noData && prompts.length === 0;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -368,13 +364,13 @@ const PromptsPage: React.FunctionComponent = () => {
                 Prompt
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuContent align="end" className="w-96">
               <DropdownMenuItem
                 onClick={() =>
                   handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.TEXT)
                 }
               >
-                <FileText className="mr-2 size-4 shrink-0 text-light-slate" />
+                <FileText className="mr-2 size-4 shrink-0 text-[var(--color-turquoise)]" />
                 <div className="flex flex-col">
                   <span className="comet-body-s-accented">Text prompt</span>
                   <span className="comet-body-xs text-light-slate">
@@ -387,7 +383,7 @@ const PromptsPage: React.FunctionComponent = () => {
                   handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.CHAT)
                 }
               >
-                <MessagesSquare className="mr-2 size-4 shrink-0 text-light-slate" />
+                <MessagesSquare className="mr-2 size-4 shrink-0 text-[var(--color-burgundy)]" />
                 <div className="flex flex-col">
                   <span className="comet-body-s-accented">Chat prompt</span>
                   <span className="comet-body-xs text-light-slate">
@@ -466,7 +462,10 @@ const PromptsPage: React.FunctionComponent = () => {
                 )}
               </DataTableNoData>
             }
-            showLoadingOverlay={isPlaceholderData && isFetching}
+            showSkeleton={isTableLoading}
+            showLoadingOverlay={
+              !isTableLoading && isPlaceholderData && isFetching
+            }
           />
           <div className="py-4">
             <DataTablePagination

@@ -39,6 +39,7 @@ export interface PromptVersion {
   created_at: string;
   tags?: string[];
   type?: PROMPT_TYPE;
+  environment?: string | null;
 }
 
 export interface PromptCommitInfo {
