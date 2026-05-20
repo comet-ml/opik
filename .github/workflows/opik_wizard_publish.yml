@@ -52,6 +52,13 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      - name: NPM token preflight
+        if: ${{ env.IS_RELEASE }}
+        uses: ./.github/actions/npm-token-preflight
+        with:
+          npm_token: ${{ secrets.NPM_TOKEN }}
+          package_name: opik-configure
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:

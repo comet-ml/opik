@@ -32,6 +32,9 @@ jobs:
       id: get_filename
       run: echo "filename=$(ls *.vsix)" >> $GITHUB_OUTPUT
 
+    # TODO(OPIK-6617): Add an OVSX_PAT preflight before this step so a bad / expired
+    # Open VSX token fails fast with an actionable message instead of erroring out
+    # inside `ovsx publish`. See .github/actions/npm-token-preflight for the pattern.
     - name: Publish Extension to Open VSX
       env:
         OVSX_PAT: ${{ secrets.OVSX_PAT }}

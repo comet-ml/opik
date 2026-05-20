@@ -117,6 +117,23 @@ runs:
         npm pack --dry-run
         echo "Package can be installed successfully"
 
+    - name: Resolve npm package name from package.json
+      id: npm_name
+      if: ${{ inputs.is_release == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        NPM_PACKAGE_NAME=$(node -p "require('./package.json').name")
+        echo "name=${NPM_PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+        echo "Resolved npm package name: ${NPM_PACKAGE_NAME}"
+
+    - name: NPM token preflight
+      if: ${{ inputs.is_release == 'true' }}
+      uses: ./.github/actions/npm-token-preflight
+      with:
+        npm_token: ${{ inputs.npm_token }}
+        package_name: ${{ steps.npm_name.outputs.name }}
+
     - name: Publish to NPM (with retry)
       id: npm_publish
       if: ${{ inputs.is_release == 'true' }}
