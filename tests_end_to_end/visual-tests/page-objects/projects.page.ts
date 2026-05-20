@@ -8,7 +8,7 @@ export class ProjectsPage extends BasePage {
 
   async goto(): Promise<void> {
     await this.page.goto(this.url('projects'));
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('load');
     await this.dismissWelcomeDialogIfPresent();
   }
 
@@ -20,7 +20,6 @@ export class ProjectsPage extends BasePage {
       resp => resp.url().includes('/projects') && resp.url().includes(encodeURIComponent(projectName)) && resp.status() === 200,
       { timeout: 10000 },
     );
-    await this.page.waitForLoadState('networkidle');
   }
 
   async waitForProject(projectName: string, retries = 3): Promise<void> {
@@ -32,9 +31,8 @@ export class ProjectsPage extends BasePage {
       } catch {
         if (i === retries - 1) throw new Error(`Project "${projectName}" not found after ${retries} attempts`);
         await this.page.reload();
-        await this.page.waitForLoadState('networkidle');
+        await this.page.waitForLoadState('load');
         await this.page.getByRole('textbox', { name: 'Search by name' }).fill(projectName);
-        await this.page.waitForLoadState('networkidle');
       }
     }
   }

@@ -8,7 +8,7 @@ export class DatasetsPage extends BasePage {
 
   async goto(projectId: string): Promise<void> {
     await this.page.goto(this.url(`projects/${projectId}/datasets`));
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('load');
     await this.dismissWelcomeDialogIfPresent();
   }
 

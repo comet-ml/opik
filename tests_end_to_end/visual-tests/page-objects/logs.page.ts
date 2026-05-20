@@ -8,7 +8,7 @@ export class LogsPage extends BasePage {
 
   async goto(projectId: string): Promise<void> {
     await this.page.goto(this.url(`projects/${projectId}/logs`) + '?logsType=traces');
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('load');
     await this.dismissWelcomeDialogIfPresent();
   }
 
@@ -22,7 +22,7 @@ export class LogsPage extends BasePage {
 
   async switchToThreads(): Promise<void> {
     await this.page.getByRole('radio', { name: 'Threads' }).click();
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('load');
   }
 
   async waitForThreadsReady(expectedCellText: string): Promise<void> {

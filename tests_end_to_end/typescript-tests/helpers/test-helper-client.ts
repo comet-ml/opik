@@ -238,7 +238,7 @@ export class TestHelperClient {
     }
   }
 
-  async createTestSuiteDataset(name: string, projectName: string): Promise<Dataset> {
+  async createTestSuiteDatasetForProject(name: string, projectName: string): Promise<Dataset> {
     try {
       const response = await this.client.post('/api/datasets/create-test-suite', {
         name,
@@ -792,7 +792,7 @@ export class TestHelperClient {
     }
   }
 
-  async createTestSuiteExperiment(experimentName: string, datasetName: string, projectName: string): Promise<Experiment> {
+  async createTestSuiteExperimentForProject(experimentName: string, datasetName: string, projectName: string): Promise<Experiment> {
     try {
       const response = await this.client.post('/api/experiments/create-test-suite-experiment', {
         experiment_name: experimentName,

@@ -100,7 +100,7 @@ async function globalSetup(_config: FullConfig) {
   ]);
   await client.waitForDatasetItemsCount(DATASET_NAME, 3, 15);
 
-  await client.createTestSuiteDataset(TEST_SUITE_NAME, PROJECT_NAME);
+  await client.createTestSuiteDatasetForProject(TEST_SUITE_NAME, PROJECT_NAME);
   await client.insertDatasetItems(TEST_SUITE_NAME, [
     { input: 'Test input A', output: 'Test output A' },
     { input: 'Test input B', output: 'Test output B' },
@@ -108,7 +108,7 @@ async function globalSetup(_config: FullConfig) {
   await client.waitForDatasetItemsCount(TEST_SUITE_NAME, 2, 15);
 
   const experiment = await client.createExperimentForProject(EXPERIMENT_NAME, DATASET_NAME, PROJECT_NAME);
-  const testSuiteExperiment = await client.createTestSuiteExperiment(TEST_SUITE_EXP_NAME, TEST_SUITE_NAME, PROJECT_NAME);
+  const testSuiteExperiment = await client.createTestSuiteExperimentForProject(TEST_SUITE_EXP_NAME, TEST_SUITE_NAME, PROJECT_NAME);
 
   const state: TestState = {
     experimentId: experiment.id,

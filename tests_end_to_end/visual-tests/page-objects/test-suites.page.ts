@@ -8,7 +8,7 @@ export class TestSuitesPage extends BasePage {
 
   async goto(projectId: string): Promise<void> {
     await this.page.goto(this.url(`projects/${projectId}/test-suites`));
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('load');
     await this.dismissWelcomeDialogIfPresent();
   }
 
