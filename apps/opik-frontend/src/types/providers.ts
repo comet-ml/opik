@@ -228,6 +228,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
+  GOOGLE_GEMINI_3_5_FLASH = "google/gemini-3.5-flash",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -631,12 +632,13 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
+  GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
+  GEMMA_4_31B_IT = "gemma-4-31b-it",
   LYRIA_3_CLIP_PREVIEW = "lyria-3-clip-preview",
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
-  GEMMA_4_31B_IT = "gemma-4-31b-it",
+  GEMINI_3_5_FLASH = "gemini-3.5-flash",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
