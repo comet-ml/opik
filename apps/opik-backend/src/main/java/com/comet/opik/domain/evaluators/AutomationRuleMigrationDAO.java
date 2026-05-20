@@ -46,7 +46,7 @@ public interface AutomationRuleMigrationDAO {
             @Bind("limit") int limit);
 
     @SqlQuery("""
-            SELECT DISTINCT arp.rule_id
+            SELECT arp.rule_id
             FROM automation_rule_projects arp
             WHERE arp.workspace_id = :workspaceId
             <if(demoRuleNames)>
@@ -62,20 +62,6 @@ public interface AutomationRuleMigrationDAO {
     List<UUID> findMultiProjectRuleIds(
             @Bind("workspaceId") String workspaceId,
             @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "demoRuleNames") List<String> demoRuleNames);
-
-    @SqlQuery("""
-            SELECT rule.id, rule.project_id AS legacy_project_id,
-                   rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters,
-                   evaluator.type, evaluator.code,
-                   evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
-            FROM automation_rules rule
-            JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
-            WHERE rule.id = :ruleId AND rule.workspace_id = :workspaceId
-            """)
-    @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
-    AutomationRuleEvaluatorModel<?> findRuleWithEvaluator(
-            @Bind("ruleId") UUID ruleId,
-            @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("DELETE FROM automation_rule_projects WHERE rule_id = :ruleId AND workspace_id = :workspaceId")
     int deleteJunctionByRuleId(@Bind("ruleId") UUID ruleId, @Bind("workspaceId") String workspaceId);

@@ -66,8 +66,6 @@ public interface WorkspacesService {
 
     List<String> findAutomationRuleMigrationSkippedWorkspaceIds();
 
-    long countAutomationRuleMigrationSkipped();
-
     /**
      * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
      * are stamped with the system user — this is the dataset migration job's call site, never a
@@ -280,12 +278,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public List<String> findAutomationRuleMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).findAutomationRuleMigrationSkippedWorkspaceIds());
-    }
-
-    @Override
-    public long countAutomationRuleMigrationSkipped() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countAutomationRuleMigrationSkipped());
     }
 
     @Override
