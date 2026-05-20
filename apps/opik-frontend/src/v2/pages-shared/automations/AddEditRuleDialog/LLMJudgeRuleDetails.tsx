@@ -26,9 +26,11 @@ import {
 import {
   generateDefaultLLMPromptMessage,
   getAllTemplateStringsFromContent,
+  resolveTraceEvaluatorVariableDefault,
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
+import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -36,6 +38,8 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -74,6 +78,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
+  const agenticToolsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENTIC_TOOLS_ENABLED,
+  );
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
 
@@ -120,6 +127,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
       // recalculate variables
       const variables = formInstance.getValues("llmJudgeDetails.variables");
+      const currentScope = formInstance.getValues("scope");
       const localVariables: Record<string, string> = {};
       let parsingVariablesError: boolean = false;
       messages
@@ -138,7 +146,14 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           return acc.concat(allTags);
         }, [])
         .filter((v) => v !== "")
-        .forEach((v: string) => (localVariables[v] = variables[v] ?? ""));
+        .forEach((v: string) => {
+          localVariables[v] = resolveTraceEvaluatorVariableDefault(
+            v,
+            variables[v],
+            currentScope,
+            agenticToolsEnabled,
+          );
+        });
 
       formInstance.setValue("llmJudgeDetails.variables", localVariables);
       formInstance.setValue(
@@ -146,7 +161,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         parsingVariablesError,
       );
     },
-    [],
+    [agenticToolsEnabled],
   );
 
   return (
@@ -335,6 +350,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     datasetColumnNames={datasetColumnNames}
                     type={autocompleteType}
                     includeIntermediateNodes
+                    reservedSentinels={
+                      agenticToolsEnabled
+                        ? RESERVED_TRACE_EVALUATOR_VARIABLES
+                        : undefined
+                    }
                   />
                 </>
               );

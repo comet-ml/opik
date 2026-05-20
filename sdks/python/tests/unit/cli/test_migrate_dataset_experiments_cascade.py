@@ -1771,7 +1771,6 @@ class TestPlannerCascadePlacement:
             client=_planner_client(rest_client),
             name="MyDataset",
             to_project="B",
-            from_project=None,
         )
 
         types = [type(a).__name__ for a in plan.actions]

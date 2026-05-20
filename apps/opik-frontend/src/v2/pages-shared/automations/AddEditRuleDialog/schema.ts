@@ -210,8 +210,12 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
     z
       .string()
       .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+      // Allow the standard JSONPath form (input/output/metadata.[...]) OR a reserved
+      // bare sentinel like `spans` — see RESERVED_TRACE_EVALUATOR_VARIABLES. The
+      // backend's OnlineScoringEngine substitutes the sentinel with the JSON-
+      // serialized spans list at render time.
+      .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
+        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
       }),
   ),
 }).superRefine((data, ctx) => {
@@ -362,8 +366,13 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
       z
         .string()
         .min(1, { message: "Key is required" })
-        .regex(/^(input|output|metadata)(\.|$)/, {
-          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+        // Allow the standard JSONPath form (input/output/metadata.[...]) OR a
+        // reserved bare sentinel like `spans` — see
+        // RESERVED_TRACE_EVALUATOR_VARIABLES. The Python scorer opts into the
+        // SpanService fetch when the arguments map carries the `spans` key and
+        // injects a List<Span> as the matching kwarg.
+        .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
+          message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
         }),
     ),
     parsingArgumentsError: z.boolean().optional(),
