@@ -166,7 +166,11 @@ class DatasetProjectMigrationJobTest {
         }
     }
 
-    /** One workspace exercising all 4 buckets: certain, ambiguous, certain-deleted, demo. */
+    /**
+     * One workspace exercising all 4 buckets: certain, ambiguous, certain-deleted, demo.
+     * After the D1 policy alignment certain-deleted reroutes to Default Project (auto-created),
+     * so only ambiguous + demo stay V1 and the workspace remains trapped on {@code all_ambiguous}.
+     */
     @Test
     void mixedWorkspaceMigratesEligibleAndKeepsNonEligibleAsV1() {
         var apiKey = randomName("api-key");
@@ -216,24 +220,28 @@ class DatasetProjectMigrationJobTest {
 
         assertWorkspaceVersion1(apiKey, workspaceName);
 
-        // Certain dataset migrates; ambiguous + certain-deleted + demo datasets stay V1.
+        // Certain dataset migrates to its inferred project; certain-deleted reroutes to
+        // auto-created Default Project; ambiguous + demo datasets stay V1.
         Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(
                 () -> assertDatasetMigrated(apiKey, workspaceName, eligibleDatasetId, eligibleProjectId));
         assertDatasetUnchanged(apiKey, workspaceName, ambiguousDatasetId);
-        assertDatasetUnchanged(apiKey, workspaceName, deletedDatasetId);
+        var migratedDeleted = datasetResourceClient.getDatasetById(deletedDatasetId, apiKey, workspaceName);
+        assertThat(migratedDeleted.projectId()).isNotNull().isNotEqualTo(eligibleProjectId);
         assertDatasetUnchanged(apiKey, workspaceName, demoDatasetId);
     }
 
+    /**
+     * Certain-deleted reroutes to Default Project (aligned with D1's policy via
+     * {@code projectService.getOrCreate}). Workspace migrates to V2 instead of being trapped.
+     */
     @Test
-    void skipDatasetWhenInferredProjectWasDeleted(WorkspacesService workspacesService) {
+    void migrateDatasetWhenInferredProjectWasDeletedToDefaultProject() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        // Workspace also has a Default Project so any phantom no-inference path doesn't preempt
-        // the deleted_project trap. This test is specifically about the certain-deleted bucket.
-        createProject(apiKey, workspaceName, ProjectService.DEFAULT_PROJECT);
+        var defaultProjectId = createProject(apiKey, workspaceName, ProjectService.DEFAULT_PROJECT);
 
         var projectName = randomName("project");
         var projectId = createProject(apiKey, workspaceName, projectName);
@@ -241,17 +249,11 @@ class DatasetProjectMigrationJobTest {
         var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
         seedTracedExperiment(apiKey, workspaceName, datasetName, projectName);
 
-        // Delete the project so the only orphan dataset's inferred project is gone.
-        // This routes the dataset to certain-deleted → no migration possible → workspace trapped.
+        // Delete the inferred project after seeding — the certain-deleted bucket reroutes to Default.
         projectResourceClient.deleteProject(projectId, apiKey, workspaceName);
 
-        assertWorkspaceVersion1(apiKey, workspaceName);
-
-        assertDatasetUnchanged(apiKey, workspaceName, datasetId);
-
-        // Trapped workspaces persist via the workspaces.dataset_migration_skipped_at column; the next
-        // cycle reads that list to assemble its exclusion set, so the workspace must appear here.
-        assertWorkspaceTrappedWith(workspacesService, workspaceId, "deleted_project");
+        assertWorkspaceVersion2(apiKey, workspaceName);
+        assertDatasetMigrated(apiKey, workspaceName, datasetId, defaultProjectId);
     }
 
     /** No-inference orphan + Default Project → orphan migrates to Default Project. */
@@ -274,70 +276,75 @@ class DatasetProjectMigrationJobTest {
         assertDatasetMigrated(apiKey, workspaceName, datasetId, defaultProjectId);
     }
 
-    /** No-inference orphan + no Default Project → workspace trapped (default_project_missing). */
+    /**
+     * No-inference orphan in a workspace WITHOUT a Default Project: the service auto-provisions
+     * the Default Project via {@code projectService.getOrCreate} and migrates the dataset there.
+     * Aligned with D1's policy — replaces what used to be a trap.
+     */
     @Test
-    void trapWorkspaceWhenNoDefaultProject(WorkspacesService workspacesService) {
+    void migrateNoInferenceDatasetWhenDefaultProjectMissingByAutoCreating() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        // V1 dataset with no experiments and no Default Project to fall back to.
+        // No Default Project pre-created — service will provision it on demand.
         var datasetName = randomName("dataset");
         var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
 
-        assertWorkspaceVersion1(apiKey, workspaceName);
+        assertWorkspaceVersion2(apiKey, workspaceName);
 
-        assertDatasetUnchanged(apiKey, workspaceName, datasetId);
-
-        assertWorkspaceTrappedWith(workspacesService, workspaceId, "default_project_missing");
+        var actual = datasetResourceClient.getDatasetById(datasetId, apiKey, workspaceName);
+        assertThat(actual.projectId()).isNotNull();
+        // The auto-created Default Project's id is unknown to the test; verify it points at one
+        // that has the conventional name.
+        var defaultProject = projectResourceClient.getProject(actual.projectId(), apiKey, workspaceName);
+        assertThat(defaultProject.name()).isEqualTo(ProjectService.DEFAULT_PROJECT);
     }
 
     /**
-     * Mixed certain + no-inference with no Default Project: the certain dataset must migrate
-     * even though the workspace will be trapped for the un-migratable no-inference orphan.
-     * Regression test for a pre-trap bug where validated certain mappings were stranded V1.
+     * Mixed certain + no-inference in a workspace WITHOUT a pre-existing Default Project:
+     * certain migrates to its inferred project, no-inference triggers Default-Project auto-create
+     * and migrates there. Whole workspace ends V2. Aligned with D1's policy.
      */
     @Test
-    void migrateCertainEvenWhenDefaultProjectMissingForNoInference(WorkspacesService workspacesService) {
+    void migrateAllBucketsWhenDefaultProjectAutoCreated() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        // Certain bucket: dataset with a traced V2 experiment in a live project → migrates.
+        // Certain bucket: dataset with a traced V2 experiment in a live project → migrates there.
         var projectName = randomName("project");
         var projectId = createProject(apiKey, workspaceName, projectName);
         var certainDatasetName = randomName("dataset");
         var certainDatasetId = createOrphanDataset(apiKey, workspaceName, certainDatasetName);
         seedTracedExperiment(apiKey, workspaceName, certainDatasetName, projectName);
 
-        // No-inference bucket: dataset with no experiments and no Default Project to fall back to.
+        // No-inference bucket: no experiments. No Default Project pre-created — service provisions it.
         var noInferenceDatasetName = randomName("dataset");
         var noInferenceDatasetId = createOrphanDataset(apiKey, workspaceName, noInferenceDatasetName);
 
-        // Certain dataset still gets migrated even though the workspace is about to be trapped.
-        Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(
-                () -> assertDatasetMigrated(apiKey, workspaceName, certainDatasetId, projectId));
+        assertWorkspaceVersion2(apiKey, workspaceName);
+        assertDatasetMigrated(apiKey, workspaceName, certainDatasetId, projectId);
 
-        // No-inference dataset stays V1 (no Default Project as destination).
-        assertDatasetUnchanged(apiKey, workspaceName, noInferenceDatasetId);
-
-        // Workspace is trapped with default_project_missing so future cycles skip it.
-        assertWorkspaceTrappedWith(workspacesService, workspaceId, "default_project_missing");
+        // No-inference dataset migrated to an auto-created Default Project (id unknown to test).
+        var migratedNoInference = datasetResourceClient.getDatasetById(noInferenceDatasetId, apiKey, workspaceName);
+        assertThat(migratedNoInference.projectId()).isNotNull().isNotEqualTo(projectId);
     }
 
-    /** All orphans ambiguous (multi-project) → workspace trapped (all_ambiguous). */
+    /**
+     * All orphans ambiguous (multi-project) → workspace trapped with {@code all_ambiguous}, the
+     * only remaining trap reason after the D1 policy alignment. Default Project is intentionally
+     * NOT pre-seeded — there are no certain-deleted or no-inference orphans, so
+     * {@code getOrCreate} is never reached.
+     */
     @Test
     void trapWorkspaceWhenAllAmbiguous(WorkspacesService workspacesService) {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
-
-        // Default Project exists, so the trap reason is forced to be all_ambiguous, not
-        // default_project_missing — this isolates the all_ambiguous code path.
-        createProject(apiKey, workspaceName, ProjectService.DEFAULT_PROJECT);
 
         var projectName1 = randomName("project");
         var projectName2 = randomName("project");
