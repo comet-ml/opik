@@ -7,12 +7,7 @@ import { FormControl, FormField } from "@/ui/form";
 import { Input } from "@/ui/input";
 import { Button } from "@/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipPortal,
-  TooltipTrigger,
-} from "@/ui/tooltip";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
@@ -52,26 +47,20 @@ export const DEFAULT_FEEDBACK_SCORE_CONDITION_GROUP: FeedbackScoreConditionGroup
 const CONDITION_FIELDS = ["name", "operator", "threshold", "window"] as const;
 type ConditionField = (typeof CONDITION_FIELDS)[number];
 
-// A tooltip wrapper for disabled controls — Radix tooltips don't fire on
-// elements with pointer-events: none, so we wrap the disabled child in a
-// span that intercepts hover/focus.
+// Radix tooltips don't fire on elements with pointer-events: none (which
+// disabled buttons get from the Button variants), so when `disabled` is true
+// we wrap the child in a span that intercepts hover/focus for the tooltip.
 const DisabledTooltip: React.FC<{
   message: string;
   disabled: boolean;
   children: React.ReactNode;
-}> = ({ message, disabled, children }) => {
-  if (!disabled) return <>{children}</>;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex cursor-not-allowed">{children}</span>
-      </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent side="top">{message}</TooltipContent>
-      </TooltipPortal>
-    </Tooltip>
-  );
-};
+}> = ({ message, disabled, children }) => (
+  <TooltipWrapper content={disabled ? message : null}>
+    <span className={cn("inline-flex", disabled && "cursor-not-allowed")}>
+      {children}
+    </span>
+  </TooltipWrapper>
+);
 
 const SeparatorBadge: React.FC<{ kind: "AND" | "OR" }> = ({ kind }) => (
   <div className="py-0.5">
