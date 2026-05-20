@@ -18834,6 +18834,7 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
