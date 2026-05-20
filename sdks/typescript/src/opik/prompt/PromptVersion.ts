@@ -21,7 +21,15 @@ export class PromptVersion {
   public readonly id: string;
   public readonly name: string;
   public readonly prompt: string;
+  /**
+   * @deprecated Legacy commit hash of this prompt version. Use {@link version} instead — `commit` is no longer surfaced in the Opik UI and is kept only for backwards compatibility with older SDK callers.
+   */
   public readonly commit: string;
+  /**
+   * Sequential version identifier of this prompt version (e.g. `"v3"`).
+   * Undefined for mask versions, which do not carry a version number.
+   */
+  public readonly version?: string;
   public readonly type: PromptType;
   public readonly metadata?: OpikApi.JsonNode;
   public readonly changeDescription?: string;
@@ -34,6 +42,7 @@ export class PromptVersion {
     this.name = data.name;
     this.prompt = data.prompt;
     this.commit = data.commit;
+    this.version = data.version;
     this.type = data.type;
     this.metadata = data.metadata;
     this.changeDescription = data.changeDescription;
@@ -200,6 +209,7 @@ export class PromptVersion {
       name,
       prompt: apiResponse.template,
       commit: apiResponse.commit,
+      version: apiResponse.versionNumber ?? undefined,
       promptId: apiResponse.promptId,
       versionId: apiResponse.id,
       type: apiResponse.type ?? PromptType.MUSTACHE,

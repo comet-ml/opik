@@ -23,6 +23,7 @@ describe("PromptVersion", () => {
         name: "test-prompt",
         prompt: "Hello {{name}}!",
         commit: "abc123de",
+        version: "v3",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
         metadata: { version: "1.0" },
@@ -37,6 +38,7 @@ describe("PromptVersion", () => {
       expect(version.name).toBe("test-prompt");
       expect(version.prompt).toBe("Hello {{name}}!");
       expect(version.commit).toBe("abc123de");
+      expect(version.version).toBe("v3");
       expect(version.type).toBe(PromptType.MUSTACHE);
       expect(version.metadata).toEqual({ version: "1.0" });
       expect(version.changeDescription).toBe("Initial version");
@@ -60,6 +62,7 @@ describe("PromptVersion", () => {
       expect(version.name).toBe("minimal-prompt");
       expect(version.prompt).toBe("Minimal template");
       expect(version.commit).toBe("commit123");
+      expect(version.version).toBeUndefined();
       expect(version.type).toBe(PromptType.MUSTACHE);
       expect(version.metadata).toBeUndefined();
       expect(version.changeDescription).toBeUndefined();
@@ -869,6 +872,7 @@ Please enjoy your extended stay.`;
         id: "version-id",
         promptId: "prompt-id",
         commit: "abc123de",
+        versionNumber: "v3",
         template: "Hello {{name}}!",
         type: "mustache",
         createdAt: new Date("2024-01-01T10:00:00Z"),
@@ -884,6 +888,7 @@ Please enjoy your extended stay.`;
       expect(version.name).toBe("test-prompt");
       expect(version.prompt).toBe("Hello {{name}}!");
       expect(version.commit).toBe("abc123de");
+      expect(version.version).toBe("v3");
       expect(version.type).toBe(PromptType.MUSTACHE);
       expect(version.metadata).toEqual({ version: "1.0" });
       expect(version.changeDescription).toBe("Initial version");
@@ -910,6 +915,7 @@ Please enjoy your extended stay.`;
       expect(version.name).toBe("minimal-prompt");
       expect(version.prompt).toBe("Minimal template");
       expect(version.commit).toBe("commit123");
+      expect(version.version).toBeUndefined();
       expect(version.metadata).toBeUndefined();
       expect(version.changeDescription).toBeUndefined();
       expect(version.createdAt).toBeUndefined();

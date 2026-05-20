@@ -91,6 +91,7 @@ export interface PromptVersionData {
   name: string;
   prompt: string;
   commit: string;
+  version?: string;
   promptId: string;
   versionId: string;
   type: PromptType;
