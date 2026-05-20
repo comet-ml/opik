@@ -138,6 +138,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW("google/gemini-3.1-flash-lite-preview"),
     GOOGLE_GEMINI_3_1_PRO_PREVIEW("google/gemini-3.1-pro-preview"),
     GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS("google/gemini-3.1-pro-preview-customtools"),
+    GOOGLE_GEMINI_3_5_FLASH("google/gemini-3.5-flash"),
     GOOGLE_GEMMA_2_27B_IT("google/gemma-2-27b-it"),
     GOOGLE_GEMMA_2_9B_IT("google/gemma-2-9b-it"),
     GOOGLE_GEMMA_3_12B_IT("google/gemma-3-12b-it"),
