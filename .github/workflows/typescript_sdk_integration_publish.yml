@@ -27,6 +27,11 @@ on:
         required: false
         description: Skip commit and push
         default: false
+      git_ref:
+        type: string
+        required: false
+        description: "Git ref to check out (default: the dispatch ref). release.yaml passes refs/tags/<version> so the published tarballs are built from the exact tag, not from a moving branch HEAD."
+        default: ""
   workflow_call:
     inputs:
       version:
@@ -41,6 +46,11 @@ on:
         type: boolean
         required: false
         default: false
+      git_ref:
+        type: string
+        required: false
+        description: "Git ref to check out (default: the calling workflow's ref). release.yaml passes refs/tags/<version> so the build is reproducible from the tag."
+        default: ""
 
 
 concurrency:
@@ -70,7 +80,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ inputs.git_ref || github.ref }}
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || github.token }}
 
