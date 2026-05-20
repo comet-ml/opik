@@ -139,21 +139,34 @@ runs:
           PUBLISH_CMD="npm publish --access ${{ inputs.npm_access }}"
         fi
 
+        ALREADY_PUBLISHED=false
+        PUBLISH_LOG=$(mktemp)
+        trap 'rm -f "$PUBLISH_LOG"' EXIT
+
         while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
           echo "Publish attempt $ATTEMPT of $MAX_ATTEMPTS (timeout: ${TIMEOUT_SECONDS}s)..."
-          
-          # Use timeout command to prevent hanging indefinitely
-          if timeout $TIMEOUT_SECONDS $PUBLISH_CMD; then
+
+          # Use timeout to prevent hanging; tee to stream live AND capture for inspection.
+          if timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"; then
             SUCCESS=true
             break
           else
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -eq 124 ]; then
+            # PIPESTATUS[0] is the timeout/npm exit code; tee always succeeds.
+            EXIT_CODE=${PIPESTATUS[0]}
+            if [ "$EXIT_CODE" -eq 124 ]; then
               echo "Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
             else
               echo "Attempt $ATTEMPT failed with exit code $EXIT_CODE"
             fi
-            
+
+            # Non-retryable: version already published. The desired end state is achieved;
+            # treat as a skip-with-warning so concurrent / replay dispatches don't fail CI.
+            if grep -q "E403" "$PUBLISH_LOG" && grep -qi "cannot publish over" "$PUBLISH_LOG"; then
+              ALREADY_PUBLISHED=true
+              echo "::warning title=NPM publish skipped::${PACKAGE_NAME}@${NEW_VERSION} is already published; treating as success."
+              break
+            fi
+
             if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
               echo "Retrying in 10 seconds..."
               sleep 10
@@ -162,7 +175,7 @@ runs:
           fi
         done
 
-        if [ "$SUCCESS" = false ]; then
+        if [ "$SUCCESS" = false ] && [ "$ALREADY_PUBLISHED" = false ]; then
           echo "Failed to publish after $MAX_ATTEMPTS attempts"
           exit 1
         fi
