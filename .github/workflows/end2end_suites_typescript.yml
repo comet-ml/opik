@@ -6,7 +6,7 @@ env:
   ALLURE_ENDPOINT: https://comet.testops.cloud/
   ALLURE_PROJECT_ID: 1
   ALLURE_RESULTS: allure-results
-  SHARD_TOTAL: 4
+  SHARD_TOTAL: 8
 
 on:
     workflow_dispatch:
@@ -82,7 +82,7 @@ jobs:
                 echo "launch_id=${LAUNCH_ID}" >> "$GITHUB_OUTPUT"
 
     run_suite:
-        name: "Run TS suite shard ${{ matrix.shard }}/4: ${{ github.event.inputs.suite || 'fullregression' }}"
+        name: "Run TS suite shard ${{ matrix.shard }}/8: ${{ github.event.inputs.suite || 'fullregression' }}"
         needs: [build-opik, setup-allure]
         runs-on: ubuntu-latest
         timeout-minutes: 30
@@ -92,7 +92,7 @@ jobs:
         strategy:
           fail-fast: false
           matrix:
-            shard: [1, 2, 3, 4]
+            shard: [1, 2, 3, 4, 5, 6, 7, 8]
 
         steps:
             - name: Checkout repo
@@ -175,7 +175,7 @@ jobs:
               run: |
                 npx playwright test --grep "Projects created via SDK are visible" --reporter=list
 
-            - name: Run TypeScript E2E suite (shard ${{ matrix.shard }}/4)
+            - name: Run TypeScript E2E suite (shard ${{ matrix.shard }}/8)
               working-directory: ${{ github.workspace }}/tests_end_to_end/typescript-tests
               env:
                 OPIK_BASE_URL: http://localhost:5173
