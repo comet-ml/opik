@@ -35,6 +35,7 @@ const DiffVersionMenu: React.FC<DiffVersionMenuProps> = ({
         <Button
           size="sm"
           variant="ghost"
+          className="px-0"
           disabled={selectableVersions.length === 0}
         >
           <GitCompareArrows className="mr-1.5 size-3.5" />

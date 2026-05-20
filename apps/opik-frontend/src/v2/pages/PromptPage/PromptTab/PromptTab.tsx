@@ -1,16 +1,21 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Check,
   ChevronDown,
+  CircleFadingArrowUp,
   Clock,
   Copy,
-  FileText,
+  FilePen,
   Pencil,
-  RotateCcw,
+  Play,
   Sparkles,
-  Send,
+  SlidersHorizontal,
+  Undo2,
   User,
   Wand2,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { keepPreviousData } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
 import copy from "clipboard-copy";
 
@@ -19,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import {
@@ -26,6 +32,8 @@ import {
   PromptWithLatestVersion,
   PROMPT_TEMPLATE_STRUCTURE,
 } from "@/types/prompts";
+import { Label } from "@/ui/label";
+import { Separator } from "@/ui/separator";
 import { Skeleton } from "@/ui/skeleton";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
@@ -33,7 +41,7 @@ import CodeHighlighter, {
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UseThisPromptDialog from "@/v2/pages/PromptPage/PromptTab/UseThisPromptDialog";
-import EditPromptVersionDialog from "@/v2/pages/PromptPage/PromptTab/EditPromptVersionDialog";
+import EditPromptSheet from "@/v2/pages/PromptPage/PromptTab/EditPromptSheet";
 import VersionHistoryTimeline, {
   VersionHistoryItem,
 } from "@/v2/pages-shared/version-history/VersionHistoryTimeline";
@@ -42,6 +50,12 @@ import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import ComparePromptVersionDialog from "@/v2/pages/PromptPage/CommitsTab/ComparePromptVersionDialog";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
+import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
+import useSetPromptVersionEnvironmentMutation from "@/api/prompts/useSetPromptVersionEnvironmentMutation";
+import { EnvironmentSquare } from "@/shared/EnvironmentLabel/EnvironmentLabel";
+import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
+import { CONFIGURATION_TABS } from "@/v2/constants/configuration";
+import useAppStore from "@/store/AppStore";
 import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlaygroundButton";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
@@ -50,6 +64,7 @@ import {
   AgentConfigurationBasicStage,
   isProdTag,
 } from "@/utils/agent-configurations";
+import PromptContentBlock from "./PromptContentBlock";
 import RestoreVersionDialog from "./RestoreVersionDialog";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
@@ -119,6 +134,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       description: v.change_description,
       created_at: v.created_at,
       created_by: v.created_by,
+      environment: v.environment ?? null,
     }));
   }, [versions, total]);
 
@@ -132,7 +148,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const { data: activeVersion, isLoading: isActiveVersionLoading } =
     usePromptVersionById(
       { versionId: effectiveVersionId },
-      { enabled: !!effectiveVersionId },
+      {
+        enabled: !!effectiveVersionId,
+        placeholderData: keepPreviousData,
+      },
     );
 
   const activeIndex = useMemo(
@@ -145,6 +164,79 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const activeIsProd = versionHasProdTag(activeVersion);
   const activeAuthor =
     (activeVersion as VersionWithMaybeAuthor | undefined)?.created_by ?? "";
+
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { data: environmentsData } = useEnvironmentsList();
+  const environments = useMemo(
+    () =>
+      (environmentsData?.content ?? [])
+        .slice()
+        .sort((a, b) => a.position - b.position),
+    [environmentsData?.content],
+  );
+  const environmentOwners = useMemo(() => {
+    const map = new Map<string, VersionWithMaybeAuthor>();
+    versions?.forEach((v) => {
+      if (v.environment) map.set(v.environment, v);
+    });
+    return map;
+  }, [versions]);
+  const activeVersionEnvironment = activeVersion?.environment ?? null;
+  const { toast: deployToast } = useToast();
+  const { mutate: setVersionEnvironment, isPending: isDeploying } =
+    useSetPromptVersionEnvironmentMutation();
+
+  const handleDeployToEnvironment = useCallback(
+    (envName: string) => {
+      if (!prompt?.id || !effectiveVersionId) return;
+      if (activeVersionEnvironment === envName) return;
+      setVersionEnvironment(
+        {
+          promptId: prompt.id,
+          versionId: effectiveVersionId,
+          environment: envName,
+        },
+        {
+          onSuccess: () =>
+            deployToast({
+              description: `Deployed ${activeVersionLabel} to ${envName}`,
+            }),
+        },
+      );
+    },
+    [
+      prompt?.id,
+      effectiveVersionId,
+      activeVersionEnvironment,
+      activeVersionLabel,
+      setVersionEnvironment,
+      deployToast,
+    ],
+  );
+
+  const handleClearEnvironment = useCallback(() => {
+    if (!prompt?.id || !effectiveVersionId || !activeVersionEnvironment) return;
+    setVersionEnvironment(
+      {
+        promptId: prompt.id,
+        versionId: effectiveVersionId,
+        environment: null,
+      },
+      {
+        onSuccess: () =>
+          deployToast({
+            description: `Removed ${activeVersionLabel} from ${activeVersionEnvironment}`,
+          }),
+      },
+    );
+  }, [
+    prompt?.id,
+    effectiveVersionId,
+    activeVersionEnvironment,
+    activeVersionLabel,
+    setVersionEnvironment,
+    deployToast,
+  ]);
 
   const handleOpenEditPrompt = (value: boolean) => {
     editPromptResetKeyRef.current += 1;
@@ -206,7 +298,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   if (isInitialLoading) {
     return (
-      <div className="flex gap-6 px-6 pt-2">
+      <div className="flex flex-col gap-4 px-6 pt-2 xl:flex-row xl:gap-6">
         <div className="min-w-0 flex-1">
           <div className="rounded-md border bg-background">
             <div className="flex items-center justify-between border-b p-4 py-3">
@@ -224,7 +316,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </div>
           </div>
         </div>
-        <div className="w-[340px] shrink-0">
+        <div className="hidden w-[340px] shrink-0 xl:block">
           <p className="comet-body-s-accented ml-3 mt-1">Version history</p>
           <div className="space-y-3 p-4">
             {[0, 1, 2, 3, 4].map((i) => (
@@ -237,30 +329,85 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   }
 
   return (
-    <div className="flex gap-6 px-6 pt-2">
-      <div className="min-w-0 flex-1">
+    <div className="flex flex-col gap-4 px-6 pt-2 xl:flex-row xl:gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="xl:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-between font-normal"
+              >
+                <span className="flex min-w-0 items-center gap-2 truncate">
+                  <span className="comet-body-s-accented text-foreground">
+                    {activeVersionLabel || "v—"}
+                  </span>
+                  <EnvironmentBadge
+                    name={activeVersionEnvironment}
+                    size="sm"
+                  />
+                  <span className="comet-body-xs text-muted-slate">
+                    {activeVersion?.created_at &&
+                      getTimeFromNow(activeVersion.created_at)}
+                  </span>
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-light-slate" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-[60vh] overflow-y-auto"
+            >
+              {historyItems.map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  onSelect={() => setActiveVersionId(item.id)}
+                  className={cn(
+                    "flex flex-col items-start gap-1",
+                    item.id === effectiveVersionId &&
+                      "bg-muted text-foreground focus:bg-muted",
+                  )}
+                >
+                  <div className="flex w-full min-w-0 items-center gap-2">
+                    <span className="comet-body-s-accented shrink-0">
+                      {item.label}
+                    </span>
+                    <EnvironmentBadge name={item.environment} size="sm" />
+                  </div>
+                  <span className="comet-body-xs text-muted-slate">
+                    {getTimeFromNow(item.created_at)}
+                    {item.created_by ? ` · ${item.created_by}` : ""}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <div className="rounded-md border bg-background">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 border-b p-4 py-3">
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="comet-body-s-accented rounded-md bg-muted px-2 py-0.5 text-foreground">
+          <div className="flex flex-wrap items-center gap-2 p-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="comet-body-accented text-foreground">
                 {activeVersionLabel || "v—"}
               </span>
               {activeIsProd && (
                 <StageTag value={AgentConfigurationBasicStage.PROD} size="sm" />
               )}
-            </div>
-
-            <div className="ml-auto flex flex-wrap items-center gap-1">
+              <EnvironmentBadge name={activeVersionEnvironment} size="sm" />
+              <Separator orientation="vertical" className="mx-1 h-4" />
               <DiffVersionMenu
                 currentItemId={effectiveVersionId}
                 versions={historyItems}
                 onSelectVersion={handleSelectDiffVersion}
               />
+            </div>
 
+            <div className="flex flex-wrap items-center gap-1 md:ml-auto">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="px-0">
+                    <Play className="mr-1.5 size-3.5" />
                     Use prompt
                     <ChevronDown className="ml-1 size-3.5" />
                   </Button>
@@ -280,18 +427,83 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              <Separator orientation="vertical" className="mx-1 h-4" />
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <Send className="mr-1.5 size-3.5" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="px-0"
+                    disabled={!effectiveVersionId || isDeploying}
+                  >
+                    <CircleFadingArrowUp className="mr-1.5 size-3.5" />
                     Deploy to
                     <ChevronDown className="ml-1 size-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem disabled>Coming soon</DropdownMenuItem>
+                <DropdownMenuContent align="end" className="min-w-[220px]">
+                  {environments.length === 0 ? (
+                    <DropdownMenuItem disabled>
+                      No environments configured
+                    </DropdownMenuItem>
+                  ) : (
+                    environments.map((env) => {
+                      const owner = environmentOwners.get(env.name);
+                      const ownerIdx = owner
+                        ? versions?.findIndex((v) => v.id === owner.id) ?? -1
+                        : -1;
+                      const ownerLabel =
+                        ownerIdx >= 0 && total > 0
+                          ? `v${total - ownerIdx}`
+                          : "";
+                      const isActiveHere =
+                        activeVersionEnvironment === env.name;
+                      return (
+                        <DropdownMenuItem
+                          key={env.id}
+                          selected={isActiveHere}
+                          disabled={isActiveHere}
+                          onSelect={() => handleDeployToEnvironment(env.name)}
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <EnvironmentSquare color={env.color} />
+                            <span className="truncate">{env.name}</span>
+                          </div>
+                          <span className="comet-body-xs ml-3 shrink-0 text-light-slate">
+                            {isActiveHere ? (
+                              <Check className="size-3.5" />
+                            ) : ownerLabel ? (
+                              `Currently ${ownerLabel}`
+                            ) : null}
+                          </span>
+                        </DropdownMenuItem>
+                      );
+                    })
+                  )}
+                  {activeVersionEnvironment && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={handleClearEnvironment}>
+                        Remove from {activeVersionEnvironment}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/$workspaceName/configuration"
+                      params={{ workspaceName }}
+                      search={{ tab: CONFIGURATION_TABS.ENVIRONMENTS }}
+                    >
+                      <SlidersHorizontal className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+                      Manage environments
+                    </Link>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              <Separator orientation="vertical" className="mx-1 h-4" />
 
               {canUsePlayground && !isChatPrompt ? (
                 <ImproveInPlaygroundButton
@@ -302,7 +514,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 canUsePlayground && (
                   <TooltipWrapper content="Improve flow is available for text prompts">
                     <span>
-                      <Button variant="ghost" size="sm" disabled>
+                      <Button variant="ghost" size="sm" className="px-0" disabled>
                         <Wand2 className="mr-1.5 size-3.5" />
                         Improve prompt
                       </Button>
@@ -311,21 +523,27 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 )
               )}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={isLatest || !activeVersion}
-                onClick={() =>
-                  activeVersion && handleRestoreVersionClick(activeVersion)
-                }
-              >
-                <RotateCcw className="mr-1.5 size-3.5" />
-                Restore
-              </Button>
+              <Separator orientation="vertical" className="mx-1 h-4" />
+
+              {activeVersion && !isLatest && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-0"
+                  onClick={() => handleRestoreVersionClick(activeVersion)}
+                >
+                  <Undo2 className="mr-1.5 size-3.5" />
+                  Restore
+                </Button>
+              )}
 
               <Button
                 variant="ghost"
                 size="sm"
+                className={cn(
+                  "px-0",
+                  activeVersion && !isLatest && "ml-3",
+                )}
                 onClick={() => handleOpenEditPrompt(true)}
               >
                 <Pencil className="mr-1.5 size-3.5" />
@@ -335,18 +553,14 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </div>
 
           {/* Change description + meta */}
-          <div className="border-b p-4">
-            {activeVersion?.change_description ? (
-              <div className="comet-body-s flex items-start gap-2 text-foreground">
-                <FileText className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
+          <div className="px-4 pb-4">
+            {activeVersion?.change_description && (
+              <div className="comet-body-s flex items-center gap-2 text-muted-slate">
+                <FilePen className="size-3.5 shrink-0 text-muted-slate" />
                 <span>{activeVersion.change_description}</span>
               </div>
-            ) : (
-              <div className="comet-body-s text-light-slate">
-                No change description
-              </div>
             )}
-            <div className="comet-body-xs mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-light-slate">
+            <div className="comet-body-s mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-slate">
               {activeVersion?.created_at && (
                 <span className="flex items-center gap-1">
                   <Clock className="size-3" />
@@ -363,90 +577,97 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </div>
 
           {/* Prompt section */}
-          <div className="border-b p-4">
-            <p className="comet-body-s-accented mb-2 text-foreground">Prompt</p>
-            <div className="rounded-md border bg-soft-background">
-              <div className="flex items-center justify-between border-b px-3 py-1.5">
-                <Button
-                  variant="ghost"
-                  size="2xs"
-                  onClick={() =>
-                    setViewMode((m) => (m === "pretty" ? "raw" : "pretty"))
-                  }
-                >
-                  {viewMode === "pretty" ? (
-                    <>
-                      Pretty <Sparkles className="ml-1 size-3" />
-                    </>
-                  ) : (
-                    <>Raw</>
-                  )}
-                  <ChevronDown className="ml-1 size-3" />
-                </Button>
-                <TooltipWrapper content="Copy prompt">
+          <div className="space-y-1.5 px-4 pb-4">
+            <Label>Prompt</Label>
+            <PromptContentBlock
+              toolbar={
+                <>
                   <Button
-                    variant="minimal"
-                    size="icon-2xs"
-                    onClick={handleCopyPrompt}
+                    variant="ghost"
+                    size="2xs"
+                    onClick={() =>
+                      setViewMode((m) => (m === "pretty" ? "raw" : "pretty"))
+                    }
                   >
-                    <Copy />
+                    {viewMode === "pretty" ? (
+                      <>
+                        Pretty <Sparkles className="ml-1 size-3" />
+                      </>
+                    ) : (
+                      <>Raw</>
+                    )}
+                    <ChevronDown className="ml-1 size-3" />
                   </Button>
-                </TooltipWrapper>
-              </div>
-              <div className={cn("p-3", viewMode === "raw" && "p-0")}>
-                {viewMode === "pretty" ? (
-                  isChatPrompt ? (
-                    <ChatPromptView template={template} />
-                  ) : (
-                    <TextPromptView template={template} />
-                  )
-                ) : isChatPrompt ? (
-                  <CodeHighlighter
-                    data={template}
-                    language={SUPPORTED_LANGUAGE.json}
-                  />
-                ) : (
-                  <pre className="comet-code whitespace-pre-wrap break-words p-3 text-foreground">
-                    {template}
-                  </pre>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Metadata section */}
-          {metadataJson && (
-            <div className="p-4">
-              <p className="comet-body-s-accented mb-2 text-foreground">
-                Metadata
-              </p>
-              <div className="rounded-md border bg-soft-background">
-                <div className="flex items-center justify-between border-b px-3 py-1.5">
-                  <span className="comet-body-xs-accented uppercase tracking-wide text-light-slate">
-                    JSON
-                  </span>
-                  <TooltipWrapper content="Copy metadata">
+                  <TooltipWrapper content="Copy prompt">
                     <Button
                       variant="minimal"
                       size="icon-2xs"
-                      onClick={handleCopyMetadata}
+                      onClick={handleCopyPrompt}
                     >
                       <Copy />
                     </Button>
                   </TooltipWrapper>
-                </div>
+                </>
+              }
+              bodyClassName={cn(
+                viewMode === "raw" && isChatPrompt && "px-0 pb-0",
+              )}
+            >
+              {viewMode === "pretty" ? (
+                isChatPrompt ? (
+                  <ChatPromptView template={template} />
+                ) : (
+                  <TextPromptView template={template} />
+                )
+              ) : isChatPrompt ? (
+                <CodeHighlighter
+                  data={template}
+                  language={SUPPORTED_LANGUAGE.json}
+                />
+              ) : (
+                <pre className="comet-code whitespace-pre-wrap break-words text-foreground">
+                  {template}
+                </pre>
+              )}
+            </PromptContentBlock>
+          </div>
+
+          {/* Metadata section */}
+          {metadataJson && (
+            <div className="space-y-1.5 px-4 pb-4">
+              <Label>Metadata</Label>
+              <PromptContentBlock
+                toolbar={
+                  <>
+                    <span className="comet-body-xs ml-3 uppercase tracking-wide text-foreground">
+                      JSON
+                    </span>
+                    <TooltipWrapper content="Copy metadata">
+                      <Button
+                        variant="minimal"
+                        size="icon-2xs"
+                        onClick={handleCopyMetadata}
+                      >
+                        <Copy />
+                      </Button>
+                    </TooltipWrapper>
+                  </>
+                }
+                bodyClassName="px-0 pb-0"
+              >
                 <CodeHighlighter
                   data={metadataJson}
                   language={SUPPORTED_LANGUAGE.json}
+                  hideCopy
                 />
-              </div>
+              </PromptContentBlock>
             </div>
           )}
         </div>
       </div>
 
-      {/* Right sidebar */}
-      <div className="w-[340px] shrink-0">
+      {/* Right sidebar (visible only on xl+ screens) */}
+      <div className="hidden w-[340px] shrink-0 xl:block">
         <p className="comet-body-s-accented ml-3 mt-1">Version history</p>
         <VersionHistoryTimeline
           items={historyItems}
@@ -462,7 +683,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         templateStructure={prompt.template_structure}
       />
 
-      <EditPromptVersionDialog
+      <EditPromptSheet
         key={editPromptResetKeyRef.current}
         open={openEditPrompt}
         setOpen={handleOpenEditPrompt}
@@ -478,6 +699,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={!!versionToRestore}
         setOpen={(v) => setVersionToRestore(v ? versionToRestore : null)}
         versionToRestore={versionToRestore}
+        versionLabel={
+          versionToRestore
+            ? historyItems.find((h) => h.id === versionToRestore.id)?.label
+            : undefined
+        }
         onSetActiveVersionId={setActiveVersionId}
       />
 
