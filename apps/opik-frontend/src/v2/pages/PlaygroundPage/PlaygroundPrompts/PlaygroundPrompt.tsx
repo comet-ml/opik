@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { FileTerminal, Trash, Save, XCircle } from "lucide-react";
+import { FileTerminal, Trash, Save } from "lucide-react";
 import last from "lodash/last";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -49,6 +49,7 @@ import {
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
+import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
@@ -348,35 +349,18 @@ const PlaygroundPrompt = ({
 
         <div className="flex min-w-0 items-center overflow-hidden pl-4 [@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4">
           {selectedChatPromptId ? (
-            <div className="flex min-w-0 items-center px-1">
-              <TooltipWrapper
-                content={
-                  hasUnsavedChatPromptChanges
-                    ? "Unsaved changes"
-                    : chatPromptData?.name ?? "Loaded prompt"
-                }
-              >
-                <div className="flex min-w-0 items-center gap-1">
-                  <FileTerminal className="size-3.5 shrink-0 text-library-loaded" />
-                  <span className="comet-body-xs-accented truncate text-light-slate">
-                    {chatPromptData?.name ?? "Loaded prompt"}
-                  </span>
-                  {hasUnsavedChatPromptChanges && (
-                    <span className="mb-auto size-1 shrink-0 rounded-full bg-warning" />
-                  )}
-                </div>
-              </TooltipWrapper>
-              <TooltipWrapper content="Detach loaded prompt">
-                <Button
-                  variant="minimal"
-                  size="icon-xs"
-                  className="shrink-0"
-                  onClick={() => handleImportChatPrompt(undefined, undefined)}
-                >
-                  <XCircle />
-                </Button>
-              </TooltipWrapper>
-            </div>
+            <LoadedPromptDisplay
+              name={chatPromptData?.name}
+              templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+              versionLabel={
+                chatPromptData && chatPromptData.version_count > 0
+                  ? `v${chatPromptData.version_count}`
+                  : undefined
+              }
+              versionTags={chatPromptData?.latest_version?.tags}
+              hasUnsavedChanges={hasUnsavedChatPromptChanges}
+              onClear={() => handleImportChatPrompt(undefined, undefined)}
+            />
           ) : (
             <PromptLibraryMenu
               projectId={activeProjectId!}
@@ -410,7 +394,6 @@ const PlaygroundPrompt = ({
                   size="icon-sm"
                   onClick={handleSaveChatPrompt}
                   disabled={!canCreatePrompts && !selectedChatPromptId}
-                  badge={hasUnsavedChatPromptChanges}
                 >
                   <Save />
                 </Button>

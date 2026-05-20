@@ -27,6 +27,7 @@ type CodeHighlighterProps = {
   copyData?: string;
   language?: SUPPORTED_LANGUAGE;
   highlightedLines?: number[];
+  hideCopy?: boolean;
 };
 
 const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
@@ -34,6 +35,7 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
   copyData,
   language = SUPPORTED_LANGUAGE.python,
   highlightedLines,
+  hideCopy = false,
 }) => {
   const theme = useCodemirrorTheme();
   const LineHighlightExtension = useCodemirrorLineHighlight({
@@ -42,13 +44,15 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
 
   return (
     <div className="relative overflow-hidden rounded-md bg-primary-foreground">
-      <div className="absolute right-2 top-0.5 z-10">
-        <CopyButton
-          message="Successfully copied code"
-          text={copyData || data}
-          tooltipText="Copy code"
-        />
-      </div>
+      {!hideCopy && (
+        <div className="absolute right-2 top-0.5 z-10">
+          <CopyButton
+            message="Successfully copied code"
+            text={copyData || data}
+            tooltipText="Copy code"
+          />
+        </div>
+      )}
       <CodeMirror
         theme={theme}
         value={data}

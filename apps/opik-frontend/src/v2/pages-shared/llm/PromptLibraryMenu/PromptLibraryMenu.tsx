@@ -1,10 +1,5 @@
-import React, {
-  ReactElement,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
-import { ChevronRight, Clock, FileTerminal } from "lucide-react";
+import React, { ReactElement, useCallback, useMemo, useState } from "react";
+import { ChevronRight, Clock, GitCommitVertical } from "lucide-react";
 import toLower from "lodash/toLower";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -15,6 +10,7 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import NoOptions from "@/shared/LoadableSelectBox/NoOptions";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
+import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
@@ -33,6 +29,7 @@ type PromptLibraryMenuProps = {
   projectId: string;
   filterByTemplateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   onSelect: (selection: PromptLibrarySelection) => void;
+  onOpenChange?: (open: boolean) => void;
   trigger: ReactElement;
 };
 
@@ -40,6 +37,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
   projectId,
   filterByTemplateStructure,
   onSelect,
+  onOpenChange,
   trigger,
 }) => {
   const [open, setOpen] = useState(false);
@@ -66,10 +64,14 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
     return byStructure.filter((p) => toLower(p.name).includes(q));
   }, [data?.content, filterByTemplateStructure, search]);
 
-  const handleOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (!next) setSearch("");
-  }, []);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      setOpen(next);
+      if (!next) setSearch("");
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
 
   const handleSelect = useCallback(
     (selection: PromptLibrarySelection) => {
@@ -133,7 +135,8 @@ const PromptRow: React.FC<PromptRowProps> = ({ prompt, onSelect }) => {
   const [hoverOpen, setHoverOpen] = useState(false);
 
   const latestStage = pickHighestStage(prompt.latest_version?.tags);
-  const latestLabel = prompt.version_count > 0 ? `v${prompt.version_count}` : "";
+  const latestLabel =
+    prompt.version_count > 0 ? `v${prompt.version_count}` : "";
 
   return (
     <HoverCard
@@ -149,15 +152,17 @@ const PromptRow: React.FC<PromptRowProps> = ({ prompt, onSelect }) => {
           className="comet-body-s flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-primary-foreground"
           onClick={() => onSelect({ promptId: prompt.id })}
         >
-          <FileTerminal className="size-3.5 shrink-0 text-light-slate" />
           <span className="truncate">{prompt.name}</span>
-          {latestLabel && (
-            <span className="comet-body-xs ml-auto flex shrink-0 items-center gap-1 text-light-slate">
-              {latestLabel}
-              {latestStage && <StageTag value={latestStage} size="xs" />}
-            </span>
-          )}
-          <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {latestLabel && (
+              <span className="comet-body-xs flex items-center gap-0.5 text-light-slate">
+                <GitCommitVertical className="size-3.5 shrink-0" />
+                {latestLabel}
+              </span>
+            )}
+            {latestStage && <StageTag value={latestStage} size="xs" />}
+            <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
+          </div>
         </div>
       </HoverCardTrigger>
       <HoverCardContent
@@ -217,9 +222,7 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
 
   if (versions.length === 0) {
     return (
-      <div className="comet-body-xs px-2 py-2 text-light-slate">
-        No versions
-      </div>
+      <div className="comet-body-xs p-2 text-light-slate">No versions</div>
     );
   }
 
@@ -249,6 +252,9 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
               {label}
             </span>
             {stage && <StageTag value={stage} size="xs" />}
+            {version.environment && (
+              <EnvironmentBadge name={version.environment} size="sm" />
+            )}
             <TooltipWrapper
               content={`${formatDate(version.created_at, {
                 utc: true,

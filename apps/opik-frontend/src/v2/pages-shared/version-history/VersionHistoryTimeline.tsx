@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import VersionTagList from "./VersionTagList";
 
 export interface VersionHistoryItem {
@@ -15,6 +16,7 @@ export interface VersionHistoryItem {
   description?: string;
   created_at: string;
   created_by?: string;
+  environment?: string | null;
 }
 
 interface VersionHistoryTimelineProps {
@@ -97,6 +99,11 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
                   {item.label}
                 </span>
                 <VersionTagList tags={item.tags} size="sm" maxWidth={200} />
+                <EnvironmentBadge
+                  name={item.environment}
+                  size="sm"
+                  className="max-w-[120px]"
+                />
               </div>
               {item.description && (
                 <p className="comet-body-xs mt-1.5 flex min-w-0 items-center gap-1 text-light-slate">

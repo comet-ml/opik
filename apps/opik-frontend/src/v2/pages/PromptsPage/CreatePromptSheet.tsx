@@ -3,21 +3,13 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ChevronDown,
-  Code2,
-  Copy,
-  MessagesSquare,
-  Plus,
-  Sparkles,
-} from "lucide-react";
+import { ChevronDown, Copy, Plus, Sparkles } from "lucide-react";
 import copy from "clipboard-copy";
 
 import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
-import { Alert, AlertTitle } from "@/ui/alert";
 import { useToast } from "@/ui/use-toast";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
@@ -162,7 +154,7 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[720px]"
         header={<SheetTopBar variant="form" title={title} />}
       >
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           <div className="space-y-1.5">
             <Label htmlFor="promptName">Name</Label>
             <Input
@@ -208,7 +200,9 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
                 <div className="min-h-[120px] p-3">
                   {promptView === "pretty" ? (
                     template ? (
-                      <MarkdownPreview>{template}</MarkdownPreview>
+                      <MarkdownPreview className="prose-sm">
+                        {template}
+                      </MarkdownPreview>
                     ) : (
                       <span className="comet-body-s text-light-slate">
                         Type your prompt...
@@ -219,7 +213,7 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
                       value={template}
                       onChange={setTemplate}
                       placeholder="Type your prompt..."
-                      className="comet-code"
+                      className="comet-body-s"
                     />
                   )}
                 </div>
@@ -234,70 +228,77 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
 
           {isChatPrompt && (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-0.5">
-                <Label>Chat messages</Label>
-                <Button
-                  variant="ghost"
-                  size="2xs"
-                  onClick={() => {
-                    const next = !showChatRaw;
-                    if (next) {
-                      setChatRaw(
-                        JSON.stringify(
-                          messages.map((m) => ({
-                            role: m.role,
-                            content: m.content,
-                          })),
-                          null,
-                          2,
-                        ),
-                      );
-                      setIsChatRawValid(true);
-                    }
-                    setShowChatRaw(next);
-                  }}
-                >
+              <Label>Chat messages</Label>
+              <div className="rounded-md border bg-soft-background">
+                <div className="flex items-center justify-between border-b px-3 py-1.5">
+                  <Button
+                    variant="ghost"
+                    size="2xs"
+                    onClick={() => {
+                      const next = !showChatRaw;
+                      if (next) {
+                        setChatRaw(
+                          JSON.stringify(
+                            messages.map((m) => ({
+                              role: m.role,
+                              content: m.content,
+                            })),
+                            null,
+                            2,
+                          ),
+                        );
+                        setIsChatRawValid(true);
+                      }
+                      setShowChatRaw(next);
+                    }}
+                  >
+                    {showChatRaw ? (
+                      <>JSON</>
+                    ) : (
+                      <>
+                        Pretty <Sparkles className="ml-1 size-3" />
+                      </>
+                    )}
+                    <ChevronDown className="ml-1 size-3" />
+                  </Button>
+                </div>
+                <div className="p-3">
                   {showChatRaw ? (
-                    <>
-                      <MessagesSquare className="mr-1.5 size-3.5" />
-                      Message view
-                    </>
+                    <ChatPromptRawView
+                      value={chatRaw}
+                      onMessagesChange={setMessages}
+                      onRawValueChange={setChatRaw}
+                      onValidationChange={setIsChatRawValid}
+                    />
                   ) : (
                     <>
-                      <Code2 className="mr-1.5 size-3.5" />
-                      Raw view
+                      <LLMPromptMessages
+                        messages={messages}
+                        onChange={setMessages}
+                        onAddMessage={handleAddMessage}
+                        hidePromptActions={true}
+                        disableMedia={true}
+                        hideAddButton={true}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 w-fit"
+                        onClick={handleAddMessage}
+                        type="button"
+                      >
+                        <Plus className="mr-2 size-4" />
+                        Message
+                      </Button>
                     </>
                   )}
-                </Button>
+                </div>
               </div>
-              {showChatRaw ? (
-                <ChatPromptRawView
-                  value={chatRaw}
-                  onMessagesChange={setMessages}
-                  onRawValueChange={setChatRaw}
-                  onValidationChange={setIsChatRawValid}
-                />
-              ) : (
-                <>
-                  <LLMPromptMessages
-                    messages={messages}
-                    onChange={setMessages}
-                    onAddMessage={handleAddMessage}
-                    hidePromptActions={true}
-                    disableMedia={true}
-                    hideAddButton={true}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 w-fit"
-                    onClick={handleAddMessage}
-                    type="button"
-                  >
-                    <Plus className="mr-2 size-4" />
-                    Message
-                  </Button>
-                </>
+              {showChatRaw && (
+                <p className="comet-body-xs text-light-slate">
+                  Edit chat messages as raw JSON. Must be a valid array with at
+                  least one message containing a role and content.
+                </p>
               )}
             </div>
           )}
@@ -305,8 +306,8 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
           <div className="space-y-1.5">
             <Label>Metadata</Label>
             <div className="rounded-md border bg-soft-background">
-              <div className="flex items-center justify-between border-b px-3 py-1.5">
-                <span className="comet-body-xs-accented uppercase tracking-wide text-light-slate">
+              <div className="flex items-center justify-between border-b py-1.5 pl-6 pr-3">
+                <span className="comet-body-xs uppercase tracking-wide text-foreground">
                   JSON
                 </span>
                 <TooltipWrapper content="Copy metadata">
@@ -329,9 +330,9 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
               </div>
             </div>
             {showInvalidJSON && (
-              <Alert variant="destructive">
-                <AlertTitle>Metadata field is not valid</AlertTitle>
-              </Alert>
+              <p className="comet-body-s text-destructive">
+                Metadata field is not valid
+              </p>
             )}
           </div>
 
