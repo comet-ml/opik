@@ -765,6 +765,18 @@ experimentProjectMigration:
   # idle window and don't churn on every tick.
   schedulerThreadTtl: 10s
 
+# Automation Rule Project Migration configuration
+# Splits multi-project automation rules into per-project copies (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+automationRuleProjectMigration:
+  enabled: false
+  workspacesPerRun: 20
+  interval: 5s
+  startupDelay: 0s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
+
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
 migration:

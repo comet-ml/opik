@@ -55,6 +55,12 @@ public interface WorkspacesService {
 
     long countMigrationSkipped();
 
+    boolean markAutomationRuleMigrationSkipped(String workspaceId, String reason);
+
+    List<String> findAutomationRuleMigrationSkippedWorkspaceIds();
+
+    long countAutomationRuleMigrationSkipped();
+
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
      * table. Runs the blocking JDBI lookup on a bounded-elastic worker; defaults to {@code true}
@@ -165,6 +171,40 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public long countMigrationSkipped() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).countMigrationSkipped());
+    }
+
+    @Override
+    public boolean markAutomationRuleMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updateAutomationRuleMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertAutomationRuleMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updateAutomationRuleMigrationSkippedIfNull(
+                            workspaceId, now, reason, SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
+    }
+
+    @Override
+    public List<String> findAutomationRuleMigrationSkippedWorkspaceIds() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).findAutomationRuleMigrationSkippedWorkspaceIds());
+    }
+
+    @Override
+    public long countAutomationRuleMigrationSkipped() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).countAutomationRuleMigrationSkipped());
     }
 
     @Override

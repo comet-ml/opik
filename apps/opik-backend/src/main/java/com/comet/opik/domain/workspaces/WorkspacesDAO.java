@@ -93,6 +93,34 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE migration_skipped_at IS NOT NULL")
     long countMigrationSkipped();
 
+    @SqlUpdate("""
+            UPDATE workspaces
+            SET automation_rule_project_migration_skipped_at = :skippedAt,
+                automation_rule_project_migration_skip_reason = :reason,
+                last_updated_by = :userName
+            WHERE id = :id AND automation_rule_project_migration_skipped_at IS NULL
+            """)
+    int updateAutomationRuleMigrationSkippedIfNull(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    @SqlUpdate("""
+            INSERT INTO workspaces (id, automation_rule_project_migration_skipped_at,
+                                    automation_rule_project_migration_skip_reason, created_by, last_updated_by)
+            VALUES (:id, :skippedAt, :reason, :userName, :userName)
+            """)
+    void insertAutomationRuleMigrationSkipped(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    @SqlQuery("SELECT id FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
+    List<String> findAutomationRuleMigrationSkippedWorkspaceIds();
+
+    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
+    long countAutomationRuleMigrationSkipped();
+
     /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the
      * workspace row doesn't exist yet — callers treat it as TRUE (safe-include UNION), same as

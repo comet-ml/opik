@@ -22,6 +22,8 @@ public record Workspace(
         Instant firstTraceReportedAt,
         Instant migrationSkippedAt,
         String migrationSkippedReason,
+        Instant automationRuleProjectMigrationSkippedAt,
+        String automationRuleProjectMigrationSkipReason,
         boolean hasLegacyScores,
         Instant createdAt,
         String createdBy,
