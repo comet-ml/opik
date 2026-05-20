@@ -10,6 +10,7 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.DatasetTypeMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -34,6 +35,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(Dataset.class)
 @RegisterConstructorMapper(BiInformationResponse.BiInformation.class)
+@RegisterConstructorMapper(EligibleDatasetWorkspace.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 @RegisterArgumentFactory(DatasetTypeMapper.class)
@@ -266,4 +268,72 @@ public interface DatasetDAO {
     int updateStatus(@Bind("workspace_id") String workspaceId,
             @Bind("id") UUID id,
             @Bind("status") DatasetStatus status);
+
+    /**
+     * Returns workspaces with at least one V1 dataset (project_id IS NULL), ordered by smallest
+     * count first. Dispatches to a variant that also filters excluded workspace IDs when non-empty.
+     */
+    default List<EligibleDatasetWorkspace> findEligibleDatasetMigrationWorkspaces(
+            List<String> demoDatasetNames, Set<String> excludedWorkspaceIds, int limit) {
+        if (CollectionUtils.isEmpty(excludedWorkspaceIds)) {
+            return findEligibleDatasetMigrationWorkspaces(demoDatasetNames, limit);
+        }
+        return findEligibleDatasetMigrationWorkspacesExcluding(demoDatasetNames, excludedWorkspaceIds, limit);
+    }
+
+    @SqlQuery("""
+            SELECT workspace_id, COUNT(*) AS datasets_count
+            FROM datasets
+            WHERE project_id IS NULL
+            AND name NOT IN (<demoDatasetNames>)
+            GROUP BY workspace_id
+            ORDER BY datasets_count ASC, workspace_id ASC
+            LIMIT :limit
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<EligibleDatasetWorkspace> findEligibleDatasetMigrationWorkspaces(
+            @BindList("demoDatasetNames") List<String> demoDatasetNames,
+            @Bind("limit") int limit);
+
+    // FORCE INDEX: without the hint, the `workspace_id NOT IN (...)` predicate causes the
+    // planner to fall back to a full table scan. Forcing the (workspace_id, name) uniqueness
+    // index turns it into a range scan — validated against prod (220k → 170k rows, 1.4s → 0.35s).
+    @SqlQuery("""
+            SELECT workspace_id, COUNT(*) AS datasets_count
+            FROM datasets FORCE INDEX (datasets_workspace_id_name_uk)
+            WHERE project_id IS NULL
+            AND name NOT IN (<demoDatasetNames>)
+            AND workspace_id NOT IN (<excludedWorkspaceIds>)
+            GROUP BY workspace_id
+            ORDER BY datasets_count ASC, workspace_id ASC
+            LIMIT :limit
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<EligibleDatasetWorkspace> findEligibleDatasetMigrationWorkspacesExcluding(
+            @BindList("demoDatasetNames") List<String> demoDatasetNames,
+            @BindList("excludedWorkspaceIds") Set<String> excludedWorkspaceIds,
+            @Bind("limit") int limit);
+
+    @SqlBatch("UPDATE datasets SET project_id = :projectId, last_updated_by = :userName "
+            + "WHERE id = :datasetId AND workspace_id = :workspaceId AND project_id IS NULL")
+    int[] batchSetProjectId(
+            @BindMethods List<DatasetProjectMapping> mappings,
+            @Bind("workspaceId") String workspaceId,
+            @Bind("userName") String userName);
+
+    // V1 dataset IDs in the workspace (excludes demo names). Service uses this to detect the
+    // no-inference bucket — orphans present here but absent from the CH inference result.
+    @SqlQuery("""
+            SELECT id FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND project_id IS NULL
+            AND name NOT IN (<demoDatasetNames>)
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Set<UUID> findOrphanDatasetIdsInWorkspace(
+            @Bind("workspace_id") String workspaceId,
+            @BindList("demoDatasetNames") List<String> demoDatasetNames);
 }

@@ -1409,6 +1409,28 @@ experimentProjectMigration:
   # idle window and don't churn on every tick.
   schedulerThreadTtl: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 
+datasetProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${DATASET_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${DATASET_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of datasets to update per MySQL batch
+  datasetBatchSize: ${DATASET_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${DATASET_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${DATASET_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${DATASET_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${DATASET_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${DATASET_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
 migration:
