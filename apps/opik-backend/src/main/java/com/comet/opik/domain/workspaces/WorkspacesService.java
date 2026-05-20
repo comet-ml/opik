@@ -59,8 +59,6 @@ public interface WorkspacesService {
 
     List<String> findAutomationRuleMigrationSkippedWorkspaceIds();
 
-    long countAutomationRuleMigrationSkipped();
-
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
      * table. Runs the blocking JDBI lookup on a bounded-elastic worker; defaults to {@code true}
@@ -199,12 +197,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public List<String> findAutomationRuleMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).findAutomationRuleMigrationSkippedWorkspaceIds());
-    }
-
-    @Override
-    public long countAutomationRuleMigrationSkipped() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countAutomationRuleMigrationSkipped());
     }
 
     @Override

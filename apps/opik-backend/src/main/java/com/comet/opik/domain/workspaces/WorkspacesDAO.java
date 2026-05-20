@@ -118,9 +118,6 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT id FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
     List<String> findAutomationRuleMigrationSkippedWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE automation_rule_project_migration_skipped_at IS NOT NULL")
-    long countAutomationRuleMigrationSkipped();
-
     /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the
      * workspace row doesn't exist yet — callers treat it as TRUE (safe-include UNION), same as

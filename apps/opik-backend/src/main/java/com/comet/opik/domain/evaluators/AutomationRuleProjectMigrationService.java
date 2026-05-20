@@ -199,6 +199,8 @@ public class AutomationRuleProjectMigrationService {
                     splitCount++;
                     newRuleCount += result.newRulesCreated();
                 }
+                case NO_OP -> log.debug("Rule already single-project (race), ruleId='{}', workspaceId='{}'",
+                        ruleId, workspaceId);
             }
         }
 
@@ -222,34 +224,36 @@ public class AutomationRuleProjectMigrationService {
     }
 
     private SplitResult splitRule(String workspaceId, UUID ruleId) {
+        var junctionProjectIds = transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AutomationRuleProjectsDAO.class)
+                        .findProjectIdsByRuleId(ruleId, workspaceId));
+
+        if (junctionProjectIds.size() <= 1) {
+            return new SplitResult(SplitOutcome.NO_OP, 0);
+        }
+
+        var existingProjects = projectService.findByIds(workspaceId, junctionProjectIds);
+        var validProjectIds = existingProjects.stream()
+                .map(Project::id)
+                .collect(Collectors.toUnmodifiableSet());
+
+        var deletedCount = junctionProjectIds.size() - validProjectIds.size();
+        if (deletedCount > 0) {
+            log.info("Rule has partially deleted projects, ruleId='{}', workspaceId='{}', valid='{}', deleted='{}'",
+                    ruleId, workspaceId, validProjectIds.size(), deletedCount);
+            rulesSkipped.add(deletedCount, SKIP_REASON_PARTIAL_DELETED);
+        }
+
+        if (validProjectIds.isEmpty()) {
+            log.info("All projects deleted for rule, ruleId='{}', workspaceId='{}'", ruleId, workspaceId);
+            rulesSkipped.add(1, SKIP_REASON_ALL_DELETED);
+            return new SplitResult(SplitOutcome.ALL_PROJECTS_DELETED, 0);
+        }
+
+        var sortedProjectIds = new ArrayList<>(new TreeSet<>(validProjectIds));
+
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleMigrationDAO.class);
-            var projectsDao = handle.attach(AutomationRuleProjectsDAO.class);
-
-            var projectIds = projectsDao.findProjectIdsByRuleId(ruleId, workspaceId);
-            if (projectIds.size() <= 1) {
-                return new SplitResult(SplitOutcome.SPLIT, 0);
-            }
-
-            var existingProjects = projectService.findByIds(workspaceId, projectIds);
-            var validProjectIds = existingProjects.stream()
-                    .map(Project::id)
-                    .collect(Collectors.toUnmodifiableSet());
-
-            var deletedCount = projectIds.size() - validProjectIds.size();
-            if (deletedCount > 0) {
-                log.info("Rule has partially deleted projects, ruleId='{}', workspaceId='{}', valid='{}', deleted='{}'",
-                        ruleId, workspaceId, validProjectIds.size(), deletedCount);
-                rulesSkipped.add(deletedCount, SKIP_REASON_PARTIAL_DELETED);
-            }
-
-            if (validProjectIds.isEmpty()) {
-                log.info("All projects deleted for rule, ruleId='{}', workspaceId='{}'", ruleId, workspaceId);
-                rulesSkipped.add(1, SKIP_REASON_ALL_DELETED);
-                return new SplitResult(SplitOutcome.ALL_PROJECTS_DELETED, 0);
-            }
-
-            var sortedProjectIds = new ArrayList<>(new TreeSet<>(validProjectIds));
 
             dao.deleteJunctionByRuleId(ruleId, workspaceId);
 
@@ -295,7 +299,8 @@ public class AutomationRuleProjectMigrationService {
     private enum SplitOutcome {
         SPLIT,
         PARTIAL_DELETED,
-        ALL_PROJECTS_DELETED
+        ALL_PROJECTS_DELETED,
+        NO_OP
     }
 
     private record SplitResult(SplitOutcome outcome, int newRulesCreated) {
