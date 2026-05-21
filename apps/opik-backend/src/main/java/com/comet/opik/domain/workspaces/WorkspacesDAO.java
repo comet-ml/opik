@@ -90,8 +90,50 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT id FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
     List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
-    long countExperimentProjectMigrationSkipped();
+    /**
+     * Atomic NULL → timestamp transition for the prompt-project-migration trap flag. Parallel to
+     * {@link #updateExperimentProjectMigrationSkippedIfNull} but scoped to the prompt cycle's own
+     * column so the two migrations record their traps independently.
+     */
+    @SqlUpdate("""
+            UPDATE workspaces
+            SET prompt_project_migration_skipped_at = :skippedAt,
+                prompt_project_migration_skip_reason = :reason,
+                last_updated_by = :userName
+            WHERE id = :id AND prompt_project_migration_skipped_at IS NULL
+            """)
+    int updatePromptProjectMigrationSkippedIfNull(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    /**
+     * Plain INSERT (no upsert). Paired with {@link #updatePromptProjectMigrationSkippedIfNull}
+     * for the missing-row case, mirroring {@link #insertExperimentProjectMigrationSkipped}.
+     */
+    @SqlUpdate("""
+            INSERT INTO workspaces (
+                id,
+                prompt_project_migration_skipped_at,
+                prompt_project_migration_skip_reason,
+                created_by,
+                last_updated_by
+            )
+            VALUES (
+                :id,
+                :skippedAt,
+                :reason,
+                :userName,
+                :userName
+            )
+            """)
+    void insertPromptProjectMigrationSkipped(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    @SqlQuery("SELECT id FROM workspaces WHERE prompt_project_migration_skipped_at IS NOT NULL")
+    List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
      * Atomic NULL → timestamp transition for the dataset-project-migration-skipped flag. Returns 1 only when
