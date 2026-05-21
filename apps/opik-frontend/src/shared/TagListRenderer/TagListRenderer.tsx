@@ -14,6 +14,7 @@ export type TagListRendererProps = {
   immutableTags?: string[];
   onAddTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
+  onClickTag?: (tag: string) => void;
   align?: "start" | "end";
   size?: "md" | "sm";
   className?: string;
@@ -30,6 +31,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   immutableTags = [],
   onAddTag,
   onDeleteTag,
+  onClickTag,
   align = "end",
   size = "md",
   className,
@@ -89,6 +91,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
           key={`immutable-${tag}`}
           size="md"
           variant={tagVariant}
+          onClick={onClickTag}
         />
       ))}
       {[...tags].sort().map((tag) => (
@@ -97,6 +100,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
           key={tag}
           size="md"
           variant={tagVariant}
+          onClick={onClickTag}
           onDelete={() => onDeleteTag(tag)}
         />
       ))}

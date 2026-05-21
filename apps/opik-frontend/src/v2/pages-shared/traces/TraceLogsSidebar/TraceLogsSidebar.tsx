@@ -44,6 +44,8 @@ import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
+import { buildDynamicTagColumns } from "@/lib/tags";
+import { generateTagFilter } from "@/lib/filters";
 import { BaseTraceData, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
@@ -378,6 +380,7 @@ const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
 const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
 const COLUMNS_METADATA_ORDER_KEY_SUFFIX = "metadata-columns-order";
+const COLUMNS_TAGS_ORDER_KEY_SUFFIX = "tag-columns-order";
 const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
 const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
 const ROW_HEIGHT_KEY_SUFFIX = "row-height";
@@ -476,12 +479,16 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [filters = [], setFilters] = useQueryParam(
+  const [rawFilters = [], setFilters] = useQueryParam(
     `${TLS_QUERY_PREFIX}filters`,
     JsonParam,
     {
       updateType: "replaceIn",
     },
+  );
+  const filters = useMemo(
+    () => (Array.isArray(rawFilters) ? (rawFilters as Filter[]) : []),
+    [rawFilters],
   );
 
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
@@ -643,6 +650,23 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setFilters([]);
   }, [setSearch, setFilters]);
 
+  const handleTagClick = useCallback(
+    (tag: string) => {
+      const tagFilterExists = filters.some(
+        (filter) =>
+          filter.field === "tags" &&
+          filter.operator === "contains" &&
+          filter.value === tag,
+      );
+
+      if (!tagFilterExists) {
+        setFilters([...filters, ...generateTagFilter(tag)]);
+        setPage(1);
+      }
+    },
+    [filters, setFilters, setPage],
+  );
+
   const rows: Array<Trace> = useMemo(
     () => (data?.content as Trace[]) ?? [],
     [data?.content],
@@ -690,6 +714,13 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     defaultValue: [COLUMN_METADATA_ID],
   });
 
+  const [tagColumnsOrder, setTagColumnsOrder] = useLocalStorageState<string[]>(
+    `${TLS_STORAGE_PREFIX}${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
+    {
+      defaultValue: [],
+    },
+  );
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(`${TLS_STORAGE_PREFIX}${COLUMNS_WIDTH_KEY_SUFFIX}`, {
@@ -711,6 +742,10 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     const normalizedPaths = normalizeMetadataPaths(paths);
     return buildDynamicMetadataColumns(normalizedPaths);
   }, [metadataPaths]);
+
+  const dynamicTagColumns = useMemo(() => {
+    return buildDynamicTagColumns(rows.flatMap((row) => row.tags ?? []));
+  }, [rows]);
 
   const dynamicColumnsIds = useMemo(
     () => dynamicScoresColumns.map((c) => c.id),
@@ -764,6 +799,18 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       };
     }) as ColumnData<BaseTraceData>[];
   }, [dynamicMetadataColumns]);
+
+  const tagColumnsData = useMemo(() => {
+    return dynamicTagColumns.map(({ label, id, columnType }) => {
+      return {
+        id,
+        label,
+        type: columnType,
+        sortable: false,
+        accessorFn: (row) => (row.tags?.includes(label) ? "Yes" : "-"),
+      } as ColumnData<BaseTraceData>;
+    });
+  }, [dynamicTagColumns]);
 
   const selectedRows: Array<Trace> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -820,6 +867,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           sortableColumns: sortableBy,
         },
       ),
+      ...convertColumnDataToColumn<BaseTraceData, Trace>(tagColumnsData, {
+        columnsOrder: tagColumnsOrder,
+        selectedColumns,
+        sortableColumns: sortableBy,
+      }),
     ];
   }, [
     sortableBy,
@@ -829,6 +881,8 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     scoresColumnsOrder,
     metadataColumnsData,
     metadataColumnsOrder,
+    tagColumnsData,
+    tagColumnsOrder,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -914,6 +968,15 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       });
     }
 
+    if (tagColumnsData.length > 0) {
+      sections.push({
+        title: "Tag values",
+        columns: tagColumnsData,
+        order: tagColumnsOrder,
+        onOrderChange: setTagColumnsOrder,
+      });
+    }
+
     return sections;
   }, [
     scoresColumnsData,
@@ -922,7 +985,18 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     metadataColumnsData,
     metadataColumnsOrder,
     setMetadataColumnsOrder,
+    tagColumnsData,
+    tagColumnsOrder,
+    setTagColumnsOrder,
   ]);
+
+  const dynamicColumnIdsExcludedFromSelectAll = useMemo(
+    () => [
+      ...metadataColumnsData.map((col) => col.id),
+      ...tagColumnsData.map((col) => col.id),
+    ],
+    [metadataColumnsData, tagColumnsData],
+  );
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -990,11 +1064,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 order={columnsOrder}
                 onOrderChange={setColumnsOrder}
                 sections={columnSections}
-                excludeFromSelectAll={
-                  metadataColumnsData.length > 0
-                    ? metadataColumnsData.map((col) => col.id)
-                    : []
-                }
+                excludeFromSelectAll={dynamicColumnIdsExcludedFromSelectAll}
               ></ColumnsButton>
             </div>
           </div>
@@ -1064,6 +1134,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           onClose={handleClose}
           onRowChange={handleRowChange}
           container={sheetContentRef}
+          onClickTag={handleTagClick}
         />
       </SheetContent>
     </Sheet>

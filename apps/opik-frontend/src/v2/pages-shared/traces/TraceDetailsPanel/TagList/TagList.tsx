@@ -14,6 +14,7 @@ type TagListProps = {
   spanId?: string;
   className?: string;
   tagVariant?: TagProps["variant"];
+  onClickTag?: (tag: string) => void;
 };
 
 const TagList: React.FunctionComponent<TagListProps> = ({
@@ -24,6 +25,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   spanId,
   tagVariant,
   className,
+  onClickTag,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const traceUpdateMutation = useTraceUpdateMutation();
@@ -87,6 +89,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       className={className}
       canAdd={canLogTraceSpanThread}
       tagVariant={tagVariant}
+      onClickTag={onClickTag}
     />
   );
 };

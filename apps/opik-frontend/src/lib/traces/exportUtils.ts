@@ -2,6 +2,7 @@ import first from "lodash/first";
 import get from "lodash/get";
 import { Trace, Span, Thread } from "@/types/traces";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
+import { TAG_COLUMN_PREFIX } from "@/lib/tags";
 
 export const TRACE_EXPORT_COLUMNS = [
   "id",
@@ -56,6 +57,9 @@ export async function mapRowDataForExport(
         if (scoreObject && scoreObject.reason) {
           acc[`${column}_reason`] = scoreObject.reason;
         }
+      } else if (column.startsWith(TAG_COLUMN_PREFIX)) {
+        const tag = column.replace(TAG_COLUMN_PREFIX, "");
+        acc[column] = row.tags?.includes(tag) ? "Yes" : "-";
       } else {
         acc[column] = get(row, keys, "");
       }

@@ -101,6 +101,7 @@ type TraceDetailsPanelProps = {
   onRowChange?: (shift: number) => void;
   container?: HTMLElement | null;
   refetchInterval?: number | false;
+  onClickTag?: (tag: string) => void;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -116,6 +117,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onRowChange,
   container,
   refetchInterval,
+  onClickTag,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -371,6 +373,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
+                    onClickTag={onClickTag}
                   />
                 )}
               </div>

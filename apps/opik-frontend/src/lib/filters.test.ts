@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDatasetFilterColumns,
+  generateTagFilter,
   transformDataColumnFilters,
 } from "./filters";
 import {
@@ -131,5 +132,17 @@ describe("transformDataColumnFilters", () => {
     expect(result[0]).toMatchObject({ field: COLUMN_DATA_ID, key: "input" });
     expect(result[1]).toMatchObject({ field: "tags", key: "" });
     expect(result[2]).toMatchObject({ field: COLUMN_DATA_ID, key: "score" });
+  });
+});
+
+describe("generateTagFilter", () => {
+  it("generates a tags contains filter", () => {
+    expect(generateTagFilter("myprotein-en-gb")[0]).toMatchObject({
+      field: "tags",
+      type: COLUMN_TYPE.list,
+      operator: "contains",
+      key: "",
+      value: "myprotein-en-gb",
+    });
   });
 });

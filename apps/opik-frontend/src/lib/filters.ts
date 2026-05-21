@@ -123,6 +123,17 @@ export const generateEnvironmentFilter = (
   ];
 };
 
+export const generateTagFilter = (tag: string): Filter[] => {
+  return [
+    createFilter({
+      field: "tags",
+      type: COLUMN_TYPE.list,
+      operator: "contains",
+      value: tag,
+    }),
+  ];
+};
+
 export const generatePromptFilters = (promptId?: string) => {
   if (!promptId) return undefined;
 

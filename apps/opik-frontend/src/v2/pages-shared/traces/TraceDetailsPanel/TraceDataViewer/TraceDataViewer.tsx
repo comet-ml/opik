@@ -51,6 +51,7 @@ type TraceDataViewerProps = {
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
   search?: string;
+  onClickTag?: (tag: string) => void;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -62,6 +63,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   setActiveSection,
   isSpansLazyLoading,
   search,
+  onClickTag,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread },
@@ -264,6 +266,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             tagVariant={
               TAG_VARIANT_BY_TRACE_TYPE[type as BASE_TRACE_DATA_TYPE] ?? "gray"
             }
+            onClickTag={onClickTag}
           />
         </div>
 

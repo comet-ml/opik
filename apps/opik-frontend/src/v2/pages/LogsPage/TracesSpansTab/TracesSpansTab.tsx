@@ -51,12 +51,14 @@ import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import {
   ENVIRONMENT_UNTAGGED_VALUE,
   generateEnvironmentFilter,
+  generateTagFilter,
 } from "@/lib/filters";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
+import { buildDynamicTagColumns } from "@/lib/tags";
 import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
@@ -132,7 +134,7 @@ import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSumma
 const getRowId = (d: Trace | Span) => d.id;
 
 const REFETCH_INTERVAL = 30000;
-const EMPTY_FILTERS: unknown[] = [];
+const EMPTY_FILTERS: Filter[] = [];
 
 const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
 
@@ -364,6 +366,7 @@ const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
 const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
 const COLUMNS_METADATA_ORDER_KEY_SUFFIX = "metadata-columns-order";
+const COLUMNS_TAGS_ORDER_KEY_SUFFIX = "tag-columns-order";
 const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
 const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
 const ROW_HEIGHT_KEY_SUFFIX = "row-height";
@@ -460,7 +463,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [rawFilters, setFilters] = useQueryParam(`${type}_filters`, JsonParam, {
     updateType: "replaceIn",
   });
-  const filters = Array.isArray(rawFilters) ? rawFilters : EMPTY_FILTERS;
+  const filters = Array.isArray(rawFilters)
+    ? (rawFilters as Filter[])
+    : EMPTY_FILTERS;
 
   const { data: environmentsData } = useEnvironmentsList();
 
@@ -735,6 +740,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setPage(1);
   }, [setSearch, setFilters, setEnvironment, setPage]);
 
+  const handleTagClick = useCallback(
+    (tag: string) => {
+      const tagFilterExists = filters.some(
+        (filter) =>
+          filter.field === "tags" &&
+          filter.operator === "contains" &&
+          filter.value === tag,
+      );
+
+      if (!tagFilterExists) {
+        setFilters([...filters, ...generateTagFilter(tag)]);
+        setPage(1);
+      }
+    },
+    [filters, setFilters, setPage],
+  );
+
   const rows: Array<Span | Trace> = useMemo(
     () => data?.content ?? [],
     [data?.content],
@@ -786,6 +808,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     defaultValue: [COLUMN_METADATA_ID],
   });
 
+  const [tagColumnsOrder, setTagColumnsOrder] = useLocalStorageState<string[]>(
+    `${type}-${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
+    {
+      defaultValue: [],
+    },
+  );
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(`${type}-${COLUMNS_WIDTH_KEY_SUFFIX}`, {
@@ -818,6 +847,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     const normalizedPaths = normalizeMetadataPaths(paths);
     return buildDynamicMetadataColumns(normalizedPaths);
   }, [metadataPaths]);
+
+  const dynamicTagColumns = useMemo(() => {
+    return buildDynamicTagColumns(rows.flatMap((row) => row.tags ?? []));
+  }, [rows]);
 
   // Only include feedback scores in dynamic columns cache (auto-selects new ones)
   // Metadata columns are NOT auto-selected - users must manually choose them
@@ -914,6 +947,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
     return fieldColumns;
   }, [dynamicMetadataColumns]);
+
+  const tagColumnsData = useMemo(() => {
+    return dynamicTagColumns.map(({ label, id, columnType }) => {
+      return {
+        id,
+        label,
+        type: columnType,
+        sortable: false,
+        accessorFn: (row) => (row.tags?.includes(label) ? "Yes" : "-"),
+      } as ColumnData<BaseTraceData>;
+    });
+  }, [dynamicTagColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -1205,6 +1250,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           sortableColumns: sortableBy,
         },
       ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        tagColumnsData,
+        {
+          columnsOrder: tagColumnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
     ];
   }, [
     sortableBy,
@@ -1215,6 +1268,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     scoresColumnsOrder,
     metadataColumnsData,
     metadataColumnsOrder,
+    tagColumnsData,
+    tagColumnsOrder,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -1292,6 +1347,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       });
     }
 
+    if (tagColumnsData.length > 0) {
+      sections.push({
+        title: "Tag values",
+        columns: tagColumnsData,
+        order: tagColumnsOrder,
+        onOrderChange: setTagColumnsOrder,
+      });
+    }
+
     return sections;
   }, [
     scoresColumnsData,
@@ -1300,7 +1364,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsData,
     metadataColumnsOrder,
     setMetadataColumnsOrder,
+    tagColumnsData,
+    tagColumnsOrder,
+    setTagColumnsOrder,
   ]);
+
+  const dynamicColumnIdsExcludedFromSelectAll = useMemo(
+    () => [
+      ...metadataColumnsData.map((col) => col.id),
+      ...tagColumnsData.map((col) => col.id),
+    ],
+    [metadataColumnsData, tagColumnsData],
+  );
 
   return (
     <>
@@ -1397,11 +1472,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 onOrderChange={setColumnsOrder}
                 sections={columnSections}
                 layout="labeled"
-                excludeFromSelectAll={
-                  metadataColumnsData.length > 0
-                    ? metadataColumnsData.map((col) => col.id)
-                    : []
-                }
+                excludeFromSelectAll={dynamicColumnIdsExcludedFromSelectAll}
               />
               <Separator orientation="vertical" className="mx-1 h-6" />
               <RefreshButton
@@ -1511,6 +1582,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         open={Boolean(traceId) && !threadId}
         onClose={handleClose}
         onRowChange={handleRowChange}
+        onClickTag={handleTagClick}
       />
       <ThreadDetailsPanel
         projectId={projectId}
