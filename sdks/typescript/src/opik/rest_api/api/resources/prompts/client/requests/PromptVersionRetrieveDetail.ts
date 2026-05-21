@@ -9,8 +9,10 @@
 export interface PromptVersionRetrieveDetail {
     name: string;
     commit?: string;
-    /** If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit */
+    /** If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit and version_number */
     environment?: string;
+    /** If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment */
+    versionNumber?: string;
     /** If provided, scopes the search to the specified project */
     projectName?: string;
 }

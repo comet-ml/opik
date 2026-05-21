@@ -100,20 +100,20 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## ${{ env.INTEGRATION }} Build" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Is Release:** ${{ env.IS_RELEASE }}" >> $GITHUB_STEP_SUMMARY
+          echo "## ${{ env.INTEGRATION }} Build" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Version:** ${{ steps.build_publish.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Event:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Is Release:** ${{ env.IS_RELEASE }}" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ env.IS_RELEASE }}" = "true" ]; then
-            echo "**Published:** ✅ Published to NPM" >> $GITHUB_STEP_SUMMARY
-            echo "**Package:** 📦 ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "**NPM:** 🔗 https://www.npmjs.com/package/${{ steps.build_publish.outputs.package_name }}/v/${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Install with:**" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "npm install ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Published:** ✅ Published to NPM" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Package:** 📦 ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "**NPM:** 🔗 https://www.npmjs.com/package/${{ steps.build_publish.outputs.package_name }}/v/${{ steps.build_publish.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Install with:**" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+            echo "npm install ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "**Status:** ⏭️ Build and tests only" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** ⏭️ Build and tests only" >> "$GITHUB_STEP_SUMMARY"
           fi

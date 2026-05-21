@@ -1728,10 +1728,11 @@ public class ExperimentDAO {
             """;
 
     /**
-     * Returns workspaces with at least one eligible orphan experiment, ordered by smallest
-     * count first. An experiment is eligible when its latest row has {@code project_id = ''}
-     * (checked via {@code argMax} in HAVING — see {@link #HAS_VERSION1_EXPERIMENTS}) and all
-     * its linked traces resolve to a single non-empty project.
+     * Returns workspaces with at least one orphan experiment, ordered by smallest count first.
+     * An experiment is orphan when its latest row has {@code project_id = ''} — dedup against the
+     * {@code ReplacingMergeTree} versions via {@code GROUP BY id + argMax(project_id, last_updated_at)}.
+     * Demo names and the env-excluded workspaces are filtered out at the DB so the service only
+     * iterates workspaces it can actually migrate.
      */
     private static final String FIND_ELIGIBLE_EXPERIMENT_WORKSPACES = """
             SELECT
@@ -1742,18 +1743,12 @@ public class ExperimentDAO {
                     e.workspace_id AS workspace_id,
                     e.id AS id
                 FROM experiments e
-                INNER JOIN experiment_items ei
-                    ON e.workspace_id = ei.workspace_id AND e.id = ei.experiment_id
-                INNER JOIN traces t
-                    ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
                 WHERE e.name NOT IN :demo_experiment_names
-                AND t.project_id != ''
                 <if(excluded_workspace_ids)>
                 AND e.workspace_id NOT IN :excluded_workspace_ids
                 <endif>
                 GROUP BY e.workspace_id, e.id
-                HAVING count(DISTINCT t.project_id) = 1
-                AND argMax(e.project_id, e.last_updated_at) = ''
+                HAVING argMax(e.project_id, e.last_updated_at) = ''
             )
             GROUP BY workspace_id
             ORDER BY experiments_count ASC
@@ -1762,24 +1757,35 @@ public class ExperimentDAO {
             """;
 
     /**
-     * For one workspace, returns each eligible experiment id and the (single) trace project_id
-     * to migrate it to. Same dedup pattern as {@link #FIND_ELIGIBLE_EXPERIMENT_WORKSPACES}.
+     * For each orphan experiment in a workspace, returns the trace-derived classification:
+     * {@code project_id} is any non-empty trace project_id (meaningful only when
+     * {@code project_count = 1}); {@code project_count} is the distinct count of non-empty trace
+     * project_ids — {@code 0} = no inference, {@code 1} = certain, {@code > 1} = ambiguous.
+     *
+     * <p>The {@code CAST(t.project_id AS String)} converts away from {@code FixedString(36)},
+     * whose LEFT JOIN no-match default (36 NUL bytes, not {@code ''}) would slip past the
+     * {@code != ''} guard and trip the downstream UUID parser.
      */
     private static final String COMPUTE_EXPERIMENT_PROJECT_MAPPING = """
             SELECT
                 e.id AS experiment_id,
-                any(t.project_id) AS project_id
+                anyIf(et.project_id, et.project_id != '') AS project_id,
+                countDistinctIf(et.project_id, et.project_id != '') AS project_count
             FROM experiments e
-            INNER JOIN experiment_items ei
-                ON e.workspace_id = ei.workspace_id AND e.id = ei.experiment_id
-            INNER JOIN traces t
-                ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
+            LEFT JOIN (
+                SELECT
+                    ei.workspace_id,
+                    ei.experiment_id,
+                    CAST(t.project_id AS String) AS project_id
+                FROM experiment_items ei
+                INNER JOIN traces t
+                    ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
+                WHERE ei.workspace_id = :workspace_id
+            ) et ON e.workspace_id = et.workspace_id AND e.id = et.experiment_id
             WHERE e.workspace_id = :workspace_id
             AND e.name NOT IN :demo_experiment_names
-            AND t.project_id != ''
             GROUP BY e.id
-            HAVING count(DISTINCT t.project_id) = 1
-            AND argMax(e.project_id, e.last_updated_at) = ''
+            HAVING argMax(e.project_id, e.last_updated_at) = ''
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -2864,14 +2870,18 @@ public class ExperimentDAO {
     Flux<ExperimentProjectMapping> computeExperimentProjectMapping() {
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(COMPUTE_EXPERIMENT_PROJECT_MAPPING,
-                    "compute_certain_experiment_project_mapping", workspaceId, userName, "");
+                    "compute_experiment_project_mapping", workspaceId, userName, "");
             var statement = connection.createStatement(template.render())
                     .bind("demo_experiment_names", DemoData.EXPERIMENTS);
             return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
         }))
                 .flatMap(result -> result.map((row, metadata) -> ExperimentProjectMapping.builder()
                         .experimentId(UUID.fromString(row.get("experiment_id", String.class)))
-                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .projectId(Optional.ofNullable(row.get("project_id", String.class))
+                                .filter(StringUtils::isNotBlank)
+                                .map(UUID::fromString)
+                                .orElse(null))
+                        .projectCount(row.get("project_count", Long.class))
                         .build()));
     }
 

@@ -16,7 +16,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -DskipTests
 
 ###############################
-FROM amazoncorretto:21.0.10-al2023
+FROM amazoncorretto:21.0.11-al2023
 
 # Add metadata labels
 LABEL org.opencontainers.image.title="Opik Backend"

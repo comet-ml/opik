@@ -37,6 +37,28 @@ export const LLM_MESSAGE_ROLE_NAME_MAP = {
   [LLM_MESSAGE_ROLE.tool_execution_result]: "Tool execution result",
 };
 
+/**
+ * Trace-scope online-evaluator variables whose source path is a reserved sentinel
+ * rather than a JSONPath against the trace. Applies to BOTH rule types:
+ *
+ * - LLM-as-judge: `{{spans}}` in a trace prompt auto-maps to `spans → spans`;
+ *   the backend's OnlineScoringEngine substitutes the JSON-serialized spans
+ *   list at render time.
+ * - Python metric: a `score(self, spans, ...)` parameter named `spans`
+ *   auto-maps to `spans → spans`; the backend opts into a SpanService fetch
+ *   when `arguments.containsKey("spans")` and injects a `List<Span>` as the
+ *   `spans` kwarg at evaluation time.
+ *
+ * Trace-scope only. Span scope doesn't have sub-spans to inject; thread scope
+ * uses `{{context}}` for the traces list and would need a different design for
+ * spans (whose spans?).
+ */
+export const RESERVED_TRACE_EVALUATOR_VARIABLES: Readonly<
+  Record<string, string>
+> = Object.freeze({
+  spans: "spans",
+});
+
 export const DEFAULT_OPEN_AI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 4000,
