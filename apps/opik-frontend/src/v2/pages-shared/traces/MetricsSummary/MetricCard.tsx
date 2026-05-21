@@ -117,6 +117,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
                   selected ? "text-foreground" : "text-muted-slate",
                   value === "N/A" && "comet-body-xs text-light-slate",
                 )}
+                data-testid={testId ? `${testId}-value` : undefined}
               >
                 {value}
               </span>

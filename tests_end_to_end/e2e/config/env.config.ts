@@ -78,12 +78,21 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
 
   const apiKey = env.OPIK_API_KEY ?? null;
 
-  // For cloud/self-hosted, accept either a pre-set API key (typical for
-  // power-user / CI debugging) OR username+password (typical for fresh CI
-  // runs — globalSetup will exchange these for an API key + storage state).
+  // For cloud/self-hosted we always need a way to mint a browser session,
+  // because the UI sits behind an auth wall. Two paths:
+  //   1. (Canonical CI path) OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD —
+  //      globalSetup logs in once per run and persists .auth/user.json.
+  //   2. (Power-user debug path) OPIK_API_KEY + a pre-captured .auth/user.json
+  //      on disk — globalSetup detects the file and skips the login round-trip.
+  // The presence of .auth/user.json can't be checked here (this module is
+  // imported from many places, some before global-setup runs), so we accept
+  // either signal and let globalSetup throw a specific error if neither path
+  // can produce a usable storage state.
   if (deployment !== 'oss' && !apiKey && (!userEmail || !userPassword)) {
     throw new Error(
-      `${deployment} deployment requires either OPIK_API_KEY OR (OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD); none provided`,
+      `${deployment} deployment requires OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD ` +
+        '(canonical CI path) — or OPIK_API_KEY plus a pre-captured .auth/user.json ' +
+        '(local debug path). None provided.',
     );
   }
 

@@ -57,16 +57,26 @@ async function authenticateAndPersist(env: EnvConfig): Promise<void> {
     return;
   }
 
-  // If the caller already has an API key AND a captured storage state, trust
-  // them and skip the login round-trip. (Useful for debugging against a
-  // captured session.)
   const haveStorageState = await fileExists(AUTH_STATE_FILE);
+  const haveLoginCreds = Boolean(env.userEmail && env.userPassword);
+
+  // Power-user debug path: API key plus a pre-captured storage state on disk.
+  // Trust both and skip the login round-trip.
   if (env.apiKey && haveStorageState) {
     console.log('[global-setup] using pre-set OPIK_API_KEY + existing .auth/user.json');
     return;
   }
 
-  if (!env.userEmail || !env.userPassword) {
+  // Canonical CI path requires email+password to mint fresh storage state.
+  if (!haveLoginCreds) {
+    if (env.apiKey && !haveStorageState) {
+      throw new Error(
+        'global-setup: OPIK_API_KEY is set but no .auth/user.json was captured; ' +
+          'the UI tests need a browser session. Either supply ' +
+          'OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD so global-setup can log in, ' +
+          'or pre-capture .auth/user.json locally and commit-ignore it.',
+      );
+    }
     throw new Error(
       'global-setup: cloud auth requires OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD',
     );

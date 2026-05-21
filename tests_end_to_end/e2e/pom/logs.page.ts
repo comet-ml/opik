@@ -27,12 +27,16 @@ export class LogsPage {
   }
 
   async countTraces(): Promise<number> {
-    const card = this.page.getByTestId('metrics-card-count');
-    if (await card.isVisible().catch(() => false)) {
-      const text = (await card.textContent()) ?? '';
+    // Prefer the value-only testid so we never accidentally parse the delta
+    // (e.g. "+5.0%") that the card also renders.
+    const valueEl = this.page.getByTestId('metrics-card-count-value');
+    if (await valueEl.isVisible().catch(() => false)) {
+      const text = (await valueEl.textContent()) ?? '';
       const digits = text.replace(/\D/g, '');
       if (digits) return Number(digits);
     }
+    // Fallback for staging deploys that don't yet have the value-only testid:
+    // pull the count out of the "Traces N" stat text in the body.
     const handle = await this.page.waitForFunction(() => {
       const txt = document.body.innerText;
       const m = txt.match(/Traces\s+(\d+)/i);
