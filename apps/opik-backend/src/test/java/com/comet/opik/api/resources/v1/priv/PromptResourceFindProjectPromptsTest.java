@@ -50,6 +50,7 @@ import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.resources.PromptTestAssertions.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
@@ -67,8 +68,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class PromptResourceFindProjectPromptsTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
-    public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "requestedVersion", "template", "metadata",
-            "changeDescription", "type", "projectName"};
 
     private static final String USER = UUID.randomUUID().toString();
 

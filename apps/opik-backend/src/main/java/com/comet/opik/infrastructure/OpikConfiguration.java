@@ -135,6 +135,10 @@ public class OpikConfiguration extends JobConfiguration {
             .build();
 
     @Valid @NotNull @JsonProperty
+    private PromptProjectMigrationConfig promptProjectMigration = PromptProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
 
     @Valid @NotNull @JsonProperty

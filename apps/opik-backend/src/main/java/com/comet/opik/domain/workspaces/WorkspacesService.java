@@ -53,7 +53,14 @@ public interface WorkspacesService {
 
     List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    long countExperimentProjectMigrationSkipped();
+    /**
+     * Prompt-cycle parallel of {@link #markExperimentProjectMigrationSkipped}, recording the trap
+     * in the dedicated {@code prompt_project_migration_skipped_at} column so the experiment trap
+     * state isn't disturbed.
+     */
+    boolean markPromptProjectMigrationSkipped(String workspaceId, String reason);
+
+    List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
      * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
@@ -176,9 +183,30 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     @Override
-    public long countExperimentProjectMigrationSkipped() {
+    public boolean markPromptProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertPromptProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
+    }
+
+    @Override
+    public List<String> findPromptProjectMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countExperimentProjectMigrationSkipped());
+                handle -> handle.attach(WorkspacesDAO.class).findPromptProjectMigrationSkippedWorkspaceIds());
     }
 
     /**
