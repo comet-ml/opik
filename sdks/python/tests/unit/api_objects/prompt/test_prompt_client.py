@@ -60,13 +60,14 @@ class TestPromptClientEndpointSelection:
     def test_create_new_prompt_with_container_params_calls_create_prompt(
         self, client, mock_rest_client
     ):
-        """When creating a new prompt with id/description/tags, should call create_prompt endpoint."""
+        """When creating a new prompt with id/description/tags, should call create_prompt endpoint.
+        Also asserts that version_number survives the tag-rebuild branch."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             _make_404_error(),
-            _make_mock_version(),
+            _make_mock_version(tags=None),
         ]
 
-        client.create_prompt(
+        result = client.create_prompt(
             name="test-prompt",
             prompt="test template",
             metadata=None,
@@ -84,17 +85,20 @@ class TestPromptClientEndpointSelection:
         assert call_kwargs["id"] == "custom-id"
         assert call_kwargs["description"] == "A test prompt"
         assert call_kwargs["tags"] == ["test", "unit"]
+        assert result.version_number == "v1"
+        assert result.tags == ["test", "unit"]
 
     def test_create_new_prompt_without_container_params_calls_create_version(
         self, client, mock_rest_client
     ):
-        """When creating a new prompt without id/description/tags, should call create_prompt_version."""
+        """When creating a new prompt without id/description/tags, should call create_prompt_version.
+        Also asserts that version_number from the create response is surfaced."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
         mock_rest_client.prompts.create_prompt_version.return_value = (
             _make_mock_version()
         )
 
-        client.create_prompt(
+        result = client.create_prompt(
             name="test-prompt",
             prompt="test template",
             metadata=None,
@@ -103,6 +107,7 @@ class TestPromptClientEndpointSelection:
 
         mock_rest_client.prompts.create_prompt_version.assert_called_once()
         mock_rest_client.prompts.create_prompt.assert_not_called()
+        assert result.version_number == "v1"
 
     def test_update_existing_prompt_always_calls_create_version(
         self, client, mock_rest_client
@@ -170,13 +175,15 @@ class TestPromptClientEndpointSelection:
     def test_create_new_prompt_with_only_tags_calls_create_prompt(
         self, client, mock_rest_client
     ):
-        """When creating a new prompt with only tags parameter, should call create_prompt."""
+        """When creating a new prompt with only tags parameter, should call create_prompt.
+        Tags-only takes the rebuild branch — assert version_number survives it
+        (regression for the bug where tag injection dropped version_number)."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             _make_404_error(),
-            _make_mock_version(),
+            _make_mock_version(tags=None),
         ]
 
-        client.create_prompt(
+        result = client.create_prompt(
             name="test-prompt",
             prompt="test template",
             metadata=None,
@@ -186,74 +193,8 @@ class TestPromptClientEndpointSelection:
 
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
-
-
-class TestCreatePromptPreservesVersionNumber:
-    """Regression tests for the bug where create_prompt returned version=None
-    on the first version when the container-create path rebuilt the frozen
-    PromptVersionDetail to inject tags and dropped version_number in the process.
-    See test_prompt__create__first_version_exposes_version_number (e2e)."""
-
-    def test_first_version_with_tags_surfaces_version_number(
-        self, client, mock_rest_client
-    ):
-        """create_prompt + retrieve_prompt_version path: retrieve returns
-        version_number='v1' but tags=None, so the SDK rebuilds the detail
-        to inject tags. version_number must survive the rebuild."""
-        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            _make_404_error(),
-            _make_mock_version(version_number="v1", tags=None),
-        ]
-
-        result = client.create_prompt(
-            name="test-prompt",
-            prompt="test template",
-            metadata=None,
-            type=prompt_types.PromptType.MUSTACHE,
-            tags=["a"],
-        )
-
         assert result.version_number == "v1"
-        assert result.tags == ["a"]
-
-    def test_first_version_with_description_only_keeps_version_number(
-        self, client, mock_rest_client
-    ):
-        """description-only path does not trigger the tag rebuild branch but
-        must still surface version_number from the retrieve response."""
-        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            _make_404_error(),
-            _make_mock_version(version_number="v1"),
-        ]
-
-        result = client.create_prompt(
-            name="test-prompt",
-            prompt="test template",
-            metadata=None,
-            type=prompt_types.PromptType.MUSTACHE,
-            description="d",
-        )
-
-        assert result.version_number == "v1"
-
-    def test_first_version_without_extras_surfaces_version_number(
-        self, client, mock_rest_client
-    ):
-        """No id/description/tags → create_prompt_version path. version_number
-        from the create response must reach the returned detail unchanged."""
-        mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
-        mock_rest_client.prompts.create_prompt_version.return_value = (
-            _make_mock_version(version_number="v1")
-        )
-
-        result = client.create_prompt(
-            name="test-prompt",
-            prompt="test template",
-            metadata=None,
-            type=prompt_types.PromptType.MUSTACHE,
-        )
-
-        assert result.version_number == "v1"
+        assert result.tags == ["test"]
 
 
 class TestInternalCreateMask:
