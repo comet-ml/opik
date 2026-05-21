@@ -521,8 +521,8 @@ class PairingResourceTest {
         }
 
         @Test
-        @DisplayName("connect_started carries runner_type and headless=false for a browser pairing")
-        void connectStarted__browserPairing__tagsRunnerTypeAndHeadlessFalse() {
+        @DisplayName("connect_started carries runner_type for a browser pairing")
+        void connectStarted__browserPairing__tagsRunnerType() {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
             CreateSessionRequest request = CreateSessionRequest.builder()
                     .projectId(projectId)
@@ -535,44 +535,23 @@ class PairingResourceTest {
                     postRequestedFor(urlPathEqualTo("/v1/notify/event"))
                             .withRequestBody(matchingJsonPath("$.event_type", equalTo(STARTED))
                                     .and(matchingJsonPath("$.event_properties.runner_type", equalTo("connect")))
-                                    .and(matchingJsonPath("$.event_properties.headless", equalTo("false")))
                                     .and(matchingJsonPath("$.event_properties.workspace_id", equalTo(WORKSPACE_ID)))
                                     .and(matchingJsonPath("$.event_properties.environment", equalTo("test"))))));
         }
 
         @Test
-        @DisplayName("connect_started carries runner_type=endpoint and headless=true for a headless SDK pairing")
-        void connectStarted__headlessEndpoint__tagsHeadlessTrue() {
-            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
-            CreateSessionRequest request = CreateSessionRequest.builder()
-                    .projectId(projectId)
-                    .activationKey(base64(randomActivationKey()))
-                    .type(RunnerType.ENDPOINT)
-                    .headless(true)
-                    .build();
-            pairingClient.createSession(request, API_KEY, TEST_WORKSPACE);
-
-            Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
-                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(STARTED))
-                                    .and(matchingJsonPath("$.event_properties.runner_type", equalTo("endpoint")))
-                                    .and(matchingJsonPath("$.event_properties.headless", equalTo("true"))))));
-        }
-
-        @Test
-        @DisplayName("connect_succeeded carries runner_type and headless from the stored session")
-        void connectSucceeded__activate__tagsRunnerTypeAndHeadless() {
+        @DisplayName("connect_succeeded carries runner_type from the stored session")
+        void connectSucceeded__activate__tagsRunnerType() {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
             byte[] activationKey = randomActivationKey();
             CreateSessionRequest createRequest = CreateSessionRequest.builder()
                     .projectId(projectId)
                     .activationKey(base64(activationKey))
                     .type(RunnerType.ENDPOINT)
-                    .headless(true)
                     .build();
             CreateSessionResponse created = pairingClient.createSession(createRequest, API_KEY, TEST_WORKSPACE);
 
-            String runnerName = "headless-runner-" + randomUUID();
+            String runnerName = "runner-" + randomUUID();
             ActivateRequest activateRequest = ActivateRequest.builder()
                     .runnerName(runnerName)
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
@@ -582,8 +561,7 @@ class PairingResourceTest {
             Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/v1/notify/event"))
                             .withRequestBody(matchingJsonPath("$.event_type", equalTo(SUCCEEDED))
-                                    .and(matchingJsonPath("$.event_properties.runner_type", equalTo("endpoint")))
-                                    .and(matchingJsonPath("$.event_properties.headless", equalTo("true"))))));
+                                    .and(matchingJsonPath("$.event_properties.runner_type", equalTo("endpoint"))))));
         }
 
         @Test

@@ -24,8 +24,5 @@ public record CreateSessionRequest(
         @NotBlank @Size(min = 43, max = 44) String activationKey,
         // null means "use the service default (300)".
         @Min(60) @Max(600) Integer ttlSeconds,
-        @NotNull RunnerType type,
-        // True when the SDK self-activates without a browser. Surfaced in analytics so we
-        // can tell Ollie-driven endpoint runs apart from human-driven browser pairings.
-        Boolean headless) {
+        @NotNull RunnerType type) {
 }

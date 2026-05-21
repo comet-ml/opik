@@ -73,7 +73,6 @@ public class PairingResource {
                 "workspace_id", workspaceId,
                 "user_name", userName,
                 "runner_type", request.type().getValue(),
-                "headless", Boolean.toString(Boolean.TRUE.equals(request.headless())),
                 "date", Instant.now().toString()));
 
         return Response.status(Response.Status.CREATED).entity(response).build();
@@ -104,7 +103,6 @@ public class PairingResource {
                     "workspace_id", workspaceId,
                     "user_name", userName,
                     "runner_type", result.runnerType().getValue(),
-                    "headless", Boolean.toString(result.headless()),
                     "date", Instant.now().toString()));
 
             URI location = uriInfo.getBaseUriBuilder()

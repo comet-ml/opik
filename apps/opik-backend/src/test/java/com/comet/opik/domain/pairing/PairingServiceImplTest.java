@@ -446,8 +446,6 @@ class PairingServiceImplTest {
 
             assertThat(result.runnerId()).isEqualTo(runnerId);
             assertThat(result.runnerType()).isNotNull();
-            // No headless field stored in the legacy test fixture → defaults to false.
-            assertThat(result.headless()).isFalse();
             verify(runnerService).activateFromPairing(
                     eq(WORKSPACE_ID), eq(USER_NAME), eq(projectId), eq(runnerId), eq(runnerName),
                     any(RunnerType.class));
