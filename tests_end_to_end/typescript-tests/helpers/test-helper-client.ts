@@ -225,6 +225,32 @@ export class TestHelperClient {
     }
   }
 
+  async createDatasetForProject(name: string, projectName: string): Promise<Dataset> {
+    try {
+      const response = await this.client.post('/api/datasets/create-for-project', {
+        name,
+        project_name: projectName,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create dataset for project');
+    }
+  }
+
+  async createTestSuiteDatasetForProject(name: string, projectName: string): Promise<Dataset> {
+    try {
+      const response = await this.client.post('/api/datasets/create-test-suite', {
+        name,
+        project_name: projectName,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create test suite dataset');
+    }
+  }
+
   async findDataset(name: string): Promise<Dataset | null> {
     try {
       const response = await this.client.post('/api/datasets/find', {
@@ -749,6 +775,34 @@ export class TestHelperClient {
       return response.data;
     } catch (error) {
       throw this.handleError(error, 'Failed to create experiment');
+    }
+  }
+
+  async createExperimentForProject(experimentName: string, datasetName: string, projectName: string): Promise<Experiment> {
+    try {
+      const response = await this.client.post('/api/experiments/create-experiment-for-project', {
+        experiment_name: experimentName,
+        dataset_name: datasetName,
+        project_name: projectName,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create experiment');
+    }
+  }
+
+  async createTestSuiteExperimentForProject(experimentName: string, datasetName: string, projectName: string): Promise<Experiment> {
+    try {
+      const response = await this.client.post('/api/experiments/create-test-suite-experiment', {
+        experiment_name: experimentName,
+        dataset_name: datasetName,
+        project_name: projectName,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create test suite experiment');
     }
   }
 
