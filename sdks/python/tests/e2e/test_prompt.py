@@ -711,6 +711,49 @@ def test_get_prompt__with_version__string_prompt(
     assert latest.version == "v3"
 
 
+def test_prompt__create__first_version_exposes_version_number(
+    opik_client: opik.Opik, prompt_name: str, temporary_project_name: str
+):
+    """The Prompt returned by the first create_prompt call must surface
+    ``version="v1"`` regardless of which optional parameters are passed.
+    Rebuilding ``PromptVersionDetail`` in the container-create path
+    (triggered by id/description/tags) previously dropped
+    ``version_number`` and surfaced ``None``."""
+    base = prompt_name
+
+    no_extras = opik_client.create_prompt(
+        name=f"{base}-noextras",
+        prompt="t",
+        project_name=temporary_project_name,
+    )
+    assert no_extras.version == "v1"
+
+    with_tags = opik_client.create_prompt(
+        name=f"{base}-tags",
+        prompt="t",
+        tags=["a"],
+        project_name=temporary_project_name,
+    )
+    assert with_tags.version == "v1"
+
+    with_description = opik_client.create_prompt(
+        name=f"{base}-desc",
+        prompt="t",
+        description="d",
+        project_name=temporary_project_name,
+    )
+    assert with_description.version == "v1"
+
+    all_extras = opik_client.create_prompt(
+        name=f"{base}-all",
+        prompt="t",
+        tags=["a"],
+        description="d",
+        project_name=temporary_project_name,
+    )
+    assert all_extras.version == "v1"
+
+
 def test_prompt__format_playground_chat_prompt__returns_json(
     opik_client: opik.Opik, prompt_name: str
 ):

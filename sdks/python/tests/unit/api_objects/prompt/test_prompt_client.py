@@ -31,6 +31,8 @@ def _make_mock_version(
     template: str = "test template",
     version_type: str = "mustache",
     metadata: Optional[dict] = None,
+    version_number: Optional[str] = "v1",
+    tags: Optional[list] = None,
 ) -> prompt_version_detail.PromptVersionDetail:
     """Helper to create a mock PromptVersionDetail."""
     return prompt_version_detail.PromptVersionDetail(
@@ -40,6 +42,8 @@ def _make_mock_version(
         type=version_type,
         metadata=metadata,
         commit="abc123",
+        version_number=version_number,
+        tags=tags,
         template_structure="text",
     )
 
@@ -182,6 +186,74 @@ class TestPromptClientEndpointSelection:
 
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
+
+
+class TestCreatePromptPreservesVersionNumber:
+    """Regression tests for the bug where create_prompt returned version=None
+    on the first version when the container-create path rebuilt the frozen
+    PromptVersionDetail to inject tags and dropped version_number in the process.
+    See test_prompt__create__first_version_exposes_version_number (e2e)."""
+
+    def test_first_version_with_tags_surfaces_version_number(
+        self, client, mock_rest_client
+    ):
+        """create_prompt + retrieve_prompt_version path: retrieve returns
+        version_number='v1' but tags=None, so the SDK rebuilds the detail
+        to inject tags. version_number must survive the rebuild."""
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
+            _make_404_error(),
+            _make_mock_version(version_number="v1", tags=None),
+        ]
+
+        result = client.create_prompt(
+            name="test-prompt",
+            prompt="test template",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            tags=["a"],
+        )
+
+        assert result.version_number == "v1"
+        assert result.tags == ["a"]
+
+    def test_first_version_with_description_only_keeps_version_number(
+        self, client, mock_rest_client
+    ):
+        """description-only path does not trigger the tag rebuild branch but
+        must still surface version_number from the retrieve response."""
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
+            _make_404_error(),
+            _make_mock_version(version_number="v1"),
+        ]
+
+        result = client.create_prompt(
+            name="test-prompt",
+            prompt="test template",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            description="d",
+        )
+
+        assert result.version_number == "v1"
+
+    def test_first_version_without_extras_surfaces_version_number(
+        self, client, mock_rest_client
+    ):
+        """No id/description/tags → create_prompt_version path. version_number
+        from the create response must reach the returned detail unchanged."""
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
+        mock_rest_client.prompts.create_prompt_version.return_value = (
+            _make_mock_version(version_number="v1")
+        )
+
+        result = client.create_prompt(
+            name="test-prompt",
+            prompt="test template",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+        )
+
+        assert result.version_number == "v1"
 
 
 class TestInternalCreateMask:
