@@ -91,7 +91,7 @@ jobs:
           else
             AUTHOR="${{ github.actor }}"
           fi
-          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
           echo "📝 Author: $AUTHOR"
 
       - name: "📦 Setup Node.js"
@@ -197,10 +197,10 @@ jobs:
           # Extract the direct job run URL from allurectl output
           if grep -q "Report link:" allure_output.log; then
             REPORT_URL=$(grep "Report link:" allure_output.log | head -1 | sed 's/.*Report link:[[:space:]]*//' | awk '{print $1}')
-            echo "allure_report_url=${REPORT_URL}" >> $GITHUB_OUTPUT
+            echo "allure_report_url=${REPORT_URL}" >> "$GITHUB_OUTPUT"
             echo "📊 Captured Allure TestOps report URL: ${REPORT_URL}"
           else
-            echo "allure_report_url=" >> $GITHUB_OUTPUT
+            echo "allure_report_url=" >> "$GITHUB_OUTPUT"
             echo "⚠️ Could not capture direct report URL from allurectl output"
           fi
           
@@ -210,7 +210,7 @@ jobs:
           echo "========================================"
           
           # Exit with the test exit code to properly report success/failure
-          exit $TEST_EXIT_CODE
+          exit "$TEST_EXIT_CODE"
 
       # ========================================
       # PHASE 4: Process Results
@@ -240,11 +240,11 @@ jobs:
             FLAKY="0"
           fi
           
-          echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          echo "passed=$PASSED" >> $GITHUB_OUTPUT
-          echo "failed=$FAILED" >> $GITHUB_OUTPUT
-          echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
-          echo "flaky=$FLAKY" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "skipped=$SKIPPED" >> "$GITHUB_OUTPUT"
+          echo "flaky=$FLAKY" >> "$GITHUB_OUTPUT"
           
           echo "::endgroup::"
 
@@ -263,7 +263,7 @@ jobs:
             echo "📊 Using fallback launches page URL"
           fi
           
-          echo "testops_url=$TESTOPS_URL" >> $GITHUB_OUTPUT
+          echo "testops_url=$TESTOPS_URL" >> "$GITHUB_OUTPUT"
 
       # ========================================
       # PHASE 5: Generate Summary
@@ -280,68 +280,68 @@ jobs:
           SKIPPED="${{ steps.parse-results.outputs.skipped }}"
           
           # Header
-          echo "# 🧪 E2E Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# 🧪 E2E Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           
           # Status banner
           if [ "${{ steps.run-tests.outcome }}" == "success" ]; then
-            echo "> ✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+            echo "> ✅ **All tests passed!**" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
-            echo "> ❌ **$FAILED test(s) failed** - Please review the results below" >> $GITHUB_STEP_SUMMARY
+            echo "> ❌ **$FAILED test(s) failed** - Please review the results below" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "> ⚠️ **Test run status: ${{ steps.run-tests.outcome }}**" >> $GITHUB_STEP_SUMMARY
+            echo "> ⚠️ **Test run status: ${{ steps.run-tests.outcome }}**" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           
           # Configuration table
-          echo "## 📝 Configuration" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Suite** | \`$SUITE\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Trigger** | ${{ github.event_name == 'push' && 'Post-merge (push to main)' || 'Manual dispatch' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Author** | @${{ steps.get-pr-info.outputs.author }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📝 Configuration" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Suite** | \`$SUITE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Trigger** | ${{ github.event_name == 'push' && 'Post-merge (push to main)' || 'Manual dispatch' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Author** | @${{ steps.get-pr-info.outputs.author }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           
           # Results table
-          echo "## 📊 Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | Count |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|------:|" >> $GITHUB_STEP_SUMMARY
-          echo "| ✅ Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
-          echo "| ❌ Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
-          echo "| ⏭️ Skipped | $SKIPPED |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Total** | **$TOTAL** |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|------:|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ✅ Passed | $PASSED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ❌ Failed | $FAILED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ⏭️ Skipped | $SKIPPED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Total** | **$TOTAL** |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           
           # Links section
-          echo "## 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Resource | Link |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 📊 **TestOps Dashboard** | [View detailed results, traces & history]($TESTOPS_URL) |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📄 **Playwright Report** | [Download from Artifacts below](#artifacts) |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📚 **E2E Test Guide** | [Quickstart documentation](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔗 Quick Links" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Resource | Link |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📊 **TestOps Dashboard** | [View detailed results, traces & history]($TESTOPS_URL) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📄 **Playwright Report** | [Download from Artifacts below](#artifacts) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📚 **E2E Test Guide** | [Quickstart documentation](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           
           # Debugging section (only on failure)
           if [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
-            echo "## 🔧 Debugging Guide" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Quick steps to investigate failures:" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "1. **Open TestOps** → Click the link above to see detailed failure traces, screenshots, and video recordings" >> $GITHUB_STEP_SUMMARY
-            echo "2. **Download Playwright Report** → The HTML report includes step-by-step traces for each test" >> $GITHUB_STEP_SUMMARY
-            echo "3. **Check test logs** → Expand the 'Run E2E test suite' step above for console output" >> $GITHUB_STEP_SUMMARY
-            echo "4. **Run locally** → See the [Quickstart Guide](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) for local debugging" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Common failure causes:" >> $GITHUB_STEP_SUMMARY
-            echo "- UI element selectors changed" >> $GITHUB_STEP_SUMMARY
-            echo "- API response format changed" >> $GITHUB_STEP_SUMMARY
-            echo "- Timing/race conditions" >> $GITHUB_STEP_SUMMARY
-            echo "- New feature requiring test updates" >> $GITHUB_STEP_SUMMARY
+            echo "## 🔧 Debugging Guide" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Quick steps to investigate failures:" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "1. **Open TestOps** → Click the link above to see detailed failure traces, screenshots, and video recordings" >> "$GITHUB_STEP_SUMMARY"
+            echo "2. **Download Playwright Report** → The HTML report includes step-by-step traces for each test" >> "$GITHUB_STEP_SUMMARY"
+            echo "3. **Check test logs** → Expand the 'Run E2E test suite' step above for console output" >> "$GITHUB_STEP_SUMMARY"
+            echo "4. **Run locally** → See the [Quickstart Guide](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) for local debugging" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Common failure causes:" >> "$GITHUB_STEP_SUMMARY"
+            echo "- UI element selectors changed" >> "$GITHUB_STEP_SUMMARY"
+            echo "- API response format changed" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Timing/race conditions" >> "$GITHUB_STEP_SUMMARY"
+            echo "- New feature requiring test updates" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # ========================================
@@ -420,12 +420,12 @@ jobs:
             fi
 
             MENTIONS="${QA_MENTION:+$QA_MENTION }${AUTHOR_MENTION}"
-            echo "mentions=${MENTIONS% }" >> $GITHUB_OUTPUT
+            echo "mentions=${MENTIONS% }" >> "$GITHUB_OUTPUT"
           else
-            echo "mentions=" >> $GITHUB_OUTPUT
+            echo "mentions=" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "author_display=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "author_display=$AUTHOR" >> "$GITHUB_OUTPUT"
 
       - name: Send Slack notification
         env:

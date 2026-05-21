@@ -76,6 +76,24 @@ async function globalSetup(config: FullConfig) {
       await context.storageState({ path: authFile });
       console.log(`✅ Authentication state saved to ${authFile}`);
 
+      // Honor OPIK_VERSION_OVERRIDE by seeding the FE's localStorage key.
+      const versionOverride = process.env.OPIK_VERSION_OVERRIDE;
+      if (versionOverride) {
+        const state = JSON.parse(fs.readFileSync(authFile, 'utf-8'));
+        const origin = new URL(envData.baseUrl).origin;
+        const entry = { name: 'opik-version-override', value: versionOverride };
+        const origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }> = state.origins ?? [];
+        const existing = origins.find((o) => o.origin === origin);
+        if (existing) {
+          existing.localStorage = (existing.localStorage ?? []).filter((e) => e.name !== entry.name).concat(entry);
+        } else {
+          origins.push({ origin, localStorage: [entry] });
+        }
+        state.origins = origins;
+        fs.writeFileSync(authFile, JSON.stringify(state, null, 2));
+        console.log(`✅ OPIK_VERSION_OVERRIDE='${versionOverride}' seeded into ${authFile}`);
+      }
+
     } catch (error) {
       console.error('❌ Authentication failed:', error);
       throw error;

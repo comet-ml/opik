@@ -7,6 +7,8 @@ import {
   MessageContent,
   TextPart,
 } from "@/types/llm";
+import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { generateRandomString } from "@/lib/utils";
 
 export const generateDefaultLLMPromptMessage = (
@@ -300,4 +302,37 @@ export const parseChatTemplateToLLMMessages = (
   } catch {
     return [];
   }
+};
+
+/**
+ * Resolve the value for one template variable in an LLM-as-judge / Python-metric
+ * rule. Existing user-supplied mapping wins; otherwise on trace scope a `spans`
+ * variable auto-fills to its sentinel value (so {{spans}} works without the user
+ * picking a path); otherwise empty. Centralized so the four rule-detail editors
+ * (v1+v2 × {LLMJudge, PythonCode}) stay in sync — adding a new reserved trace
+ * variable to {@link RESERVED_TRACE_EVALUATOR_VARIABLES} propagates here.
+ *
+ * <p>The auto-fill is gated by {@code agenticToolsEnabled} (FT
+ * {@code agentic_tools_enabled}). When the feature is off, `spans` behaves like
+ * any other variable — no sentinel is filled in, leaving the user free to map
+ * it to a real path. Mirrors the BE: `shouldFetchSpans` and the `{{spans}}`
+ * substitution are also gated by the same toggle.
+ */
+export const resolveTraceEvaluatorVariableDefault = (
+  variableName: string,
+  currentMapping: string | undefined,
+  scope: EVALUATORS_RULE_SCOPE,
+  agenticToolsEnabled: boolean,
+): string => {
+  // Preserve any value the user already set — including an explicit empty
+  // string. Treating `""` as "not set" and re-applying the sentinel auto-fill
+  // would silently clobber an API caller's deliberate `spans: ""` on every
+  // prompt re-parse.
+  if (currentMapping !== undefined) {
+    return currentMapping;
+  }
+  if (agenticToolsEnabled && scope === EVALUATORS_RULE_SCOPE.trace) {
+    return RESERVED_TRACE_EVALUATOR_VARIABLES[variableName] ?? "";
+  }
+  return "";
 };

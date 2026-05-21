@@ -93,7 +93,7 @@ def remove(*, runner_type: str, runner_id: str) -> None:
     except FileNotFoundError:
         pass
     except OSError:
-        LOGGER.debug("Failed to remove pid file %s", path, exc_info=True)
+        LOGGER.error("Failed to remove pid file %s", path, exc_info=True)
 
 
 def is_pid_alive(pid: int) -> bool:

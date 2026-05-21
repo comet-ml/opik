@@ -1001,6 +1001,37 @@ class LocalRunnersResourceTest {
         }
 
         @Test
+        void storesPromptMasksWhenProvided() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-prompt-masks", projectId, ctx.apiKey, ctx.workspace);
+            Map<UUID, UUID> promptMasks = Map.of(
+                    randomUUID(), randomUUID(),
+                    randomUUID(), randomUUID());
+
+            UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectId).promptMasks(promptMasks).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(job.promptMasks()).isEqualTo(promptMasks);
+        }
+
+        @Test
+        void storesPromptMasksNullWhenNotProvided() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-no-prompt-masks", projectId, ctx.apiKey, ctx.workspace);
+
+            UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectId).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(job.promptMasks()).isNull();
+        }
+
+        @Test
         void storesMaskIdAndMetadataNullWhenNotProvided() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
@@ -1049,6 +1080,23 @@ class LocalRunnersResourceTest {
                 assertThat(claimed.status().getValue()).isEqualTo("running");
                 assertThat(claimed.startedAt()).isNotNull();
             }
+        }
+
+        @Test
+        void returnsPromptMasksWhenClaimed() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("nj-prompt-masks", projectId, ctx.apiKey, ctx.workspace);
+            Map<UUID, UUID> promptMasks = Map.of(
+                    randomUUID(), randomUUID(),
+                    randomUUID(), randomUUID());
+
+            runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectId).promptMasks(promptMasks).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob claimed = runnersClient.nextJob(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(claimed.promptMasks()).isEqualTo(promptMasks);
         }
 
         @Test

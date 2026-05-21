@@ -62,16 +62,20 @@ public interface PromptDAO {
                     FROM prompt_versions pv
                     WHERE pv.prompt_id = p.id
                     AND pv.workspace_id = p.workspace_id
+                    AND pv.version_type = 'prompt_version'
                 ) AS version_count,
                 (
                     SELECT JSON_OBJECT(
                         'id', pv.id,
                         'prompt_id', pv.prompt_id,
                         'commit', pv.commit,
+                        'version_number', pv.version_number,
                         'template', pv.template,
                         'metadata', pv.metadata,
                         'change_description', pv.change_description,
                         'type', pv.type,
+                        'version_type', pv.version_type,
+                        'environment', pv.environment,
                         'tags', pv.tags,
                         'created_at', pv.created_at,
                         'created_by', pv.created_by,
@@ -81,14 +85,54 @@ public interface PromptDAO {
                     FROM prompt_versions pv
                     WHERE pv.prompt_id = p.id
                     AND pv.workspace_id = p.workspace_id
+                    AND pv.version_type = 'prompt_version'
                     ORDER BY pv.id DESC
                     LIMIT 1
                 ) AS latest_version
+                <if(mask_id || environment)>
+                ,
+                (
+                    SELECT JSON_OBJECT(
+                        'id', pv.id,
+                        'prompt_id', pv.prompt_id,
+                        'commit', pv.commit,
+                        'version_number', pv.version_number,
+                        'template', pv.template,
+                        'metadata', pv.metadata,
+                        'change_description', pv.change_description,
+                        'type', pv.type,
+                        'version_type', pv.version_type,
+                        'environment', pv.environment,
+                        'tags', pv.tags,
+                        'created_at', pv.created_at,
+                        'created_by', pv.created_by,
+                        'last_updated_at', pv.last_updated_at,
+                        'last_updated_by', pv.last_updated_by
+                    )
+                    FROM prompt_versions pv
+                    WHERE pv.prompt_id = p.id
+                    AND pv.workspace_id = p.workspace_id
+                    <if(mask_id)> AND pv.id = :mask_id AND pv.version_type = 'mask' <endif>
+                    <if(environment)> AND pv.environment = :environment AND pv.version_type = 'prompt_version' <endif>
+                ) AS requested_version
+                <endif>
             FROM prompts p
             WHERE id = :id
             AND workspace_id = :workspace_id
             """)
-    Prompt findById(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Prompt findById(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId,
+            @Define("mask_id") @Bind("mask_id") UUID maskId,
+            @Define("environment") @Bind("environment") String environment);
+
+    default Prompt findById(UUID id, String workspaceId) {
+        return findById(id, workspaceId, null, null);
+    }
+
+    default Prompt findById(UUID id, String workspaceId, UUID maskId) {
+        return findById(id, workspaceId, maskId, null);
+    }
 
     @SqlQuery("""
             SELECT
@@ -101,6 +145,7 @@ public interface PromptDAO {
                       FROM prompt_versions pv
                      WHERE pv.workspace_id = p.workspace_id
                      AND pv.prompt_id = p.id
+                     AND pv.version_type = 'prompt_version'
                   ) AS version_count
                 FROM prompts AS p
                 WHERE workspace_id = :workspace_id
@@ -129,6 +174,7 @@ public interface PromptDAO {
                       FROM prompt_versions pv
                       WHERE pv.workspace_id = p.workspace_id
                       AND pv.prompt_id = p.id
+                      AND pv.version_type = 'prompt_version'
                   ) AS version_count
             	FROM prompts AS p
             	WHERE workspace_id = :workspace_id
@@ -139,10 +185,13 @@ public interface PromptDAO {
                 'id', id,
                 'prompt_id', prompt_id,
                 'commit', commit,
+                'version_number', version_number,
                 'template', template,
                 'metadata', metadata,
                 'change_description', change_description,
                 'type', type,
+                'version_type', version_type,
+                'environment', environment,
                 'tags', tags,
                 'created_at', created_at,
                 'created_by', created_by,
@@ -159,6 +208,7 @@ public interface PromptDAO {
                   ) AS rn
                 FROM prompt_versions pv
                 WHERE pv.workspace_id = :workspace_id
+                  AND pv.version_type = 'prompt_version'
                   <if(ids)> AND pv.prompt_id IN (<ids>) <endif>
               ) ranked
               WHERE ranked.rn = 1
@@ -183,6 +233,7 @@ public interface PromptDAO {
                       FROM prompt_versions pv
                      WHERE pv.workspace_id = p.workspace_id
                      AND pv.prompt_id = p.id
+                     AND pv.version_type = 'prompt_version'
                   ) AS version_count
                 FROM prompts AS p
                 WHERE workspace_id = :workspace_id
@@ -232,15 +283,19 @@ public interface PromptDAO {
                     FROM prompt_versions pv2
                     WHERE pv2.prompt_id = p.id
                     AND pv2.workspace_id = p.workspace_id
+                    AND pv2.version_type = 'prompt_version'
                 ) AS version_count,
                 JSON_OBJECT(
                     'id', pv.id,
                     'prompt_id', pv.prompt_id,
                     'commit', pv.commit,
+                    'version_number', pv.version_number,
                     'template', pv.template,
                     'metadata', pv.metadata,
                     'change_description', pv.change_description,
                     'type', pv.type,
+                    'version_type', pv.version_type,
+                    'environment', pv.environment,
                     'tags', pv.tags,
                     'created_at', pv.created_at,
                     'created_by', pv.created_by,
@@ -251,6 +306,7 @@ public interface PromptDAO {
             INNER JOIN prompts p ON pv.prompt_id = p.id AND p.workspace_id = pv.workspace_id
             WHERE pv.commit = :commit
             AND pv.workspace_id = :workspace_id
+            AND pv.version_type = 'prompt_version'
             """)
     List<Prompt> findByCommit(@Bind("commit") String commit, @Bind("workspace_id") String workspaceId);
 
@@ -262,7 +318,9 @@ public interface PromptDAO {
                 p.name
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
-            WHERE pv.commit IN (<commits>) AND pv.workspace_id = :workspace_id
+            WHERE pv.commit IN (<commits>)
+            AND pv.workspace_id = :workspace_id
+            AND pv.version_type = 'prompt_version'
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings

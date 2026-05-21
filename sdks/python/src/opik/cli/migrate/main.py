@@ -13,7 +13,7 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 import click
 from rich.console import Console
@@ -25,13 +25,27 @@ from .audit import AuditLog, default_audit_path
 from .datasets.executor import execute_plan, record_planned
 from .datasets.planner import (
     CascadeExperiments,
+    CascadeOptimizations,
     CreateDestination,
-    MigrationPlan,
     RenameSource,
     ReplayVersions,
     build_dataset_plan,
 )
 from .errors import MigrationError, safe_error_string
+from .prompts.executor import execute_plan as execute_prompt_plan
+from .prompts.executor import record_planned as record_prompt_planned
+from .prompts.planner import (
+    CreateDestination as PromptCreateDestination,
+)
+from .prompts.planner import (
+    RenameSource as PromptRenameSource,
+)
+from .prompts.planner import (
+    ReplayVersions as PromptReplayVersions,
+)
+from .prompts.planner import (
+    build_prompt_plan,
+)
 
 console = Console()
 
@@ -88,11 +102,15 @@ def migrate_group(
     \b
     Commands:
         dataset    Migrate a dataset (and its full version history) into a destination project
+        prompt     Migrate a prompt (and its full version history) into a destination project
 
     \b
     Examples:
         # Migrate a dataset (full version history + experiments cascade)
         opik migrate dataset "MyDataset" --to-project=B
+
+        # Migrate a prompt (full version history)
+        opik migrate prompt "MyPrompt" --to-project=B
 
         # Preview the migration without touching the backend
         opik migrate dataset "MyDataset" --to-project=B --dry-run
@@ -179,7 +197,13 @@ def _finalize_and_fail(
     "--from-project",
     type=str,
     default=None,
-    help="Source project name. Omit to look up workspace-scoped datasets.",
+    help=(
+        "Optional source project name. Omit to look up workspace-scoped "
+        "datasets (V1 entities, or anything left at workspace scope after "
+        "auto-migration). When provided, scopes the lookup to the named "
+        "project for a smaller BE result set and a clearer not-found "
+        "message."
+    ),
 )
 @click.option(
     "--dry-run",
@@ -209,6 +233,11 @@ def migrate_dataset_command(
         2. Create the destination dataset under --to-project
         3. Replay every source version onto the destination (full history)
         4. Cascade experiments + traces + spans into the destination project
+
+    Dataset names are workspace-unique on the BE
+    (``UNIQUE (workspace_id, name)``); ``--from-project`` is an
+    optional source-scope hint that yields a smaller BE result set and
+    a clearer not-found error message.
     """
     args = {
         "name": name,
@@ -269,6 +298,118 @@ def migrate_dataset_command(
     )
 
 
+@migrate_group.command(name="prompt")
+@click.argument("name", type=str)
+@click.option(
+    "--to-project",
+    required=True,
+    type=str,
+    help="Destination project name (required).",
+)
+@click.option(
+    "--from-project",
+    type=str,
+    default=None,
+    help=(
+        "Optional source project name. Omit to look up workspace-scoped "
+        "prompts (V1 entities, or anything left at workspace scope after "
+        "auto-migration). When provided, scopes the lookup to the named "
+        "project for a smaller BE result set and a clearer not-found "
+        "message."
+    ),
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview the migration without applying any changes.",
+)
+@click.option(
+    "--audit-log",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    default=None,
+    help="Path to write the audit-log JSON file (default: ./opik-migrate-<timestamp>.json).",
+)
+@click.pass_context
+def migrate_prompt_command(
+    ctx: click.Context,
+    name: str,
+    to_project: str,
+    from_project: Optional[str],
+    dry_run: bool,
+    audit_log: Optional[Path],
+) -> None:
+    """Migrate a prompt (and its full version history) into --to-project.
+
+    \b
+    Steps performed (in order):
+        1. Rename source to "<name>_v1"
+        2. Create the destination prompt under --to-project
+        3. Replay every source version onto the destination (full history,
+           with source commit hashes preserved verbatim)
+
+    Prompt names are workspace-unique on the BE
+    (``UNIQUE (workspace_id, name)``); ``--from-project`` is an optional
+    source-scope hint that yields a smaller BE result set and a clearer
+    not-found error message.
+    """
+    args = {
+        "name": name,
+        "to_project": to_project,
+        "from_project": from_project,
+        "dry_run": dry_run,
+    }
+    audit = AuditLog(command="opik migrate prompt", args=args)
+    audit_path = audit_log or default_audit_path()
+    started_at = time.monotonic()
+
+    try:
+        client = _build_client(ctx)
+        _print_workspace_banner(client)
+        plan = build_prompt_plan(
+            client=client,
+            name=name,
+            to_project=to_project,
+            from_project=from_project,
+        )
+
+        _print_plan(plan)
+
+        if dry_run:
+            record_prompt_planned(plan, audit)
+            audit.finalize("planned")
+            audit.write(audit_path)
+            console.print(
+                f"[blue]Dry run complete. Audit log written to {audit_path}[/blue]"
+            )
+            return
+
+        execute_prompt_plan(client, plan, audit)
+    except MigrationError as exc:
+        _finalize_and_fail(
+            audit,
+            audit_path,
+            exc,
+            user_facing=True,
+            elapsed_seconds=time.monotonic() - started_at,
+        )
+    except Exception as exc:
+        _finalize_and_fail(
+            audit,
+            audit_path,
+            exc,
+            user_facing=False,
+            elapsed_seconds=time.monotonic() - started_at,
+        )
+
+    audit.finalize("ok")
+    audit.write(audit_path)
+    elapsed = _format_elapsed(time.monotonic() - started_at)
+    console.print(
+        f"[green]Migrated '{name}' into project '{to_project}' as '{plan.target_name}'.[/green] "
+        f"Took {elapsed}. Audit log: {audit_path}"
+    )
+
+
 def _format_elapsed(seconds: float) -> str:
     """Render a wall-clock duration as ``Hh Mm Ss`` / ``Mm Ss`` / ``Ss``.
 
@@ -286,27 +427,41 @@ def _format_elapsed(seconds: float) -> str:
     return f"{minutes}m {secs}s"
 
 
-def _print_plan(plan: MigrationPlan) -> None:
+def _print_plan(plan: Any) -> None:
+    """Render the migration plan as a Rich table.
+
+    Handles both dataset and prompt action records. The two action sets
+    share the same field names where they overlap (``from_name`` /
+    ``to_name`` on rename; ``name`` / ``project_name`` on create;
+    ``source_name_after_rename`` / ``dest_name`` on replay) so the table
+    rows are generated uniformly.
+    """
     table = Table(title="Migration plan")
     table.add_column("#", justify="right")
     table.add_column("Action")
     table.add_column("Detail")
     for idx, action in enumerate(plan.actions, start=1):
-        if isinstance(action, RenameSource):
+        if isinstance(action, (RenameSource, PromptRenameSource)):
             table.add_row(
                 str(idx), "rename source", f"{action.from_name} → {action.to_name}"
             )
-        elif isinstance(action, CreateDestination):
+        elif isinstance(action, (CreateDestination, PromptCreateDestination)):
             table.add_row(
                 str(idx),
                 "create destination",
                 f"{action.name} (project: {action.project_name})",
             )
-        elif isinstance(action, ReplayVersions):
+        elif isinstance(action, (ReplayVersions, PromptReplayVersions)):
             table.add_row(
                 str(idx),
                 "replay versions",
                 f"{action.source_name_after_rename} → {action.dest_name} (full history)",
+            )
+        elif isinstance(action, CascadeOptimizations):
+            table.add_row(
+                str(idx),
+                "cascade optimizations",
+                f"optimizations → project {action.dest_project_name}",
             )
         elif isinstance(action, CascadeExperiments):
             table.add_row(

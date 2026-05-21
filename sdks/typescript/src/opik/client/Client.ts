@@ -41,6 +41,7 @@ import {
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
 import { getOrFetch as promptCacheGetOrFetch, getGlobalCache } from "@/prompt/promptCache";
+import { getActiveMaskForPrompt } from "@/prompt/maskContext";
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
@@ -1212,6 +1213,7 @@ export class OpikClient {
 
       const promptData = await this.api.prompts.getPromptById(
         versionResponse.promptId,
+        {},
         this.api.requestOptions
       );
 
@@ -1424,38 +1426,55 @@ export class OpikClient {
 
     const resolvedProjectName = this.resolveProjectName(options.projectName);
 
-    const fetchFn = async (): Promise<T | null> => {
+    const fetchFn = async (maskId?: string | null): Promise<T | null> => {
       try {
-        const resolvedOptions = { ...options, projectName: resolvedProjectName };
+        let promptData: OpikApi.PromptPublic | undefined;
+        let versionData: OpikApi.PromptVersionDetail;
 
-        let projectId: string | undefined;
-        try {
-          projectId = await this.getProjectIdByName(resolvedProjectName);
-        } catch {
-          // Project doesn't exist yet — search without project filter
+        if (maskId) {
+          versionData = await this.api.prompts.getPromptVersionById(
+            maskId,
+            {},
+            this.api.requestOptions
+          );
+          if (!versionData.promptId) {
+            return null;
+          }
+          promptData = await this.api.prompts.getPromptById(
+            versionData.promptId,
+            {},
+            this.api.requestOptions
+          );
+        } else {
+          let projectId: string | undefined;
+          try {
+            projectId = await this.getProjectIdByName(resolvedProjectName);
+          } catch {
+            // Project doesn't exist yet — search without project filter
+          }
+
+          const searchResponse = await this.api.prompts.getPrompts(
+            {
+              filters: JSON.stringify([
+                { field: "name", operator: "=", value: options.name },
+              ]),
+              size: 1,
+              ...(projectId && { projectId }),
+            },
+            this.api.requestOptions
+          );
+
+          promptData = searchResponse.content?.[0];
+          if (!promptData) {
+            logger.debug(`${logContext.charAt(0).toUpperCase() + logContext.slice(1)} not found`, { name: options.name });
+            return null;
+          }
+
+          versionData = await this.api.prompts.retrievePromptVersion(
+            { ...options, projectName: resolvedProjectName },
+            this.api.requestOptions
+          );
         }
-
-        const searchResponse = await this.api.prompts.getPrompts(
-          {
-            filters: JSON.stringify([
-              { field: "name", operator: "=", value: options.name },
-            ]),
-            size: 1,
-            ...(projectId && { projectId }),
-          },
-          this.api.requestOptions
-        );
-
-        const promptData = searchResponse.content?.[0];
-        if (!promptData) {
-          logger.debug(`${logContext.charAt(0).toUpperCase() + logContext.slice(1)} not found`, { name: options.name });
-          return null;
-        }
-
-        const versionData = await this.api.prompts.retrievePromptVersion(
-          resolvedOptions,
-          this.api.requestOptions
-        );
 
         const templateStructure = versionData.templateStructure;
         if (expectedStructure === PromptTemplateStructure.Text) {
@@ -1486,14 +1505,29 @@ export class OpikClient {
       }
     };
 
-    const result = await promptCacheGetOrFetch<T>(
+    const unmasked = await promptCacheGetOrFetch<T>(
       options.name,
       options.commit,
       resolvedProjectName,
       expectedStructure,
-      fetchFn,
+      () => fetchFn(),
       this.config.promptCacheTtlSeconds
     );
+
+    const activeMaskId = unmasked?.id
+      ? getActiveMaskForPrompt(unmasked.id)
+      : null;
+    const result = activeMaskId
+      ? await promptCacheGetOrFetch<T>(
+          options.name,
+          options.commit,
+          resolvedProjectName,
+          expectedStructure,
+          () => fetchFn(activeMaskId),
+          this.config.promptCacheTtlSeconds,
+          activeMaskId
+        )
+      : unmasked;
 
     if (result !== null) {
       const ctx = getTrackContext();

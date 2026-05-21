@@ -30,7 +30,7 @@ jobs:
           if [ -z "$AUTHOR" ]; then
             AUTHOR="${{ github.actor }}"
           fi
-          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
 
       - name: Find originating PR
         id: find-pr
@@ -38,7 +38,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_URL=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].html_url' 2>/dev/null || echo "")
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 
   update-open-api-spec-and-fern-code:
     needs: resolve-trigger-context
@@ -65,7 +65,7 @@ jobs:
           cache: maven
 
       - name: Install Fern
-        run: npm install -g fern-api
+        run: npm install -g fern-api@4.71.5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -80,7 +80,7 @@ jobs:
 
       - name: Set branch name
         run: |
-          echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
+          echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code-$(date +%Y-%m-%d-%H-%M-%S)" >> "$GITHUB_ENV"
 
       - name: Run Generate OpenAPI spec and Fern code
         env:
@@ -102,21 +102,21 @@ jobs:
           if [ "${{ github.event_name }}" == "push" ]; then
             ORIGINATING_PR="${{ needs.resolve-trigger-context.outputs.originating_pr_url }}"
             if [ -n "$ORIGINATING_PR" ]; then
-              echo "trigger_info=**Triggered by BE merge:** $ORIGINATING_PR" >> $GITHUB_OUTPUT
+              echo "trigger_info=**Triggered by BE merge:** $ORIGINATING_PR" >> "$GITHUB_OUTPUT"
             else
-              echo "trigger_info=**Triggered by commit:** https://github.com/${{ github.repository }}/commit/${{ github.sha }}" >> $GITHUB_OUTPUT
+              echo "trigger_info=**Triggered by commit:** https://github.com/${{ github.repository }}/commit/${{ github.sha }}" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "trigger_info=" >> $GITHUB_OUTPUT
+            echo "trigger_info=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check for changes
         id: check_changes
         run: |
           if git diff --quiet; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit files
@@ -190,8 +190,8 @@ jobs:
               AUTHOR_MENTION="<@$AUTHOR_SLACK_ID>"
             fi
           fi
-          echo "mention=$AUTHOR_MENTION" >> $GITHUB_OUTPUT
-          echo "author_display=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "mention=$AUTHOR_MENTION" >> "$GITHUB_OUTPUT"
+          echo "author_display=$AUTHOR" >> "$GITHUB_OUTPUT"
 
       - name: Send Slack notification
         env:

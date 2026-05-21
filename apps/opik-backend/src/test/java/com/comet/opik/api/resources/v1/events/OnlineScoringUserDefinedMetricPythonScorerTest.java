@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -200,11 +199,20 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         void fetchesSpansAndPassesThemAsListWhenSpansArgumentPresent() {
             // User opts into spans by mapping the reserved `spans` key in their `arguments`.
             // We verify (a) the span service is queried, and (b) the data handed to the Python
-            // evaluator carries spans as a typed List — not as a JSON string — so `json.loads`
-            // in the runner yields `spans` as a list of dicts in the metric's signature.
+            // evaluator carries spans as a typed List of the lean SpanForLlm projection — not
+            // raw Span, not a JSON string — so `json.loads` in the runner yields `spans` as a
+            // list of dicts with the projected shape (name/type/input/output/etc., plus nested
+            // children) in the metric's signature.
             var message = sampleMessageWithSpansArgument();
-            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+            // Build the span explicitly rather than via Podam so the projection assertion can
+            // reference a known `name` field — Podam fills random strings that obscure intent.
+            var span = com.comet.opik.api.Span.builder()
+                    .id(UUID.randomUUID())
                     .traceId(traceId)
+                    .projectId(UUID.randomUUID())
+                    .name("fetch_weather")
+                    .type(com.comet.opik.domain.SpanType.tool)
+                    .startTime(java.time.Instant.now())
                     .build();
 
             when(spanService.getByTraceIds(eq(Set.of(traceId)))).thenReturn(Flux.just(span));
@@ -222,8 +230,9 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
             verify(pythonEvaluatorService).evaluate(eq(message.code().metric()), dataCaptor.capture());
             var capturedSpans = dataCaptor.getValue().get("spans");
             assertThat(capturedSpans).isInstanceOf(List.class);
-            assertThat((List<?>) capturedSpans).hasSize(1)
-                    .first().isInstanceOf(Span.class);
+            assertThat((List<?>) capturedSpans).hasSize(1).first()
+                    .isInstanceOf(com.comet.opik.api.SpanForLlm.class)
+                    .extracting("name").isEqualTo("fetch_weather");
         }
 
         @Test

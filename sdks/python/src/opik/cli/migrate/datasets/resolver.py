@@ -1,34 +1,44 @@
-"""Name resolution for ``opik migrate``.
+"""Name resolution for ``opik migrate dataset``.
 
-Datasets are addressed by name in the UI, but the workspace allows the same
-dataset name across different projects. ``resolve_source`` enforces names-as-
-identifiers UX: a single hit wins, zero hits raise ``DatasetNotFoundError``,
-multiple hits (workspace-scoped lookup) raise ``AmbiguityError`` listing the
-project paths so the user can disambiguate with ``--from-project``.
+Entity-agnostic helpers (pagination, project-name lookup, collision
+check, project preflight) live in ``cli/migrate/_resolver.py``. This
+module keeps only dataset-specific glue: the ``ResolvedDataset``
+dataclass and the ``resolve_source`` / ``name_taken_in_workspace``
+wrappers that bind the dataset Fern surface.
+
+Dataset names are workspace-unique (BE liquibase migration
+``000001_init_script.sql`` enforces ``UNIQUE (workspace_id, name)`` on
+the ``datasets`` table), so a name lookup yields at most one row.
+``--from-project`` is still useful as an **optional** filter:
+
+* Smaller result set from the BE on workspaces with many entities.
+* Sharper not-found message: "not found in project 'A'" vs "not found
+  in the workspace" — better debugging signal when the user has a
+  mental model of the source project.
+* Targets a V1/auto-migrated workspace-scoped row vs an explicitly
+  project-scoped row when the user wants to assert which one to copy.
+
+Omit ``--from-project`` to target workspace-scoped entities (V1
+entities, or anything left at workspace scope after auto-migration).
 """
 
 from __future__ import annotations
 
-import difflib
-import logging
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Optional
+from typing import Any, Callable, List, Optional
 
 import opik
 from opik.api_objects import rest_helpers
-from opik.rest_api.core.api_error import ApiError
 
-from ..errors import AmbiguityError, DatasetNotFoundError, ProjectNotFoundError
-
-LOGGER = logging.getLogger(__name__)
-
-# Cap the candidate list we feed to difflib. Workspaces with >100 projects
-# are uncommon, and the suggestion quality plateaus quickly past that.
-_PROJECT_SUGGESTION_PAGE_SIZE = 100
-
-# Page size used when paginating dataset lookups. Larger pages = fewer
-# round-trips on workspaces with many same-named datasets.
-_FIND_DATASETS_PAGE_SIZE = 100
+from .._resolver import (
+    DEFAULT_PAGE_SIZE,
+    ensure_destination_project_exists as _ensure_destination_project_exists,
+    make_list_fn,
+    name_taken_in_workspace as _name_taken_in_workspace,
+    project_name_for_row,
+    resolve_unique_source_by_name,
+)
+from ..errors import ConflictError, DatasetNotFoundError
 
 
 @dataclass(frozen=True)
@@ -46,185 +56,73 @@ class ResolvedDataset:
     tags: Optional[List[str]]
 
 
-def _iter_dataset_pages(
-    client: opik.Opik,
-    *,
-    name: Optional[str] = None,
-    project_id: Optional[str] = None,
-) -> Iterable[Any]:
-    """Yield every dataset row matching the filters, paginating to exhaustion.
+def _datasets_list_fn(
+    client: opik.Opik, *, name: Optional[str], project_id: Optional[str]
+) -> Callable[[int, int], Any]:
+    """Build the dataset ``(page, size) -> response`` closure.
 
-    Single source of truth for ``find_datasets`` pagination inside this
-    module. Avoids the silent truncation bug where a single
-    ``find_datasets(page=1)`` call would miss rows on later pages.
+    Stays on the low-level Fern surface
+    (``client.rest_client.datasets.find_datasets``): the high-level
+    ``client.get_datasets()`` wrapper returns SDK ``Dataset`` objects
+    that drop ``project_id`` and ``dataset_items_count``, both of which
+    the planner needs.
 
-    Stays on ``client.rest_client`` (the low-level Fern surface): the
-    high-level ``client.get_datasets()`` wrapper returns SDK ``Dataset``
-    objects that drop the ``project_id`` and ``dataset_items_count`` fields
-    the planner needs for collision detection and progress reporting.
+    ``project_id`` filters the BE query when provided (smaller result
+    set on workspaces with many entities); ``None`` is workspace-wide.
     """
-    rest_client = client.rest_client
-    page_idx = 1
-    while True:
-        page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda p=page_idx: rest_client.datasets.find_datasets(
-                page=p,
-                size=_FIND_DATASETS_PAGE_SIZE,
-                project_id=project_id,
-                name=name,
-            )
-        )
-        if not page.content:
-            return
-        for row in page.content:
-            yield row
-        if len(page.content) < _FIND_DATASETS_PAGE_SIZE:
-            return
-        page_idx += 1
-
-
-def _project_name_for_row(client: opik.Opik, row: Any) -> Optional[str]:
-    """Resolve a dataset row's ``project_id`` to a human-readable name.
-
-    Returns None when the dataset has no project (workspace-scoped) or when
-    the project lookup raises a recoverable ``ApiError`` (typically 404 — the
-    project was deleted out from under us between listing and lookup). The
-    fallback is intentional: a missing project label is fine to omit from a
-    collision message, and downstream code accepts ``None`` as
-    "workspace-scoped".
-
-    Unexpected exceptions (auth, transport, config) are logged at WARNING and
-    we still return ``None`` so the surrounding check doesn't fail mid-flight,
-    but the cause is surfaced rather than silently swallowed.
-    """
-    project_id = getattr(row, "project_id", None)
-    if not project_id:
-        return None
-    try:
-        proj = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: client.get_project(id=project_id)
-        )
-        return getattr(proj, "name", None)
-    except ApiError:
-        # Recoverable: 404 (project gone) or similar; row.id is still usable.
-        return None
-    except Exception as exc:
-        LOGGER.warning(
-            "Unexpected error resolving project id %s to a name: %s",
-            project_id,
-            exc.__class__.__name__,
-        )
-        return None
+    return make_list_fn(
+        client.rest_client.datasets.find_datasets,
+        name=name,
+        project_id=project_id,
+    )
 
 
 def resolve_source(
     client: opik.Opik,
     name: str,
-    from_project: Optional[str],
+    from_project: Optional[str] = None,
 ) -> ResolvedDataset:
-    """Resolve ``name`` (optionally scoped to ``from_project``) to a single dataset.
+    """Resolve ``name`` (optionally scoped to ``from_project``) to one dataset.
 
-    ``from_project=None`` means workspace-scoped lookup — datasets created
-    without an explicit project. Multiple workspace-scoped matches with the
-    same name shouldn't normally happen (the BE enforces uniqueness within a
-    project), but workspace-scoped + project-scoped collisions are possible
-    and we surface them as ``AmbiguityError``.
+    ``from_project=None`` does a workspace-wide lookup. When provided,
+    the BE filters by the resolved ``project_id`` so the result set is
+    smaller and the not-found error message names the project. Workspace
+    name uniqueness means a workspace lookup also yields at most one
+    row; the flag is primarily a perf / UX hint when the user knows the
+    source project.
 
-    Pagination: walks every ``find_datasets`` page (not just the first) so
-    matches on later pages are not silently dropped.
-
-    ``project_name`` on the returned ``ResolvedDataset`` is derived from the
-    matched row's ``project_id`` (resolved to a name), not from the
-    ``--from-project`` flag — so workspace-scoped lookups still produce the
-    correct project context for downstream ``Opik.get_dataset`` /
-    ``delete_dataset`` calls.
+    Raises ``DatasetNotFoundError`` on zero matches. The (architecturally
+    unreachable) >1-matches branch raises ``ConflictError`` with an
+    "invariant violated" message — defensive against a BE constraint
+    bypass.
     """
     project_id = rest_helpers.resolve_project_id_by_name_optional(
         client.rest_client, project_name=from_project
     )
-
-    matches: List[ResolvedDataset] = []
-    for row in _iter_dataset_pages(client, name=name, project_id=project_id):
-        if row.name != name:
-            continue
-        matches.append(
-            ResolvedDataset(
-                id=row.id,
-                name=row.name,
-                project_name=_project_name_for_row(client, row),
-                description=row.description,
-                type=getattr(row, "type", None),
-                visibility=getattr(row, "visibility", None),
-                tags=getattr(row, "tags", None),
-            )
-        )
-
-    if not matches:
-        scope = f"project '{from_project}'" if from_project else "the workspace"
-        raise DatasetNotFoundError(f"Dataset '{name}' not found in {scope}.")
-
-    if len(matches) > 1:
-        raise AmbiguityError(
-            f"Dataset name '{name}' matched {len(matches)} datasets. "
-            "Re-run with --from-project to disambiguate."
-        )
-
-    return matches[0]
+    scope_label = f"project '{from_project}'" if from_project else "the workspace"
+    row = resolve_unique_source_by_name(
+        client,
+        list_fn=_datasets_list_fn(client, name=name, project_id=project_id),
+        name=name,
+        not_found_error=DatasetNotFoundError,
+        invariant_violated_error=ConflictError,
+        entity_label="dataset",
+        scope_label=scope_label,
+    )
+    return ResolvedDataset(
+        id=row.id,
+        name=row.name,
+        project_name=project_name_for_row(client, row),
+        description=row.description,
+        type=getattr(row, "type", None),
+        visibility=getattr(row, "visibility", None),
+        tags=getattr(row, "tags", None),
+    )
 
 
-def ensure_destination_project_exists(
-    client: opik.Opik,
-    to_project: str,
-) -> str:
-    """Resolve and return the ``to_project`` ID, or raise ``ProjectNotFoundError``.
-
-    Slice 1 fails fast rather than auto-creating a project: a typo in
-    ``--to-project`` would otherwise silently strand the migration under a
-    brand-new project the user did not mean to create. To soften the failure
-    we attach ``Did you mean: ...`` suggestions when similar project names
-    exist in the workspace.
-    """
-    try:
-        return rest_helpers.resolve_project_id_by_name(
-            client.rest_client, project_name=to_project
-        )
-    except ApiError as exc:
-        if exc.status_code == 404:
-            suggestions = _suggest_project_names(client, to_project)
-            message = f"Destination project '{to_project}' does not exist."
-            if suggestions:
-                message += f" Did you mean: {', '.join(repr(s) for s in suggestions)}?"
-            message += " Create it via the UI or SDK, then re-run."
-            raise ProjectNotFoundError(message) from exc
-        raise
-
-
-def _suggest_project_names(client: opik.Opik, name: str) -> List[str]:
-    """Return up to 3 closest project-name matches for ``name``.
-
-    Best-effort with narrow exception handling: an ``ApiError`` during the
-    lookup just degrades to no suggestions (we'd rather raise the original
-    404 from the caller than a secondary error that obscures the real issue),
-    but unexpected errors are logged so they're still visible to operators.
-    """
-    try:
-        page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: client.rest_client.projects.find_projects(
-                page=1, size=_PROJECT_SUGGESTION_PAGE_SIZE
-            )
-        )
-    except ApiError:
-        return []
-    except Exception as exc:
-        LOGGER.warning(
-            "Project-suggestion lookup failed unexpectedly while resolving "
-            "missing project %r: %s",
-            name,
-            exc.__class__.__name__,
-        )
-        return []
-    candidates = [p.name for p in page.content if p.name]
-    return difflib.get_close_matches(name, candidates, n=3, cutoff=0.6)
+def ensure_destination_project_exists(client: opik.Opik, to_project: str) -> str:
+    """Resolve and return ``to_project`` ID, or raise ``ProjectNotFoundError``."""
+    return _ensure_destination_project_exists(client, to_project)
 
 
 def name_taken_in_workspace(
@@ -233,28 +131,29 @@ def name_taken_in_workspace(
     *,
     ignore_dataset_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Return a description of the colliding project, or ``None``.
+    """Workspace-wide name collision check for the rename PUT pre-flight.
 
-    Opik enforces dataset names workspace-wide (not per-project), so the
-    pre-flight has to scan without a ``project_id`` filter. ``ignore_dataset_id``
-    lets callers exclude the source dataset from the check (it'll get renamed
-    before the destination is created, so its current name doesn't conflict).
-
-    Pagination: iterates every page until we either find a true collision
-    (early-exit) or exhaust the results — so collisions don't slip through
-    just because they live past the first page of name-matches.
-
-    The returned string is a human-readable label for the colliding project
-    (its name when resolvable, else ``"another project"``) suitable for
-    ``ConflictError`` messages.
+    Always scopes workspace-wide (``project_id=None``): the rename
+    target must be free across the entire workspace because
+    ``(workspace_id, name)`` is the BE's unique key. ``ignore_dataset_id``
+    excludes the source dataset itself from the check (it's about to be
+    renamed). Returns a human-readable label for the colliding project,
+    or ``None`` when the name is free.
     """
-    for row in _iter_dataset_pages(client, name=name, project_id=None):
-        if row.name != name:
-            continue
-        if ignore_dataset_id is not None and row.id == ignore_dataset_id:
-            continue
-        project_name = _project_name_for_row(client, row)
-        if project_name:
-            return f"project '{project_name}'"
-        return "another project"
-    return None
+    return _name_taken_in_workspace(
+        client,
+        list_fn=_datasets_list_fn(client, name=name, project_id=None),
+        name=name,
+        ignore_id=ignore_dataset_id,
+    )
+
+
+# Re-exported so existing imports keep working (callers may have
+# imported these symbols directly from this module historically).
+__all__ = [
+    "DEFAULT_PAGE_SIZE",
+    "ResolvedDataset",
+    "ensure_destination_project_exists",
+    "name_taken_in_workspace",
+    "resolve_source",
+]

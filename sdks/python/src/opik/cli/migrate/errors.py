@@ -21,8 +21,8 @@ class DatasetNotFoundError(MigrationError):
     """Raised when the source dataset name cannot be resolved."""
 
 
-class AmbiguityError(MigrationError):
-    """Raised when a workspace-scoped name resolves to multiple datasets."""
+class PromptNotFoundError(MigrationError):
+    """Raised when the source prompt name cannot be resolved."""
 
 
 class ConflictError(MigrationError):

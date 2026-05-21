@@ -712,9 +712,14 @@ class TestCascadeExperiments:
         # Other metadata keys preserved.
         assert kwargs["experiment_config"].get("other") == "keep"
 
-    def test_optimization_id__stripped_on_destination(self) -> None:
-        # Slice 3 doesn't cascade the optimization entity, so any
-        # ``optimization_id`` pointer is dropped to avoid a dangling FK.
+    def test_optimization_id__remapped_to_destination_when_remap_has_entry(
+        self,
+    ) -> None:
+        # Slice 5 cascades the optimization entity. The experiment cascade
+        # consults ``optimization_id_remap`` (populated by the prior
+        # CascadeOptimizations action) and forwards the destination
+        # optimization id so the destination experiment binds to the
+        # destination optimization row.
         experiment = _Experiment(
             id="src-exp-1",
             optimization_id="src-opt-abc",
@@ -734,7 +739,7 @@ class TestCascadeExperiments:
         )
         client = _client_with_recreate_capture(rest_client)
 
-        cascade_experiments(
+        result = cascade_experiments(
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
@@ -742,13 +747,100 @@ class TestCascadeExperiments:
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
             item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            optimization_id_remap={"src-opt-abc": "dest-opt-xyz"},
             audit=_audit(),
         )
 
         kwargs = client.create_experiment.call_args.kwargs
-        assert "optimization_id" not in kwargs, (
-            "optimization_id should not be forwarded on the migrate path"
+        assert kwargs["optimization_id"] == "dest-opt-xyz"
+        # Orphan counter stays zero on the happy path.
+        assert result.experiments_with_orphan_optimization_id == 0
+
+    def test_optimization_id__missing_remap__omitted_with_orphan_counter(
+        self,
+    ) -> None:
+        # Defensive path: source experiment carries an ``optimization_id``
+        # but the remap doesn't have an entry. The field is omitted from
+        # the destination payload (no dangling FK) and the orphan
+        # counter increments so the audit log surfaces the planner
+        # ordering bug. Experiment is still created (degraded fidelity,
+        # not a hard failure).
+        experiment = _Experiment(
+            id="src-exp-1",
+            optimization_id="src-opt-abc",
+            dataset_version_id="src-v-1",
         )
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            optimization_id_remap={},  # empty -> orphan path
+            audit=_audit(),
+        )
+
+        kwargs = client.create_experiment.call_args.kwargs
+        assert "optimization_id" not in kwargs
+        assert result.experiments_with_orphan_optimization_id == 1
+        assert result.experiments_migrated == 1
+
+    def test_optimization_id__source_has_none__remap_not_consulted(
+        self,
+    ) -> None:
+        # Source experiment has no ``optimization_id`` at all -- field
+        # must not appear on the destination payload and the orphan
+        # counter must stay zero regardless of remap contents.
+        experiment = _Experiment(
+            id="src-exp-1",
+            optimization_id=None,
+            dataset_version_id="src-v-1",
+        )
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            optimization_id_remap={"unrelated": "noise"},
+            audit=_audit(),
+        )
+
+        kwargs = client.create_experiment.call_args.kwargs
+        assert "optimization_id" not in kwargs
+        assert result.experiments_with_orphan_optimization_id == 0
 
     def test_trace_id_remap__populated_and_project_rewritten_on_destination(
         self,
@@ -1679,7 +1771,6 @@ class TestPlannerCascadePlacement:
             client=_planner_client(rest_client),
             name="MyDataset",
             to_project="B",
-            from_project=None,
         )
 
         types = [type(a).__name__ for a in plan.actions]

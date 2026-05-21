@@ -21,7 +21,7 @@ def tmp_runners_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 class TestWrite:
-    def test_creates_file_with_expected_payload(self, tmp_runners_dir: Path) -> None:
+    def test_write__happyflow(self, tmp_runners_dir: Path) -> None:
         path = pid_file.write(
             runner_id="r-1",
             runner_type="connect",
@@ -38,7 +38,9 @@ class TestWrite:
         assert data["workspace"] == "my-ws"
         assert isinstance(data["started_at"], float)
 
-    def test_creates_runners_dir_if_missing(self, tmp_runners_dir: Path) -> None:
+    def test_write__runners_dir_missing__creates_dir(
+        self, tmp_runners_dir: Path
+    ) -> None:
         assert not tmp_runners_dir.exists()
         pid_file.write(
             runner_id="r-1",
@@ -48,7 +50,7 @@ class TestWrite:
         )
         assert tmp_runners_dir.exists()
 
-    def test_overwrites_existing_file(self, tmp_runners_dir: Path) -> None:
+    def test_write__file_exists__overwrites(self, tmp_runners_dir: Path) -> None:
         pid_file.write(
             runner_id="r-1", runner_type="connect", project_name="a", workspace=None
         )
@@ -59,7 +61,7 @@ class TestWrite:
         data = json.loads(path.read_text())
         assert data["project_name"] == "b"
 
-    def test_returns_none_on_oserror(
+    def test_write__oserror__returns_none(
         self, tmp_runners_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def boom(*_a, **_kw):
@@ -73,27 +75,27 @@ class TestWrite:
 
 
 class TestRemove:
-    def test_deletes_existing_file(self, tmp_runners_dir: Path) -> None:
+    def test_remove__file_exists__deletes(self, tmp_runners_dir: Path) -> None:
         pid_file.write(
             runner_id="r-1", runner_type="connect", project_name="p", workspace=None
         )
         pid_file.remove(runner_type="connect", runner_id="r-1")
         assert not (tmp_runners_dir / "connect-r-1.json").exists()
 
-    def test_missing_file_is_noop(self, tmp_runners_dir: Path) -> None:
+    def test_remove__file_missing__noop(self, tmp_runners_dir: Path) -> None:
         # Must not raise on a runner that was never written or already cleaned up.
         pid_file.remove(runner_type="connect", runner_id="absent")
 
 
 class TestIsPidAlive:
-    def test_self_is_alive(self) -> None:
+    def test_is_pid_alive__current_process__returns_true(self) -> None:
         assert pid_file.is_pid_alive(os.getpid())
 
-    def test_zero_and_negative_are_dead(self) -> None:
+    def test_is_pid_alive__non_positive_pid__returns_false(self) -> None:
         assert not pid_file.is_pid_alive(0)
         assert not pid_file.is_pid_alive(-1)
 
-    def test_exited_subprocess_is_dead(self) -> None:
+    def test_is_pid_alive__exited_subprocess__returns_false(self) -> None:
         proc = subprocess.Popen([sys.executable, "-c", "pass"])
         proc.wait(timeout=5)
         # Spin briefly while the kernel reaps.
@@ -111,10 +113,10 @@ class TestListAll:
         path.write_text(json.dumps(payload))
         return path
 
-    def test_empty_dir_returns_empty(self, tmp_runners_dir: Path) -> None:
+    def test_list_all__empty_dir__returns_empty(self, tmp_runners_dir: Path) -> None:
         assert pid_file.list_all() == []
 
-    def test_skips_stale_pids(self, tmp_runners_dir: Path) -> None:
+    def test_list_all__stale_pid__skipped(self, tmp_runners_dir: Path) -> None:
         # PID 1 (init) is alive; a high-number PID is very unlikely to be alive.
         self._write_raw(
             tmp_runners_dir,
@@ -143,7 +145,9 @@ class TestListAll:
         ids = [r.runner_id for r in pid_file.list_all()]
         assert ids == ["alive"]
 
-    def test_filters_by_runner_type(self, tmp_runners_dir: Path) -> None:
+    def test_list_all__runner_type_filter__returns_matching_only(
+        self, tmp_runners_dir: Path
+    ) -> None:
         for runner_type in ("connect", "endpoint"):
             self._write_raw(
                 tmp_runners_dir,
@@ -160,7 +164,7 @@ class TestListAll:
         connect_only = pid_file.list_all(runner_type="connect")
         assert [r.runner_type for r in connect_only] == ["connect"]
 
-    def test_skips_malformed_files(self, tmp_runners_dir: Path) -> None:
+    def test_list_all__malformed_files__skipped(self, tmp_runners_dir: Path) -> None:
         tmp_runners_dir.mkdir(parents=True)
         (tmp_runners_dir / "connect-bad.json").write_text("not json {")
         (tmp_runners_dir / "connect-missing-fields.json").write_text(
@@ -168,14 +172,14 @@ class TestListAll:
         )
         assert pid_file.list_all() == []
 
-    def test_ignores_non_json_files(self, tmp_runners_dir: Path) -> None:
+    def test_list_all__non_json_file__ignored(self, tmp_runners_dir: Path) -> None:
         tmp_runners_dir.mkdir(parents=True)
         (tmp_runners_dir / "README.txt").write_text("hi")
         assert pid_file.list_all() == []
 
 
 class TestPurgeStale:
-    def test_purges_dead_entries_on_write(self, tmp_runners_dir: Path) -> None:
+    def test_write__stale_entry_exists__purged(self, tmp_runners_dir: Path) -> None:
         # Seed a stale file, then write a new one and confirm the stale was removed.
         tmp_runners_dir.mkdir(parents=True)
         stale = tmp_runners_dir / "connect-stale.json"
@@ -199,7 +203,7 @@ class TestPurgeStale:
         )
         assert not stale.exists()
 
-    def test_purges_malformed_on_write(self, tmp_runners_dir: Path) -> None:
+    def test_write__malformed_entry_exists__purged(self, tmp_runners_dir: Path) -> None:
         tmp_runners_dir.mkdir(parents=True)
         bad = tmp_runners_dir / "connect-bad.json"
         bad.write_text("not json")
@@ -217,7 +221,7 @@ class TestSignalRoundtrip:
     discovered pid, and check the file/process disappear. Guards the contract
     that `opik <type> stop` relies on: list_all → os.kill → process exits."""
 
-    def test_sigterm_via_pid_file(self, tmp_runners_dir: Path) -> None:
+    def test_sigterm_via_pid_file__happyflow(self, tmp_runners_dir: Path) -> None:
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         try:
             tmp_runners_dir.mkdir(parents=True)

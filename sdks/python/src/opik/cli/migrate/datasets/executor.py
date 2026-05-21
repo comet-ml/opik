@@ -21,8 +21,10 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 from ..audit import AuditLog
 from .._base import execute_plan_loop, record_planned_loop
 from .experiments import cascade_experiments
+from .optimizations import cascade_optimizations
 from .planner import (
     CascadeExperiments,
+    CascadeOptimizations,
     CreateDestination,
     MigrationPlan,
     RenameSource,
@@ -107,6 +109,8 @@ def _apply_action(
         )
     elif isinstance(action, ReplayVersions):
         _replay_versions(client, rest_client, action, plan=plan, audit=audit)
+    elif isinstance(action, CascadeOptimizations):
+        _cascade_optimizations(rest_client, action, plan=plan, audit=audit)
     elif isinstance(action, CascadeExperiments):
         _cascade_experiments(client, rest_client, action, plan=plan, audit=audit)
     else:
@@ -183,6 +187,75 @@ def _replay_versions(
 
     plan.version_remap.update(result.version_remap)
     plan.item_id_remap.update(result.item_id_remap)
+
+
+def _cascade_optimizations(
+    rest_client: OpikApi,
+    action: CascadeOptimizations,
+    *,
+    plan: MigrationPlan,
+    audit: AuditLog,
+) -> None:
+    """Recreate every source-dataset optimization under the destination
+    project and populate ``plan.optimization_id_remap`` so the subsequent
+    ``CascadeExperiments`` action can re-point each experiment's
+    ``optimization_id`` FK at the new destination optimization id.
+
+    Drives a Rich progress bar that ticks once per optimization. The
+    algorithmic core in ``cascade_optimizations`` stays console-agnostic
+    -- the bar is driven by the per-optimization callback. Production
+    datasets carry tens to low-hundreds of optimizations at most, so a
+    simple single-level bar is plenty (no nested per-optimization detail
+    bar like the experiment cascade has).
+    """
+    with Progress(
+        TextColumn("[bold blue]Cascading optimizations"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("{task.description}"),
+        console=_console,
+        transient=False,
+    ) as progress:
+        task_id: Optional[int] = None
+
+        def _on_optimization_start(completed: int, total: int, label: str) -> None:
+            nonlocal task_id
+            # ``label == "done"`` signals the final tick (completed=total).
+            # Drop the "(N/total)" suffix in that frame so the bar doesn't
+            # render "(total+1/total)" from the +1 offset that helps mid-
+            # loop ticks read as "currently processing the (Nth+1) item".
+            is_done = label == "done"
+            if is_done:
+                description = f"→ {action.dest_project_name} · done"
+            else:
+                description = (
+                    f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
+                )
+            # ``total`` might be 0 on a zero-optimization dataset; clamp to
+            # >= 1 so the Rich bar doesn't render as divide-by-zero NaN%.
+            # The same value is used for the bar's ``completed`` on the
+            # "done" tick so the zero-optimization path still renders as
+            # 100% (otherwise the bar would lazily add the task at total=1
+            # and never advance, leaving an already-finished migration
+            # stuck at 0%).
+            bar_total = max(total, 1)
+            if task_id is None:
+                task_id = progress.add_task(description, total=bar_total)
+            if is_done:
+                progress.update(task_id, completed=bar_total, description=description)
+            else:
+                progress.update(task_id, completed=completed, description=description)
+
+        result = cascade_optimizations(
+            rest_client,
+            source_dataset_id=action.source_dataset_id,
+            target_dataset_name=action.dest_name,
+            target_project_name=action.dest_project_name,
+            audit=audit,
+            progress_callback=_on_optimization_start,
+        )
+
+    plan.optimization_id_remap.update(result.id_remap)
 
 
 def _cascade_experiments(
@@ -297,6 +370,7 @@ def _cascade_experiments(
             target_project_name=action.dest_project_name,
             version_remap=plan.version_remap,
             item_id_remap=plan.item_id_remap,
+            optimization_id_remap=plan.optimization_id_remap,
             audit=audit,
             progress_callback=_on_experiment_start,
             inner_progress_callback=_on_inner_step,
@@ -361,6 +435,13 @@ def _action_details(action: object) -> Dict[str, Any]:
             "to_dataset": action.dest_name,
             "to_project": action.dest_project_name,
             "is_test_suite": action.is_test_suite,
+        }
+    if isinstance(action, CascadeOptimizations):
+        return {
+            "type": "cascade_optimizations",
+            "source_dataset_id": action.source_dataset_id,
+            "to_dataset": action.dest_name,
+            "to_project": action.dest_project_name,
         }
     if isinstance(action, CascadeExperiments):
         return {

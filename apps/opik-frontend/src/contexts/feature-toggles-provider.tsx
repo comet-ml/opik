@@ -25,9 +25,11 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
   [FeatureToggleKeys.DATASET_EXPORT_ENABLED]: true,
   [FeatureToggleKeys.DEMO_DATA_ENABLED]: true,
+  [FeatureToggleKeys.OLLIE_ENABLED]: false,
   [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
+  [FeatureToggleKeys.AGENTIC_TOOLS_ENABLED]: false,
   // LLM Provider feature flags - default false
   [FeatureToggleKeys.OPENAI_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: false,
@@ -61,7 +63,12 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
 
   useEffect(() => {
     if (data) {
-      setFeatures(data);
+      // Merge over DEFAULT_STATE so any toggle the backend omits (e.g. a
+      // newer FE talking to an older BE that doesn't yet have a given
+      // field) falls back to its declared default instead of becoming
+      // `undefined`. Keeps the runtime in sync with the `FeatureToggles`
+      // type contract, which promises a boolean for every key.
+      setFeatures({ ...DEFAULT_STATE, ...data });
       // Mirrors ServiceTogglesConfig bounds (5..100). Out-of-range or
       // malformed values fall through to the fallback so a misconfigured
       // deployment can't poison the UI.

@@ -34,8 +34,8 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record TraceThreadUserDefinedMetricPythonCode(
-            @JsonView( {
-                    View.Public.class, View.Write.class}) @NotNull String metric){
+            @JsonView({
+                    View.Public.class, View.Write.class}) @NotNull String metric) {
 
         public static final String CONTEXT_ARG_NAME = "context";
     }
