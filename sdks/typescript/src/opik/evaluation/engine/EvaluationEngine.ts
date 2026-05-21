@@ -178,9 +178,30 @@ export class EvaluationEngine<T = Record<string, unknown>> {
                 }
               })
               .catch((error) => {
-                // Unexpected engine errors (infrastructure failures)
+                // Unexpected engine errors (infrastructure failures).
+                // Still record a failed test result so the item isn't silently dropped.
                 const errorMessage =
                   error instanceof Error ? error.message : String(error);
+                const failedResult: EvaluationTestResult = {
+                  testCase: {
+                    traceId: "",
+                    datasetItemId: item.id,
+                    scoringInputs: {},
+                    taskOutput: {},
+                  },
+                  scoreResults: [
+                    {
+                      name: TASK_ERROR_SCORE_NAME,
+                      value: 0,
+                      reason: errorMessage,
+                      scoringFailed: true,
+                    },
+                  ],
+                };
+                if (this.suiteMode) {
+                  failedResult.trialId = runIndex;
+                }
+                testResults.push(failedResult);
                 errors.push({
                   datasetItemId: item.id,
                   runIndex,
