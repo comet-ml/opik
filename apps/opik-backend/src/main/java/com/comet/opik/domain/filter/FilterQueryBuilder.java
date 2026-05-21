@@ -118,6 +118,7 @@ public class FilterQueryBuilder {
     private static final String COMMIT_DB = "commit";
     private static final String TEMPLATE_DB = "template";
     private static final String CHANGE_DESCRIPTION_DB = "change_description";
+    private static final String VERSION_NUMBER_DB = "version_number";
 
     /**
      * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, Experiment, etc.).
@@ -424,6 +425,7 @@ public class FilterQueryBuilder {
     private static final Map<PromptVersionField, String> PROMPT_VERSION_FIELDS_MAP = Map.ofEntries(
             Map.entry(PromptVersionField.ID, ID_DB),
             Map.entry(PromptVersionField.COMMIT, COMMIT_DB),
+            Map.entry(PromptVersionField.VERSION_NUMBER, VERSION_NUMBER_DB),
             Map.entry(PromptVersionField.TEMPLATE, TEMPLATE_DB),
             Map.entry(PromptVersionField.CHANGE_DESCRIPTION, CHANGE_DESCRIPTION_DB),
             Map.entry(PromptVersionField.METADATA, METADATA_ANALYTICS_DB),
@@ -652,6 +654,7 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.PROMPT_VERSION, Set.of(
                 PromptVersionField.ID,
                 PromptVersionField.COMMIT,
+                PromptVersionField.VERSION_NUMBER,
                 PromptVersionField.TEMPLATE,
                 PromptVersionField.CHANGE_DESCRIPTION,
                 PromptVersionField.TYPE,
