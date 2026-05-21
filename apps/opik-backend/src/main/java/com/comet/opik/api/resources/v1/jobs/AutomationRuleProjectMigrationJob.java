@@ -16,6 +16,7 @@ import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -41,6 +42,7 @@ public class AutomationRuleProjectMigrationJob extends Job implements Interrupta
     private final AutomationRuleProjectMigrationService migrationService;
     private final AutomationRuleProjectMigrationConfig config;
     private final LockService lockService;
+    private final Scheduler migrationScheduler;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
@@ -56,6 +58,13 @@ public class AutomationRuleProjectMigrationJob extends Job implements Interrupta
         this.config = config;
         this.lockService = lockService;
 
+        this.migrationScheduler = Schedulers.newBoundedElastic(
+                config.schedulerThreadCap(),
+                config.schedulerQueuedTaskCap(),
+                "automation-rule-project-migration",
+                (int) config.schedulerThreadTtl().toJavaDuration().toSeconds(),
+                true);
+
         var meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
         this.cycleDuration = meter
                 .histogramBuilder("%s.cycle.duration".formatted(METRIC_NAMESPACE))
@@ -64,6 +73,13 @@ public class AutomationRuleProjectMigrationJob extends Job implements Interrupta
                 .setUnit("ms")
                 .ofLongs()
                 .build();
+
+        log.info("Automation rule project migration job configured, enabled='{}', interval='{}', "
+                + "workspacesPerRun='{}', maxRulesPerCycle='{}', lockTimeout='{}', "
+                + "schedulerThreadCap='{}', schedulerQueuedTaskCap='{}'",
+                config.enabled(), config.interval(), config.workspacesPerRun(),
+                config.maxRulesPerCycle(), config.lockTimeout(),
+                config.schedulerThreadCap(), config.schedulerQueuedTaskCap());
     }
 
     @Override
@@ -86,10 +102,15 @@ public class AutomationRuleProjectMigrationJob extends Job implements Interrupta
                         return Mono.empty();
                     }
                     return Mono.<Void>fromRunnable(migrationService::runMigrationCycle)
-                            .subscribeOn(Schedulers.boundedElastic())
+                            .subscribeOn(migrationScheduler)
                             .timeout(config.jobTimeout().toJavaDuration())
-                            .doOnSuccess(unused -> cycleDuration.record(
-                                    System.currentTimeMillis() - startMillis, RESULT_SUCCESS));
+                            .doOnSuccess(unused -> {
+                                var durationMs = System.currentTimeMillis() - startMillis;
+                                cycleDuration.record(durationMs, RESULT_SUCCESS);
+                                log.info(
+                                        "Automation rule project migration cycle completed successfully, durationMs='{}'",
+                                        durationMs);
+                            });
                 }),
                 Mono.defer(() -> {
                     log.info("Could not acquire lock, another instance is already running");
@@ -100,16 +121,19 @@ public class AutomationRuleProjectMigrationJob extends Job implements Interrupta
                 config.lockWaitTime().toJavaDuration(),
                 true)
                 .onErrorResume(throwable -> {
-                    cycleDuration.record(System.currentTimeMillis() - startMillis, RESULT_ERROR);
+                    var durationMs = System.currentTimeMillis() - startMillis;
+                    cycleDuration.record(durationMs, RESULT_ERROR);
                     if (interrupted.get()) {
-                        log.warn("Automation rule project migration was interrupted", throwable);
+                        log.warn("Automation rule project migration was interrupted, durationMs='{}'",
+                                durationMs, throwable);
                     } else {
-                        log.error("Automation rule project migration failed", throwable);
+                        log.error("Automation rule project migration failed, durationMs='{}'",
+                                durationMs, throwable);
                     }
                     return Mono.empty();
                 })
                 .doFinally(signal -> currentExecution.set(null))
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(migrationScheduler)
                 .subscribe();
         currentExecution.set(subscription);
     }

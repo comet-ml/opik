@@ -1431,14 +1431,30 @@ datasetProjectMigration:
   schedulerQueuedTaskCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
   schedulerThreadTtl: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 
+# Automation rule project migration (D6): splits multi-project automation rules into
+# per-project copies so V2's project-first navigation represents them correctly.
+# Controlled by AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED — disabled by default.
 automationRuleProjectMigration:
+  # Master switch — set to true to activate the recurring Quartz job.
   enabled: ${AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED:-false}
+  # Max workspaces processed per cycle (global, across all replicas via distributed lock).
   workspacesPerRun: ${AUTOMATION_RULE_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions.
+  maxRulesPerCycle: ${AUTOMATION_RULE_PROJECT_MIGRATION_MAX_RULES_PER_CYCLE:-100}
+  # How often the Quartz job fires.
   interval: ${AUTOMATION_RULE_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay after application start before the first cycle runs.
   startupDelay: ${AUTOMATION_RULE_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Redis distributed lock held by the winning replica — must be shorter than jobTimeout.
   lockTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # How long to wait trying to acquire the lock before giving up (non-blocking skip).
   lockWaitTime: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Hard timeout for the entire cycle — safety net if processing stalls.
   jobTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated bounded-elastic scheduler — isolates migration from the shared reactive chain.
+  schedulerThreadCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list

@@ -1,10 +1,14 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import lombok.Builder;
+import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
+import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
@@ -16,7 +20,8 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 public interface AutomationRuleMigrationDAO {
 
-    record EligibleWorkspace(String workspaceId, long multiProjectRuleCount) {
+    @Builder(toBuilder = true)
+    record EligibleWorkspace(@NonNull String workspaceId, long multiProjectRuleCount) {
     }
 
     @SqlQuery("""
@@ -27,7 +32,10 @@ public interface AutomationRuleMigrationDAO {
                 <if(demoRuleNames)>
                 JOIN automation_rules ar ON arp.rule_id = ar.id AND arp.workspace_id = ar.workspace_id
                 <endif>
-                WHERE arp.workspace_id NOT IN (<excludedWorkspaceIds>)
+                WHERE 1=1
+                <if(excludedWorkspaceIds)>
+                  AND arp.workspace_id NOT IN (<excludedWorkspaceIds>)
+                <endif>
                 <if(demoRuleNames)>
                   AND ar.name NOT IN (<demoRuleNames>)
                 <endif>
@@ -39,9 +47,10 @@ public interface AutomationRuleMigrationDAO {
             LIMIT :limit
             """)
     @UseStringTemplateEngine
-    @RegisterRowMapper(EligibleWorkspaceRowMapper.class)
+    @AllowUnusedBindings
+    @RegisterConstructorMapper(EligibleWorkspace.class)
     List<EligibleWorkspace> findEligibleWorkspaces(
-            @BindList("excludedWorkspaceIds") Set<String> excludedWorkspaceIds,
+            @Define("excludedWorkspaceIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "excludedWorkspaceIds") Set<String> excludedWorkspaceIds,
             @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "demoRuleNames") List<String> demoRuleNames,
             @Bind("limit") int limit);
 
@@ -74,6 +83,11 @@ public interface AutomationRuleMigrationDAO {
             @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId);
 
+    @SqlUpdate("UPDATE automation_rules SET enabled = false WHERE id = :ruleId AND workspace_id = :workspaceId")
+    int disableRule(@Bind("ruleId") UUID ruleId, @Bind("workspaceId") String workspaceId);
+
+    // Fields are enumerated intentionally — project_id is excluded so the cloned rule
+    // does not inherit the legacy column value from the source row.
     @SqlUpdate("""
             INSERT INTO automation_rules (id, workspace_id, `action`, name, sampling_rate, enabled, filters)
             SELECT :newId, workspace_id, `action`, name, sampling_rate, enabled, filters
@@ -92,7 +106,4 @@ public interface AutomationRuleMigrationDAO {
             """)
     void copyEvaluator(@Bind("newId") UUID newId,
             @Bind("sourceId") UUID sourceId);
-
-    @SqlUpdate("UPDATE automation_rules SET project_id = NULL WHERE id = :id AND workspace_id = :workspaceId")
-    int clearLegacyProjectId(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 }
