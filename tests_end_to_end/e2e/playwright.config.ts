@@ -1,14 +1,14 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { loadEnvConfig } from './config/env.config';
 
 const env = loadEnvConfig();
 
-const storageStatePath = process.env.OPIK_STORAGE_STATE
-  ? path.resolve(__dirname, process.env.OPIK_STORAGE_STATE)
-  : path.resolve(__dirname, '.auth', `${env.deployment}.json`);
-const storageState = fs.existsSync(storageStatePath) ? storageStatePath : undefined;
+// OSS deployments have no auth wall; cloud/self-hosted use the storage state
+// minted by global-setup at .auth/user.json (created on every run from
+// OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD, never checked in).
+const storageState =
+  env.deployment === 'oss' ? undefined : path.resolve(__dirname, '.auth/user.json');
 
 export default defineConfig({
   testDir: './tests',

@@ -1,7 +1,7 @@
 import atexit
 
 import opik
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from opik.rest_api.core.api_error import ApiError
 
 from ..schemas import TraceCreate, TraceResponse
@@ -10,10 +10,21 @@ router = APIRouter(prefix="/traces", tags=["traces"])
 
 
 @router.post("", response_model=TraceResponse, status_code=201)
-def create_trace(body: TraceCreate) -> TraceResponse:
+def create_trace(
+    body: TraceCreate,
+    x_opik_api_key: str | None = Header(default=None),
+) -> TraceResponse:
     # Use @opik.track to exercise the same code path users invoke; the
     # decorator emits a trace via the SDK's streamer thread.
-    client = opik.Opik(workspace=body.workspace) if body.workspace else opik.Opik()
+    kwargs: dict[str, str] = {}
+    if body.workspace:
+        kwargs["workspace"] = body.workspace
+    if x_opik_api_key:
+        kwargs["api_key"] = x_opik_api_key
+    client = opik.Opik(**kwargs) if kwargs else opik.Opik()
+    # Bind the @opik.track decorator's global client to this request's auth
+    # context so flush_tracker + search_traces both use the same credentials.
+    opik.set_global_client(client, context_wise=True)
 
     @opik.track(name=body.name, project_name=body.project_name)
     def _emit(_input_value: str) -> str:

@@ -76,13 +76,15 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   const userPassword = env.OPIK_TEST_USER_PASSWORD ?? null;
   const userName = env.OPIK_TEST_USER_NAME ?? null;
 
-  if (deployment === 'cloud' && (!userEmail || !userPassword)) {
-    throw new Error('cloud deployment requires OPIK_TEST_USER_EMAIL and OPIK_TEST_USER_PASSWORD');
-  }
-
   const apiKey = env.OPIK_API_KEY ?? null;
-  if (deployment === 'cloud' && !apiKey) {
-    throw new Error('cloud deployment requires OPIK_API_KEY (teardown sweeps the workspace via authenticated REST)');
+
+  // For cloud/self-hosted, accept either a pre-set API key (typical for
+  // power-user / CI debugging) OR username+password (typical for fresh CI
+  // runs — globalSetup will exchange these for an API key + storage state).
+  if (deployment !== 'oss' && !apiKey && (!userEmail || !userPassword)) {
+    throw new Error(
+      `${deployment} deployment requires either OPIK_API_KEY OR (OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD); none provided`,
+    );
   }
 
   const rawBaseUrl = env.OPIK_BASE_URL ?? defaults.baseUrl;

@@ -1,7 +1,7 @@
 import atexit
 
 import opik
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from opik.rest_api.core.api_error import ApiError
 
 from ..schemas import ProjectCreate, ProjectResponse
@@ -10,10 +10,21 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.post("", response_model=ProjectResponse, status_code=201)
-def create_project(body: ProjectCreate) -> ProjectResponse:
+def create_project(
+    body: ProjectCreate,
+    x_opik_api_key: str | None = Header(default=None),
+) -> ProjectResponse:
+    # Callers may pass an API key per-request via X-Opik-Api-Key (used when the
+    # TS test runner mints a key at suite start). When absent, opik.Opik()
+    # falls back to OPIK_API_KEY env, matching local-dev defaults.
     # _rest_client because opik.Opik() doesn't yet expose a public
     # create_project(); switch when the SDK adds one.
-    client = opik.Opik(workspace=body.workspace) if body.workspace else opik.Opik()
+    kwargs: dict[str, str] = {}
+    if body.workspace:
+        kwargs["workspace"] = body.workspace
+    if x_opik_api_key:
+        kwargs["api_key"] = x_opik_api_key
+    client = opik.Opik(**kwargs) if kwargs else opik.Opik()
     # Opik.__init__ spawns a streamer thread and registers an atexit handler.
     # We never enqueue messages here, so close the streamer and drop the
     # handler immediately rather than leaking one of each per request.
