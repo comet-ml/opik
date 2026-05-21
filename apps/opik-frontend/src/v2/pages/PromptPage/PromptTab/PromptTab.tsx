@@ -345,14 +345,18 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setOpenUseThisPrompt(true)}>
-                    Show code snippets
+                    {isLatest || !activeVersionLabel
+                      ? "Show code snippets"
+                      : `Show code snippets for ${activeVersionLabel}`}
                   </DropdownMenuItem>
                   {canUsePlayground && (
                     <DropdownMenuItem
                       disabled={!prompt || isPendingProviderKeys}
                       onClick={handleOpenInPlaygroundClick}
                     >
-                      Open in playground
+                      {isLatest || !activeVersionLabel
+                        ? "Open in playground"
+                        : `Open ${activeVersionLabel} in playground`}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -552,6 +556,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         setOpen={setOpenUseThisPrompt}
         promptName={prompt.name}
         templateStructure={prompt.template_structure}
+        versionLabel={isLatest ? undefined : activeVersionLabel || undefined}
+        versionCommit={isLatest ? undefined : activeVersion?.commit}
       />
 
       <EditPromptSheet

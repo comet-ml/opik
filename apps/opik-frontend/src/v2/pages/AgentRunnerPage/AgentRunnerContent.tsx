@@ -1,7 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Pause, Play, RotateCcw, Unplug } from "lucide-react";
+import { MoreHorizontal, Pause, Play, RotateCcw, Unplug } from "lucide-react";
 
 import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import { Skeleton } from "@/ui/skeleton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -123,8 +129,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 
   const handleRun = (
     inputs: Record<string, unknown>,
-    blueprintName?: string,
-    maskId?: string,
+    promptMasks: Record<string, string>,
   ) => {
     if (!agentName) {
       return;
@@ -135,8 +140,9 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
         agent_name: agentName,
         project_id: projectId,
         inputs,
-        mask_id: maskId,
-        blueprint_name: blueprintName,
+        ...(Object.keys(promptMasks).length > 0 && {
+          prompt_masks: promptMasks,
+        }),
       },
       {
         onSuccess: (data) => {
@@ -189,12 +195,12 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b bg-gray-100 px-4 py-3">
+      <div className="flex items-center gap-3 border-b bg-soft-background px-4 py-3">
         <h1 className="comet-title-xs">Agent playground</h1>
 
         {pairing.isInitialLoading ? null : isConnected ? (
           <TooltipWrapper content="Your agent is connected to Opik">
-            <span className="comet-body-xs flex items-center gap-1.5 text-emerald-600">
+            <span className="comet-body-xs flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-0.5 text-foreground">
               <span className="size-1.5 rounded-full bg-emerald-500" />
               Connected
             </span>
@@ -240,26 +246,41 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
                   </span>
                 </TooltipWrapper>
               )}
-              <Button variant="ghost" size="2xs" onClick={handleReset}>
-                <RotateCcw className="mr-1 size-3.5" />
-                Reset
-              </Button>
+              <TooltipWrapper content="Reset">
+                <Button
+                  variant="ghost"
+                  size="icon-2xs"
+                  onClick={handleReset}
+                  aria-label="Reset"
+                >
+                  <RotateCcw />
+                </Button>
+              </TooltipWrapper>
               {canConfigureWorkspaceSettings && (
-                <TooltipWrapper content="Disconnect agent">
-                  <Button
-                    variant="outline"
-                    size="2xs"
-                    disabled={disconnectMutation.isPending}
-                    onClick={() => {
-                      if (pairing.runnerId) {
-                        disconnectMutation.mutate(pairing.runnerId);
-                      }
-                    }}
-                  >
-                    <Unplug className="mr-1 size-3.5" />
-                    Disconnect
-                  </Button>
-                </TooltipWrapper>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-2xs"
+                      aria-label="More actions"
+                    >
+                      <MoreHorizontal />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={disconnectMutation.isPending}
+                      onClick={() => {
+                        if (pairing.runnerId) {
+                          disconnectMutation.mutate(pairing.runnerId);
+                        }
+                      }}
+                    >
+                      <Unplug className="mr-2 size-3.5" />
+                      Disconnect
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </>
           )}

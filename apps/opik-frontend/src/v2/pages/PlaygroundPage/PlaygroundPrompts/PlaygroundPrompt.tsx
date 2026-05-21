@@ -57,6 +57,7 @@ import {
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
+import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptProps {
@@ -124,6 +125,7 @@ const PlaygroundPrompt = ({
 
   const {
     chatPromptData,
+    chatPromptVersionData,
     loadedChatPromptRef,
     chatPromptTemplate,
     hasUnsavedChatPromptChanges,
@@ -134,6 +136,12 @@ const PlaygroundPrompt = ({
     onMessagesLoaded: handleChatPromptMessagesLoaded,
     skipInitialLoad: prompt?.skipInitialPromptLoad,
   });
+
+  const chatPromptVersionLabel = usePromptVersionLabel(
+    selectedChatPromptId,
+    selectedChatPromptVersionId ?? chatPromptVersionData?.id,
+    chatPromptData?.version_count,
+  );
 
   // Clear the one-time flag so it doesn't persist to localStorage
   useEffect(() => {
@@ -356,12 +364,11 @@ const PlaygroundPrompt = ({
             <LoadedPromptDisplay
               name={chatPromptData?.name}
               templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-              versionLabel={
-                chatPromptData && chatPromptData.version_count > 0
-                  ? `v${chatPromptData.version_count}`
-                  : undefined
+              versionLabel={chatPromptVersionLabel}
+              versionTags={
+                chatPromptVersionData?.tags ??
+                chatPromptData?.latest_version?.tags
               }
-              versionTags={chatPromptData?.latest_version?.tags}
               hasUnsavedChanges={hasUnsavedChatPromptChanges}
               onClear={() => handleImportChatPrompt(undefined, undefined)}
             />

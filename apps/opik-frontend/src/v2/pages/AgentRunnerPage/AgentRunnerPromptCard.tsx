@@ -1,11 +1,18 @@
 import React, {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import { ChevronDown, ChevronRight, Clock, Save, Sparkles } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  GitCommitHorizontal,
+  Save,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/ui/button";
@@ -26,6 +33,7 @@ import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersion
 import {
   Prompt,
   PROMPT_TEMPLATE_STRUCTURE,
+  PROMPT_VERSION_TYPE,
   PromptVersion,
 } from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
@@ -50,9 +58,19 @@ type LoadedVersion = {
   label: string;
 };
 
-const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
-  prompt,
-}) => {
+export type PromptMaskEntry = {
+  promptId: string;
+  versionId: string;
+};
+
+export type AgentRunnerPromptCardHandle = {
+  prepareMask: () => Promise<PromptMaskEntry | null>;
+};
+
+const AgentRunnerPromptCard = forwardRef<
+  AgentRunnerPromptCardHandle,
+  AgentRunnerPromptCardProps
+>(({ prompt }, ref) => {
   const workspaceName = useAppStore((s) => s.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
@@ -95,12 +113,12 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
   }, [versions, total, selectedVersionId]);
 
   const baselineTemplate = selectedVersion?.version.template ?? "";
-  const loadedVersionIdRef = useRef<string | null>(null);
+  const [loadedVersionId, setLoadedVersionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedVersion) return;
-    if (loadedVersionIdRef.current === selectedVersion.version.id) return;
-    loadedVersionIdRef.current = selectedVersion.version.id;
+    if (loadedVersionId === selectedVersion.version.id) return;
+    setLoadedVersionId(selectedVersion.version.id);
     if (isChatPrompt) {
       const messages = parseChatTemplateToLLMMessages(
         selectedVersion.version.template,
@@ -114,10 +132,11 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
       setDraftTemplate(selectedVersion.version.template ?? "");
       setDraftMessages([]);
     }
-  }, [selectedVersion, isChatPrompt]);
+  }, [selectedVersion, isChatPrompt, loadedVersionId]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!selectedVersion) return false;
+    if (loadedVersionId !== selectedVersion.version.id) return false;
     if (isChatPrompt) {
       return !chatTemplatesEqual(
         serializeChatTemplate(draftMessages),
@@ -127,6 +146,7 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
     return draftTemplate !== baselineTemplate;
   }, [
     selectedVersion,
+    loadedVersionId,
     isChatPrompt,
     draftMessages,
     draftTemplate,
@@ -147,6 +167,7 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
         template,
         templateStructure: prompt.template_structure,
         type: selectedVersion?.version.type,
+        versionType: PROMPT_VERSION_TYPE.MASK,
         projectId: activeProjectId ?? undefined,
         onSuccess: (v) => setPickedVersionId(v.id),
       });
@@ -170,6 +191,64 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
     toast,
   ]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      prepareMask: async () => {
+        if (hasUnsavedChanges) {
+          if (!canCreatePrompts) {
+            toast({
+              title: "Cannot save prompt changes",
+              description: `Missing permission to create new versions of ${prompt.name}`,
+              variant: "destructive",
+            });
+            throw new Error("Missing permission to save prompt version");
+          }
+          const template = isChatPrompt
+            ? serializeChatTemplate(draftMessages)
+            : draftTemplate;
+          let createdVersionId: string | undefined;
+          await createVersionAsync({
+            name: prompt.name,
+            template,
+            templateStructure: prompt.template_structure,
+            type: selectedVersion?.version.type,
+            versionType: PROMPT_VERSION_TYPE.MASK,
+            projectId: activeProjectId ?? undefined,
+            onSuccess: (v) => {
+              createdVersionId = v.id;
+            },
+          });
+          if (!createdVersionId) {
+            throw new Error("Failed to create prompt version");
+          }
+          return { promptId: prompt.id, versionId: createdVersionId };
+        }
+
+        if (pickedVersionId) {
+          return { promptId: prompt.id, versionId: pickedVersionId };
+        }
+
+        return null;
+      },
+    }),
+    [
+      hasUnsavedChanges,
+      pickedVersionId,
+      canCreatePrompts,
+      isChatPrompt,
+      draftMessages,
+      draftTemplate,
+      createVersionAsync,
+      prompt.id,
+      prompt.name,
+      prompt.template_structure,
+      selectedVersion?.version.type,
+      activeProjectId,
+      toast,
+    ],
+  );
+
   const handleAddMessage = useCallback(() => {
     setDraftMessages((prev) => {
       const last = prev[prev.length - 1];
@@ -181,7 +260,7 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
   const selectedStage = pickHighestStage(selectedVersion?.version.tags);
 
   const renderBody = () => {
-    if (!selectedVersion && !loadedVersionIdRef.current) {
+    if (!selectedVersion && !loadedVersionId) {
       return (
         <div className="space-y-2">
           <Skeleton className="h-16 w-full" />
@@ -234,23 +313,27 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
             promptId: prompt.id,
           }}
           search={{ activeVersionId: selectedVersionId }}
-          className="comet-body-s-accented truncate text-foreground underline-offset-2 hover:underline"
+          className="comet-body-xs truncate text-muted-slate underline-offset-2 hover:underline"
         >
           {prompt.name}
         </Link>
+
+        <span className="-mr-1 text-[10px] text-light-slate opacity-60">
+          |
+        </span>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="2xs"
-              className="comet-body-xs gap-1 text-light-slate"
+              className="comet-body-xs gap-1 px-1 text-light-slate"
               disabled={isVersionsLoading || versions.length === 0}
             >
               {selectedStage ? (
                 <StageTag value={selectedStage} size="xs" />
               ) : (
-                <Sparkles className="size-3 text-[var(--tag-lime-text)]" />
+                <GitCommitHorizontal className="size-3 text-light-slate" />
               )}
               {selectedVersion?.label ?? "v?"}
               <ChevronDown className="size-3" />
@@ -312,6 +395,8 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
       <div className={cn("px-3 pb-3", !isOpen && "hidden")}>{renderBody()}</div>
     </div>
   );
-};
+});
+
+AgentRunnerPromptCard.displayName = "AgentRunnerPromptCard";
 
 export default AgentRunnerPromptCard;
