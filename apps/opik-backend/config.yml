@@ -1450,7 +1450,7 @@ automationRuleProjectMigration:
   # Max workspaces processed per cycle (global, across all replicas via distributed lock).
   workspacesPerRun: ${AUTOMATION_RULE_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
   # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions.
-  maxRulesPerCycle: ${AUTOMATION_RULE_PROJECT_MIGRATION_MAX_RULES_PER_CYCLE:-100}
+  maxRulesPerCycle: ${AUTOMATION_RULE_PROJECT_MIGRATION_MAX_RULES_PER_CYCLE:-20}
   # How often the Quartz job fires.
   interval: ${AUTOMATION_RULE_PROJECT_MIGRATION_INTERVAL:-30s}
   # Delay after application start before the first cycle runs.
@@ -1462,7 +1462,7 @@ automationRuleProjectMigration:
   # Hard timeout for the entire cycle — safety net if processing stalls.
   jobTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
   # Dedicated bounded-elastic scheduler — isolates migration from the shared reactive chain.
-  schedulerThreadCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerThreadCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-2}
   schedulerQueuedTaskCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
   schedulerThreadTtl: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 

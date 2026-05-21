@@ -815,7 +815,7 @@ automationRuleProjectMigration:
   # Number of workspaces to process per job run (smallest first)
   workspacesPerRun: 20
   # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions
-  maxRulesPerCycle: 100
+  maxRulesPerCycle: 20
   # Interval between recurring job runs
   interval: 5s
   # Delay before first run after app startup
@@ -829,7 +829,7 @@ automationRuleProjectMigration:
   # Per-cycle timeout — short for tests so hangs fail fast
   jobTimeout: 30s
   # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  # Max threads in the pool — the job runs sequentially per replica; minimum 2 required by reactor.
   schedulerThreadCap: 2
   # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
   schedulerQueuedTaskCap: 50

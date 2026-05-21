@@ -91,7 +91,7 @@ public interface AutomationRuleEvaluatorService {
 
     Mono<LogPage> getLogs(LogCriteria criteria);
 
-    void evictCache(@NonNull String workspaceId);
+    void evictCache(String workspaceId);
 }
 
 @Singleton

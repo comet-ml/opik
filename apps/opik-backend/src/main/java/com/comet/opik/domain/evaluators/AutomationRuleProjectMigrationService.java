@@ -172,21 +172,15 @@ public class AutomationRuleProjectMigrationService {
         log.info("Starting workspace automation rule migration, workspaceId='{}', multiProjectRuleCount='{}'",
                 workspaceId, multiProjectRuleCount);
 
-        var multiProjectRuleIds = findMultiProjectRuleIds(workspaceId);
+        var rulesToProcess = findMultiProjectRuleIds(workspaceId);
 
-        if (CollectionUtils.isEmpty(multiProjectRuleIds)) {
+        if (CollectionUtils.isEmpty(rulesToProcess)) {
             log.info("No multi-project automation rules to migrate, workspaceId='{}'", workspaceId);
             return WorkspaceMigrationResult.EMPTY;
         }
 
-        var rulesToProcess = multiProjectRuleIds.size() > config.maxRulesPerCycle()
-                ? multiProjectRuleIds.subList(0, config.maxRulesPerCycle())
-                : multiProjectRuleIds;
-
-        if (rulesToProcess.size() < multiProjectRuleIds.size()) {
-            log.info("Capping rules to process, workspaceId='{}', total='{}', processing='{}'",
-                    workspaceId, multiProjectRuleIds.size(), rulesToProcess.size());
-        }
+        log.info("Found multi-project rules to process, workspaceId='{}', count='{}'",
+                workspaceId, rulesToProcess.size());
 
         int splitCount = 0;
         int newRuleCount = 0;
@@ -207,7 +201,6 @@ public class AutomationRuleProjectMigrationService {
 
         rulesSplit.add(splitCount);
         newRulesCreated.add(newRuleCount);
-        rulesMovedToDefault.add(movedToDefaultCount);
 
         evaluatorService.evictCache(workspaceId);
 
@@ -224,7 +217,8 @@ public class AutomationRuleProjectMigrationService {
     private List<UUID> findMultiProjectRuleIds(String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AutomationRuleMigrationDAO.class)
-                        .findMultiProjectRuleIds(workspaceId, DemoData.AUTOMATION_RULES));
+                        .findMultiProjectRuleIds(workspaceId, DemoData.AUTOMATION_RULES,
+                                config.maxRulesPerCycle()));
     }
 
     private SplitResult splitRule(String workspaceId, UUID ruleId) {
