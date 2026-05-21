@@ -48,6 +48,10 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import PromptsSelectBox from "@/v1/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import AddNewPromptVersionDialog from "@/v1/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import {
+  PROMPT_SAVE_AS_CHAT_TOOLTIP,
+  PROMPT_UNSAVED_TOOLTIP,
+} from "@/constants/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 
 interface PlaygroundPromptProps {
@@ -315,8 +319,8 @@ const PlaygroundPrompt = ({
           <TooltipWrapper
             content={
               hasUnsavedChatPromptChanges
-                ? "This prompt version hasn't been saved"
-                : "Save as chat prompt"
+                ? PROMPT_UNSAVED_TOOLTIP
+                : PROMPT_SAVE_AS_CHAT_TOOLTIP
             }
           >
             <Button
