@@ -28,6 +28,7 @@ export type MetricCardProps = {
   hideDelta?: boolean;
   hideLabel?: boolean;
   hideValue?: boolean;
+  testId?: string;
 };
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -43,6 +44,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   hideDelta = false,
   hideLabel = false,
   hideValue = false,
+  testId,
 }) => {
   const percentage = computePercentageChange(
     currentRaw ?? null,
@@ -87,6 +89,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         className,
       )}
       onClick={onClick}
+      data-testid={testId}
     >
       <div
         className={cn(
