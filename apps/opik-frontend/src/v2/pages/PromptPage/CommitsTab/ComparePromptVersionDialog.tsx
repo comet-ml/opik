@@ -110,18 +110,6 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     const requestedDiff = initialDiffVersionId
       ? versions.find((v) => v.id === initialDiffVersionId)
       : undefined;
-
-    // When the caller anchored both sides (e.g., PromptTab picking a target
-    // while viewing a specific version), order them chronologically so the
-    // diff reads from-old → to-new.
-    if (requestedBase && requestedDiff) {
-      const olderFirst =
-        requestedBase.created_at.localeCompare(requestedDiff.created_at) <= 0;
-      setBaseVersion(olderFirst ? requestedBase : requestedDiff);
-      setDiffVersion(olderFirst ? requestedDiff : requestedBase);
-      return;
-    }
-
     setBaseVersion(
       requestedBase ??
         versions.find((v) => v.commit === first(versionOptions)?.value),

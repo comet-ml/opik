@@ -85,9 +85,9 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [openLoadConfirm, setOpenLoadConfirm] = useState(false);
   const [versionToRestore, setVersionToRestore] =
     useState<PromptVersion | null>(null);
-  const [diffTargetVersionId, setDiffTargetVersionId] = useState<string | null>(
-    null,
-  );
+  const [compareAgainstVersionId, setCompareAgainstVersionId] = useState<
+    string | null
+  >(null);
   const [viewMode, setViewMode] = useState<ViewMode>("pretty");
 
   const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
@@ -202,7 +202,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   }, [isPlaygroundEmpty, handleLoadIntoPlayground]);
 
   const handleSelectDiffVersion = useCallback((item: VersionHistoryItem) => {
-    setDiffTargetVersionId(item.id);
+    setCompareAgainstVersionId(item.id);
     setOpenCompare(true);
   }, []);
 
@@ -560,8 +560,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openCompare}
         setOpen={setOpenCompare}
         versions={versions ?? []}
-        initialBaseVersionId={effectiveVersionId || undefined}
-        initialDiffVersionId={diffTargetVersionId ?? undefined}
+        initialBaseVersionId={compareAgainstVersionId ?? undefined}
+        initialDiffVersionId={effectiveVersionId || undefined}
       />
 
       <ConfirmDialog
