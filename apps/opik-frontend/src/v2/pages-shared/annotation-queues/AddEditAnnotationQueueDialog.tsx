@@ -63,6 +63,7 @@ const formSchema = z.object({
   scope: z.nativeEnum(ANNOTATION_QUEUE_SCOPE),
   comments_enabled: z.boolean(),
   feedback_definition_names: z.array(z.string()).default([]),
+  annotators_per_item: z.number().int().min(1).default(1),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -101,6 +102,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       scope: defaultQueue?.scope || scope || ANNOTATION_QUEUE_SCOPE.TRACE,
       feedback_definition_names: defaultQueue?.feedback_definition_names || [],
       comments_enabled: defaultQueue?.comments_enabled || true,
+      annotators_per_item: defaultQueue?.annotators_per_item || 1,
     },
   });
 
@@ -296,6 +298,35 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                       </FormItem>
                     );
                   }}
+                />
+              </div>
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="annotators_per_item"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Number of annotators per item</FormLabel>
+                      <Description>
+                        This sets the number of annotators required to score an
+                        item before it is marked as completed in the queue.
+                      </Description>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={field.value}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value, 10);
+                            if (!isNaN(value)) {
+                              field.onChange(value);
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
               <div className="space-y-4">

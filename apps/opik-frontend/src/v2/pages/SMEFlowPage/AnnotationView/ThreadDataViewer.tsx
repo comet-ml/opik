@@ -17,10 +17,10 @@ const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 const ThreadDataViewer: React.FunctionComponent = () => {
-  const { currentItem, nextItem } = useSMEFlow();
+  const { currentItem, nextDefaultItem } = useSMEFlow();
 
   const thread = currentItem as Thread;
-  const nextThread = nextItem as Thread | undefined;
+  const nextThread = nextDefaultItem as Thread | undefined;
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",

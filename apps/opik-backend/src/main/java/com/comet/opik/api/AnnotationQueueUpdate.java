@@ -19,5 +19,6 @@ public record AnnotationQueueUpdate(
         String description,
         String instructions,
         Boolean commentsEnabled,
-        List<@NotBlank String> feedbackDefinitionNames) {
+        List<@NotBlank String> feedbackDefinitionNames,
+        Integer annotatorsPerItem) {
 }
