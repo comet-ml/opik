@@ -184,8 +184,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage],
   );
 
-  const saveDisabled =
-    message.content === "" || (!canCreatePrompts && !promptId);
+  const saveDisabled = !hasContent || (!canCreatePrompts && !promptId);
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&

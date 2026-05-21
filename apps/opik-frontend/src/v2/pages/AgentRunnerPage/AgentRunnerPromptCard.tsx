@@ -5,13 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Save,
-  Sparkles,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, Save, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/ui/button";
@@ -29,20 +23,22 @@ import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPrompt
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
-import { Prompt, PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
+import {
+  Prompt,
+  PROMPT_TEMPLATE_STRUCTURE,
+  PromptVersion,
+} from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
 import {
   generateDefaultLLMPromptMessage,
   getNextMessageType,
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
-import {
-  chatTemplatesEqual,
-  serializeChatTemplate,
-} from "@/lib/chatTemplate";
+import { chatTemplatesEqual, serializeChatTemplate } from "@/lib/chatTemplate";
 import { pickHighestStage } from "@/utils/agent-configurations";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { cn } from "@/lib/utils";
 
 type AgentRunnerPromptCardProps = {
@@ -60,6 +56,9 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
   const workspaceName = useAppStore((s) => s.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
 
   const [isOpen, setIsOpen] = useState(true);
   const [pickedVersionId, setPickedVersionId] = useState<string | null>(null);
@@ -80,7 +79,10 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
       { enabled: isOpen, staleTime: 60_000 },
     );
 
-  const versions = versionsData?.content ?? [];
+  const versions = useMemo(
+    () => versionsData?.content ?? [],
+    [versionsData?.content],
+  );
   const total = versionsData?.total ?? versions.length;
 
   const selectedVersionId =
@@ -135,7 +137,7 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
     useCreatePromptVersionMutation();
 
   const handleSave = useCallback(async () => {
-    if (!hasUnsavedChanges) return;
+    if (!hasUnsavedChanges || !canCreatePrompts) return;
     const template = isChatPrompt
       ? serializeChatTemplate(draftMessages)
       : draftTemplate;
@@ -156,6 +158,7 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
     }
   }, [
     hasUnsavedChanges,
+    canCreatePrompts,
     createVersionAsync,
     prompt.name,
     prompt.template_structure,
@@ -290,16 +293,18 @@ const AgentRunnerPromptCard: React.FC<AgentRunnerPromptCardProps> = ({
               <span className="size-1.5 rounded-full bg-destructive" />
               Unsaved changes
             </span>
-            <TooltipWrapper content="Save as new version">
-              <Button
-                variant="minimal"
-                size="icon-2xs"
-                disabled={isSaving}
-                onClick={handleSave}
-              >
-                <Save />
-              </Button>
-            </TooltipWrapper>
+            {canCreatePrompts && (
+              <TooltipWrapper content="Save as new version">
+                <Button
+                  variant="minimal"
+                  size="icon-2xs"
+                  disabled={isSaving}
+                  onClick={handleSave}
+                >
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
           </div>
         )}
       </div>
