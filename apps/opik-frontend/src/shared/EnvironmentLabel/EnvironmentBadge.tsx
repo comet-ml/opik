@@ -1,19 +1,8 @@
 import React from "react";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
-import { DEFAULT_HEX_COLOR, HEX_COLOR_REGEX } from "@/constants/colorVariants";
 import { TagProps } from "@/ui/tag";
 import { cn } from "@/lib/utils";
-
-const resolveColor = (color: string | undefined) =>
-  color && HEX_COLOR_REGEX.test(color) ? color : DEFAULT_HEX_COLOR;
-
-const getContrastingTextColor = (hex: string): string => {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const luminance = (r * 299 + g * 587 + b * 114) / 1000;
-  return luminance > 140 ? "#0f172a" : "#ffffff";
-};
+import { getContrastingTextColor, resolveEnvironmentColor } from "./helpers";
 
 const SIZE_CLASSES: Record<NonNullable<TagProps["size"]>, string> = {
   default: "comet-body-xs h-5 px-2 leading-5 rounded-sm",
@@ -38,7 +27,7 @@ const EnvironmentBadge: React.FC<EnvironmentBadgeProps> = ({
   if (!name) return null;
 
   const env = data?.content?.find((e) => e.name === name);
-  const bg = resolveColor(env?.color);
+  const bg = resolveEnvironmentColor(env?.color);
   const text = getContrastingTextColor(bg);
 
   return (

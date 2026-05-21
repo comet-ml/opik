@@ -10,7 +10,7 @@ import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import SelectBoxClearWrapper from "@/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import usePromptById from "@/api/prompts/usePromptById";
-import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
@@ -145,15 +145,14 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
 
   if (compact) {
     if (value) {
-      const displayName =
-        promptName ??
-        promptsOptions.find((o) => o.value === value)?.label ??
-        "Loaded prompt";
+      const promptFromList = prompts.find((p) => p.id === value);
+      const displayName = promptName ?? promptFromList?.name ?? "Loaded prompt";
 
       return (
         <CompactLoadedPrompt
           promptId={value}
           displayName={displayName}
+          prompt={promptFromList}
           hasUnsavedChanges={hasUnsavedChanges}
           onClear={onClear}
         />
@@ -226,6 +225,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
 type CompactLoadedPromptProps = {
   promptId: string;
   displayName: string;
+  prompt?: Prompt;
   hasUnsavedChanges?: boolean;
   onClear?: () => void;
 };
@@ -233,10 +233,15 @@ type CompactLoadedPromptProps = {
 const CompactLoadedPrompt: React.FC<CompactLoadedPromptProps> = ({
   promptId,
   displayName,
+  prompt,
   hasUnsavedChanges,
   onClear,
 }) => {
-  const { data } = usePromptById({ promptId }, { enabled: !!promptId });
+  const { data: fetched } = usePromptById(
+    { promptId },
+    { enabled: !!promptId && !prompt },
+  );
+  const data = prompt ?? fetched;
   const versionLabel =
     data && data.version_count > 0 ? `v${data.version_count}` : undefined;
 
