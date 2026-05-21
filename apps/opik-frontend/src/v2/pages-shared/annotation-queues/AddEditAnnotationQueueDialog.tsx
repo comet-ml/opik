@@ -63,7 +63,7 @@ const formSchema = z.object({
   scope: z.nativeEnum(ANNOTATION_QUEUE_SCOPE),
   comments_enabled: z.boolean(),
   feedback_definition_names: z.array(z.string()).default([]),
-  annotators_per_item: z.number().int().min(1).default(1),
+  annotators_per_item: z.coerce.number().int().min(1).default(1),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -312,17 +312,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         item before it is marked as completed in the queue.
                       </Description>
                       <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={field.value}
-                          onChange={(e) => {
-                            const value = parseInt(e.target.value, 10);
-                            if (!isNaN(value)) {
-                              field.onChange(value);
-                            }
-                          }}
-                        />
+                        <Input type="number" min={1} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

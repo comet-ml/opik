@@ -56,14 +56,20 @@ export function useAnnotationPersistence({
   const lastSavedCommentRef = useRef<LastSavedComment>({ text: "" });
   const lastSavedScoresRef = useRef<TraceFeedbackScore[]>([]);
   const commentCreatingRef = useRef(false);
+  const ignoreNextCreateResponseRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleSaveRef = useRef<() => void>(() => {});
 
-  // If the user edits while a CREATE is in-flight, saveNow skips due to
-  // commentCreatingRef. Once the CREATE resolves, we retrigger the save so
-  // the pending edit is sent as an UPDATE (we now have the comment ID).
+  // Captures the comment ID from the CREATE response so subsequent edits
+  // send UPDATE instead of duplicate CREATEs. If the user navigated to a
+  // different item before the response arrives, ignoreNextCreateResponseRef
+  // is set by resetLastSaved and we skip to avoid corrupting the new item's state.
   const onCommentCreated = useCallback((data: { id?: string }) => {
     commentCreatingRef.current = false;
+    if (ignoreNextCreateResponseRef.current) {
+      ignoreNextCreateResponseRef.current = false;
+      return;
+    }
     if (data?.id) {
       lastSavedCommentRef.current.id = data.id;
     }
@@ -72,6 +78,11 @@ export function useAnnotationPersistence({
 
   const onCommentCreateError = useCallback(() => {
     commentCreatingRef.current = false;
+    lastSavedCommentRef.current = { text: "" };
+    if (ignoreNextCreateResponseRef.current) {
+      ignoreNextCreateResponseRef.current = false;
+      return;
+    }
     scheduleSaveRef.current();
   }, []);
 
@@ -236,6 +247,9 @@ export function useAnnotationPersistence({
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
+      }
+      if (commentCreatingRef.current) {
+        ignoreNextCreateResponseRef.current = true;
       }
       commentCreatingRef.current = false;
       lastSavedCommentRef.current = {

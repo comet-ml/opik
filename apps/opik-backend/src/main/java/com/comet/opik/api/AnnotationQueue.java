@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -39,7 +40,7 @@ public record AnnotationQueue(
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable List<String> feedbackDefinitionNames,
         @JsonView({AnnotationQueue.View.Public.class,
-                AnnotationQueue.View.Write.class}) @Nullable Integer annotatorsPerItem,
+                AnnotationQueue.View.Write.class}) @Nullable @Min(1) Integer annotatorsPerItem,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<AnnotationQueueReviewer> reviewers,
         @JsonView({

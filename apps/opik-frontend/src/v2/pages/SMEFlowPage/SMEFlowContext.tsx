@@ -30,77 +30,14 @@ import {
   getAnnotationQueueItemId,
   getFeedbackScoresByUser,
   getLastCommentByUser,
+  getItemState,
+  ITEM_STATE,
 } from "@/lib/annotation-queues";
-import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
 import { useAnnotationPersistence } from "./useAnnotationPersistence";
 
-export enum ITEM_STATE {
-  DEFAULT = "default",
-  SCORED = "scored",
-  COMPLETED = "completed",
-}
+export { ITEM_STATE } from "@/lib/annotation-queues";
 
 const POLLING_INTERVAL_MS = 30000;
-
-const isItemProcessedByUser = (
-  item: Trace | Thread,
-  feedbackScoreNames: string[],
-  userName: string | undefined,
-): boolean => {
-  if (!userName) return false;
-
-  const hasFeedbackScores = (item.feedback_scores || []).some((score) => {
-    if (!feedbackScoreNames.includes(score.name)) return false;
-    return hasValuesByAuthor(score)
-      ? Boolean(findValueByAuthor(score.value_by_author, userName))
-      : score.last_updated_by === userName;
-  });
-
-  const hasComment = (item.comments || []).some(
-    (comment) => comment.created_by === userName,
-  );
-
-  return hasFeedbackScores || hasComment;
-};
-
-const getDistinctAnnotatorCount = (
-  item: Trace | Thread,
-  feedbackScoreNames: string[],
-): number => {
-  const authors = new Set<string>();
-
-  (item.feedback_scores || []).forEach((score) => {
-    if (!feedbackScoreNames.includes(score.name)) return;
-    if (hasValuesByAuthor(score)) {
-      Object.keys(score.value_by_author).forEach((a) => authors.add(a));
-    } else if (score.last_updated_by) {
-      authors.add(score.last_updated_by);
-    }
-  });
-
-  (item.comments || []).forEach((comment) => {
-    if (comment.created_by) authors.add(comment.created_by);
-  });
-
-  return authors.size;
-};
-
-const getItemState = (
-  item: Trace | Thread,
-  feedbackScoreNames: string[],
-  userName: string | undefined,
-  annotatorsPerItem: number,
-): ITEM_STATE => {
-  if (
-    getDistinctAnnotatorCount(item, feedbackScoreNames) >= annotatorsPerItem
-  ) {
-    return ITEM_STATE.COMPLETED;
-  }
-  if (isItemProcessedByUser(item, feedbackScoreNames, userName)) {
-    return ITEM_STATE.SCORED;
-  }
-  return ITEM_STATE.DEFAULT;
-};
 
 export type AnnotationState = {
   comment?: { text?: string };
