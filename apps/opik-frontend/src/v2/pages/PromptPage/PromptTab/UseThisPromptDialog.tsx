@@ -65,7 +65,7 @@ chat_prompt = client.create_chat_prompt(
 )
 
 # Format the chat prompt with the given parameters
-formatted_messages = chat_prompt.format(name="Alice", topic="Python programming")
+formatted_messages = chat_prompt.format(variables={"name": "Alice", "topic": "Python programming"})
 print(formatted_messages)
 `;
 
@@ -80,7 +80,7 @@ chat_prompt = client.get_chat_prompt(name="${promptName}")
 print(chat_prompt.metadata)
 
 # Format the chat prompt with the given parameters
-formatted_messages = chat_prompt.format(name="Alice", topic="Python programming")
+formatted_messages = chat_prompt.format(variables={"name": "Alice", "topic": "Python programming"})
 print(formatted_messages)
 `;
 
