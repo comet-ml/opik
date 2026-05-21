@@ -2,7 +2,7 @@ import React from "react";
 import { Code, FlaskConical, LucideIcon, Rocket } from "lucide-react";
 import capitalize from "lodash/capitalize";
 
-import { AgentConfigurationBasicStage } from "@/utils/agent-configurations";
+import { VersionStage } from "@/utils/version-stages";
 
 type StageTagSize = "xs" | "sm";
 
@@ -18,17 +18,17 @@ type StageConfig = {
 };
 
 const STAGE_CONFIGS: Record<string, StageConfig> = {
-  [AgentConfigurationBasicStage.DEV]: {
+  [VersionStage.DEV]: {
     icon: Code,
     bg: "bg-[var(--stage-dev-bg)]",
     text: "text-[var(--stage-dev-text)]",
   },
-  [AgentConfigurationBasicStage.STAGING]: {
+  [VersionStage.STAGING]: {
     icon: FlaskConical,
     bg: "bg-[var(--stage-staging-bg)]",
     text: "text-[var(--stage-staging-text)]",
   },
-  [AgentConfigurationBasicStage.PROD]: {
+  [VersionStage.PROD]: {
     icon: Rocket,
     bg: "bg-[var(--tag-lime-bg)]",
     text: "text-[var(--tag-lime-text)]",

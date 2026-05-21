@@ -1,6 +1,6 @@
 import React from "react";
 
-import { isBasicStage, sortTags } from "@/utils/agent-configurations";
+import { isBasicStage, sortTags } from "@/utils/version-stages";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
 import ChildrenWidthMeasurer from "@/shared/ChildrenWidthMeasurer/ChildrenWidthMeasurer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";

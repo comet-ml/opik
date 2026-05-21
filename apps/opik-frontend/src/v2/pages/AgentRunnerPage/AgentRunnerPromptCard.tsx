@@ -35,7 +35,7 @@ import {
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 import { chatTemplatesEqual, serializeChatTemplate } from "@/lib/chatTemplate";
-import { pickHighestStage } from "@/utils/agent-configurations";
+import { pickHighestStage } from "@/utils/version-stages";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";

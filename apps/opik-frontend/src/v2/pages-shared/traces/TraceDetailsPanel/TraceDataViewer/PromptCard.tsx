@@ -43,7 +43,7 @@ import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import { PromptLibraryMetadata } from "@/types/playground";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { pickHighestStage } from "@/utils/agent-configurations";
+import { pickHighestStage } from "@/utils/version-stages";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { useActiveProjectId } from "@/store/AppStore";
