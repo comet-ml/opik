@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import useLocalStorageState from "use-local-storage-state";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { Filter } from "@/types/filters";
 import { COLUMN_TYPE } from "@/types/shared";
 import { BaseTraceData } from "@/types/traces";
 import {
@@ -24,11 +25,13 @@ describe("useTagFilterHandler", () => {
   });
 
   it("adds a tags contains filter and resets pagination", () => {
-    const setFilters = vi.fn();
+    let nextFilters: unknown;
+    const setFilters = vi.fn((updater) => {
+      nextFilters = typeof updater === "function" ? updater([]) : updater;
+    });
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
-        filters: [],
         setFilters,
         setPage,
       }),
@@ -36,7 +39,8 @@ describe("useTagFilterHandler", () => {
 
     act(() => result.current("myprotein-en-gb"));
 
-    expect(setFilters).toHaveBeenCalledWith([
+    expect(setFilters).toHaveBeenCalledWith(expect.any(Function));
+    expect(nextFilters).toEqual([
       expect.objectContaining({
         field: "tags",
         operator: "contains",
@@ -47,19 +51,23 @@ describe("useTagFilterHandler", () => {
   });
 
   it("does not add a duplicate tags contains filter", () => {
-    const setFilters = vi.fn();
+    const currentFilters: Filter[] = [
+      {
+        id: "tag-filter",
+        field: "tags",
+        type: COLUMN_TYPE.list,
+        operator: "contains",
+        value: "myprotein-en-gb",
+      },
+    ];
+    let nextFilters: unknown;
+    const setFilters = vi.fn((updater) => {
+      nextFilters =
+        typeof updater === "function" ? updater(currentFilters) : updater;
+    });
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
-        filters: [
-          {
-            id: "tag-filter",
-            field: "tags",
-            type: COLUMN_TYPE.list,
-            operator: "contains",
-            value: "myprotein-en-gb",
-          },
-        ],
         setFilters,
         setPage,
       }),
@@ -67,8 +75,37 @@ describe("useTagFilterHandler", () => {
 
     act(() => result.current("myprotein-en-gb"));
 
-    expect(setFilters).not.toHaveBeenCalled();
+    expect(setFilters).toHaveBeenCalledWith(expect.any(Function));
+    expect(nextFilters).toBe(currentFilters);
     expect(setPage).not.toHaveBeenCalled();
+  });
+
+  it("dedupes against the latest filters when rapid clicks enqueue updates", () => {
+    let currentFilters: Filter[] = [];
+    const setFilters = vi.fn((updater) => {
+      currentFilters =
+        typeof updater === "function" ? updater(currentFilters) : updater;
+    });
+    const setPage = vi.fn();
+    const { result } = renderHook(() =>
+      useTagFilterHandler({
+        setFilters,
+        setPage,
+      }),
+    );
+
+    act(() => {
+      result.current("myprotein-en-gb");
+      result.current("myprotein-en-gb");
+    });
+
+    expect(currentFilters).toHaveLength(1);
+    expect(currentFilters[0]).toMatchObject({
+      field: "tags",
+      operator: "contains",
+      value: "myprotein-en-gb",
+    });
+    expect(setPage).toHaveBeenCalledTimes(1);
   });
 });
 

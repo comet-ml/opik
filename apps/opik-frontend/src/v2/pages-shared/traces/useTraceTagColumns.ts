@@ -9,31 +9,36 @@ import { ColumnData } from "@/types/shared";
 export const COLUMNS_TAGS_ORDER_KEY_SUFFIX = "tag-columns-order";
 
 type UseTagFilterHandlerParams = {
-  filters: Filter[];
-  setFilters: (filters: Filter[]) => void;
+  setFilters: (
+    filters: Filter[] | ((filters?: Filter[] | null) => Filter[]),
+  ) => void;
   setPage: (page: number) => void;
 };
 
 export const useTagFilterHandler = ({
-  filters,
   setFilters,
   setPage,
 }: UseTagFilterHandlerParams) => {
   return useCallback(
     (tag: string) => {
-      const tagFilterExists = filters.some(
-        (filter) =>
-          filter.field === "tags" &&
-          filter.operator === "contains" &&
-          filter.value === tag,
-      );
+      setFilters((currentFilters) => {
+        const filters = Array.isArray(currentFilters) ? currentFilters : [];
+        const tagFilterExists = filters.some(
+          (filter) =>
+            filter.field === "tags" &&
+            filter.operator === "contains" &&
+            filter.value === tag,
+        );
 
-      if (!tagFilterExists) {
-        setFilters([...filters, ...generateTagFilter(tag)]);
+        if (tagFilterExists) {
+          return filters;
+        }
+
         setPage(1);
-      }
+        return [...filters, ...generateTagFilter(tag)];
+      });
     },
-    [filters, setFilters, setPage],
+    [setFilters, setPage],
   );
 };
 

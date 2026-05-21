@@ -742,7 +742,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setPage(1);
   }, [setSearch, setFilters, setEnvironment, setPage]);
   const handleTagClick = useTagFilterHandler({
-    filters,
     setFilters,
     setPage,
   });

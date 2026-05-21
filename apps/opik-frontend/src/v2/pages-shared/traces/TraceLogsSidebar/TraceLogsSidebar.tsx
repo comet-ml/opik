@@ -652,7 +652,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setFilters([]);
   }, [setSearch, setFilters]);
   const handleTagClick = useTagFilterHandler({
-    filters,
     setFilters,
     setPage,
   });
