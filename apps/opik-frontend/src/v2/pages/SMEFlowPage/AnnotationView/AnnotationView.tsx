@@ -1,22 +1,16 @@
-import React from "react";
-import { ChevronLeft, ChevronRight, Check } from "lucide-react";
+import React, { useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { Card } from "@/ui/card";
-import { cn } from "@/lib/utils";
 import TraceDataViewer from "./TraceDataViewer";
-import SMEFlowLayout from "../SMEFlowLayout";
 import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
 import { Button } from "@/ui/button";
-import { Separator } from "@/ui/separator";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import CommentAndScoreViewer from "@/v2/pages/SMEFlowPage/AnnotationView/CommentAndScoreViewer";
-import ValidationAlert from "./ValidationAlert";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { useSMEFlow } from "../SMEFlowContext";
+import { useSMEFlow, ITEM_STATE, WORKFLOW_STATUS } from "../SMEFlowContext";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
 import ThreadDataViewer from "./ThreadDataViewer";
+import ItemsSidebar from "./ItemsSidebar";
 import { SME_ACTION, SME_HOTKEYS } from "../hotkeys";
-import { AnnotationTreeStateProvider } from "./AnnotationTreeStateContext";
 
 interface AnnotationViewProps {
   header: React.ReactNode;
@@ -27,175 +21,102 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
 }) => {
   const {
     annotationQueue,
-    currentIndex,
-    queueItems,
-    validationState,
-    isCurrentItemProcessed,
-    unprocessedItems,
-    handleNext,
-    handlePrevious,
-    handleSubmit,
+    itemStates,
+    nextDefaultItem,
+    handleNextDefault,
+    flushPendingChanges,
+    setCurrentView,
   } = useSMEFlow();
 
-  const isLastItem = currentIndex === queueItems.length - 1;
-  const isFirstItem = currentIndex === 0;
+  const allDone = Object.values(itemStates).every(
+    (s) => s !== ITEM_STATE.DEFAULT,
+  );
 
-  // Determine button label based on item completion status
-  const getButtonLabel = () => {
-    if (isCurrentItemProcessed) {
-      // Viewing a completed item (current item is NOT in unprocessedItems)
-      // Check if there are OTHER unprocessed items
-      // Since current item is already processed, it's not in unprocessedItems
-      const hasOtherUnprocessedItems = unprocessedItems.length > 0;
+  const isNextDisabled = !nextDefaultItem;
 
-      if (hasOtherUnprocessedItems) {
-        return "Update + next";
-      } else {
-        // All items are completed - reviewing mode
-        // Show "Update + next" unless it's the last item in the queue
-        return isLastItem ? "Update + complete" : "Update + next";
-      }
-    } else {
-      // Viewing a non-completed item (current item IS in unprocessedItems)
-      // Show "Submit + complete" only if this is the ONLY unprocessed item
-      return unprocessedItems.length === 1
-        ? "Submit + complete"
-        : "Submit + next";
+  const handleNext = useCallback(() => {
+    if (allDone) {
+      flushPendingChanges();
+      setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    } else if (!isNextDisabled) {
+      handleNextDefault();
     }
-  };
-
-  const buttonLabel = getButtonLabel();
-
-  useHotkeys(
-    SME_HOTKEYS[SME_ACTION.PREVIOUS].key,
-    (keyboardEvent: KeyboardEvent) => {
-      keyboardEvent.preventDefault();
-      if (!isFirstItem) {
-        handlePrevious();
-      }
-    },
-    [isFirstItem, handlePrevious],
-  );
+  }, [
+    allDone,
+    isNextDisabled,
+    flushPendingChanges,
+    handleNextDefault,
+    setCurrentView,
+  ]);
 
   useHotkeys(
-    SME_HOTKEYS[SME_ACTION.NEXT].key,
+    SME_HOTKEYS[SME_ACTION.NEXT_DEFAULT].key,
     (keyboardEvent: KeyboardEvent) => {
       keyboardEvent.preventDefault();
-      if (!isLastItem) {
-        handleNext();
-      }
+      handleNext();
     },
-    [isLastItem, handleNext],
-  );
-
-  useHotkeys(
-    SME_HOTKEYS[SME_ACTION.DONE].key,
-    (keyboardEvent: KeyboardEvent) => {
-      keyboardEvent.preventDefault();
-      if (validationState.canSubmit) {
-        handleSubmit();
-      }
-    },
-    [validationState.canSubmit, handleSubmit],
+    { enableOnFormTags: true },
+    [handleNext],
   );
 
   const isThread = annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.THREAD;
 
   return (
-    <AnnotationTreeStateProvider>
-      <SMEFlowLayout
-        header={header}
-        footer={
-          <>
-            <ReturnToAnnotationQueueButton />
-            <div className="flex items-center gap-2">
-              <div
-                className={cn(
-                  "comet-body-s flex items-center",
-                  isCurrentItemProcessed
-                    ? "text-[var(--special-button)]"
-                    : "text-light-slate",
-                )}
-              >
-                {isCurrentItemProcessed && <Check className="mr-1 size-4" />}
-                {currentIndex + 1} of {queueItems.length}
+    <div className="-mx-6 flex h-full flex-col overflow-hidden bg-soft-background px-16 pb-4 pt-8">
+      <div className="flex shrink-0 items-center justify-between pb-4">
+        {header}
+      </div>
+      <div className="mb-4 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-background">
+        <div className="flex h-full flex-row">
+          <ItemsSidebar />
+          <div className="flex flex-1 flex-row overflow-hidden">
+            <div className="flex flex-[2] flex-col overflow-hidden border-r border-border">
+              <TraceDataViewer.Header />
+              <div className="flex-1 overflow-y-auto p-3">
+                {isThread ? <ThreadDataViewer /> : <TraceDataViewer.Content />}
               </div>
-              <TooltipWrapper
-                content="Previous item"
-                hotkeys={[SME_HOTKEYS[SME_ACTION.PREVIOUS].display]}
-              >
-                <Button
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={isFirstItem}
-                >
-                  <ChevronLeft className="mr-2 size-4" />
-                  Previous
-                  <HotkeyDisplay
-                    hotkey={SME_HOTKEYS[SME_ACTION.PREVIOUS].display}
-                    variant="outline"
-                    size="sm"
-                    className="ml-2"
-                  />
-                </Button>
-              </TooltipWrapper>
-              <TooltipWrapper
-                content="Next item"
-                hotkeys={[SME_HOTKEYS[SME_ACTION.NEXT].display]}
-              >
-                <Button
-                  variant="outline"
-                  onClick={handleNext}
-                  disabled={isLastItem}
-                >
-                  <HotkeyDisplay
-                    hotkey={SME_HOTKEYS[SME_ACTION.NEXT].display}
-                    variant="outline"
-                    size="sm"
-                    className="mr-2"
-                  />
-                  Next
-                  <ChevronRight className="ml-2 size-4" />
-                </Button>
-              </TooltipWrapper>
-              <TooltipWrapper
-                content="Submit and continue"
-                hotkeys={[SME_HOTKEYS[SME_ACTION.DONE].display]}
-              >
-                <Button
-                  onClick={handleSubmit}
-                  disabled={!validationState.canSubmit}
-                >
-                  {buttonLabel}
-                  <HotkeyDisplay
-                    hotkey={SME_HOTKEYS[SME_ACTION.DONE].display}
-                    size="sm"
-                    className="ml-2"
-                  />
-                </Button>
-              </TooltipWrapper>
             </div>
-          </>
-        }
-      >
-        <div className="flex h-full flex-col">
-          {validationState.errors.length > 0 && (
-            <div className="mb-4">
-              <ValidationAlert errors={validationState.errors} />
+            <div className="flex flex-[1] flex-col overflow-hidden">
+              <div className="flex h-10 shrink-0 items-center border-b border-border bg-soft-background px-3">
+                <span className="comet-body-xs-accented text-foreground">
+                  Annotate
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 py-2">
+                <CommentAndScoreViewer />
+              </div>
             </div>
-          )}
-          <Card className="flex h-full flex-row items-stretch p-6">
-            <div className="flex-[2] overflow-y-auto">
-              {isThread ? <ThreadDataViewer /> : <TraceDataViewer />}
-            </div>
-            <Separator orientation="vertical" className="mx-3" />
-            <div className="flex-[1] overflow-y-auto">
-              <CommentAndScoreViewer />
-            </div>
-          </Card>
+          </div>
         </div>
-      </SMEFlowLayout>
-    </AnnotationTreeStateProvider>
+      </div>
+      <div className="flex shrink-0 justify-between gap-2 border-t border-border pt-3">
+        <ReturnToAnnotationQueueButton />
+        {allDone ? (
+          <Button onClick={handleNext}>
+            Finish annotating
+            <HotkeyDisplay
+              hotkey={SME_HOTKEYS[SME_ACTION.NEXT_DEFAULT].display}
+              size="sm"
+              className="ml-2"
+            />
+          </Button>
+        ) : (
+          <TooltipWrapper
+            content={SME_HOTKEYS[SME_ACTION.NEXT_DEFAULT].description}
+            hotkeys={[SME_HOTKEYS[SME_ACTION.NEXT_DEFAULT].display]}
+          >
+            <Button onClick={handleNextDefault} disabled={isNextDisabled}>
+              Next
+              <HotkeyDisplay
+                hotkey={SME_HOTKEYS[SME_ACTION.NEXT_DEFAULT].display}
+                size="sm"
+                className="ml-2"
+              />
+            </Button>
+          </TooltipWrapper>
+        )}
+      </div>
+    </div>
   );
 };
 
