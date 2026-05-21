@@ -8941,6 +8941,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -9010,6 +9017,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
     AlertTrigger_Write:
       required:
       - event_type
@@ -9151,6 +9165,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
