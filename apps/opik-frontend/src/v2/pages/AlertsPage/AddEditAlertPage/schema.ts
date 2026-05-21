@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z, RefinementCtx } from "zod";
 import { ALERT_EVENT_TYPE, ALERT_TYPE } from "@/types/alerts";
 
 export const HeaderSchema = z.object({
@@ -9,110 +9,115 @@ export const HeaderSchema = z.object({
 export const FeedbackScoreConditionSchema = z.object({
   threshold: z.string(),
   window: z.string(),
-  name: z.string(), // Feedback score name
-  operator: z.string(), // Operator for comparison (>, <)
+  name: z.string(),
+  operator: z.enum([">", "<"]),
 });
+
+export const FeedbackScoreConditionGroupSchema = z.object({
+  conditions: z.array(FeedbackScoreConditionSchema),
+});
+
+const FEEDBACK_SCORE_TRIGGERS = new Set<ALERT_EVENT_TYPE>([
+  ALERT_EVENT_TYPE.trace_feedback_score,
+  ALERT_EVENT_TYPE.trace_thread_feedback_score,
+]);
+const SIMPLE_THRESHOLD_TRIGGERS = new Set<ALERT_EVENT_TYPE>([
+  ALERT_EVENT_TYPE.trace_cost,
+  ALERT_EVENT_TYPE.trace_latency,
+  ALERT_EVENT_TYPE.trace_errors,
+]);
+
+const CONDITION_REQUIRED_FIELDS = [
+  ["threshold", "Threshold is required"],
+  ["window", "Window is required"],
+  ["name", "Feedback score name is required"],
+  ["operator", "Operator is required"],
+] as const;
+
+const addRequired = (
+  ctx: RefinementCtx,
+  value: string | undefined,
+  path: (string | number)[],
+  message: string,
+) => {
+  if (!value || value.trim() === "") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message, path });
+    return false;
+  }
+  return true;
+};
+
+const validateNumeric = (
+  ctx: RefinementCtx,
+  value: string,
+  path: (string | number)[],
+) => {
+  if (isNaN(parseFloat(value))) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Threshold must be a valid number",
+      path,
+    });
+  }
+};
 
 export const TriggerSchema = z
   .object({
     eventType: z.nativeEnum(ALERT_EVENT_TYPE),
     threshold: z.string().optional(),
     window: z.string().optional(),
-    name: z.string().optional(), // Feedback score name (deprecated, use conditions)
-    operator: z.string().optional(), // Operator for comparison (deprecated, use conditions)
-    conditions: z.array(FeedbackScoreConditionSchema).optional(), // Multiple conditions for feedback scores
+    name: z.string().optional(), // Feedback score name (deprecated, use groups)
+    operator: z.string().optional(), // Operator for comparison (deprecated, use groups)
+    groups: z.array(FeedbackScoreConditionGroupSchema).optional(), // AND within a group, OR between groups
   })
   .superRefine((data, ctx) => {
-    const isFeedbackScoreTrigger =
-      data.eventType === ALERT_EVENT_TYPE.trace_feedback_score ||
-      data.eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score;
-
-    // Validate feedback score triggers (use conditions array)
-    if (isFeedbackScoreTrigger) {
-      if (!data.conditions || data.conditions.length === 0) {
+    if (FEEDBACK_SCORE_TRIGGERS.has(data.eventType)) {
+      if (!data.groups?.length) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "At least one condition is required",
-          path: ["conditions"],
+          path: ["groups"],
         });
-      } else {
-        // Validate each condition
-        data.conditions.forEach((condition, index) => {
-          if (!condition.threshold || condition.threshold.trim() === "") {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "Threshold is required",
-              path: ["conditions", index, "threshold"],
-            });
-          } else {
-            const thresholdNum = parseFloat(condition.threshold);
-            if (isNaN(thresholdNum)) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Threshold must be a valid number",
-                path: ["conditions", index, "threshold"],
-              });
-            }
-          }
-
-          if (!condition.window || condition.window.trim() === "") {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "Window is required",
-              path: ["conditions", index, "window"],
-            });
-          }
-
-          if (!condition.name || condition.name.trim() === "") {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "Feedback score name is required",
-              path: ["conditions", index, "name"],
-            });
-          }
-
-          if (!condition.operator || condition.operator.trim() === "") {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "Operator is required",
-              path: ["conditions", index, "operator"],
-            });
-          }
-        });
+        return;
       }
-    }
-
-    // Validate threshold for cost, latency, and errors triggers (not feedback scores)
-    const isSimpleThresholdTrigger =
-      data.eventType === ALERT_EVENT_TYPE.trace_cost ||
-      data.eventType === ALERT_EVENT_TYPE.trace_latency ||
-      data.eventType === ALERT_EVENT_TYPE.trace_errors;
-
-    if (isSimpleThresholdTrigger) {
-      if (!data.threshold || data.threshold.trim() === "") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Threshold is required",
-          path: ["threshold"],
-        });
-      } else {
-        const thresholdNum = parseFloat(data.threshold);
-        if (isNaN(thresholdNum)) {
+      data.groups.forEach((group, gi) => {
+        if (!group.conditions?.length) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "Threshold must be a valid number",
-            path: ["threshold"],
+            message: "At least one condition is required",
+            path: ["groups", gi, "conditions"],
           });
+          return;
         }
-      }
-
-      if (!data.window || data.window.trim() === "") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Window is required",
-          path: ["window"],
+        group.conditions.forEach((condition, ci) => {
+          const base = ["groups", gi, "conditions", ci] as const;
+          for (const [field, message] of CONDITION_REQUIRED_FIELDS) {
+            const present = addRequired(
+              ctx,
+              condition[field],
+              [...base, field],
+              message,
+            );
+            if (field === "threshold" && present) {
+              validateNumeric(ctx, condition.threshold, [...base, "threshold"]);
+            }
+          }
         });
+      });
+      return;
+    }
+
+    if (SIMPLE_THRESHOLD_TRIGGERS.has(data.eventType)) {
+      const thresholdPresent = addRequired(
+        ctx,
+        data.threshold,
+        ["threshold"],
+        "Threshold is required",
+      );
+      if (thresholdPresent) {
+        validateNumeric(ctx, data.threshold!, ["threshold"]);
       }
+      addRequired(ctx, data.window, ["window"], "Window is required");
     }
   });
 
@@ -159,4 +164,7 @@ export type AlertFormType = z.infer<typeof AlertFormSchema>;
 export type TriggerFormType = z.infer<typeof TriggerSchema>;
 export type FeedbackScoreConditionType = z.infer<
   typeof FeedbackScoreConditionSchema
+>;
+export type FeedbackScoreConditionGroupType = z.infer<
+  typeof FeedbackScoreConditionGroupSchema
 >;
