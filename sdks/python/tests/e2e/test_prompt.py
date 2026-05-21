@@ -669,17 +669,31 @@ def test_get_prompt__with_version__string_prompt(
     opik_client: opik.Opik, prompt_name: str, temporary_project_name: str
 ):
     """Test that get_prompt() with the sequential ``version`` selector
-    (e.g. ``"v1"``, ``"v2"``, ...) returns the correct prompt content."""
-    # Create three versions of the same prompt.
-    opik_client.create_prompt(
-        name=prompt_name, prompt="Version 1", project_name=temporary_project_name
+    (e.g. ``"v1"``, ``"v2"``, ...) returns the correct prompt content,
+    and that every create_prompt return value surfaces the assigned
+    ``version_number``. The first create passes ``tags`` to exercise the
+    container-create + tag-rebuild branch in PromptClient, which
+    previously dropped ``version_number`` and left ``.version`` as None
+    on the first version."""
+    # First create takes the create_prompt + retrieve + tag-rebuild path.
+    v1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt="Version 1",
+        tags=["initial"],
+        project_name=temporary_project_name,
     )
-    opik_client.create_prompt(
+    v2 = opik_client.create_prompt(
         name=prompt_name, prompt="Version 2", project_name=temporary_project_name
     )
-    latest = opik_client.create_prompt(
+    v3 = opik_client.create_prompt(
         name=prompt_name, prompt="Version 3", project_name=temporary_project_name
     )
+
+    # The version returned by create_prompt itself must match the sequential
+    # number the backend assigned — this is the regression assertion.
+    assert v1.version == "v1"
+    assert v2.version == "v2"
+    assert v3.version == "v3"
 
     expected_by_version = {
         "v1": "Version 1",
@@ -707,51 +721,6 @@ def test_get_prompt__with_version__string_prompt(
     )
     assert latest_fetched is not None
     assert latest_fetched.version == "v3"
-    # The create_prompt return value should also surface the version_number now.
-    assert latest.version == "v3"
-
-
-def test_prompt__create__first_version_exposes_version_number(
-    opik_client: opik.Opik, prompt_name: str, temporary_project_name: str
-):
-    """The Prompt returned by the first create_prompt call must surface
-    ``version="v1"`` regardless of which optional parameters are passed.
-    Rebuilding ``PromptVersionDetail`` in the container-create path
-    (triggered by id/description/tags) previously dropped
-    ``version_number`` and surfaced ``None``."""
-    base = prompt_name
-
-    no_extras = opik_client.create_prompt(
-        name=f"{base}-noextras",
-        prompt="t",
-        project_name=temporary_project_name,
-    )
-    assert no_extras.version == "v1"
-
-    with_tags = opik_client.create_prompt(
-        name=f"{base}-tags",
-        prompt="t",
-        tags=["a"],
-        project_name=temporary_project_name,
-    )
-    assert with_tags.version == "v1"
-
-    with_description = opik_client.create_prompt(
-        name=f"{base}-desc",
-        prompt="t",
-        description="d",
-        project_name=temporary_project_name,
-    )
-    assert with_description.version == "v1"
-
-    all_extras = opik_client.create_prompt(
-        name=f"{base}-all",
-        prompt="t",
-        tags=["a"],
-        description="d",
-        project_name=temporary_project_name,
-    )
-    assert all_extras.version == "v1"
 
 
 def test_prompt__format_playground_chat_prompt__returns_json(
