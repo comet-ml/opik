@@ -777,8 +777,9 @@ datasetProjectMigration:
   datasetBatchSize: 1000
   # Interval between recurring job runs
   interval: 5s
-  # Delay before first run after app startup
-  startupDelay: 0s
+  # Delay before first run after app startup — gives tests time to seed preconditions
+  # (workspaces, datasets, experiments, traces) before the first cycle fires
+  startupDelay: 5s
   # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
   # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
   lockTimeout: 5s

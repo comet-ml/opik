@@ -1821,37 +1821,41 @@ public class ExperimentDAO {
 
     /**
      * For one workspace, returns each dataset_id and the (single) project_id that all
-     * non-demo experiments for that dataset's traces resolve to. Groups by {@code e.dataset_id}
-     * and exposes {@code distinct_project_count} so the service can branch on the four-bucket
-     * classification. {@code any(t.project_id)} is only meaningful when count = 1.
+     * non-demo experiments for that dataset resolve to. Inference is derived directly from
+     * {@code experiments.project_id} (which D1 sets) rather than from the experiment→trace
+     * graph: this is correct only when D1 (experiment-project migration) has already run for
+     * the workspace, which is a documented operational pre-requirement. Experiments whose
+     * latest {@code project_id} is still {@code ''} (D1 left them V1 — typically ambiguous in
+     * D1's own bucketing) are filtered out and effectively count as "no-inference" at the
+     * dataset level, which the service then routes to the workspace's Default Project.
      *
-     * <p>No {@code FINAL} or {@code LIMIT 1 BY id} dedup is needed even though all three joined
-     * tables are {@code ReplacingMergeTree}: {@code count(DISTINCT t.project_id)} and {@code any}
-     * are invariant under row duplication of the same {@code (dataset_id, project_id)} tuples
-     * that ReplacingMergeTree may transiently expose pre-merge.
+     * <p>Scoped to the caller-supplied orphan dataset IDs via {@code dataset_id IN :dataset_ids}
+     * so the scan only walks the experiments rows for V1 datasets, not the whole workspace.
      *
-     * <p>The {@code workspace_id} predicate is repeated on every joined alias because ClickHouse
-     * does not push the JOIN predicate down through INNER JOINs reliably — validated against
-     * prod, the worst-case workspace (120k experiments, 520k traces) reads 175M rows without
-     * the per-alias filter (hits the 20M row cap) versus 1.16M rows with it.
+     * <p>Inner aggregate uses {@code argMax(project_id, last_updated_at) GROUP BY id} to dedup
+     * across ReplacingMergeTree row versions: when D1 updates {@code project_id} from {@code ''}
+     * to a non-empty value, the table briefly carries both pre- and post-update rows for the
+     * same {@code (workspace_id, id)} until merge. {@code argMax} picks the latest, so the outer
+     * {@code count(DISTINCT)} does not double-count an in-flight migration as ambiguous.
      */
     private static final String COMPUTE_DATASET_PROJECT_MAPPING = """
             SELECT
-                e.dataset_id AS dataset_id,
-                count(DISTINCT t.project_id) AS distinct_project_count,
-                any(t.project_id) AS project_id
-            FROM experiments e
-            INNER JOIN experiment_items ei
-                ON e.workspace_id = ei.workspace_id AND e.id = ei.experiment_id
-            INNER JOIN traces t
-                ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
-            WHERE e.workspace_id = :workspace_id
-            AND ei.workspace_id = :workspace_id
-            AND t.workspace_id = :workspace_id
-            AND e.name NOT IN :demo_experiment_names
-            AND e.dataset_id != ''
-            AND t.project_id != ''
-            GROUP BY e.dataset_id
+                dataset_id AS dataset_id,
+                count(DISTINCT experiment_project_id) AS distinct_project_count,
+                any(experiment_project_id) AS project_id
+            FROM (
+                SELECT
+                    dataset_id,
+                    argMax(project_id, last_updated_at) AS experiment_project_id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id IN :dataset_ids
+                AND name NOT IN :demo_experiment_names
+                AND dataset_id != ''
+                GROUP BY workspace_id, id, dataset_id
+                HAVING experiment_project_id != ''
+            )
+            GROUP BY dataset_id
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -2938,11 +2942,16 @@ public class ExperimentDAO {
                 .reduce(0L, Long::sum);
     }
 
-    Flux<DatasetProjectMapping> computeDatasetProjectMapping() {
+    Flux<DatasetProjectMapping> computeDatasetProjectMapping(@NonNull Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Flux.empty();
+        }
+        var datasetIdsAsStrings = datasetIds.stream().map(UUID::toString).toArray(String[]::new);
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(COMPUTE_DATASET_PROJECT_MAPPING,
                     "compute_dataset_project_mapping", workspaceId, userName, "");
             var statement = connection.createStatement(template.render())
+                    .bind("dataset_ids", datasetIdsAsStrings)
                     .bind("demo_experiment_names", DemoData.EXPERIMENTS);
             return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
         }))

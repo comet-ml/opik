@@ -127,9 +127,6 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT id FROM workspaces WHERE dataset_project_migration_skipped_at IS NOT NULL")
     List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) FROM workspaces WHERE dataset_project_migration_skipped_at IS NOT NULL")
-    long countDatasetProjectMigrationSkipped();
-
     @SqlQuery("""
             SELECT dataset_project_migration_skip_reason AS reason, COUNT(*) AS count
             FROM workspaces

@@ -66,8 +66,6 @@ public interface WorkspacesService {
 
     List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
 
-    long countDatasetProjectMigrationSkipped();
-
     List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
 
     /**
@@ -214,12 +212,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public List<String> findDatasetProjectMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).findDatasetProjectMigrationSkippedWorkspaceIds());
-    }
-
-    @Override
-    public long countDatasetProjectMigrationSkipped() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countDatasetProjectMigrationSkipped());
     }
 
     @Override

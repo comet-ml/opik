@@ -10,7 +10,6 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.DatasetTypeMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
-import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -271,21 +270,18 @@ public interface DatasetDAO {
 
     /**
      * Returns workspaces with at least one V1 dataset (project_id IS NULL), ordered by smallest
-     * count first. Dispatches to a variant that also filters excluded workspace IDs when non-empty.
+     * count first. {@code FORCE INDEX} and the {@code workspace_id NOT IN (...)} predicate are
+     * only emitted when {@code excludedWorkspaceIds} is non-empty: without the hint, the {@code
+     * NOT IN} predicate makes the planner fall back to a full table scan; forcing the
+     * {@code (workspace_id, name)} uniqueness index turns it into a range scan — validated
+     * against prod (220k → 170k rows, 1.4s → 0.35s).
      */
-    default List<EligibleDatasetWorkspace> findEligibleDatasetMigrationWorkspaces(
-            List<String> demoDatasetNames, Set<String> excludedWorkspaceIds, int limit) {
-        if (CollectionUtils.isEmpty(excludedWorkspaceIds)) {
-            return findEligibleDatasetMigrationWorkspaces(demoDatasetNames, limit);
-        }
-        return findEligibleDatasetMigrationWorkspacesExcluding(demoDatasetNames, excludedWorkspaceIds, limit);
-    }
-
     @SqlQuery("""
             SELECT workspace_id, COUNT(*) AS datasets_count
-            FROM datasets
+            FROM datasets <if(excludedWorkspaceIds)>FORCE INDEX (datasets_workspace_id_name_uk)<endif>
             WHERE project_id IS NULL
             AND name NOT IN (<demoDatasetNames>)
+            <if(excludedWorkspaceIds)> AND workspace_id NOT IN (<excludedWorkspaceIds>) <endif>
             GROUP BY workspace_id
             ORDER BY datasets_count ASC, workspace_id ASC
             LIMIT :limit
@@ -294,30 +290,13 @@ public interface DatasetDAO {
     @AllowUnusedBindings
     List<EligibleDatasetWorkspace> findEligibleDatasetMigrationWorkspaces(
             @BindList("demoDatasetNames") List<String> demoDatasetNames,
+            @Define("excludedWorkspaceIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "excludedWorkspaceIds") Collection<String> excludedWorkspaceIds,
             @Bind("limit") int limit);
 
-    // FORCE INDEX: without the hint, the `workspace_id NOT IN (...)` predicate causes the
-    // planner to fall back to a full table scan. Forcing the (workspace_id, name) uniqueness
-    // index turns it into a range scan — validated against prod (220k → 170k rows, 1.4s → 0.35s).
-    @SqlQuery("""
-            SELECT workspace_id, COUNT(*) AS datasets_count
-            FROM datasets FORCE INDEX (datasets_workspace_id_name_uk)
-            WHERE project_id IS NULL
-            AND name NOT IN (<demoDatasetNames>)
-            AND workspace_id NOT IN (<excludedWorkspaceIds>)
-            GROUP BY workspace_id
-            ORDER BY datasets_count ASC, workspace_id ASC
-            LIMIT :limit
+    @SqlBatch("""
+            UPDATE datasets SET project_id = :projectId, last_updated_by = :userName
+            WHERE id = :datasetId AND workspace_id = :workspaceId AND project_id IS NULL
             """)
-    @UseStringTemplateEngine
-    @AllowUnusedBindings
-    List<EligibleDatasetWorkspace> findEligibleDatasetMigrationWorkspacesExcluding(
-            @BindList("demoDatasetNames") List<String> demoDatasetNames,
-            @BindList("excludedWorkspaceIds") Set<String> excludedWorkspaceIds,
-            @Bind("limit") int limit);
-
-    @SqlBatch("UPDATE datasets SET project_id = :projectId, last_updated_by = :userName "
-            + "WHERE id = :datasetId AND workspace_id = :workspaceId AND project_id IS NULL")
     int[] batchSetProjectId(
             @BindMethods List<DatasetProjectMapping> mappings,
             @Bind("workspaceId") String workspaceId,

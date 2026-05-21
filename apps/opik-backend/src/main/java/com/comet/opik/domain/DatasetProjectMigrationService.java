@@ -208,10 +208,7 @@ public class DatasetProjectMigrationService implements Managed {
                     .collect(Collectors.toUnmodifiableSet());
         })
                 .subscribeOn(migrationScheduler)
-                .flatMap(excludedWorkspaceIds -> Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
-                        handle -> handle.attach(DatasetDAO.class).findEligibleDatasetMigrationWorkspaces(
-                                DemoData.DATASETS, excludedWorkspaceIds, config.workspacesPerRun())))
-                        .subscribeOn(migrationScheduler))
+                .flatMap(this::findEligibleWorkspaces)
                 .flatMapMany(eligibleWorkspaces -> {
                     cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
                     if (CollectionUtils.isEmpty(eligibleWorkspaces)) {
@@ -229,22 +226,16 @@ public class DatasetProjectMigrationService implements Managed {
 
     private Mono<Boolean> migrateWorkspace(String workspaceId, long datasetsCount) {
         var workspaceStartMillis = System.currentTimeMillis();
-        return Mono.fromCallable(() -> {
-            log.info("Starting workspace migration, workspaceId='{}', datasetsCount='{}'",
-                    workspaceId, datasetsCount);
-            // Full orphan set drives the no-inference bucket (orphans absent from the CH inference).
-            return transactionTemplate.inTransaction(READ_ONLY,
-                    handle -> handle.attach(DatasetDAO.class)
-                            .findOrphanDatasetIdsInWorkspace(workspaceId, DemoData.DATASETS));
-        })
-                .subscribeOn(migrationScheduler)
+        log.info("Starting workspace migration, workspaceId='{}', datasetsCount='{}'", workspaceId, datasetsCount);
+        // Full orphan set drives the no-inference bucket (orphans absent from the CH inference).
+        return findOrphanDatasetIds(workspaceId)
                 .flatMap(orphanIds -> {
                     if (CollectionUtils.isEmpty(orphanIds)) {
                         log.info("No orphan datasets remain, workspaceId='{}'", workspaceId);
                         recordWorkspaceDuration(RESULT_NO_ACTIONABLE, workspaceStartMillis);
                         return Mono.just(false);
                     }
-                    return experimentDAO.computeDatasetProjectMapping()
+                    return experimentDAO.computeDatasetProjectMapping(orphanIds)
                             .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                             .collectList()
                             .publishOn(migrationScheduler)
@@ -412,15 +403,33 @@ public class DatasetProjectMigrationService implements Managed {
         }
         return Mono.fromCallable(() -> {
             for (var batch : Lists.partition(mappings, config.datasetBatchSize())) {
-                transactionTemplate.inTransaction(WRITE, handle -> {
-                    handle.attach(DatasetDAO.class).batchSetProjectId(batch, workspaceId, SYSTEM_USER);
-                    return null;
-                });
+                writeBatch(workspaceId, batch);
                 batchSize.record(batch.size());
                 log.debug("Updated dataset batch, workspaceId='{}', count='{}'", workspaceId, batch.size());
             }
             return true;
         }).subscribeOn(migrationScheduler);
+    }
+
+    private Mono<List<EligibleDatasetWorkspace>> findEligibleWorkspaces(Set<String> excludedWorkspaceIds) {
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(DatasetDAO.class).findEligibleDatasetMigrationWorkspaces(
+                        DemoData.DATASETS, excludedWorkspaceIds, config.workspacesPerRun())))
+                .subscribeOn(migrationScheduler);
+    }
+
+    private Mono<Set<UUID>> findOrphanDatasetIds(String workspaceId) {
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(DatasetDAO.class)
+                        .findOrphanDatasetIdsInWorkspace(workspaceId, DemoData.DATASETS)))
+                .subscribeOn(migrationScheduler);
+    }
+
+    private void writeBatch(String workspaceId, List<DatasetProjectMapping> batch) {
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(DatasetDAO.class).batchSetProjectId(batch, workspaceId, SYSTEM_USER);
+            return null;
+        });
     }
 
     // Picks a trap reason if the workspace cannot make further progress next cycle, else empty.
