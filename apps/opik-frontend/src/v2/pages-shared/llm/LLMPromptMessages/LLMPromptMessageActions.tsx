@@ -34,6 +34,10 @@ import {
   parsePromptVersionContent,
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
+import {
+  PROMPT_UNSAVED_EXPERIMENT_TOOLTIP,
+  PROMPT_UNSAVED_TOOLTIP,
+} from "@/constants/prompts";
 
 type ConfirmType = "load" | "save";
 
@@ -196,8 +200,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   );
   const saveTooltip = saveWarning
     ? !datasetId
-      ? "This prompt version hasn't been saved"
-      : "This prompt version hasn't been saved. Save it to link it to the experiment and make comparisons easier."
+      ? PROMPT_UNSAVED_TOOLTIP
+      : PROMPT_UNSAVED_EXPERIMENT_TOOLTIP
     : "Save to prompt library";
 
   const onPromptSelectBoxOpenChange = useCallback(

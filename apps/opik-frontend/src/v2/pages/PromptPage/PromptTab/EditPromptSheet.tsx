@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
@@ -73,6 +79,28 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
   const [showRawView, setShowRawView] = useState(false);
   const [rawJsonValue, setRawJsonValue] = useState("");
   const [isRawJsonValid, setIsRawJsonValid] = useState(true);
+
+  // Reset all editor state to the latest props each time the sheet opens.
+  // useState only seeds initial values on mount; without this, reopening
+  // after a version switch would show stale draft state.
+  const latestPropsRef = useRef({
+    promptTemplate,
+    metadataString,
+    initialMessages,
+  });
+  latestPropsRef.current = { promptTemplate, metadataString, initialMessages };
+  useEffect(() => {
+    if (!open) return;
+    const props = latestPropsRef.current;
+    setTemplate(props.promptTemplate);
+    setMetadata(props.metadataString);
+    setMessages(props.initialMessages);
+    setChangeDescription("");
+    setShowRawView(false);
+    setRawJsonValue("");
+    setIsRawJsonValid(true);
+    setViewMode("raw");
+  }, [open]);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -309,11 +337,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 border-t px-6 py-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setOpen(false)}
-          >
+          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button
