@@ -560,6 +560,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openCompare}
         setOpen={setOpenCompare}
         versions={versions ?? []}
+        initialBaseVersionId={effectiveVersionId || undefined}
         initialDiffVersionId={diffTargetVersionId ?? undefined}
       />
 
