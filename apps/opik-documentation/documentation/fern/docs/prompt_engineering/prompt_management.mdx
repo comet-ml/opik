@@ -1891,12 +1891,12 @@ Use `filter_string` (Python OQL) or `filters` (TypeScript JSON array) to narrow 
 
 | Column | Type | Supported operators | Notes |
 |--------|------|---------------------|-------|
-| `id` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
-| `commit` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
-| `version_number` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | Sequential identifier in `"v<N>"` form, e.g. `"v3"` |
-| `template` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
-| `change_description` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
-| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `id` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
+| `commit` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
+| `version_number` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | Sequential identifier in `"v<N>"` form, e.g. `"v3"` |
+| `template` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
+| `change_description` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
+| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
 | `type` | Enum | `=`, `!=` | Values: `"mustache"`, `"jinja2"` |
 | `tags` | List | `contains` | Multiple entries require all tags (AND logic) |
 | `created_at` | DateTime | `>=`, `<=`, `>`, `<` | ISO 8601 format: `"2024-01-01T00:00:00Z"` |

@@ -17,6 +17,18 @@ STRING_OPERATORS = [
     ">",
     "<",
 ]
+# Operators supported by backend FieldType.STRING_STATE_DB. Mirrors
+# ANALYTICS_DB_OPERATOR_MAP in FilterQueryBuilder.java: STRING_STATE_DB has
+# entries only for CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH, EQUAL and
+# NOT_EQUAL — > and < resolve to a null operator and produce a 400.
+STRING_STATE_DB_OPERATORS = [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+]
 DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
 NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
 FEEDBACK_SCORES_OPERATORS = [
@@ -339,18 +351,20 @@ class PromptVersionOQLConfig(OQLConfig):
 
     @property
     def supported_operators(self) -> Dict[str, List[str]]:
+        # All string-typed fields here are backend FieldType.STRING_STATE_DB,
+        # which does not support > / < — see STRING_STATE_DB_OPERATORS.
         return {
-            "id": STRING_OPERATORS,
-            "commit": STRING_OPERATORS,
-            "version_number": STRING_OPERATORS,
-            "template": STRING_OPERATORS,
-            "change_description": STRING_OPERATORS,
+            "id": STRING_STATE_DB_OPERATORS,
+            "commit": STRING_STATE_DB_OPERATORS,
+            "version_number": STRING_STATE_DB_OPERATORS,
+            "template": STRING_STATE_DB_OPERATORS,
+            "change_description": STRING_STATE_DB_OPERATORS,
             "metadata": DICTIONARY_OPERATORS,
             "type": ["=", "!="],
             "tags": LIST_OPERATORS,
             "created_at": DATE_TIME_OPERATORS,
-            "created_by": STRING_OPERATORS,
-            "default": STRING_OPERATORS,
+            "created_by": STRING_STATE_DB_OPERATORS,
+            "default": STRING_STATE_DB_OPERATORS,
         }
 
     @property

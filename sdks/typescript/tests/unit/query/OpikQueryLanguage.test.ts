@@ -356,6 +356,30 @@ describe("OpikQueryLanguage", () => {
         OpikQueryLanguage.forPromptVersions("tags > 5");
       }).toThrow(/Operator > is not supported for field tags/);
     });
+
+    it("should throw error for > on prompt version version_number (STRING_STATE_DB)", () => {
+      expect(() => {
+        OpikQueryLanguage.forPromptVersions('version_number > "v2"');
+      }).toThrow(/Operator > is not supported for field version_number/);
+    });
+
+    it("should throw error for < on prompt version version_number (STRING_STATE_DB)", () => {
+      expect(() => {
+        OpikQueryLanguage.forPromptVersions('version_number < "v2"');
+      }).toThrow(/Operator < is not supported for field version_number/);
+    });
+
+    it("should throw error for > on prompt version commit (STRING_STATE_DB)", () => {
+      expect(() => {
+        OpikQueryLanguage.forPromptVersions('commit > "abc"');
+      }).toThrow(/Operator > is not supported for field commit/);
+    });
+
+    it("should throw error for < on prompt version id (STRING_STATE_DB)", () => {
+      expect(() => {
+        OpikQueryLanguage.forPromptVersions('id < "00000000"');
+      }).toThrow(/Operator < is not supported for field id/);
+    });
   });
 
   describe("parsedFilters JSON output", () => {

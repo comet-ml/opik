@@ -1081,6 +1081,22 @@ def test_prompt_version_oql__valid_filters__happyflow(filter_string, expected):
             'template = "test" extra_stuff',
             r"Invalid filter string, trailing characters.*",
         ),
+        (
+            'version_number > "v2"',
+            r"Operator > is not supported for field version_number.*",
+        ),
+        (
+            'version_number < "v2"',
+            r"Operator < is not supported for field version_number.*",
+        ),
+        (
+            'commit > "abc"',
+            r"Operator > is not supported for field commit.*",
+        ),
+        (
+            'id < "00000000"',
+            r"Operator < is not supported for field id.*",
+        ),
     ],
 )
 def test_prompt_version_oql__invalid_filters__raises_value_error(

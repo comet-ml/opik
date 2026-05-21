@@ -26,17 +26,19 @@ export class PromptVersionOQLConfig extends OQLConfig {
   }
 
   get supportedOperators(): Record<string, readonly string[]> {
+    // All string-typed fields here are backend FieldType.STRING_STATE_DB,
+    // which does not support > / < — see OPERATOR_SETS.STRING_STATE_DB_OPS.
     return {
-      id: OPERATOR_SETS.STRING_OPS,
-      commit: OPERATOR_SETS.STRING_OPS,
-      version_number: OPERATOR_SETS.STRING_OPS,
-      template: OPERATOR_SETS.STRING_OPS,
-      change_description: OPERATOR_SETS.STRING_OPS,
+      id: OPERATOR_SETS.STRING_STATE_DB_OPS,
+      commit: OPERATOR_SETS.STRING_STATE_DB_OPS,
+      version_number: OPERATOR_SETS.STRING_STATE_DB_OPS,
+      template: OPERATOR_SETS.STRING_STATE_DB_OPS,
+      change_description: OPERATOR_SETS.STRING_STATE_DB_OPS,
       metadata: OPERATOR_SETS.DICT_OPS,
       type: ["=", "!="],
       tags: OPERATOR_SETS.LIST_OPS,
       created_at: OPERATOR_SETS.DATETIME_OPS,
-      created_by: OPERATOR_SETS.STRING_OPS,
+      created_by: OPERATOR_SETS.STRING_STATE_DB_OPS,
     };
   }
 
