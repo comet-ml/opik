@@ -44,7 +44,9 @@ import DiffVersionMenu from "@/v2/pages-shared/version-history/DiffVersionMenu";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import ComparePromptVersionDialog from "@/v2/pages/PromptPage/CommitsTab/ComparePromptVersionDialog";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
-import usePromptVersionById from "@/api/prompts/usePromptVersionById";
+import usePromptVersionById, {
+  useFetchPromptVersion,
+} from "@/api/prompts/usePromptVersionById";
 import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlaygroundButton";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
@@ -182,16 +184,35 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     toast({ description: "Metadata copied to clipboard" });
   }, [metadataJson, toast]);
 
-  const handleLoadIntoPlayground = useCallback(() => {
+  const fetchPromptVersion = useFetchPromptVersion();
+
+  const handleLoadIntoPlayground = useCallback(async () => {
+    if (!prompt?.id) return;
+    // activeVersion can hold stale data when switching versions because
+    // usePromptVersionById uses placeholderData: keepPreviousData — fall back
+    // to an imperative fetch so we always load the version actually selected.
+    let version = activeVersion;
+    if (effectiveVersionId && activeVersion?.id !== effectiveVersionId) {
+      try {
+        version = await fetchPromptVersion({ versionId: effectiveVersionId });
+      } catch {
+        version = activeVersion;
+      }
+    }
+    const source = version ?? prompt.latest_version;
     loadPlayground({
-      promptContent: parsePromptVersionContent(
-        activeVersion ?? prompt?.latest_version,
-      ),
-      promptId: prompt?.id,
-      promptVersionId: activeVersion?.id ?? prompt?.latest_version?.id,
-      templateStructure: prompt?.template_structure,
+      promptContent: parsePromptVersionContent(source),
+      promptId: prompt.id,
+      promptVersionId: source?.id,
+      templateStructure: prompt.template_structure,
     });
-  }, [loadPlayground, prompt, activeVersion]);
+  }, [
+    loadPlayground,
+    prompt,
+    activeVersion,
+    effectiveVersionId,
+    fetchPromptVersion,
+  ]);
 
   const handleOpenInPlaygroundClick = useCallback(() => {
     if (isPlaygroundEmpty) {
