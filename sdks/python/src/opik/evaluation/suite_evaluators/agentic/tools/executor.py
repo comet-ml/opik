@@ -1,10 +1,10 @@
-from typing import Any, Dict, Protocol, TYPE_CHECKING
+import abc
+from typing import Any, ClassVar, Dict
 
-if TYPE_CHECKING:
-    from ..context import TraceToolContext
+from ..context import TraceToolContext
 
 
-class ToolExecutor(Protocol):
+class ToolExecutor(abc.ABC):
     """Tool callable by the agentic LLM judge.
 
     Implementations must never raise out of `execute`: errors are returned
@@ -12,7 +12,8 @@ class ToolExecutor(Protocol):
     and let the model retry.
     """
 
-    name: str
-    spec: Dict[str, Any]
+    name: ClassVar[str]
+    spec: ClassVar[Dict[str, Any]]
 
-    def execute(self, arguments: str, ctx: "TraceToolContext") -> str: ...
+    @abc.abstractmethod
+    def execute(self, arguments: str, ctx: TraceToolContext) -> str: ...

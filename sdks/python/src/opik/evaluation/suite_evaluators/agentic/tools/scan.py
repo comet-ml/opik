@@ -26,7 +26,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from .. import context, entity_ref
-from . import tool_args, path_evaluator
+from . import executor, tool_args, path_evaluator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ SCAN_SPEC: Dict[str, Any] = {
 }
 
 
-class ScanTool:
+class ScanTool(executor.ToolExecutor):
     """Path/predicate query over cached entities."""
 
     name = "scan"

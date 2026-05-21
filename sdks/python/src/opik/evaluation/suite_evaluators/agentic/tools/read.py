@@ -26,7 +26,7 @@ from ..compression import (
     tier as tier_module,
     trace_compressor,
 )
-from . import tool_args
+from . import executor, tool_args
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ READ_SPEC: Dict[str, Any] = {
 }
 
 
-class ReadTool:
+class ReadTool(executor.ToolExecutor):
     """Cache-backed entity reader with adaptive compression."""
 
     name = "read"

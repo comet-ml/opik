@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 from .. import context
 from ..compression import span_tree_serializer
+from . import executor
 
 
 GET_TRACE_SPANS_SPEC: Dict[str, Any] = {
@@ -24,7 +25,7 @@ GET_TRACE_SPANS_SPEC: Dict[str, Any] = {
 }
 
 
-class GetTraceSpansTool:
+class GetTraceSpansTool(executor.ToolExecutor):
     """Bird's-eye overview of the active trace's span tree.
 
     Takes no arguments — operates on the trace pre-seeded into the context.

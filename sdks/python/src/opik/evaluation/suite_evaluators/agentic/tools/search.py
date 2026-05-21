@@ -29,7 +29,7 @@ import re
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .. import context, entity_ref, path_format
-from . import tool_args, path_evaluator
+from . import executor, tool_args, path_evaluator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ SEARCH_SPEC: Dict[str, Any] = {
 }
 
 
-class SearchTool:
+class SearchTool(executor.ToolExecutor):
     """Regex search over a cached trace or span with jq-path output."""
 
     name = "search"
