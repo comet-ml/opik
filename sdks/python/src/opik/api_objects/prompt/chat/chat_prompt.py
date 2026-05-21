@@ -286,6 +286,9 @@ class ChatPrompt(base_prompt.BasePrompt):
         if self.commit is not None:
             info_dict["version"]["commit"] = self.commit
 
+        if self.version is not None:
+            info_dict["version"]["version_number"] = self.version
+
         if self.__internal_api__version_id__ is not None:
             info_dict["version"]["id"] = self.__internal_api__version_id__
 

@@ -798,6 +798,13 @@ def verify_opik_prompt_entry(
     assert "commit" in version, (
         f"Missing 'version.commit' in opik_prompts entry for {name}"
     )
+    # Sequential version identifier (e.g. "v1"). Mask versions don't carry one,
+    # but the injected entries in this happy-path test come from non-mask
+    # `create_prompt` / `create_chat_prompt` calls, which always have it.
+    assert version.get("version_number", "").startswith("v"), (
+        f"Expected 'version.version_number' starting with 'v' in opik_prompts entry for {name}, "
+        f"got {version.get('version_number')!r}"
+    )
 
 
 def verify_dataset_filtered_items(
