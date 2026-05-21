@@ -21,15 +21,17 @@ type UseThisPromptDialogProps = {
 
 const getCreatingPrompt = (promptName: string) => `import opik
 
-# Create a new Prompt instance
-prompt = opik.Prompt(
+client = opik.Opik()
+
+# Create a new prompt (or a new version if it already exists)
+prompt = client.create_prompt(
   name="${promptName}",
   prompt="Hello, {{name}}! Welcome to {{location}}. How can I assist you today?",
-  metadata={"temperature": 0.4}
+  metadata={"temperature": 0.4},
 )
 
 # Format the prompt with the given parameters
-formatted_prompt = prompt.format({"name": "Alice", "location": "Wonderland"})
+formatted_prompt = prompt.format(name="Alice", location="Wonderland")
 print(formatted_prompt)
 `;
 
@@ -44,24 +46,26 @@ prompt = client.get_prompt(name="${promptName}")
 print(prompt.metadata)
 
 # Format the prompt with the given parameters
-formatted_prompt = prompt.format({"name": "Alice", "location": "Wonderland"})
+formatted_prompt = prompt.format(name="Alice", location="Wonderland")
 print(formatted_prompt)
 `;
 
 const getCreatingChatPrompt = (promptName: string) => `import opik
 
-# Create a new ChatPrompt instance
-chat_prompt = opik.ChatPrompt(
+client = opik.Opik()
+
+# Create a new chat prompt (or a new version if it already exists)
+chat_prompt = client.create_chat_prompt(
   name="${promptName}",
   messages=[
     {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "Hello, {{name}}! How can you help me with {{topic}}?"}
+    {"role": "user", "content": "Hello, {{name}}! How can you help me with {{topic}}?"},
   ],
-  metadata={"temperature": 0.7}
+  metadata={"temperature": 0.7},
 )
 
 # Format the chat prompt with the given parameters
-formatted_messages = chat_prompt.format({"name": "Alice", "topic": "Python programming"})
+formatted_messages = chat_prompt.format(name="Alice", topic="Python programming")
 print(formatted_messages)
 `;
 
@@ -76,7 +80,7 @@ chat_prompt = client.get_chat_prompt(name="${promptName}")
 print(chat_prompt.metadata)
 
 # Format the chat prompt with the given parameters
-formatted_messages = chat_prompt.format({"name": "Alice", "topic": "Python programming"})
+formatted_messages = chat_prompt.format(name="Alice", topic="Python programming")
 print(formatted_messages)
 `;
 
