@@ -842,6 +842,21 @@ automationRuleProjectMigration:
   # idle window and don't churn on every tick.
   schedulerThreadTtl: 10s
 
+# Alert Project Migration configuration
+# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
+alertProjectMigration:
+  enabled: false
+  workspacesPerRun: 20
+  alertBatchSize: 100
+  interval: 5s
+  startupDelay: 5s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
+  schedulerThreadCap: 2
+  schedulerQueuedTaskCap: 50
+  schedulerThreadTtl: 10s
+
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
 migration:
