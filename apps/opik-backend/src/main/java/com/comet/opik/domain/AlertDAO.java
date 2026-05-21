@@ -91,6 +91,7 @@ public interface AlertDAO {
                             'alert_trigger_id', alert_trigger_id,
                             'config_type', config_type,
                             'config_value', config_value,
+                            'group_index', group_index,
                             'created_at', created_at,
                             'created_by', created_by,
                             'last_updated_at', last_updated_at,
@@ -200,6 +201,7 @@ public interface AlertDAO {
                             'alert_trigger_id', alert_trigger_id,
                             'config_type', config_type,
                             'config_value', config_value,
+                            'group_index', group_index,
                             'created_at', created_at,
                             'created_by', created_by,
                             'last_updated_at', last_updated_at,
@@ -412,11 +414,17 @@ public interface AlertDAO {
                         .map(this::parseConfigValue)
                         .orElse(null);
 
+                Integer groupIndex = Optional.ofNullable(configNode.get("group_index"))
+                        .filter(node -> !node.isNull())
+                        .map(JsonNode::asInt)
+                        .orElse(null);
+
                 return AlertTriggerConfig.builder()
                         .id(UUID.fromString(configNode.get("id").asText()))
                         .alertTriggerId(UUID.fromString(configNode.get("alert_trigger_id").asText()))
                         .type(AlertTriggerConfigType.fromString(configNode.get("config_type").asText()))
                         .configValue(configValue)
+                        .groupIndex(groupIndex)
                         .createdAt(Instant.from(FORMATTER.parse(configNode.get("created_at").asText())))
                         .createdBy(configNode.get("created_by").asText())
                         .lastUpdatedAt(Instant.from(FORMATTER.parse(configNode.get("last_updated_at").asText())))
