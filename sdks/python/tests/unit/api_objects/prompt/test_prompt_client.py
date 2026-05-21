@@ -250,6 +250,144 @@ class TestInternalCreateMask:
         assert version.change_description is None
 
 
+class TestGetPromptByVersionSelector:
+    """Tests for the new sequential ``version`` parameter (e.g. ``"v3"``)."""
+
+    @pytest.fixture(autouse=True)
+    def clear_global_cache(self):
+        yield
+        prompt_cache.get_global_cache().clear()
+
+    def test_get_prompt__version_arg__threads_through_as_version_number(
+        self, client, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        client.get_prompt(name="my-prompt", version="v3")
+
+        mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
+        call_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
+        assert call_kwargs["name"] == "my-prompt"
+        assert call_kwargs["version_number"] == "v3"
+        assert call_kwargs["commit"] is None
+
+    def test_get_prompt__commit_and_version_both_set__raises_value_error(
+        self, client, mock_rest_client
+    ):
+        with pytest.raises(ValueError, match=r"Provide either `commit` or `version`"):
+            client.get_prompt(name="my-prompt", commit="abc12345", version="v1")
+        mock_rest_client.prompts.retrieve_prompt_version.assert_not_called()
+
+    def test_get_prompt_with_cache__commit_and_version_both_set__raises_value_error(
+        self, client, mock_rest_client
+    ):
+        from opik.api_objects.prompt.text import prompt as text_prompt_module
+
+        with pytest.raises(ValueError, match=r"Provide either `commit` or `version`"):
+            client.get_prompt_with_cache(
+                name="my-prompt",
+                commit="abc12345",
+                project_name=None,
+                template_structure="text",
+                prompt_cls=text_prompt_module.Prompt,
+                version="v1",
+            )
+
+    def test_get_prompt_with_cache__different_versions__do_not_collide_in_cache(
+        self, client, mock_rest_client
+    ):
+        from opik.api_objects.prompt.text import prompt as text_prompt_module
+
+        v1 = _make_mock_version(template="content for v1")
+        v2 = _make_mock_version(template="content for v2")
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [v1, v2]
+
+        first = client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            version="v1",
+        )
+        second = client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            version="v2",
+        )
+
+        assert first is not None and first.prompt == "content for v1"
+        assert second is not None and second.prompt == "content for v2"
+        assert mock_rest_client.prompts.retrieve_prompt_version.call_count == 2
+
+    def test_get_prompt_with_cache__commit_and_version_pin__do_not_collide(
+        self, client, mock_rest_client
+    ):
+        from opik.api_objects.prompt.text import prompt as text_prompt_module
+
+        by_commit = _make_mock_version(template="content by commit")
+        by_version = _make_mock_version(template="content by version")
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
+            by_commit,
+            by_version,
+        ]
+
+        commit_result = client.get_prompt_with_cache(
+            name="my-prompt",
+            commit="abc12345",
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+        )
+        version_result = client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            version="v3",
+        )
+
+        assert commit_result is not None
+        assert commit_result.prompt == "content by commit"
+        assert version_result is not None
+        assert version_result.prompt == "content by version"
+        assert mock_rest_client.prompts.retrieve_prompt_version.call_count == 2
+
+    def test_get_prompt_with_cache__same_version_twice__second_hits_cache(
+        self, client, mock_rest_client
+    ):
+        from opik.api_objects.prompt.text import prompt as text_prompt_module
+
+        v2 = _make_mock_version(template="v2 content")
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = v2
+
+        first = client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            version="v2",
+        )
+        second = client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            version="v2",
+        )
+
+        assert first is second
+        assert mock_rest_client.prompts.retrieve_prompt_version.call_count == 1
+
+
 class TestGetPromptWithCacheBypass:
     """Tests for no_cache parameter in Opik.get_prompt()."""
 

@@ -30,7 +30,18 @@ class BasePrompt(ABC):
     @property
     @abstractmethod
     def commit(self) -> Optional[str]:
-        """The commit hash of the prompt version."""
+        """Legacy commit hash of the prompt version.
+
+        DEPRECATED — use :attr:`version` (e.g. ``"v3"``) instead. ``commit``
+        is no longer surfaced in the Opik UI and is kept only for backwards
+        compatibility with older SDK callers.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def version(self) -> Optional[str]:
+        """The sequential version selector for the prompt version (e.g. ``"v3"``)."""
         pass
 
     @property

@@ -1361,13 +1361,19 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a text prompt by name and optional version.
+   * Retrieves a text prompt by name, optionally targeting a specific `version`.
    * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
-   * default 300s). Pinned commits are cached indefinitely. When called inside a track()
-   * context the prompt reference is injected into the active trace/span metadata.
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
    * @returns Promise resolving to Prompt or null if not found
+   * @throws Error if both `commit` and `version` are provided
    * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
    */
   public getPrompt = async (
@@ -1383,13 +1389,19 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a chat prompt by name and optional version.
+   * Retrieves a chat prompt by name, optionally targeting a specific `version`.
    * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
-   * default 300s). Pinned commits are cached indefinitely. When called inside a track()
-   * context the prompt reference is injected into the active trace/span metadata.
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
    * @returns Promise resolving to ChatPrompt or null if not found
+   * @throws Error if both `commit` and `version` are provided
    * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
    *
    * @example
@@ -1422,6 +1434,14 @@ export class OpikClient {
     ) => T,
     logContext: string
   ): Promise<T | null> => {
+    // Validate mutual exclusivity synchronously, before touching any async work.
+    if (options.commit && options.version) {
+      throw new Error(
+        "Provide either `commit` or `version`, not both. " +
+          "Prefer `version` — `commit` is deprecated."
+      );
+    }
+
     logger.debug(`Getting ${logContext}`, options);
 
     const resolvedProjectName = this.resolveProjectName(options.projectName);
@@ -1470,11 +1490,21 @@ export class OpikClient {
             return null;
           }
 
+          // Build the REST request body explicitly so we never leak SDK-only
+          // fields (such as `version` — the wire format calls it `versionNumber`).
+          const retrieveRequest: OpikApi.PromptVersionRetrieveDetail = {
+            name: options.name,
+            projectName: resolvedProjectName,
+            ...(options.commit ? { commit: options.commit } : {}),
+            ...(options.version ? { versionNumber: options.version } : {}),
+          };
+
           versionData = await this.api.prompts.retrievePromptVersion(
-            { ...options, projectName: resolvedProjectName },
+            retrieveRequest,
             this.api.requestOptions
           );
         }
+
 
         const templateStructure = versionData.templateStructure;
         if (expectedStructure === PromptTemplateStructure.Text) {
@@ -1511,7 +1541,9 @@ export class OpikClient {
       resolvedProjectName,
       expectedStructure,
       () => fetchFn(),
-      this.config.promptCacheTtlSeconds
+      this.config.promptCacheTtlSeconds,
+      undefined,
+      options.version
     );
 
     const activeMaskId = unmasked?.id
@@ -1525,7 +1557,8 @@ export class OpikClient {
           expectedStructure,
           () => fetchFn(activeMaskId),
           this.config.promptCacheTtlSeconds,
-          activeMaskId
+          activeMaskId,
+          options.version
         )
       : unmasked;
 
