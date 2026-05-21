@@ -12,6 +12,7 @@ import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import usePromptById from "@/api/prompts/usePromptById";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useDeepMemo from "@/hooks/useDeepMemo";
+import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
 import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
@@ -33,6 +34,7 @@ interface PromptsSelectBoxProps {
   disabled?: boolean;
   hasUnsavedChanges?: boolean;
   promptName?: string;
+  loadedVersionId?: string;
   compact?: boolean;
 }
 
@@ -49,6 +51,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   disabled = false,
   hasUnsavedChanges = false,
   promptName,
+  loadedVersionId,
   compact = false,
 }) => {
   const [open, setOpen] = useState(false);
@@ -153,6 +156,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
           promptId={value}
           displayName={displayName}
           prompt={promptFromList}
+          versionId={loadedVersionId}
           hasUnsavedChanges={hasUnsavedChanges}
           onClear={onClear}
         />
@@ -226,6 +230,7 @@ type CompactLoadedPromptProps = {
   promptId: string;
   displayName: string;
   prompt?: Prompt;
+  versionId?: string;
   hasUnsavedChanges?: boolean;
   onClear?: () => void;
 };
@@ -234,6 +239,7 @@ const CompactLoadedPrompt: React.FC<CompactLoadedPromptProps> = ({
   promptId,
   displayName,
   prompt,
+  versionId,
   hasUnsavedChanges,
   onClear,
 }) => {
@@ -242,8 +248,11 @@ const CompactLoadedPrompt: React.FC<CompactLoadedPromptProps> = ({
     { enabled: !!promptId && !prompt },
   );
   const data = prompt ?? fetched;
-  const versionLabel =
-    data && data.version_count > 0 ? `v${data.version_count}` : undefined;
+  const versionLabel = usePromptVersionLabel(
+    promptId,
+    versionId,
+    data?.version_count,
+  );
 
   return (
     <LoadedPromptDisplay

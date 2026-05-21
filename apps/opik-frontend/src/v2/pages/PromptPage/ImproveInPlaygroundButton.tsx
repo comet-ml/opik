@@ -51,6 +51,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
         template,
         templateStructure: prompt.template_structure,
         type: sourceVersion?.type,
+        metadata: sourceVersion?.metadata,
         projectId: activeProjectId ?? undefined,
         onSuccess: () => {
           toast({ description: `Saved improved version of ${prompt.name}` });
@@ -58,7 +59,14 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
         },
       });
     },
-    [prompt, sourceVersion?.type, activeProjectId, createVersion, toast],
+    [
+      prompt,
+      sourceVersion?.type,
+      sourceVersion?.metadata,
+      activeProjectId,
+      createVersion,
+      toast,
+    ],
   );
 
   return (
