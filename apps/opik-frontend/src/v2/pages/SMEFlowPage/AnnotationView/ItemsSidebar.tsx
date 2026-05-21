@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import { User, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSMEFlow, ITEM_STATE } from "../SMEFlowContext";
@@ -26,7 +26,7 @@ const StateIndicator: React.FC<{ state: ITEM_STATE }> = ({ state }) => {
         <span className="size-1.5 rounded-full bg-light-slate" />
       )}
       {state === ITEM_STATE.DEFAULT && (
-        <span className="size-1.5 rounded-full border border-muted-slate" />
+        <span className="size-1.5 rounded-full border border-slate-300" />
       )}
     </span>
   );
@@ -46,6 +46,18 @@ const ItemsSidebar: React.FunctionComponent = () => {
     [navigateToItem],
   );
 
+  const itemPreviews = useMemo(
+    () =>
+      queueItems.map((item) => {
+        const trace = item as Trace & Thread;
+        return {
+          input: getPreviewText(trace.input, "input"),
+          output: getPreviewText(trace.output, "output"),
+        };
+      }),
+    [queueItems],
+  );
+
   return (
     <div className="flex h-full w-80 shrink-0 flex-col overflow-hidden border-r border-border">
       <div className="flex h-10 shrink-0 items-center border-b border-border bg-soft-background px-3">
@@ -60,8 +72,8 @@ const ItemsSidebar: React.FunctionComponent = () => {
           const isActive = index === currentIndex;
           const trace = item as Trace & Thread;
 
-          const inputPreview = getPreviewText(trace.input, "input");
-          const outputPreview = getPreviewText(trace.output, "output");
+          const { input: inputPreview, output: outputPreview } =
+            itemPreviews[index];
 
           return (
             <button

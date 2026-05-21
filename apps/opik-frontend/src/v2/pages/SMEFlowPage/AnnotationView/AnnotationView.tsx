@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import TraceDataViewer from "./TraceDataViewer";
 import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
@@ -24,6 +24,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     itemStates,
     nextDefaultItem,
     handleNextDefault,
+    flushPendingChanges,
     setCurrentView,
   } = useSMEFlow();
 
@@ -33,18 +34,29 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
 
   const isNextDisabled = !nextDefaultItem;
 
+  const handleNext = useCallback(() => {
+    if (allDone) {
+      flushPendingChanges();
+      setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    } else if (!isNextDisabled) {
+      handleNextDefault();
+    }
+  }, [
+    allDone,
+    isNextDisabled,
+    flushPendingChanges,
+    handleNextDefault,
+    setCurrentView,
+  ]);
+
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.NEXT_DEFAULT].key,
     (keyboardEvent: KeyboardEvent) => {
       keyboardEvent.preventDefault();
-      if (allDone) {
-        setCurrentView(WORKFLOW_STATUS.COMPLETED);
-      } else if (!isNextDisabled) {
-        handleNextDefault();
-      }
+      handleNext();
     },
     { enableOnFormTags: true },
-    [allDone, isNextDisabled, handleNextDefault, setCurrentView],
+    [handleNext],
   );
 
   const isThread = annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.THREAD;
@@ -80,7 +92,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
       <div className="flex shrink-0 justify-between gap-2 border-t border-border pt-3">
         <ReturnToAnnotationQueueButton />
         {allDone ? (
-          <Button onClick={() => setCurrentView(WORKFLOW_STATUS.COMPLETED)}>
+          <Button onClick={handleNext}>
             Finish annotating
             <HotkeyDisplay
               hotkey={SME_HOTKEYS[SME_ACTION.NEXT_DEFAULT].display}
