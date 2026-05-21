@@ -32,6 +32,7 @@ import {
   getLastCommentByUser,
   getItemState,
   ITEM_STATE,
+  AnnotationState,
 } from "@/lib/annotation-queues";
 import { useAnnotationPersistence } from "./useAnnotationPersistence";
 
@@ -39,10 +40,7 @@ export { ITEM_STATE } from "@/lib/annotation-queues";
 
 const POLLING_INTERVAL_MS = 30000;
 
-export type AnnotationState = {
-  comment?: { text?: string };
-  scores: TraceFeedbackScore[];
-};
+export type { AnnotationState } from "@/lib/annotation-queues";
 
 export enum WORKFLOW_STATUS {
   INITIAL = "initial",

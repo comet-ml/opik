@@ -102,6 +102,11 @@ export const getCommentsByUser = (
     .map((comment) => comment.text);
 };
 
+export type AnnotationState = {
+  comment?: { text?: string };
+  scores: TraceFeedbackScore[];
+};
+
 export enum ITEM_STATE {
   DEFAULT = "default",
   SCORED = "scored",

@@ -41,7 +41,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [currentIndex]);
 
-  const handleClick = useCallback(
+  const handleItemClick = useCallback(
     (index: number) => navigateToItem(index),
     [navigateToItem],
   );
@@ -79,7 +79,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
             <button
               key={itemId}
               ref={isActive ? activeRef : undefined}
-              onClick={() => handleClick(index)}
+              onClick={() => handleItemClick(index)}
               className={cn(
                 "flex w-full flex-col gap-0.5 p-2 text-left transition-colors",
                 "hover:bg-muted/50",
