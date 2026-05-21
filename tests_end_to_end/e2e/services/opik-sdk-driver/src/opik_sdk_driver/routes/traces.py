@@ -22,7 +22,7 @@ def create_trace(body: TraceCreate) -> TraceResponse:
     try:
         try:
             _emit(body.input)
-            opik.flush_all()
+            opik.flush_tracker()
             traces = client.search_traces(
                 project_name=body.project_name,
                 filter_string=f'name = "{body.name}"',
