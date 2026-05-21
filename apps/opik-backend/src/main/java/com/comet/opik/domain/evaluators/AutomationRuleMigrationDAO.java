@@ -74,6 +74,9 @@ public interface AutomationRuleMigrationDAO {
             @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "demoRuleNames") List<String> demoRuleNames,
             @Bind("limit") int limit);
 
+    @SqlQuery("SELECT project_id FROM automation_rule_projects WHERE rule_id = :ruleId AND workspace_id = :workspaceId")
+    Set<UUID> findJunctionProjectIds(@Bind("ruleId") UUID ruleId, @Bind("workspaceId") String workspaceId);
+
     @SqlUpdate("DELETE FROM automation_rule_projects WHERE rule_id = :ruleId AND workspace_id = :workspaceId")
     int deleteJunctionByRuleId(@Bind("ruleId") UUID ruleId, @Bind("workspaceId") String workspaceId);
 

@@ -251,6 +251,11 @@ public class AutomationRuleProjectMigrationService {
             var migrationDao = handle.attach(AutomationRuleMigrationDAO.class);
             var ruleDao = handle.attach(AutomationRuleDAO.class);
 
+            var freshJunctions = migrationDao.findJunctionProjectIds(ruleId, workspaceId);
+            if (freshJunctions.size() <= 1) {
+                return SplitResult.builder().outcome(SplitOutcome.NO_OP).build();
+            }
+
             migrationDao.deleteJunctionByRuleId(ruleId, workspaceId);
 
             var firstProjectId = sortedProjectIds.getFirst();
@@ -282,17 +287,26 @@ public class AutomationRuleProjectMigrationService {
     private SplitResult moveRuleToDefaultProject(String workspaceId, UUID ruleId, int deletedCount) {
         var defaultProject = projectService.getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, SYSTEM_USER);
 
-        transactionTemplate.inTransaction(WRITE, handle -> {
+        var moved = transactionTemplate.inTransaction(WRITE, handle -> {
             var migrationDao = handle.attach(AutomationRuleMigrationDAO.class);
             var ruleDao = handle.attach(AutomationRuleDAO.class);
+
+            var freshJunctions = migrationDao.findJunctionProjectIds(ruleId, workspaceId);
+            if (freshJunctions.size() <= 1) {
+                return false;
+            }
 
             migrationDao.deleteJunctionByRuleId(ruleId, workspaceId);
             migrationDao.insertJunction(ruleId, defaultProject.id(), workspaceId);
             migrationDao.disableRule(ruleId, workspaceId);
             ruleDao.clearLegacyProjectId(ruleId, workspaceId);
 
-            return null;
+            return true;
         });
+
+        if (!moved) {
+            return SplitResult.builder().outcome(SplitOutcome.NO_OP).build();
+        }
 
         rulesMovedToDefault.add(1, MOVED_TO_DEFAULT_ATTR);
         log.info("All projects deleted for rule, moved to Default Project (disabled), "
