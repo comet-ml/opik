@@ -865,7 +865,7 @@ class PromptServiceImpl implements PromptService {
                 .id(newVersionId)
                 .commit(newCommit)
                 .createdBy(userName)
-                .changeDescription("Restored from version " + versionToRestore.commit())
+                .changeDescription("Restored from version " + versionToRestore.versionNumber())
                 .tags(null) // Don't propagate tags to restored version
                 .environment(null) // Don't propagate environment ownership to restored version
                 .build();
