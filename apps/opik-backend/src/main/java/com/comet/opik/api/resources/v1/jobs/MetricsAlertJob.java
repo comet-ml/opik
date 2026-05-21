@@ -233,8 +233,11 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 "Evaluating group_index='{}' ('{}' config(s)) for alert '{}' (id: '{}'), event type: '{}'",
                 group.groupIndex(), group.configs().size(), alert.name(), alert.id(), trigger.eventType());
 
+        // flatMapSequential preserves source order in the emitted results so that
+        // results.getFirst() below deterministically refers to the first configured condition
+        // (it still fetches metrics concurrently, just orders downstream emissions).
         return Flux.fromIterable(group.configs())
-                .flatMap(config -> fetchMetricValue(alert, trigger, config)
+                .flatMapSequential(config -> fetchMetricValue(alert, trigger, config)
                         .map(value -> new ConditionResult(config, value))
                         .defaultIfEmpty(new ConditionResult(config, null)))
                 .collectList()

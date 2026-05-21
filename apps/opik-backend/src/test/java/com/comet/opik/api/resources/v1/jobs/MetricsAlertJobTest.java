@@ -196,6 +196,39 @@ class MetricsAlertJobTest {
         assertThat(conditions.get(1).get("metric_value").asText()).isEqualTo("0.2000");
     }
 
+    @ParameterizedTest
+    @EnumSource(value = AlertEventType.class, names = {"TRACE_FEEDBACK_SCORE", "TRACE_THREAD_FEEDBACK_SCORE"})
+    void payloadScalarsMatchSourceOrderEvenWhenSecondFetchCompletesFirst(AlertEventType eventType) {
+        // Regression: results must be ordered by config index, not by async-completion order,
+        // otherwise getFirst() picks a non-deterministic "primary" condition for the payload scalars.
+        Alert alert = alertWithGroupedFeedbackConfigs(eventType, 3, "<", "0.5", "0.6");
+
+        EntityType entityType = entityTypeFor(eventType);
+        // First call is delayed, second resolves immediately — would interleave under plain flatMap.
+        when(projectMetricsDAO.getAverageFeedbackScore(
+                anyList(), any(Instant.class), any(Instant.class), eq(entityType), eq(FEEDBACK_NAME)))
+                .thenReturn(Mono.just(new BigDecimal("0.1")).delayElement(java.time.Duration.ofMillis(150)))
+                .thenReturn(Mono.just(new BigDecimal("0.2")));
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(),
+                payloadCaptor.capture(), anyList());
+
+        JsonNode payload = JsonUtils.readValue(payloadCaptor.getValue().getFirst(), JsonNode.class);
+
+        // Scalars must come from the first *configured* condition (threshold 0.5, value 0.1),
+        // not from whichever fetch completed first.
+        assertThat(payload.get("threshold").asText()).isEqualTo("0.5000");
+        assertThat(payload.get("metric_value").asText()).isEqualTo("0.1000");
+        assertThat(payload.get("conditions").get(0).get("threshold").asText()).isEqualTo("0.5000");
+        assertThat(payload.get("conditions").get(1).get("threshold").asText()).isEqualTo("0.6000");
+    }
+
     @Test
     void doesNotEvaluateWhenInterrupted() throws org.quartz.UnableToInterruptJobException {
         job.interrupt();
