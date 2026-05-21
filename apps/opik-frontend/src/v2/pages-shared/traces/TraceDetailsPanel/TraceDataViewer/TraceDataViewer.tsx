@@ -108,6 +108,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     const legacyTabMap: Record<string, string> = {
       input: canShowMessagesTab ? "messages" : "details",
       metadata: "details",
+      configuration: hasPrompts ? "prompts" : "details",
     };
     const normalizedTab = legacyTabMap[tab] ?? tab;
 

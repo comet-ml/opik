@@ -62,8 +62,9 @@ export function useHydratePromptMetadata() {
       if (chatPromptId) {
         try {
           const promptData = await fetchPrompt({ promptId: chatPromptId });
+          const explicitVersionId = prompt.loadedChatPromptVersionId;
           const targetVersionId =
-            prompt.loadedChatPromptVersionId ?? promptData?.latest_version?.id;
+            explicitVersionId ?? promptData?.latest_version?.id;
           if (!targetVersionId) return undefined;
 
           let versionData: PromptVersion | undefined;
@@ -72,27 +73,31 @@ export function useHydratePromptMetadata() {
               versionId: targetVersionId,
             });
           } catch {
-            // Fall back to latest_version embedded in the prompt response
+            // Only fall back to latest_version when no explicit version was
+            // requested. Otherwise we'd compare against the wrong version
+            // and silently drop the library link.
           }
 
-          const templateToCompare =
-            versionData?.template ?? promptData?.latest_version?.template;
-          if (!templateToCompare) return undefined;
+          // When an explicit version was selected but we couldn't fetch it,
+          // there's no safe anchor — bail rather than mismatch.
+          if (explicitVersionId && !versionData) return undefined;
+
+          const sourceVersion = versionData ?? promptData?.latest_version;
+          if (!sourceVersion?.template) return undefined;
+
           if (
             !chatTemplatesEqual(
               serializeChatTemplate(currentMessages),
-              templateToCompare,
+              sourceVersion.template,
             )
           )
             return undefined;
 
           return buildMetadata(promptData, {
-            id: versionData?.id ?? targetVersionId,
-            template:
-              versionData?.template ?? promptData?.latest_version?.template,
-            commit: versionData?.commit ?? promptData?.latest_version?.commit,
-            metadata:
-              versionData?.metadata ?? promptData?.latest_version?.metadata,
+            id: sourceVersion.id,
+            template: sourceVersion.template,
+            commit: sourceVersion.commit,
+            metadata: sourceVersion.metadata,
           });
         } catch {
           return undefined;

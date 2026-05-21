@@ -165,6 +165,10 @@ const PromptCard: React.FC<PromptCardProps> = ({
     toast({ description: "Prompt copied to clipboard" });
   }, [textContent, toast]);
 
+  const effectiveTemplateStructure = isChatPrompt
+    ? PROMPT_TEMPLATE_STRUCTURE.CHAT
+    : PROMPT_TEMPLATE_STRUCTURE.TEXT;
+
   const doLoadIntoPlayground = useCallback(() => {
     loadPlayground({
       promptContent: parsePromptVersionContent({
@@ -173,9 +177,16 @@ const PromptCard: React.FC<PromptCardProps> = ({
       }),
       promptId,
       promptVersionId: versionId,
-      templateStructure: rawPrompt.template_structure,
+      templateStructure: effectiveTemplateStructure,
     });
-  }, [loadPlayground, template, rawPrompt, promptId, versionId]);
+  }, [
+    loadPlayground,
+    template,
+    rawPrompt,
+    promptId,
+    versionId,
+    effectiveTemplateStructure,
+  ]);
 
   const handleOpenInPlayground = useCallback(() => {
     if (isPlaygroundEmpty) {
@@ -295,7 +306,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
                 projectId: activeProjectId!,
                 promptId,
               }}
-              search={{ activeVersionId: versionId }}
+              search={versionId ? { activeVersionId: versionId } : {}}
             >
               View
               <ArrowUpRight className="ml-1 size-3" />
@@ -357,9 +368,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
                       value={localSearch}
                       placeholder="Search..."
                       onValueChange={(v) => setLocalSearch(v as string)}
-                      onKeyDown={(e) =>
-                        e.key === "Escape" && closeSearch()
-                      }
+                      onKeyDown={(e) => e.key === "Escape" && closeSearch()}
                       className="comet-body-xs h-7 flex-1 border-0 bg-transparent px-1.5 focus-visible:ring-0"
                     />
                     <button
