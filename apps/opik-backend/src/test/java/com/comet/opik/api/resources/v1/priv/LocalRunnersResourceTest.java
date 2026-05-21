@@ -1753,7 +1753,7 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        @DisplayName("opik_runner_disconnected fires with runner_type on a real SDK-initiated disconnect")
+        @DisplayName("opik_runner_disconnected fires with reason=stopped on a real SDK-initiated disconnect")
         void disconnectRunner__owned__emitsRunnerDisconnected() {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
             UUID runnerId = connectRunnerWithPairing("disconnect-bi", projectId, API_KEY, TEST_WORKSPACE,
@@ -1770,6 +1770,7 @@ class LocalRunnersResourceTest {
                                             equalTo(runnerId.toString())))
                                     .and(matchingJsonPath("$.event_properties.runner_type",
                                             equalTo("endpoint")))
+                                    .and(matchingJsonPath("$.event_properties.reason", equalTo("stopped")))
                                     .and(matchingJsonPath("$.event_properties.workspace_id",
                                             equalTo(WORKSPACE_ID))))));
         }

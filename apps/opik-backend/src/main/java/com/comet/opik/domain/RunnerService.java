@@ -7,6 +7,7 @@ import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -127,13 +128,15 @@ class RunnerServiceImpl implements RunnerService {
     private final @NonNull Provider<EndpointJobService> endpointJobService;
     private final @NonNull Provider<ConnectBridgeService> connectBridgeService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull AnalyticsService analyticsService;
 
     @Inject
     RunnerServiceImpl(@NonNull StringRedisClient redisClient, @NonNull IdGenerator idGenerator,
             @NonNull ProjectService projectService, @NonNull LocalRunnerConfig runnerConfig,
             @NonNull Provider<EndpointJobService> endpointJobService,
             @NonNull Provider<ConnectBridgeService> connectBridgeService,
-            @NonNull Provider<RequestContext> requestContext) {
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull AnalyticsService analyticsService) {
         this.redisClient = redisClient;
         this.idGenerator = idGenerator;
         this.projectService = projectService;
@@ -141,6 +144,7 @@ class RunnerServiceImpl implements RunnerService {
         this.endpointJobService = endpointJobService;
         this.connectBridgeService = connectBridgeService;
         this.requestContext = requestContext;
+        this.analyticsService = analyticsService;
     }
 
     @Override
@@ -634,6 +638,17 @@ class RunnerServiceImpl implements RunnerService {
         if (disconnectedAt == null) {
             disconnectedAt = Instant.now().toString();
             runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
+            // Fire once per reaped runner — gated on the field being unset so subsequent
+            // reaper passes (during the dead-runner grace period) don't re-emit.
+            String typeStr = runnerMap.get(FIELD_TYPE);
+            String userName = runnerMap.get(FIELD_USER_NAME);
+            analyticsService.trackEvent("opik_runner_disconnected", Map.of(
+                    "runner_id", runnerId.toString(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName != null ? userName : "",
+                    "runner_type", typeStr != null ? typeStr : "",
+                    "reason", "reaped",
+                    "date", disconnectedAt));
         }
 
         Instant disconnected = Instant.parse(disconnectedAt);

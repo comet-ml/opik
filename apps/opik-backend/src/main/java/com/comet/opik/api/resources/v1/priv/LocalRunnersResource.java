@@ -125,6 +125,7 @@ public class LocalRunnersResource {
                     "workspace_id", workspaceId,
                     "user_name", userName,
                     "runner_type", type.getValue(),
+                    "reason", "stopped",
                     "date", Instant.now().toString()));
         });
         return Response.noContent().build();
