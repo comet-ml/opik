@@ -1,16 +1,8 @@
 import type { Page, Locator } from '@playwright/test';
-import type { BackendClient, SpanRecord } from '../core/backend';
-
-export type Span = SpanRecord;
-
-export interface TraceMetadata {
-  projectName: string;
-}
 
 export class TracePanelPage {
   constructor(
     private readonly page: Page,
-    private readonly backendClient: BackendClient,
     private readonly traceId: string,
   ) {}
 
@@ -20,22 +12,45 @@ export class TracePanelPage {
     await this.page.getByTestId('data-viewer-created-at').waitFor({ state: 'visible', timeout: 30_000 });
   }
 
-  async readSpans(): Promise<Span[]> {
-    return this.backendClient.getTraceSpans(this.traceId);
+  /** Root locator for the side-panel content, scoped to the panel testid. */
+  get root(): Locator {
+    return this.page.getByTestId('traces');
   }
 
-  async readMetadata(): Promise<TraceMetadata> {
-    const trace = await this.backendClient.getTrace(this.traceId);
-    const project = await this.backendClient.getProject(trace.projectId);
-    return { projectName: project.name };
+  get closeButton(): Locator {
+    return this.root.getByRole('button', { name: 'Close' });
+  }
+
+  get inputSection(): Locator {
+    return this.root.getByRole('button', { name: 'Input', expanded: true });
+  }
+
+  get outputSection(): Locator {
+    return this.root.getByRole('button', { name: 'Output', expanded: true });
+  }
+
+  /** Heading-area locator for the trace name shown in the panel toolbar. */
+  traceNameInHeader(name: string): Locator {
+    return this.root.getByText(name, { exact: true }).first();
+  }
+
+  /** Text matching `Spans (n)` shown above the spans tree. */
+  spansCountLabel(n: number): Locator {
+    return this.root.getByText(new RegExp(`^Spans\\s*\\(${n}\\)$`)).first();
+  }
+
+  /** Rendered input text inside the panel's Details tab. */
+  inputValue(value: string): Locator {
+    return this.root.getByText(value, { exact: true }).first();
+  }
+
+  /** Rendered output text inside the panel's Details tab. */
+  outputValue(value: string): Locator {
+    return this.root.getByText(value, { exact: true }).first();
   }
 
   async close(): Promise<void> {
     await this.closeButton.click();
     await this.page.waitForURL((url) => !url.searchParams.get('trace'));
-  }
-
-  get closeButton(): Locator {
-    return this.page.getByRole('button', { name: 'Close' });
   }
 }

@@ -1,15 +1,11 @@
 import type { Page, Locator } from '@playwright/test';
-import type { BackendClient } from '../core/backend';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 
 export class LogsPage {
-  constructor(
-    private readonly page: Page,
-    private readonly backendClient: BackendClient,
-  ) {}
-
   private projectId: string | null = null;
+
+  constructor(private readonly page: Page) {}
 
   async goto(projectId: string): Promise<void> {
     this.projectId = projectId;
@@ -52,7 +48,7 @@ export class LogsPage {
     const env = loadEnvConfig();
     const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?trace=${traceId}`;
     await this.page.goto(url);
-    return new TracePanelPage(this.page, this.backendClient, traceId);
+    return new TracePanelPage(this.page, traceId);
   }
 
   async openFirstTrace(): Promise<TracePanelPage> {
@@ -63,7 +59,7 @@ export class LogsPage {
       throw new Error('LogsPage.openFirstTrace: first row has no data-row-id attribute');
     }
     await row.click();
-    return new TracePanelPage(this.page, this.backendClient, traceId);
+    return new TracePanelPage(this.page, traceId);
   }
 
   async readTraceIdsInOrder(): Promise<string[]> {
@@ -75,6 +71,11 @@ export class LogsPage {
       if (id) ids.push(id);
     }
     return ids;
+  }
+
+  /** Breadcrumb link for the current project, shown when navigated to /logs. */
+  breadcrumbProjectLink(projectName: string): Locator {
+    return this.page.getByRole('navigation', { name: 'breadcrumb' }).getByRole('link', { name: projectName });
   }
 
   get traceRows(): Locator {

@@ -1,7 +1,1 @@
-export {
-  makeBackendClient,
-  type BackendClient,
-  type ProjectRef,
-  type TraceSummary,
-  type SpanRecord,
-} from './client';
+export { makeBackendClient, type BackendClient, type ProjectRef } from './client';
