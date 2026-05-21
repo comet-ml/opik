@@ -14,7 +14,7 @@ import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { pickHighestStage } from "@/utils/agent-configurations";
+import { pickHighestStage } from "@/utils/version-stages";
 import { cn } from "@/lib/utils";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 
