@@ -285,4 +285,32 @@ class CostServiceTest {
                 Arguments.of("anthropic/claude-sonnet-4.5-2025-12-17", "anthropic"),
                 Arguments.of("openai/gpt-5.2-2025-12-17", "openai"));
     }
+
+    /**
+     * Test for Bedrock model names with version pin suffix ({@code :0}).
+     * Verifies that model names like "anthropic.claude-opus-4-6-v1:0" correctly
+     * match the base pricing entry "anthropic.claude-opus-4-6-v1" after stripping the
+     * version suffix, without requiring duplicate entries in the pricing database.
+     */
+    @ParameterizedTest
+    @MethodSource("provideModelNamesWithVersionSuffix")
+    void calculateCost_shouldStripVersionSuffix(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideModelNamesWithVersionSuffix() {
+        return Stream.of(
+                // Opus 4.6 on Bedrock with :0 suffix (issue #5130)
+                Arguments.of("anthropic.claude-opus-4-6-v1:0", "bedrock"),
+                // Global variant
+                Arguments.of("global.anthropic.claude-opus-4-6-v1:0", "bedrock"),
+                // Opus 4.6 without :0 should still work (exact match)
+                Arguments.of("anthropic.claude-opus-4-6-v1", "bedrock"));
+    }
 }

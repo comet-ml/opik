@@ -42,6 +42,7 @@ public class CostService {
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
     private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
+    private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
@@ -145,6 +146,35 @@ public class CostService {
             }
         }
 
+        // Try stripping version suffix (e.g., ":0") from model names.
+        // Bedrock model names often include a version pin (e.g., "anthropic.claude-opus-4-6-v1:0")
+        // where the pricing database only has the base name ("anthropic.claude-opus-4-6-v1").
+        String withoutVersionOriginal = stripVersionSuffix(modelName);
+        if (!withoutVersionOriginal.equalsIgnoreCase(modelName)) {
+            // Try exact match with version suffix stripped (preserves dots in original name)
+            String originalKey = createModelProviderKey(withoutVersionOriginal, provider);
+            ModelPrice versionMatch = modelProviderPrices.get(originalKey);
+            if (versionMatch != null) {
+                log.debug(
+                        "Found model price after stripping version suffix. Original: '{}', Stripped: '{}'",
+                        modelName, withoutVersionOriginal);
+                return versionMatch;
+            }
+
+            // Also try the normalized form (dots → hyphens) of the stripped name
+            String normalizedWithoutVersion = normalizeModelName(withoutVersionOriginal);
+            if (!normalizedWithoutVersion.equalsIgnoreCase(withoutVersionOriginal)) {
+                String normalizedKey = createModelProviderKey(normalizedWithoutVersion, provider);
+                ModelPrice normalizedVersionMatch = modelProviderPrices.get(normalizedKey);
+                if (normalizedVersionMatch != null) {
+                    log.debug(
+                            "Found model price after stripping version suffix and normalizing. Original: '{}', Stripped: '{}'",
+                            modelName, normalizedWithoutVersion);
+                    return normalizedVersionMatch;
+                }
+            }
+        }
+
         log.debug("No model price found for model: '{}' with provider: '{}'", modelName, provider);
         return DEFAULT_COST;
     }
@@ -174,6 +204,18 @@ public class CostService {
      */
     private static String stripDateSuffix(String modelName) {
         return modelName.toLowerCase(Locale.ROOT).replaceFirst(DATE_SUFFIX_PATTERN, "");
+    }
+
+    /**
+     * Strips version pin suffixes like {@code :0} from model names to enable fallback pricing lookup.
+     * This handles Bedrock model names with version pin suffixes (e.g., {@code anthropic.claude-opus-4-6-v1:0})
+     * where the pricing database only has the base model name (e.g., {@code anthropic.claude-opus-4-6-v1}).
+     *
+     * @param modelName The model name (non-null, non-blank per caller contract)
+     * @return Lowercase model name with version suffix removed if present, otherwise lowercase original name
+     */
+    private static String stripVersionSuffix(String modelName) {
+        return modelName.toLowerCase(Locale.ROOT).replaceFirst(VERSION_SUFFIX_PATTERN, "");
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
