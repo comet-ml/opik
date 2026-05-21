@@ -15,6 +15,7 @@ export const AlertTriggerConfigWrite: core.serialization.ObjectSchema<
         "config_value",
         core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     ),
+    groupIndex: core.serialization.property("group_index", core.serialization.number().optional()),
 });
 
 export declare namespace AlertTriggerConfigWrite {
@@ -22,5 +23,6 @@ export declare namespace AlertTriggerConfigWrite {
         id?: string | null;
         type: AlertTriggerConfigWriteType.Raw;
         config_value?: Record<string, string> | null;
+        group_index?: number | null;
     }
 }

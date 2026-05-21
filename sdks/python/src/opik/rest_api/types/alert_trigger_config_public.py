@@ -13,6 +13,11 @@ class AlertTriggerConfigPublic(UniversalBaseModel):
     alert_trigger_id: typing.Optional[str] = None
     type: AlertTriggerConfigPublicType
     config_value: typing.Optional[typing.Dict[str, str]] = None
+    group_index: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Groups configs within a trigger: same group_index means AND between configs, different group_index means OR between groups. Null means a legacy/singleton group of one config. Always null for scope:project configs.
+    """
+
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
