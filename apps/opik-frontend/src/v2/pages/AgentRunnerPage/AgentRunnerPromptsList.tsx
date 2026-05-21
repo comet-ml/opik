@@ -1,11 +1,17 @@
-import React from "react";
+import React, { forwardRef, useImperativeHandle, useRef } from "react";
 
 import { Skeleton } from "@/ui/skeleton";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
-import AgentRunnerPromptCard from "./AgentRunnerPromptCard";
+import AgentRunnerPromptCard, {
+  AgentRunnerPromptCardHandle,
+} from "./AgentRunnerPromptCard";
 
 type AgentRunnerPromptsListProps = {
   projectId: string;
+};
+
+export type AgentRunnerPromptsListHandle = {
+  prepareMasks: () => Promise<Record<string, string>>;
 };
 
 const SkeletonCard: React.FC = () => (
@@ -21,9 +27,10 @@ const SkeletonCard: React.FC = () => (
   </div>
 );
 
-const AgentRunnerPromptsList: React.FC<AgentRunnerPromptsListProps> = ({
-  projectId,
-}) => {
+const AgentRunnerPromptsList = forwardRef<
+  AgentRunnerPromptsListHandle,
+  AgentRunnerPromptsListProps
+>(({ projectId }, ref) => {
   const { data, isLoading } = useProjectPromptsList(
     {
       projectId,
@@ -31,6 +38,29 @@ const AgentRunnerPromptsList: React.FC<AgentRunnerPromptsListProps> = ({
       size: 500,
     },
     { enabled: Boolean(projectId) },
+  );
+
+  const cardHandlesRef = useRef<Map<string, AgentRunnerPromptCardHandle>>(
+    new Map(),
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      prepareMasks: async () => {
+        const results = await Promise.all(
+          Array.from(cardHandlesRef.current.values()).map((handle) =>
+            handle.prepareMask(),
+          ),
+        );
+        const masks: Record<string, string> = {};
+        for (const entry of results) {
+          if (entry) masks[entry.promptId] = entry.versionId;
+        }
+        return masks;
+      },
+    }),
+    [],
   );
 
   if (isLoading) {
@@ -58,10 +88,19 @@ const AgentRunnerPromptsList: React.FC<AgentRunnerPromptsListProps> = ({
   return (
     <div className="flex flex-col gap-3">
       {prompts.map((prompt) => (
-        <AgentRunnerPromptCard key={prompt.id} prompt={prompt} />
+        <AgentRunnerPromptCard
+          key={prompt.id}
+          prompt={prompt}
+          ref={(handle) => {
+            if (handle) cardHandlesRef.current.set(prompt.id, handle);
+            else cardHandlesRef.current.delete(prompt.id);
+          }}
+        />
       ))}
     </div>
   );
-};
+});
+
+AgentRunnerPromptsList.displayName = "AgentRunnerPromptsList";
 
 export default AgentRunnerPromptsList;

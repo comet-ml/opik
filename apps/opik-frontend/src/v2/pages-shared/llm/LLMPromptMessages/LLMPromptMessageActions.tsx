@@ -330,6 +330,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
           hasUnsavedChanges={saveWarning}
           promptName={promptData?.name}
+          loadedVersionId={message.promptVersionId}
         />
 
         {!saveDisabled && (

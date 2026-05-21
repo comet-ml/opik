@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+
+import { Skeleton } from "@/ui/skeleton";
 
 const NO_AGENTS_GRACE_MS = 20_000;
 
@@ -49,11 +51,25 @@ const AgentRunnerLoading: React.FC<AgentRunnerLoadingProps> = ({
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 py-8 text-muted-slate">
-      <Loader2 className="size-5 animate-spin text-primary" />
-      <p className="comet-body-s">Loading agent...</p>
+    <div className="flex flex-col gap-3">
+      <SkeletonField />
+      <SkeletonField />
+      <SkeletonField />
     </div>
   );
 };
+
+const SkeletonField: React.FC = () => (
+  <div className="overflow-hidden rounded-md border border-border bg-soft-background">
+    <div className="flex items-center gap-2 px-3 py-2">
+      <Skeleton className="size-4 shrink-0" />
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="h-3 w-12" />
+    </div>
+    <div className="px-3 pb-3">
+      <Skeleton className="h-10 w-full" />
+    </div>
+  </div>
+);
 
 export default AgentRunnerLoading;
