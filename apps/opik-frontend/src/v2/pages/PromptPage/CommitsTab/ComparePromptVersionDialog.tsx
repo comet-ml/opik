@@ -20,12 +20,19 @@ type ComparePromptVersionDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   versions: PromptVersion[];
+  initialBaseVersionId?: string;
   initialDiffVersionId?: string;
 };
 
 const ComparePromptVersionDialog: React.FunctionComponent<
   ComparePromptVersionDialogProps
-> = ({ open, setOpen, versions, initialDiffVersionId }) => {
+> = ({
+  open,
+  setOpen,
+  versions,
+  initialBaseVersionId,
+  initialDiffVersionId,
+}) => {
   const [baseVersion, setBaseVersion] = useState<PromptVersion | undefined>(
     last(versions),
   );
@@ -97,17 +104,39 @@ const ComparePromptVersionDialog: React.FunctionComponent<
 
   useEffect(() => {
     if (!open) return;
-    setBaseVersion(
-      versions.find((v) => v.commit === first(versionOptions)?.value),
-    );
-    const requested = initialDiffVersionId
+    const requestedBase = initialBaseVersionId
+      ? versions.find((v) => v.id === initialBaseVersionId)
+      : undefined;
+    const requestedDiff = initialDiffVersionId
       ? versions.find((v) => v.id === initialDiffVersionId)
       : undefined;
+
+    // When the caller anchored both sides (e.g., PromptTab picking a target
+    // while viewing a specific version), order them chronologically so the
+    // diff reads from-old → to-new.
+    if (requestedBase && requestedDiff) {
+      const olderFirst =
+        requestedBase.created_at.localeCompare(requestedDiff.created_at) <= 0;
+      setBaseVersion(olderFirst ? requestedBase : requestedDiff);
+      setDiffVersion(olderFirst ? requestedDiff : requestedBase);
+      return;
+    }
+
+    setBaseVersion(
+      requestedBase ??
+        versions.find((v) => v.commit === first(versionOptions)?.value),
+    );
     setDiffVersion(
-      requested ??
+      requestedDiff ??
         versions.find((v) => v.commit === last(versionOptions)?.value),
     );
-  }, [open, versionOptions, versions, initialDiffVersionId]);
+  }, [
+    open,
+    versionOptions,
+    versions,
+    initialBaseVersionId,
+    initialDiffVersionId,
+  ]);
 
   const renderVersionColumn = (
     version: PromptVersion | undefined,
