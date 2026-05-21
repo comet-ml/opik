@@ -198,23 +198,34 @@ class PromptClient:
         commit: Optional[str] = None,
         raise_if_not_template_structure: Optional[str] = None,
         project_name: Optional[str] = None,
+        version: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
-        Retrieve the prompt detail for a given prompt name and commit version.
+        Retrieve the prompt detail for a given prompt name, optionally
+        pinned to a specific ``version``.
 
         Parameters:
             name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest
+                version is retrieved.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             raise_if_not_template_structure: Optional template structure validation. If provided and doesn't match, raises PromptTemplateStructureMismatch.
             project_name: The name of the project to which the prompt belongs. If not provided, the default project is used.
 
         Returns:
             Prompt: The details of the specified prompt.
         """
+        if commit is not None and version is not None:
+            raise ValueError(
+                "Provide either `commit` or `version`, not both. "
+                "Prefer `version` — `commit` is deprecated."
+            )
         try:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
+                version_number=version,
                 project_name=project_name,
             )
 
@@ -251,7 +262,14 @@ class PromptClient:
         template_structure: str,
         prompt_cls: Type[_PromptT],
         no_cache: bool = False,
+        version: Optional[str] = None,
     ) -> Optional[_PromptT]:
+        if commit is not None and version is not None:
+            raise ValueError(
+                "Provide either `commit` or `version`, not both. "
+                "Prefer `version` — `commit` is deprecated."
+            )
+
         def _fetch(mask_id: Optional[str] = None) -> Optional[_PromptT]:
             if mask_id is not None:
                 prompt_version = self._rest_client.prompts.get_prompt_version_by_id(
@@ -263,6 +281,7 @@ class PromptClient:
                     commit=commit,
                     raise_if_not_template_structure=template_structure,
                     project_name=project_name,
+                    version=version,
                 )
             if prompt_version is None:
                 return None
@@ -282,6 +301,7 @@ class PromptClient:
                 template_structure=template_structure,
                 fetch_fn=lambda: _fetch(mask_id=mask_id),
                 mask_id=mask_id,
+                version=version,
             )
 
         unmasked = _cached_fetch()
