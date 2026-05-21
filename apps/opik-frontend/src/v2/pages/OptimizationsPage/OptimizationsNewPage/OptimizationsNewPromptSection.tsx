@@ -20,6 +20,10 @@ import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPrompt
 import OptimizationModelSelect from "@/v2/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
 import OptimizationTemperatureConfig from "@/v2/pages-shared/optimizations/OptimizationConfigForm/OptimizationTemperatureConfig";
 import { OPTIMIZATION_MESSAGE_TYPE_OPTIONS } from "@/constants/optimizations";
+import {
+  PROMPT_SAVE_AS_CHAT_TOOLTIP,
+  PROMPT_UNSAVED_TOOLTIP,
+} from "@/constants/prompts";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
@@ -135,8 +139,8 @@ const OptimizationsNewPromptSection: React.FC<
               <TooltipWrapper
                 content={
                   hasUnsavedChatPromptChanges
-                    ? "This prompt version hasn't been saved"
-                    : "Save as chat prompt"
+                    ? PROMPT_UNSAVED_TOOLTIP
+                    : PROMPT_SAVE_AS_CHAT_TOOLTIP
                 }
               >
                 <Button

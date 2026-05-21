@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ChevronDown,
   Clock,
@@ -85,6 +85,9 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [openLoadConfirm, setOpenLoadConfirm] = useState(false);
   const [versionToRestore, setVersionToRestore] =
     useState<PromptVersion | null>(null);
+  const [diffTargetVersionId, setDiffTargetVersionId] = useState<string | null>(
+    null,
+  );
   const [viewMode, setViewMode] = useState<ViewMode>("pretty");
 
   const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
@@ -94,8 +97,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     "activeVersionId",
     StringParam,
   );
-
-  const editPromptResetKeyRef = useRef(0);
 
   const { data, isLoading: isVersionsLoading } = usePromptVersionsById(
     {
@@ -154,11 +155,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     (activeVersion as VersionWithMaybeAuthor | undefined)?.created_by ?? "";
   const activeVersionEnvironment = activeVersion?.environment ?? null;
 
-  const handleOpenEditPrompt = (value: boolean) => {
-    editPromptResetKeyRef.current += 1;
-    setOpenEditPrompt(value);
-  };
-
   const handleRestoreVersionClick = (version: PromptVersion) =>
     setVersionToRestore(version);
 
@@ -166,9 +162,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
   const isLatest = effectiveVersionId === prompt?.latest_version?.id;
   const template = activeVersion?.template ?? "";
-  const metadataJson = activeVersion?.metadata
-    ? JSON.stringify(activeVersion.metadata, null, 2)
-    : "";
+  const metadataJson = useMemo(
+    () =>
+      activeVersion?.metadata
+        ? JSON.stringify(activeVersion.metadata, null, 2)
+        : "",
+    [activeVersion?.metadata],
+  );
 
   const handleCopyPrompt = useCallback(async () => {
     if (!template) return;
@@ -201,9 +201,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     }
   }, [isPlaygroundEmpty, handleLoadIntoPlayground]);
 
-  const handleSelectDiffVersion = useCallback(() => {
-    // The dropdown picks the comparison target; ComparePromptVersionDialog
-    // re-renders its own version pickers so we just open the dialog here.
+  const handleSelectDiffVersion = useCallback((item: VersionHistoryItem) => {
+    setDiffTargetVersionId(item.id);
     setOpenCompare(true);
   }, []);
 
@@ -395,7 +394,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 variant="ghost"
                 size="sm"
                 className={cn("px-0", activeVersion && !isLatest && "ml-3")}
-                onClick={() => handleOpenEditPrompt(true)}
+                onClick={() => setOpenEditPrompt(true)}
               >
                 <Pencil className="mr-1.5 size-3.5" />
                 Edit
@@ -535,9 +534,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       />
 
       <EditPromptSheet
-        key={editPromptResetKeyRef.current}
         open={openEditPrompt}
-        setOpen={handleOpenEditPrompt}
+        setOpen={setOpenEditPrompt}
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
@@ -562,6 +560,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openCompare}
         setOpen={setOpenCompare}
         versions={versions ?? []}
+        initialDiffVersionId={diffTargetVersionId ?? undefined}
       />
 
       <ConfirmDialog

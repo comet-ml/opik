@@ -20,11 +20,12 @@ type ComparePromptVersionDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   versions: PromptVersion[];
+  initialDiffVersionId?: string;
 };
 
 const ComparePromptVersionDialog: React.FunctionComponent<
   ComparePromptVersionDialogProps
-> = ({ open, setOpen, versions }) => {
+> = ({ open, setOpen, versions, initialDiffVersionId }) => {
   const [baseVersion, setBaseVersion] = useState<PromptVersion | undefined>(
     last(versions),
   );
@@ -95,15 +96,18 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   }, [versions, versionLabelByCommit]);
 
   useEffect(() => {
-    if (open) {
-      setBaseVersion(
-        versions.find((v) => v.commit === first(versionOptions)?.value),
-      );
-      setDiffVersion(
+    if (!open) return;
+    setBaseVersion(
+      versions.find((v) => v.commit === first(versionOptions)?.value),
+    );
+    const requested = initialDiffVersionId
+      ? versions.find((v) => v.id === initialDiffVersionId)
+      : undefined;
+    setDiffVersion(
+      requested ??
         versions.find((v) => v.commit === last(versionOptions)?.value),
-      );
-    }
-  }, [open, versionOptions, versions]);
+    );
+  }, [open, versionOptions, versions, initialDiffVersionId]);
 
   const renderVersionColumn = (
     version: PromptVersion | undefined,
@@ -172,74 +176,74 @@ const ComparePromptVersionDialog: React.FunctionComponent<
       >
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <div className="flex flex-col gap-4 pb-2">
-          <div className="grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none">
-            {renderVersionColumn(baseVersion, baseText, baseText)}
-            {renderVersionColumn(diffVersion, baseText, diffText)}
-          </div>
-          {(imagesHaveChanges || videosHaveChanges || audiosHaveChanges) && (
-            <>
-              {imagesHaveChanges && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                    <MediaTagsList
-                      type="image"
-                      items={baseImages}
-                      editable={false}
-                      preview={true}
-                    />
+            <div className="grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none">
+              {renderVersionColumn(baseVersion, baseText, baseText)}
+              {renderVersionColumn(diffVersion, baseText, diffText)}
+            </div>
+            {(imagesHaveChanges || videosHaveChanges || audiosHaveChanges) && (
+              <>
+                {imagesHaveChanges && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                      <MediaTagsList
+                        type="image"
+                        items={baseImages}
+                        editable={false}
+                        preview={true}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                      <MediaTagsList
+                        type="image"
+                        items={diffImages}
+                        editable={false}
+                        preview={true}
+                      />
+                    </div>
                   </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                    <MediaTagsList
-                      type="image"
-                      items={diffImages}
-                      editable={false}
-                      preview={true}
-                    />
+                )}
+                {videosHaveChanges && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                      <MediaTagsList
+                        type="video"
+                        items={baseVideos}
+                        editable={false}
+                        preview={true}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                      <MediaTagsList
+                        type="video"
+                        items={diffVideos}
+                        editable={false}
+                        preview={true}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-              {videosHaveChanges && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                    <MediaTagsList
-                      type="video"
-                      items={baseVideos}
-                      editable={false}
-                      preview={true}
-                    />
+                )}
+                {audiosHaveChanges && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                      <MediaTagsList
+                        type="audio"
+                        items={baseAudios}
+                        editable={false}
+                        preview={true}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                      <MediaTagsList
+                        type="audio"
+                        items={diffAudios}
+                        editable={false}
+                        preview={true}
+                      />
+                    </div>
                   </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                    <MediaTagsList
-                      type="video"
-                      items={diffVideos}
-                      editable={false}
-                      preview={true}
-                    />
-                  </div>
-                </div>
-              )}
-              {audiosHaveChanges && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                    <MediaTagsList
-                      type="audio"
-                      items={baseAudios}
-                      editable={false}
-                      preview={true}
-                    />
-                  </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                    <MediaTagsList
-                      type="audio"
-                      items={diffAudios}
-                      editable={false}
-                      preview={true}
-                    />
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+                )}
+              </>
+            )}
           </div>
         </div>
       </SheetContent>
