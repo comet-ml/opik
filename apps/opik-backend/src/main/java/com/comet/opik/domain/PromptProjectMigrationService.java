@@ -288,10 +288,24 @@ public class PromptProjectMigrationService implements Managed {
         var assignments = mergeAssignments(certainAssignments,
                 getDefaultAssignments(workspaceId, deletedPromptIds, noInference));
 
+        // findOrphanPromptIds caps at batchSize, so the current view is only "the whole workspace"
+        // when the result came back short — a full-page result means more orphans may still exist
+        // and the trap decisions below must defer to a later cycle instead of permanently excluding
+        // the workspace based on a partial sample.
+        boolean isTailBatch = orphanIds.size() < batchSize;
+
         if (assignments.isEmpty()) {
-            log.info("Only ambiguous prompts in workspace, trapping all_ambiguous, workspaceId='{}', count='{}'",
+            if (isTailBatch) {
+                log.info(
+                        "All remaining orphan prompts in workspace are ambiguous, trapping all_ambiguous, workspaceId='{}', count='{}'",
+                        workspaceId, ambiguous.size());
+                return markMigrationSkipped(workspaceId, workspaceStartMillis, Mono.empty());
+            }
+            log.info(
+                    "Current batch is fully ambiguous but workspace may have more orphans, deferring trap to next cycle, workspaceId='{}', batchAmbiguous='{}'",
                     workspaceId, ambiguous.size());
-            return markMigrationSkipped(workspaceId, workspaceStartMillis, Mono.empty());
+            recordWorkspaceDuration(RESULT_ALL_AMBIGUOUS, workspaceStartMillis);
+            return Mono.empty();
         }
 
         return Flux.fromIterable(assignments.entrySet())
@@ -300,15 +314,21 @@ public class PromptProjectMigrationService implements Managed {
                 .reduce(0L, Long::sum)
                 .flatMap(totalUpdated -> {
                     var duration = Duration.ofMillis(System.currentTimeMillis() - workspaceStartMillis);
-                    if (!ambiguous.isEmpty()) {
+                    if (!ambiguous.isEmpty() && isTailBatch) {
                         log.info(
                                 "Migration completed with remaining ambiguous prompts, marking workspace as trapped, workspaceId='{}', migrated='{}', ambiguous='{}', duration='{}'",
                                 workspaceId, totalUpdated, ambiguous.size(), duration);
                         return markMigrationSkipped(workspaceId, workspaceStartMillis, Mono.just(false));
                     }
-                    log.info(
-                            "Workspace prompt migration completed, workspaceId='{}', migrated='{}', deletedProject='{}', noInference='{}', duration='{}'",
-                            workspaceId, totalUpdated, deletedPromptIds.size(), noInference.size(), duration);
+                    if (!ambiguous.isEmpty()) {
+                        log.info(
+                                "Batch migration completed; workspace has remaining orphans for next cycle, workspaceId='{}', migrated='{}', batchAmbiguous='{}', duration='{}'",
+                                workspaceId, totalUpdated, ambiguous.size(), duration);
+                    } else {
+                        log.info(
+                                "Workspace prompt migration completed, workspaceId='{}', migrated='{}', deletedProject='{}', noInference='{}', duration='{}'",
+                                workspaceId, totalUpdated, deletedPromptIds.size(), noInference.size(), duration);
+                    }
                     recordWorkspaceDuration(RESULT_MIGRATED, workspaceStartMillis);
                     return Mono.just(true);
                 });

@@ -465,6 +465,113 @@ class PromptProjectMigrationServiceTest {
     }
 
     /**
+     * Partial-batch all-ambiguous: a workspace with more orphans than {@code promptBatchSize}
+     * whose current batch happens to be entirely ambiguous must NOT be trapped on this cycle —
+     * the workspace may still have non-ambiguous orphans on the next page. Without the
+     * {@code isTailBatch} guard this is a silent data-loss path: workspace gets permanently
+     * excluded after cycle 1 and the remaining orphans are stranded.
+     *
+     * <p>Known residual: when every orphan in the workspace is genuinely ambiguous,
+     * {@code findOrphanPromptIds} keeps returning a full {@code BATCH_SIZE}-sized page each
+     * cycle so {@code isTailBatch} stays false forever and the workspace cycles indefinitely
+     * without trapping. The indefinite cycle is annoying (visible in metrics / logs) but is
+     * strictly better than the silent-data-loss alternative. Closing this cleanly requires
+     * {@code ORDER BY id ASC} + cursor-style spillover in {@code findOrphanPromptIds} and is
+     * a follow-up to this PR.
+     */
+    @Test
+    void partialBatchAllAmbiguousDoesNotTrap(WorkspacesService workspacesService) {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        // Two distinct alive projects shared across every ambiguous prompt so each prompt's
+        // classification has projectCount == 2 → AMBIGUOUS bucket.
+        var projectName1 = randomName("project");
+        var projectId1 = createProject(apiKey, workspaceName, projectName1);
+        var dataset1 = createDatasetWithProject(apiKey, workspaceName, projectId1);
+        var projectName2 = randomName("project");
+        var projectId2 = createProject(apiKey, workspaceName, projectName2);
+        var dataset2 = createDatasetWithProject(apiKey, workspaceName, projectId2);
+
+        // BATCH_SIZE + 2 ambiguous prompts: cycle 1 fetches BATCH_SIZE (non-tail, all-ambiguous),
+        // so the guard defers the trap. None get migrated either, so the workspace remains
+        // eligible — which is the correctness contract we're protecting.
+        var promptIds = new ArrayList<UUID>();
+        for (int i = 0; i < BATCH_SIZE + 2; i++) {
+            var link = createOrphanPromptVersion(apiKey, workspaceName);
+            createExperimentInProject(apiKey, workspaceName, dataset1, projectId1, projectName1, link, null);
+            createExperimentInProject(apiKey, workspaceName, dataset2, projectId2, projectName2, link, null);
+            promptIds.add(link.promptId());
+        }
+
+        migrationService.runMigrationCycle().block();
+
+        assertThat(countMigrated(apiKey, workspaceName, promptIds))
+                .as("cycle 1 must not migrate any ambiguous prompt")
+                .isZero();
+        assertWorkspaceNotTrapped(workspacesService, workspaceId);
+    }
+
+    /**
+     * Partial-batch mixed buckets: a workspace with more orphans than {@code promptBatchSize}
+     * whose current batch contains both certain and ambiguous prompts must migrate the certain
+     * prompts and NOT trap on the post-write decision — the workspace still has more orphans
+     * (including the ambiguous remainder) for the next cycle. Without the {@code isTailBatch}
+     * guard the post-write trap fires and strands the rest.
+     */
+    @Test
+    void partialBatchMixedAmbiguousAndCertainDoesNotTrap(WorkspacesService workspacesService) {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        // One alive project for the certain bucket, two alive projects for the ambiguous bucket.
+        var certainProjectName = randomName("project");
+        var certainProjectId = createProject(apiKey, workspaceName, certainProjectName);
+        var certainDataset = createDatasetWithProject(apiKey, workspaceName, certainProjectId);
+        var ambiguousProjectName1 = randomName("project");
+        var ambiguousProjectId1 = createProject(apiKey, workspaceName, ambiguousProjectName1);
+        var ambiguousDataset1 = createDatasetWithProject(apiKey, workspaceName, ambiguousProjectId1);
+        var ambiguousProjectName2 = randomName("project");
+        var ambiguousProjectId2 = createProject(apiKey, workspaceName, ambiguousProjectName2);
+        var ambiguousDataset2 = createDatasetWithProject(apiKey, workspaceName, ambiguousProjectId2);
+
+        // 51 certain + 51 ambiguous = BATCH_SIZE + 2 total. Pigeonhole: any 100-of-102 slice must
+        // include at least 49 of each bucket — cycle 1's batch is guaranteed to have both certain
+        // and ambiguous prompts regardless of MySQL fetch order.
+        int perBucket = (BATCH_SIZE + 2) / 2;
+        var certainPromptIds = new ArrayList<UUID>();
+        for (int i = 0; i < perBucket; i++) {
+            var link = createOrphanPromptVersion(apiKey, workspaceName);
+            createExperimentInProject(apiKey, workspaceName, certainDataset, certainProjectId, certainProjectName,
+                    link, null);
+            certainPromptIds.add(link.promptId());
+        }
+        var ambiguousPromptIds = new ArrayList<UUID>();
+        for (int i = 0; i < perBucket; i++) {
+            var link = createOrphanPromptVersion(apiKey, workspaceName);
+            createExperimentInProject(apiKey, workspaceName, ambiguousDataset1, ambiguousProjectId1,
+                    ambiguousProjectName1, link, null);
+            createExperimentInProject(apiKey, workspaceName, ambiguousDataset2, ambiguousProjectId2,
+                    ambiguousProjectName2, link, null);
+            ambiguousPromptIds.add(link.promptId());
+        }
+
+        migrationService.runMigrationCycle().block();
+
+        assertThat(countMigrated(apiKey, workspaceName, certainPromptIds))
+                .as("cycle 1 must migrate at least some certain prompts in the batch")
+                .isPositive();
+        assertThat(countMigrated(apiKey, workspaceName, ambiguousPromptIds))
+                .as("ambiguous prompts are never written by the cycle")
+                .isZero();
+        assertWorkspaceNotTrapped(workspacesService, workspaceId);
+    }
+
+    /**
      * Edge case for {@code mergeAssignments}: when the workspace's Default Project happens to
      * coincide with a {@code certainAssignments} key (an experiment legitimately references the
      * Default Project), the merge function unions the two prompt sets rather than letting either
@@ -632,6 +739,10 @@ class PromptProjectMigrationServiceTest {
         assertThat(workspacesService.findPromptProjectMigrationSkippedWorkspaceIds()).contains(workspaceId);
         assertThat(workspacesService.findById(workspaceId))
                 .hasValueSatisfying(w -> assertThat(w.promptProjectMigrationSkipReason()).isEqualTo(reason));
+    }
+
+    private void assertWorkspaceNotTrapped(WorkspacesService workspacesService, String workspaceId) {
+        assertThat(workspacesService.findPromptProjectMigrationSkippedWorkspaceIds()).doesNotContain(workspaceId);
     }
 
     private long countMigrated(String apiKey, String workspaceName, List<UUID> promptIds) {
