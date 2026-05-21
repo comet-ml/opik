@@ -115,6 +115,9 @@ function useLoadPlayground() {
         if (promptId) {
           newPrompt.loadedChatPromptId = promptId;
         }
+        if (promptVersionId) {
+          newPrompt.loadedChatPromptVersionId = promptVersionId;
+        }
 
         try {
           const contentString = getTextFromMessageContent(content);
