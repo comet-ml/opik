@@ -23,6 +23,11 @@ class PromptVersionPublic(UniversalBaseModel):
     version short unique identifier, generated if absent. it must be 8 characters long
     """
 
+    version_number: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    sequential version number in the format v<N>; null for masks
+    """
+
     template: str
     metadata: typing.Optional[JsonNodePublic] = None
     type: typing.Optional[PromptVersionPublicType] = None

@@ -8,6 +8,8 @@ export interface PromptVersionPublic {
     promptId?: string;
     /** version short unique identifier, generated if absent. it must be 8 characters long */
     commit?: string;
+    /** sequential version number in the format v<N>; null for masks */
+    versionNumber?: string;
     template: string;
     metadata?: OpikApi.JsonNodePublic;
     type?: OpikApi.PromptVersionPublicType;

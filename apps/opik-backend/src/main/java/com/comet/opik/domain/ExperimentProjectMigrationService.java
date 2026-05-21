@@ -169,7 +169,7 @@ public class ExperimentProjectMigrationService implements Managed {
 
     public Mono<Void> runMigrationCycle() {
         return Mono.fromCallable(() -> {
-            var skippedWorkspaceIds = workspacesService.findMigrationSkippedWorkspaceIds();
+            var skippedWorkspaceIds = workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds();
             var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
             cycleTrappedWorkspaces.set(skippedWorkspaceIds.size());
             cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
@@ -358,7 +358,9 @@ public class ExperimentProjectMigrationService implements Managed {
     }
 
     private Mono<Boolean> markMigrationSkipped(String workspaceId, long workspaceStartMillis, Mono<Boolean> result) {
-        return Mono.fromRunnable(() -> workspacesService.markMigrationSkipped(workspaceId, REASON_ALL_AMBIGUOUS))
+        return Mono
+                .fromRunnable(() -> workspacesService.markExperimentProjectMigrationSkipped(
+                        workspaceId, REASON_ALL_AMBIGUOUS))
                 .subscribeOn(migrationScheduler)
                 .doFinally(signalType -> recordWorkspaceDuration(RESULT_ALL_AMBIGUOUS, workspaceStartMillis))
                 .then(result);

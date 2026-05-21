@@ -13,6 +13,7 @@ export const PromptVersion: core.serialization.ObjectSchema<serializers.PromptVe
         id: core.serialization.string().optional(),
         promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
         commit: core.serialization.string().optional(),
+        versionNumber: core.serialization.property("version_number", core.serialization.string().optional()),
         template: core.serialization.string(),
         metadata: JsonNode.optional(),
         type: PromptVersionType.optional(),
@@ -31,6 +32,7 @@ export declare namespace PromptVersion {
         id?: string | null;
         prompt_id?: string | null;
         commit?: string | null;
+        version_number?: string | null;
         template: string;
         metadata?: JsonNode.Raw | null;
         type?: PromptVersionType.Raw | null;
