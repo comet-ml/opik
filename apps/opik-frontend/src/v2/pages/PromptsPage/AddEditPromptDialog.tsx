@@ -31,6 +31,7 @@ import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
+import { serializeChatTemplate } from "@/lib/chatTemplate";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
@@ -130,16 +131,10 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
       return setShowInvalidJSON(true);
     }
 
-    // For chat prompts, convert messages to JSON string
+    // For chat prompts, use the canonical compact serialization shared with
+    // every other edit path so diffs don't trip on whitespace.
     const promptTemplate = isChatPrompt
-      ? JSON.stringify(
-          messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          null,
-          2,
-        )
+      ? serializeChatTemplate(messages)
       : template;
 
     createMutate(

@@ -165,9 +165,9 @@ const AgentRunnerPromptCard = forwardRef<
       await createVersionAsync({
         name: prompt.name,
         template,
+        metadata: selectedVersion?.version.metadata,
         templateStructure: prompt.template_structure,
         type: selectedVersion?.version.type,
-        versionType: PROMPT_VERSION_TYPE.MASK,
         projectId: activeProjectId ?? undefined,
         onSuccess: (v) => setPickedVersionId(v.id),
       });
@@ -187,6 +187,7 @@ const AgentRunnerPromptCard = forwardRef<
     draftMessages,
     draftTemplate,
     selectedVersion?.version.type,
+    selectedVersion?.version.metadata,
     activeProjectId,
     toast,
   ]);
@@ -211,6 +212,7 @@ const AgentRunnerPromptCard = forwardRef<
           await createVersionAsync({
             name: prompt.name,
             template,
+            metadata: selectedVersion?.version.metadata,
             templateStructure: prompt.template_structure,
             type: selectedVersion?.version.type,
             versionType: PROMPT_VERSION_TYPE.MASK,
@@ -244,6 +246,7 @@ const AgentRunnerPromptCard = forwardRef<
       prompt.name,
       prompt.template_structure,
       selectedVersion?.version.type,
+      selectedVersion?.version.metadata,
       activeProjectId,
       toast,
     ],
