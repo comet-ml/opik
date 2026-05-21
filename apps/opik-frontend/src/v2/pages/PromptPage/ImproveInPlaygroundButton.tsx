@@ -45,7 +45,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
       const template =
         typeof improvedPrompt === "string"
           ? improvedPrompt
-          : (parseLLMMessageContent(improvedPrompt).text ?? "");
+          : parseLLMMessageContent(improvedPrompt).text ?? "";
       createVersion({
         name: prompt.name,
         template,
