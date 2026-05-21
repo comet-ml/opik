@@ -393,7 +393,13 @@ public class AlertProjectMigrationService implements Managed {
                     if (StringUtils.isBlank(projectIdsStr)) {
                         return Stream.empty();
                     }
-                    return JsonUtils.<Set<UUID>>readCollectionValue(projectIdsStr, Set.class, UUID.class).stream();
+                    try {
+                        return JsonUtils.<Set<UUID>>readCollectionValue(projectIdsStr, Set.class, UUID.class).stream();
+                    } catch (Exception e) {
+                        log.warn("Skipping malformed '{}' value for trigger '{}', treating as workspace-wide",
+                                AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY, trigger.id(), e);
+                        return Stream.empty();
+                    }
                 })
                 .collect(Collectors.toUnmodifiableSet());
     }
@@ -427,18 +433,7 @@ public class AlertProjectMigrationService implements Managed {
             return Set.of();
         }
         return alert.triggers().stream()
-                .filter(t -> t.triggerConfigs() != null)
-                .flatMap(t -> t.triggerConfigs().stream())
-                .filter(c -> c.type() == AlertTriggerConfigType.SCOPE_PROJECT)
-                .flatMap(c -> {
-                    var projectIdsStr = c.configValue() != null
-                            ? c.configValue().get(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY)
-                            : null;
-                    if (StringUtils.isBlank(projectIdsStr)) {
-                        return Stream.empty();
-                    }
-                    return JsonUtils.<Set<UUID>>readCollectionValue(projectIdsStr, Set.class, UUID.class).stream();
-                })
+                .flatMap(t -> extractTriggerProjectIds(t).stream())
                 .collect(Collectors.toUnmodifiableSet());
     }
 
