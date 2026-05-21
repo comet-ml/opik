@@ -16,7 +16,7 @@ import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScore
 import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
-import { AnnotationState } from "./SMEFlowContext";
+import { AnnotationState } from "@/lib/annotation-queues";
 
 const DEBOUNCE_MS = 1000;
 

@@ -1,7 +1,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useAnnotationPersistence } from "./useAnnotationPersistence";
-import { AnnotationState } from "./SMEFlowContext";
+import { AnnotationState } from "@/lib/annotation-queues";
 import { Trace } from "@/types/traces";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
 import { FEEDBACK_SCORE_TYPE } from "@/types/traces";
