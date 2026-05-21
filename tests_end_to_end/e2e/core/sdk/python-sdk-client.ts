@@ -1,5 +1,12 @@
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
+  createTrace(args: {
+    project_name: string;
+    name: string;
+    input: string;
+    output: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -65,6 +72,9 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
   return {
     async createProject({ name, workspace }) {
       return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+    },
+    async createTrace(args) {
+      return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
     },
   };
 }
