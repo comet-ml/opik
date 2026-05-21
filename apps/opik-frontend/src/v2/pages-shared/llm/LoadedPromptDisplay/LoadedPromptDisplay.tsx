@@ -9,7 +9,7 @@ import {
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
-import { pickHighestStage } from "@/utils/agent-configurations";
+import { pickHighestStage } from "@/utils/version-stages";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 type LoadedPromptDisplayProps = {

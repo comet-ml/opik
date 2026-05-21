@@ -50,10 +50,7 @@ import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlayground
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { getTimeFromNow } from "@/lib/date";
-import {
-  AgentConfigurationBasicStage,
-  isProdTag,
-} from "@/utils/agent-configurations";
+import { VersionStage, isProdTag } from "@/utils/version-stages";
 import DeployToEnvironmentMenu from "./DeployToEnvironmentMenu";
 import PromptContentBlock from "./PromptContentBlock";
 import RestoreVersionDialog from "./RestoreVersionDialog";
@@ -307,9 +304,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               <span className="comet-body-accented text-foreground">
                 {activeVersionLabel || "v—"}
               </span>
-              {activeIsProd && (
-                <StageTag value={AgentConfigurationBasicStage.PROD} size="sm" />
-              )}
+              {activeIsProd && <StageTag value={VersionStage.PROD} size="sm" />}
               <EnvironmentBadge name={activeVersionEnvironment} size="sm" />
               <Separator orientation="vertical" className="mx-1 h-4" />
               <DiffVersionMenu
