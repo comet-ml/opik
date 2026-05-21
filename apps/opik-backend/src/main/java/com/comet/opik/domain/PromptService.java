@@ -861,11 +861,13 @@ class PromptServiceImpl implements PromptService {
         UUID newVersionId = idGenerator.generateId();
         String newCommit = CommitUtils.getCommit(newVersionId);
 
+        String versionRef = StringUtils.defaultIfBlank(versionToRestore.versionNumber(), versionToRestore.commit());
+
         PromptVersion newVersion = versionToRestore.toBuilder()
                 .id(newVersionId)
                 .commit(newCommit)
                 .createdBy(userName)
-                .changeDescription("Restored from version " + versionToRestore.commit())
+                .changeDescription("Restored from version " + versionRef)
                 .tags(null) // Don't propagate tags to restored version
                 .environment(null) // Don't propagate environment ownership to restored version
                 .build();

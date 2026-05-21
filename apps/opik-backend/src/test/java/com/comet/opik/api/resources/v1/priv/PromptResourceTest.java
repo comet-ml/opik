@@ -3012,7 +3012,7 @@ class PromptResourceTest {
 
                 // Additional checks specific to restore semantics
                 assertThat(restoredVersion.changeDescription())
-                        .isEqualTo("Restored from version " + createdV1.commit());
+                        .isEqualTo("Restored from version " + createdV1.versionNumber());
                 assertThat(restoredVersion.id()).isNotEqualTo(createdV1.id());
                 assertThat(restoredVersion.id()).isNotEqualTo(createdV2.id());
                 assertThat(restoredVersion.commit()).isNotEqualTo(createdV1.commit());
