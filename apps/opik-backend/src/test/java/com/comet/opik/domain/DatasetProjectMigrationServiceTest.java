@@ -308,6 +308,65 @@ class DatasetProjectMigrationServiceTest {
     }
 
     /**
+     * Reviewer scenario (PR #6799, Default Project exists): dataset whose experiments all have
+     * {@code project_id=''} (D1-pending, or D1 left them ambiguous). The CH
+     * {@code HAVING experiment_project_id != ''} filter drops those rows from
+     * {@code COMPUTE_DATASET_PROJECT_MAPPING}'s output, so the dataset is absent from
+     * {@code inferenceByDataset} and falls into the no-inference bucket → migrated to the
+     * pre-seeded Default Project. Proves the empty-project-id rows do not slip through as
+     * ambiguous or certain. Workspace version is intentionally not asserted: the V1 experiment
+     * is still present and its V1→V2 promotion is D1's responsibility, not this job's.
+     */
+    @Test
+    void migrateDatasetWhenAllExperimentsHaveEmptyProjectIdToExistingDefaultProject() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var defaultProjectId = createProject(apiKey, workspaceName, ProjectService.DEFAULT_PROJECT);
+
+        var datasetName = randomName("dataset");
+        var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
+        // V1 experiment linked to the dataset by name (createPartialExperiment leaves projectId
+        // and projectName null → project_id='' in ClickHouse, matching D1-pending state).
+        experimentResourceClient.create(
+                experimentResourceClient.createPartialExperiment().id(null).datasetName(datasetName).build(),
+                apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertDatasetMigrated(apiKey, workspaceName, datasetId, defaultProjectId);
+    }
+
+    /**
+     * Reviewer scenario (PR #6799, no Default Project): same empty-{@code project_id} setup but
+     * the workspace has no Default Project pre-seeded. The service auto-provisions it via
+     * {@code projectService.getOrCreate} (per the D1 policy alignment) and migrates the dataset
+     * there. Proves that the no-inference fallback works end-to-end even on a clean workspace.
+     */
+    @Test
+    void migrateDatasetWhenAllExperimentsHaveEmptyProjectIdAutoCreatingDefaultProject() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var datasetName = randomName("dataset");
+        var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
+        experimentResourceClient.create(
+                experimentResourceClient.createPartialExperiment().id(null).datasetName(datasetName).build(),
+                apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        var actual = datasetResourceClient.getDatasetById(datasetId, apiKey, workspaceName);
+        assertThat(actual.projectId()).isNotNull();
+        var defaultProject = projectResourceClient.getProject(actual.projectId(), apiKey, workspaceName);
+        assertThat(defaultProject.name()).isEqualTo(ProjectService.DEFAULT_PROJECT);
+    }
+
+    /**
      * No-inference orphan in a workspace WITHOUT a Default Project: service auto-provisions
      * the Default Project via {@code projectService.getOrCreate} and migrates the dataset there.
      */

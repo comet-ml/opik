@@ -1851,7 +1851,6 @@ public class ExperimentDAO {
                 WHERE workspace_id = :workspace_id
                 AND dataset_id IN :dataset_ids
                 AND name NOT IN :demo_experiment_names
-                AND dataset_id != ''
                 GROUP BY workspace_id, id, dataset_id
                 HAVING experiment_project_id != ''
             )
@@ -2942,8 +2941,8 @@ public class ExperimentDAO {
                 .reduce(0L, Long::sum);
     }
 
-    Flux<DatasetProjectMapping> computeDatasetProjectMapping(@NonNull Set<UUID> datasetIds) {
-        if (datasetIds.isEmpty()) {
+    Flux<DatasetProjectMapping> computeDatasetProjectMapping(Set<UUID> datasetIds) {
+        if (CollectionUtils.isEmpty(datasetIds)) {
             return Flux.empty();
         }
         var datasetIdsAsStrings = datasetIds.stream().map(UUID::toString).toArray(String[]::new);
@@ -2955,10 +2954,14 @@ public class ExperimentDAO {
                     .bind("demo_experiment_names", DemoData.EXPERIMENTS);
             return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
         }))
-                .flatMap(result -> result.map((row, metadata) -> DatasetProjectMapping.builder()
-                        .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
-                        .projectId(UUID.fromString(row.get("project_id", String.class)))
-                        .distinctProjectCount(row.get("distinct_project_count", Long.class))
-                        .build()));
+                .flatMap(result -> result.map((row, metadata) -> Optional
+                        .ofNullable(row.get("project_id", String.class))
+                        .filter(StringUtils::isNotBlank)
+                        .map(projectId -> DatasetProjectMapping.builder()
+                                .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
+                                .projectId(UUID.fromString(projectId))
+                                .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                                .build())))
+                .flatMap(Mono::justOrEmpty);
     }
 }
