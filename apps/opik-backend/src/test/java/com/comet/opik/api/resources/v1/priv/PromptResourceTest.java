@@ -3944,7 +3944,35 @@ class PromptResourceTest {
                             (Function<PromptVersion, String>) PromptVersion::template,
                             (BiFunction<PromptVersion, String, String>) (v, field) -> field,
                             (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.template()
-                                    .equals(filterValue)));
+                                    .equals(filterValue)),
+                    // EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.EQUAL,
+                            "exact version_number match",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .equals(filterValue)),
+                    // NOT_EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.NOT_EQUAL,
+                            "not equal to version_number",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.versionNumber()
+                                    .equals(filterValue)),
+                    // ENDS_WITH - VERSION_NUMBER (matches the numeric suffix of v1's version_number)
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.ENDS_WITH,
+                            "version_number ends with suffix",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field
+                                    .substring(field.length() - 1),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .endsWith(filterValue)));
         }
 
         @ParameterizedTest(name = "Success: filter by {0} - {1}")
@@ -3996,53 +4024,6 @@ class PromptResourceTest {
 
             assertThat(page.total()).isEqualTo(1);
             assertThat(assertion.apply(page.content().getFirst(), filterValue)).isTrue();
-        }
-
-        Stream<Arguments> filterPromptVersionsByVersionNumber() {
-            return Stream.of(
-                    // EQUAL - accepts the "v"-prefixed display form
-                    arguments(Operator.EQUAL, "exact version_number match (v-prefixed)", "v1", 1),
-                    // EQUAL - also accepts the raw numeric form
-                    arguments(Operator.EQUAL, "exact version_number match (numeric)", "1", 1),
-                    // NOT_EQUAL - excludes v1, leaves v2
-                    arguments(Operator.NOT_EQUAL, "not equal to version_number", "v1", 2),
-                    // GREATER_THAN - "v1" leaves only v2
-                    arguments(Operator.GREATER_THAN, "version_number greater than", "v1", 2),
-                    // GREATER_THAN_EQUAL - "v2" leaves only v2
-                    arguments(Operator.GREATER_THAN_EQUAL, "version_number greater than or equal", "v2", 2),
-                    // LESS_THAN - "v2" leaves only v1
-                    arguments(Operator.LESS_THAN, "version_number less than", "v2", 1),
-                    // LESS_THAN_EQUAL - "v1" leaves only v1
-                    arguments(Operator.LESS_THAN_EQUAL, "version_number less than or equal", "v1", 1));
-        }
-
-        @ParameterizedTest(name = "Success: filter by VERSION_NUMBER - {1}")
-        @MethodSource
-        @DisplayName("Success: filter prompt versions by VERSION_NUMBER field")
-        void filterPromptVersionsByVersionNumber(
-                Operator operator, String description, String filterValue, int expectedVersionNumber) {
-            var prompt = buildPrompt().template(null).build();
-            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            IntStream.range(0, 2).forEach(i -> {
-                var v = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                        .promptId(promptId)
-                        .build();
-                promptVersionResourceClient.createPromptVersion(
-                        CreatePromptVersion.builder().name(prompt.name()).version(v).build(),
-                        API_KEY, TEST_WORKSPACE);
-            });
-
-            var filters = List.of(PromptVersionFilter.builder()
-                    .field(PromptVersionField.VERSION_NUMBER)
-                    .operator(operator)
-                    .value(filterValue)
-                    .build());
-            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
-                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
-
-            assertThat(page.total()).isEqualTo(1);
-            assertThat(page.content().getFirst().versionNumber()).isEqualTo("v" + expectedVersionNumber);
         }
 
         Stream<Arguments> filterPromptVersionsByCreatedAt() {
