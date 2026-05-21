@@ -158,8 +158,19 @@ const ConditionGroup: React.FC<ConditionGroupProps> = ({
   const addCondition = () =>
     conditionsFieldArray.append({ ...DEFAULT_FEEDBACK_SCORE_CONDITION });
 
-  const removeCondition = (conditionIndex: number) =>
-    conditionsFieldArray.remove(conditionIndex);
+  // Deleting the only condition in a group removes the whole group (so the
+  // user doesn't end up with an empty group), unless this is the last group
+  // — then the delete is disabled to keep at least one group around.
+  const handleDeleteCondition = (conditionIndex: number) => {
+    if (conditionsFieldArray.fields.length === 1) {
+      onRemove();
+    } else {
+      conditionsFieldArray.remove(conditionIndex);
+    }
+  };
+
+  const canDeleteCondition =
+    conditionsFieldArray.fields.length > 1 || canRemove;
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-soft-background">
@@ -174,7 +185,7 @@ const ConditionGroup: React.FC<ConditionGroupProps> = ({
         </div>
         <DisabledTooltip
           disabled={!canRemove}
-          message="Can't remove the last group — every alert needs at least one."
+          message="Can't remove — every alert needs at least one group with at least one condition."
         >
           <Button
             type="button"
@@ -200,8 +211,8 @@ const ConditionGroup: React.FC<ConditionGroupProps> = ({
               conditionIndex={conditionIndex}
               scoreSource={scoreSource}
               projectId={projectId}
-              onDelete={() => removeCondition(conditionIndex)}
-              canDelete={conditionsFieldArray.fields.length > 1}
+              onDelete={() => handleDeleteCondition(conditionIndex)}
+              canDelete={canDeleteCondition}
             />
           </React.Fragment>
         ))}
@@ -285,7 +296,7 @@ const ConditionRow: React.FC<ConditionRowProps> = ({
                     scoreSource={scoreSource}
                     entityIds={[projectId]}
                     multiselect={false}
-                    className={cn("h-8 w-full", {
+                    className={cn("h-8 w-full font-normal", {
                       "border-destructive": Boolean(errors.name),
                     })}
                   />
@@ -365,7 +376,7 @@ const ConditionRow: React.FC<ConditionRowProps> = ({
                     value={field.value as string}
                     onChange={field.onChange}
                     options={WINDOW_OPTIONS}
-                    className={cn("h-8 w-full text-left", {
+                    className={cn("h-8 w-full text-left font-normal", {
                       "border-destructive": Boolean(errors.window),
                     })}
                     placeholder="Select time window"
@@ -387,7 +398,7 @@ const ConditionRow: React.FC<ConditionRowProps> = ({
         </div>
         <DisabledTooltip
           disabled={!canDelete}
-          message="Can't remove the last condition — every group needs at least one."
+          message="Can't remove — every alert needs at least one group with at least one condition."
         >
           <Button
             type="button"
