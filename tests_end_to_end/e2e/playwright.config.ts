@@ -1,7 +1,14 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { loadEnvConfig } from './config/env.config';
 
 const env = loadEnvConfig();
+
+const storageStatePath = process.env.OPIK_STORAGE_STATE
+  ? path.resolve(__dirname, process.env.OPIK_STORAGE_STATE)
+  : path.resolve(__dirname, '.auth', `${env.deployment}.json`);
+const storageState = fs.existsSync(storageStatePath) ? storageStatePath : undefined;
 
 export default defineConfig({
   testDir: './tests',
@@ -23,6 +30,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    ...(storageState ? { storageState } : {}),
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

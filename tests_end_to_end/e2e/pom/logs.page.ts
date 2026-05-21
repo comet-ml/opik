@@ -9,35 +9,49 @@ export class LogsPage {
     private readonly backendClient: BackendClient,
   ) {}
 
+  private projectId: string | null = null;
+
   async goto(projectId: string): Promise<void> {
+    this.projectId = projectId;
     const env = loadEnvConfig();
     await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs`);
   }
 
   async waitForReady(): Promise<void> {
-    const table = this.page.getByRole('table');
+    const realRow = this.page.locator('tr[data-row-id]').first();
     const emptyState = this.page.getByText('No traces yet');
     await Promise.race([
-      table.waitFor({ state: 'visible' }),
+      realRow.waitFor({ state: 'visible' }),
       emptyState.waitFor({ state: 'visible' }),
     ]);
+    await this.page.waitForFunction(() => {
+      const txt = document.body.innerText;
+      return /Traces\s+\d+/i.test(txt);
+    });
   }
 
   async countTraces(): Promise<number> {
     const card = this.page.getByTestId('metrics-card-count');
-    await card.waitFor({ state: 'visible' });
-    const text = (await card.textContent()) ?? '';
-    const digits = text.replace(/\D/g, '');
-    if (!digits) {
-      throw new Error(`LogsPage.countTraces: no digits in metrics-card-count text "${text}"`);
+    if (await card.isVisible().catch(() => false)) {
+      const text = (await card.textContent()) ?? '';
+      const digits = text.replace(/\D/g, '');
+      if (digits) return Number(digits);
     }
-    return Number(digits);
+    const handle = await this.page.waitForFunction(() => {
+      const txt = document.body.innerText;
+      const m = txt.match(/Traces\s+(\d+)/i);
+      return m ? Number(m[1]) : null;
+    });
+    return (await handle.jsonValue()) as number;
   }
 
   async openTraceById(traceId: string): Promise<TracePanelPage> {
-    const url = new URL(this.page.url());
-    url.searchParams.set('trace', traceId);
-    await this.page.goto(url.toString());
+    if (!this.projectId) {
+      throw new Error('LogsPage.openTraceById: call goto(projectId) first');
+    }
+    const env = loadEnvConfig();
+    const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?trace=${traceId}`;
+    await this.page.goto(url);
     return new TracePanelPage(this.page, this.backendClient, traceId);
   }
 
@@ -53,6 +67,7 @@ export class LogsPage {
   }
 
   async readTraceIdsInOrder(): Promise<string[]> {
+    await this.traceRows.first().waitFor({ state: 'visible' });
     const rows = await this.traceRows.all();
     const ids: string[] = [];
     for (const row of rows) {

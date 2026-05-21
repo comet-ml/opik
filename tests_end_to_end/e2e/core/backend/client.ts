@@ -70,8 +70,14 @@ export function makeBackendClient(apiKey: string | null = null) {
       };
     },
 
-    async getTraceSpans(traceId: string): Promise<SpanRecord[]> {
-      const page = await opik.api.spans.getSpansByProject({ traceId, size: 500 });
+    async getTraceSpans(traceId: string, projectId?: string): Promise<SpanRecord[]> {
+      const resolvedProjectId =
+        projectId ?? String((await opik.api.traces.getTraceById(traceId)).projectId);
+      const page = await opik.api.spans.getSpansByProject({
+        traceId,
+        projectId: resolvedProjectId,
+        size: 500,
+      });
       const content = page.content ?? [];
       return content.map((s) => ({
         id: String(s.id),

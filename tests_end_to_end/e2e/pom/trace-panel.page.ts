@@ -15,8 +15,9 @@ export class TracePanelPage {
   ) {}
 
   async waitForFullyLoaded(): Promise<void> {
-    await this.page.getByTestId('side-panel-close').waitFor({ state: 'visible' });
-    await this.page.getByTestId('data-viewer-created-at').waitFor({ state: 'visible' });
+    await this.page.waitForURL((url) => url.searchParams.get('trace') === this.traceId);
+    await this.closeButton.waitFor({ state: 'visible', timeout: 30_000 });
+    await this.page.getByTestId('data-viewer-created-at').waitFor({ state: 'visible', timeout: 30_000 });
   }
 
   async readSpans(): Promise<Span[]> {
@@ -30,11 +31,11 @@ export class TracePanelPage {
   }
 
   async close(): Promise<void> {
-    await this.page.getByTestId('side-panel-close').click();
+    await this.closeButton.click();
     await this.page.waitForURL((url) => !url.searchParams.get('trace'));
   }
 
   get closeButton(): Locator {
-    return this.page.getByTestId('side-panel-close');
+    return this.page.getByRole('button', { name: 'Close' });
   }
 }
