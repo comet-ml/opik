@@ -22,7 +22,9 @@ from typing import Any, Dict, List, Set, Tuple, Type
 
 import pydantic
 
+import opik
 from opik.evaluation.models import base_model
+from opik.decorator import context_manager
 
 from . import context
 from .compression import trace_compressor
@@ -51,7 +53,7 @@ LARGE_TRACE_BYTES = trace_compressor.FULL_TOKEN_LIMIT * 4
 # duplicating `get_trace_spans` to trigger this hint, then taking the
 # verdict-now license to skip the drill-in. The rewrite removes that
 # license and instead points at the most common forward path (`read` on
-# a truncation hint) so the path of least resistance is "call a
+# a truncation hint), so the path of least resistance is "call a
 # different tool", not "give up." See OPIK-6243 PR review transcript.
 _DEDUP_HINT_TEMPLATE = (
     "Duplicate call: `{tool_name}` with the same arguments has already been "
@@ -80,6 +82,7 @@ class LoopTelemetry:
     duplicate_calls: int = 0
 
 
+@opik.track
 def run_agentic_judge(
     *,
     model: base_model.OpikBaseModel,
@@ -140,25 +143,31 @@ def run_agentic_judge(
             telemetry.tool_calls_by_name[tool_name] += 1
 
             call_key = (tool_name, arguments)
-            if call_key in seen_calls:
-                # Same call already executed this loop — short-circuit
-                # with a hint so the model stops re-querying and either
-                # drills in with a different tool/args or finalizes.
-                # Counted separately so the by-name histogram stays an
-                # honest "tool-executed-N-times" record.
-                telemetry.duplicate_calls += 1
-                result = _DEDUP_HINT_TEMPLATE.format(tool_name=tool_name)
-            else:
-                seen_calls.add(call_key)
-                result = registry.execute(tool_name, arguments, ctx)
-
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call["id"],
-                    "content": result,
-                }
-            )
+            with context_manager.start_as_current_span(
+                name=tool_name,
+                type="tool",
+                input={"input": arguments},
+                metadata={"call_key": call_key, "round_index": round_index},
+            ) as span:
+                if call_key in seen_calls:
+                    # Same call already executed this loop — short-circuit
+                    # with a hint so the model stops re-querying and either
+                    # drills in with a different tool/args or finalizes.
+                    # Counted separately so the by-name histogram stays an
+                    # honest "tool-executed-N-times" record.
+                    telemetry.duplicate_calls += 1
+                    result = _DEDUP_HINT_TEMPLATE.format(tool_name=tool_name)
+                else:
+                    seen_calls.add(call_key)
+                    result = registry.execute(tool_name, arguments, ctx)
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call["id"],
+                            "content": result,
+                        }
+                    )
+                span.output = {"output": result}
 
         # Follow-up turns let the model decide whether more tools are
         # needed. Stop the loop as soon as the model produces no further
@@ -215,8 +224,10 @@ def _emit_telemetry(telemetry: LoopTelemetry, ctx: context.TraceToolContext) -> 
         telemetry.duplicate_calls,
     )
 
+    read_engaged = True
     if telemetry.tool_calls_by_name.get("read", 0) == 0:
         if _trace_size_bytes(ctx) > LARGE_TRACE_BYTES:
+            read_engaged = False
             LOGGER.warning(
                 "Agentic judge produced a verdict on a large trace (>%d bytes) "
                 "without ever calling `read`. The configured judge model may "
@@ -224,6 +235,16 @@ def _emit_telemetry(telemetry: LoopTelemetry, ctx: context.TraceToolContext) -> 
                 "checking provider tool-call support.",
                 LARGE_TRACE_BYTES,
             )
+
+    opik.opik_context.update_current_span(
+        metadata={
+            "agentic_loop_rounds": telemetry.rounds,
+            "agentic_loop_tool_calls": telemetry.tool_calls_by_name,
+            "agentic_loop_duplicate_calls": telemetry.duplicate_calls,
+            "agentic_loop_trace_size_bytes": _trace_size_bytes(ctx),
+            "agentic_loop_read_engaged": read_engaged,
+        }
+    )
 
 
 def _trace_size_bytes(ctx: context.TraceToolContext) -> int:
