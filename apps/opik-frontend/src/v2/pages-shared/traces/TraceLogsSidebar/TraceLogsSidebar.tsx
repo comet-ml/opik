@@ -44,8 +44,6 @@ import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
-import { buildDynamicTagColumns } from "@/lib/tags";
-import { generateTagFilter } from "@/lib/filters";
 import { BaseTraceData, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
@@ -97,6 +95,11 @@ import {
 } from "@/v2/pages-shared/traces/DetailsActionSection";
 import { Filter } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
+import {
+  COLUMNS_TAGS_ORDER_KEY_SUFFIX,
+  useTagFilterHandler,
+  useTraceTagColumns,
+} from "@/v2/pages-shared/traces/useTraceTagColumns";
 
 const getRowId = (d: Trace) => d.id;
 
@@ -380,7 +383,6 @@ const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
 const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
 const COLUMNS_METADATA_ORDER_KEY_SUFFIX = "metadata-columns-order";
-const COLUMNS_TAGS_ORDER_KEY_SUFFIX = "tag-columns-order";
 const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
 const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
 const ROW_HEIGHT_KEY_SUFFIX = "row-height";
@@ -649,23 +651,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setSearch("");
     setFilters([]);
   }, [setSearch, setFilters]);
-
-  const handleTagClick = useCallback(
-    (tag: string) => {
-      const tagFilterExists = filters.some(
-        (filter) =>
-          filter.field === "tags" &&
-          filter.operator === "contains" &&
-          filter.value === tag,
-      );
-
-      if (!tagFilterExists) {
-        setFilters([...filters, ...generateTagFilter(tag)]);
-        setPage(1);
-      }
-    },
-    [filters, setFilters, setPage],
-  );
+  const handleTagClick = useTagFilterHandler({
+    filters,
+    setFilters,
+    setPage,
+  });
 
   const rows: Array<Trace> = useMemo(
     () => (data?.content as Trace[]) ?? [],
@@ -714,13 +704,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     defaultValue: [COLUMN_METADATA_ID],
   });
 
-  const [tagColumnsOrder, setTagColumnsOrder] = useLocalStorageState<string[]>(
-    `${TLS_STORAGE_PREFIX}${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
-    {
-      defaultValue: [],
-    },
-  );
-
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(`${TLS_STORAGE_PREFIX}${COLUMNS_WIDTH_KEY_SUFFIX}`, {
@@ -743,9 +726,15 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     return buildDynamicMetadataColumns(normalizedPaths);
   }, [metadataPaths]);
 
-  const dynamicTagColumns = useMemo(() => {
-    return buildDynamicTagColumns(rows.flatMap((row) => row.tags ?? []));
-  }, [rows]);
+  const {
+    tagColumnsData,
+    tagColumnsOrder,
+    setTagColumnsOrder,
+    tagColumnIdsExcludedFromSelectAll,
+  } = useTraceTagColumns({
+    rows,
+    storageKey: `${TLS_STORAGE_PREFIX}${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
+  });
 
   const dynamicColumnsIds = useMemo(
     () => dynamicScoresColumns.map((c) => c.id),
@@ -799,18 +788,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       };
     }) as ColumnData<BaseTraceData>[];
   }, [dynamicMetadataColumns]);
-
-  const tagColumnsData = useMemo(() => {
-    return dynamicTagColumns.map(({ label, id, columnType }) => {
-      return {
-        id,
-        label,
-        type: columnType,
-        sortable: false,
-        accessorFn: (row) => (row.tags?.includes(label) ? "Yes" : "-"),
-      } as ColumnData<BaseTraceData>;
-    });
-  }, [dynamicTagColumns]);
 
   const selectedRows: Array<Trace> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -993,9 +970,9 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const dynamicColumnIdsExcludedFromSelectAll = useMemo(
     () => [
       ...metadataColumnsData.map((col) => col.id),
-      ...tagColumnsData.map((col) => col.id),
+      ...tagColumnIdsExcludedFromSelectAll,
     ],
-    [metadataColumnsData, tagColumnsData],
+    [metadataColumnsData, tagColumnIdsExcludedFromSelectAll],
   );
 
   return (
