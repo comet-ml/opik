@@ -248,7 +248,7 @@ export class Prompt extends BasePrompt {
    * or a commit hash for backwards compatibility. Inputs matching `/^v\d+$/`
    * are treated as version numbers; anything else is treated as a commit.
    *
-   * @param versionOrCommit - Sequential version (`"v<N>"`) or commit hash
+   * @param version - Sequential version (`"v<N>"`) or commit hash
    *   (commit input is **deprecated** — pass a `"v<N>"` identifier instead).
    * @returns Prompt instance representing that version, or null if not found
    *
@@ -261,8 +261,8 @@ export class Prompt extends BasePrompt {
    * const byCommit = await prompt.getVersion("abc123de");
    * ```
    */
-  async getVersion(versionOrCommit: string): Promise<Prompt | null> {
-    const response = await this.retrieveVersion(versionOrCommit);
+  async getVersion(version: string): Promise<Prompt | null> {
+    const response = await this.retrieveVersion(version);
     if (!response) {
       return null;
     }

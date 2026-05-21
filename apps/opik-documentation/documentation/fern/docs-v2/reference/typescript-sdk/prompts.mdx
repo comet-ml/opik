@@ -1157,13 +1157,13 @@ const results = await prompt.getVersions({
 });
 ```
 
-##### `getVersion(versionOrCommit)`
+##### `getVersion(version)`
 
 Returns a `Prompt` instance pinned to a specific version of this prompt. Accepts either the sequential version identifier (e.g. `"v3"`) — preferred — or a commit hash (deprecated; retained for backwards compatibility). Inputs matching `/^v\d+$/` are treated as version numbers; anything else is treated as a commit.
 
 **Arguments:**
 
-- `versionOrCommit: string` - Sequential version (`"v<N>"`) or commit hash (deprecated)
+- `version: string` - Sequential version (`"v<N>"`) or commit hash (deprecated)
 
 **Returns:** `Promise<Prompt | null>` - Prompt instance pinned to that version, or `null` if not found
 
@@ -1313,13 +1313,13 @@ Retrieves all version history for this chat prompt, with optional filtering, sor
 
 **Returns:** `Promise<PromptVersion[]>` - Array of all matching versions (newest first)
 
-##### `getVersion(versionOrCommit)`
+##### `getVersion(version)`
 
 Returns a `ChatPrompt` instance pinned to a specific version of this chat prompt. Accepts either the sequential version identifier (e.g. `"v3"`) — preferred — or a commit hash (deprecated; retained for backwards compatibility). Inputs matching `/^v\d+$/` are treated as version numbers; anything else is treated as a commit.
 
 **Arguments:**
 
-- `versionOrCommit: string` - Sequential version (`"v<N>"`) or commit hash (deprecated)
+- `version: string` - Sequential version (`"v<N>"`) or commit hash (deprecated)
 
 **Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance pinned to that version, or `null` if not found
 

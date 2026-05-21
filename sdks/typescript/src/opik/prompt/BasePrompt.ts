@@ -368,16 +368,16 @@ export abstract class BasePrompt {
    * anything else is treated as a commit hash. Commit-based fetching is
    * deprecated — pass a `"v<N>"` identifier instead.
    *
-   * @param versionOrCommit - Sequential version (`"v3"`) or commit hash (deprecated)
+   * @param version - Sequential version (`"v3"`) or commit hash (deprecated)
    * @returns Promise resolving to the API response or null if not found
    */
   protected async retrieveVersion(
-    versionOrCommit: string,
+    version: string,
   ): Promise<OpikApi.PromptVersionDetail | null> {
-    const isVersionNumber = /^v\d+$/.test(versionOrCommit);
+    const isVersionNumber = /^v\d+$/.test(version);
     const request = isVersionNumber
-      ? { name: this.name, versionNumber: versionOrCommit }
-      : { name: this.name, commit: versionOrCommit };
+      ? { name: this.name, versionNumber: version }
+      : { name: this.name, commit: version };
 
     try {
       const response = await this.opik.api.prompts.retrievePromptVersion(
@@ -398,7 +398,7 @@ export abstract class BasePrompt {
 
       logger.error("Failed to retrieve prompt version", {
         promptName: this.name,
-        versionOrCommit,
+        version,
         error,
       });
       throw error;
@@ -423,10 +423,10 @@ export abstract class BasePrompt {
    * or, for backwards compatibility, by its commit hash. Returns a new instance
    * of the appropriate prompt type.
    *
-   * @param versionOrCommit - Sequential version (`"v<N>"`) — preferred; or commit hash (deprecated)
+   * @param version - Sequential version (`"v<N>"`) — preferred; or commit hash (deprecated)
    * @returns Promise resolving to prompt instance or null if not found
    */
-  abstract getVersion(versionOrCommit: string): Promise<BasePrompt | null>;
+  abstract getVersion(version: string): Promise<BasePrompt | null>;
 
   /**
    * Restores a specific version by creating a new version with content from the specified version.
