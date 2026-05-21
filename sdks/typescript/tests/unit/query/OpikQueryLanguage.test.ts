@@ -344,6 +344,18 @@ describe("OpikQueryLanguage", () => {
         OpikQueryLanguage.forPrompts('model = "gpt-4"');
       }).toThrow(/is not supported/);
     });
+
+    it("should throw error for unsupported operator on prompt version type field", () => {
+      expect(() => {
+        OpikQueryLanguage.forPromptVersions('type contains "MUSTACHE"');
+      }).toThrow(/Operator contains is not supported for field type/);
+    });
+
+    it("should throw error for unsupported operator on prompt version tags", () => {
+      expect(() => {
+        OpikQueryLanguage.forPromptVersions("tags > 5");
+      }).toThrow(/Operator > is not supported for field tags/);
+    });
   });
 
   describe("parsedFilters JSON output", () => {
@@ -406,6 +418,17 @@ describe("OpikQueryLanguage", () => {
       "version_count",
     ];
 
+    const promptVersionFields = [
+      "id",
+      "commit",
+      "version_number",
+      "template",
+      "change_description",
+      "type",
+      "tags",
+      "created_by",
+    ];
+
     it.each(traceFields)('should parse trace field "%s"', (field) => {
       const operator = field === "tags" ? "contains" : "=";
       const oql = OpikQueryLanguage.forTraces(`${field} ${operator} "test"`);
@@ -444,6 +467,20 @@ describe("OpikQueryLanguage", () => {
       expect(parsed).toHaveLength(1);
       expect(parsed![0].field).toBe(field);
     });
+
+    it.each(promptVersionFields)(
+      'should parse prompt version field "%s"',
+      (field) => {
+        const operator = field === "tags" ? "contains" : "=";
+        const oql = OpikQueryLanguage.forPromptVersions(
+          `${field} ${operator} "test"`
+        );
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0].field).toBe(field);
+      }
+    );
   });
 
   describe("complex queries", () => {
@@ -536,6 +573,86 @@ describe("OpikQueryLanguage", () => {
         operator: "=",
         value: "chat",
       });
+    });
+
+    it("should parse prompt version version_number equality", () => {
+      const oql = OpikQueryLanguage.forPromptVersions('version_number = "v3"');
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "version_number",
+        operator: "=",
+        value: "v3",
+      });
+    });
+
+    it("should parse prompt version version_number inequality", () => {
+      const oql = OpikQueryLanguage.forPromptVersions(
+        'version_number != "v1"'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "version_number",
+        operator: "!=",
+        value: "v1",
+      });
+    });
+
+    it("should parse prompt version version_number ends_with", () => {
+      const oql = OpikQueryLanguage.forPromptVersions(
+        'version_number ends_with "0"'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "version_number",
+        operator: "ends_with",
+        value: "0",
+      });
+    });
+
+    it("should parse prompt version queries with multiple conditions", () => {
+      const oql = OpikQueryLanguage.forPromptVersions(
+        'version_number = "v3" and tags contains "production"'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(2);
+      expect(parsed![0]).toMatchObject({
+        field: "version_number",
+        operator: "=",
+        value: "v3",
+      });
+      expect(parsed![1]).toMatchObject({
+        field: "tags",
+        operator: "contains",
+        value: "production",
+      });
+    });
+
+    it("should parse prompt version metadata with nested key", () => {
+      const oql = OpikQueryLanguage.forPromptVersions(
+        'metadata.environment = "prod"'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "metadata",
+        key: "environment",
+        operator: "=",
+        value: "prod",
+      });
+    });
+
+    it("should return null for empty prompt version query", () => {
+      const oql = OpikQueryLanguage.forPromptVersions("");
+      expect(oql.parsedFilters).toBeNull();
+      expect(oql.getFilterExpressions()).toBeNull();
     });
   });
 

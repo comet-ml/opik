@@ -985,6 +985,18 @@ def test_dataset_item_oql__empty_filter__returns_none(filter_string):
             [{"field": "commit", "operator": "=", "value": "abc123"}],
         ),
         (
+            'version_number = "v3"',
+            [{"field": "version_number", "operator": "=", "value": "v3"}],
+        ),
+        (
+            'version_number != "v1"',
+            [{"field": "version_number", "operator": "!=", "value": "v1"}],
+        ),
+        (
+            'version_number ends_with "0"',
+            [{"field": "version_number", "operator": "ends_with", "value": "0"}],
+        ),
+        (
             'template contains "hello"',
             [{"field": "template", "operator": "contains", "value": "hello"}],
         ),

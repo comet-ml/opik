@@ -327,6 +327,7 @@ class PromptVersionOQLConfig(OQLConfig):
         return {
             "id": "string",
             "commit": "string",
+            "version_number": "string",
             "template": "string",
             "change_description": "string",
             "metadata": "dictionary",
@@ -341,6 +342,7 @@ class PromptVersionOQLConfig(OQLConfig):
         return {
             "id": STRING_OPERATORS,
             "commit": STRING_OPERATORS,
+            "version_number": STRING_OPERATORS,
             "template": STRING_OPERATORS,
             "change_description": STRING_OPERATORS,
             "metadata": DICTIONARY_OPERATORS,
