@@ -22,10 +22,10 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleMigrationDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleProjectMigrationService;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -99,17 +99,19 @@ class AutomationRuleProjectMigrationServiceTest {
     private ProjectResourceClient projectResourceClient;
     private AutomationRuleEvaluatorResourceClient evaluatorResourceClient;
     private TransactionTemplate transactionTemplate;
+    private AutomationRuleProjectMigrationService migrationService;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport, TransactionTemplate transactionTemplate) {
+    void setUpAll(ClientSupport clientSupport, TransactionTemplate transactionTemplate, Injector injector) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(clientSupport, baseUrl);
         this.transactionTemplate = transactionTemplate;
+        this.migrationService = injector.getInstance(AutomationRuleProjectMigrationService.class);
     }
 
     @Test
-    void fiveProjectRuleSplitsWithIdPreservation(AutomationRuleProjectMigrationService migrationService) {
+    void fiveProjectRuleSplitsWithIdPreservation() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -150,7 +152,7 @@ class AutomationRuleProjectMigrationServiceTest {
     }
 
     @Test
-    void partialDeletedProjectSplitsValidOnly(AutomationRuleProjectMigrationService migrationService) {
+    void partialDeletedProjectSplitsValidOnly() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -176,9 +178,7 @@ class AutomationRuleProjectMigrationServiceTest {
     }
 
     @Test
-    void allDeletedProjectTrapsWorkspace(
-            AutomationRuleProjectMigrationService migrationService,
-            WorkspacesService workspacesService) {
+    void allDeletedProjectsMovesRuleToDefaultProjectDisabled() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -187,19 +187,25 @@ class AutomationRuleProjectMigrationServiceTest {
         var projectId1 = createProject(apiKey, workspaceName);
         var projectId2 = createProject(apiKey, workspaceName);
 
-        createMultiProjectRule(apiKey, workspaceName, Set.of(projectId1, projectId2));
+        var ruleId = createMultiProjectRule(apiKey, workspaceName, Set.of(projectId1, projectId2));
 
         projectResourceClient.deleteProject(projectId1, apiKey, workspaceName);
         projectResourceClient.deleteProject(projectId2, apiKey, workspaceName);
 
         migrationService.runMigrationCycle();
 
-        assertThat(workspacesService.findAutomationRuleMigrationSkippedWorkspaceIds())
-                .contains(workspaceId);
+        var defaultProject = projectResourceClient.getByName(
+                ProjectService.DEFAULT_PROJECT, apiKey, workspaceName);
+        var rules = evaluatorResourceClient.findEvaluatorPage(
+                defaultProject.id(), null, null, null, 1, 100, workspaceName, apiKey);
+
+        assertThat(rules.content()).hasSize(1);
+        assertThat(rules.content().getFirst().getId()).isEqualTo(ruleId);
+        assertThat(rules.content().getFirst().isEnabled()).isFalse();
     }
 
     @Test
-    void idempotentRerunIsNoOp(AutomationRuleProjectMigrationService migrationService) {
+    void idempotentRerunIsNoOp() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -226,7 +232,7 @@ class AutomationRuleProjectMigrationServiceTest {
     }
 
     @Test
-    void excludedWorkspaceNeverTouched(AutomationRuleProjectMigrationService migrationService) {
+    void excludedWorkspaceNeverTouched() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, EXCLUDED_WORKSPACE_ID, randomName("user"));
@@ -252,7 +258,7 @@ class AutomationRuleProjectMigrationServiceTest {
     }
 
     @Test
-    void cacheEvictedAfterMigration(AutomationRuleProjectMigrationService migrationService) {
+    void cacheEvictedAfterMigration() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -291,13 +297,47 @@ class AutomationRuleProjectMigrationServiceTest {
 
         var withoutExclusion = transactionTemplate.inTransaction(
                 handle -> handle.attach(AutomationRuleMigrationDAO.class)
-                        .findEligibleWorkspaces(Set.of("__placeholder__"), List.of(), 100));
+                        .findEligibleWorkspaces(Set.of(), List.of(), 100));
         assertThat(withoutExclusion).anyMatch(w -> w.workspaceId().equals(workspaceId));
 
         var withExclusion = transactionTemplate.inTransaction(
                 handle -> handle.attach(AutomationRuleMigrationDAO.class)
-                        .findEligibleWorkspaces(Set.of("__placeholder__"), List.of(demoRuleName), 100));
+                        .findEligibleWorkspaces(Set.of(), List.of(demoRuleName), 100));
         assertThat(withExclusion).noneMatch(w -> w.workspaceId().equals(workspaceId));
+    }
+
+    @Test
+    void mixedRulesHealthySplitsAndDeadMovesToDefault() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var projectA = createProject(apiKey, workspaceName);
+        var projectB = createProject(apiKey, workspaceName);
+        var projectC = createProject(apiKey, workspaceName);
+
+        var deadRuleId = createMultiProjectRule(apiKey, workspaceName, Set.of(projectA, projectB));
+        projectResourceClient.deleteProject(projectA, apiKey, workspaceName);
+        projectResourceClient.deleteProject(projectB, apiKey, workspaceName);
+
+        var healthyRuleId = createMultiProjectRule(apiKey, workspaceName, Set.of(projectB, projectC));
+
+        migrationService.runMigrationCycle();
+
+        var rulesForC = evaluatorResourceClient.findEvaluatorPage(
+                projectC, null, null, null, 1, 100, workspaceName, apiKey);
+        assertThat(rulesForC.content()).hasSize(1);
+
+        var defaultProject = projectResourceClient.getByName(
+                ProjectService.DEFAULT_PROJECT, apiKey, workspaceName);
+        var defaultRules = evaluatorResourceClient.findEvaluatorPage(
+                defaultProject.id(), null, null, null, 1, 100, workspaceName, apiKey);
+        assertThat(defaultRules.content()).hasSize(1);
+        assertThat(defaultRules.content().getFirst().getId()).isEqualTo(deadRuleId);
+        assertThat(defaultRules.content().getFirst().isEnabled()).isFalse();
+
+        assertThat(hasVersion1AutomationRules(workspaceId)).isFalse();
     }
 
     private UUID createProject(String apiKey, String workspaceName) {
