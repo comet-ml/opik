@@ -2040,6 +2040,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
+      label: "x-ai/grok-build-0.1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_CODE_FAST_1,
       label: "x-ai/grok-code-fast-1",
     },
@@ -2213,6 +2217,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+      label: "Gemini 3.5 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
