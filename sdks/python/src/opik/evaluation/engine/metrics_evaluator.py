@@ -152,7 +152,7 @@ def _compute_metric_scores(
     scoring_key_mapping: ScoringKeyMappingType,
     dataset_item_content: Dict[str, Any],
     task_output: Dict[str, Any],
-    trace_tool_context: Any = None,
+    trace_tool_context: Any,
 ) -> List[score_result.ScoreResult]:
     """
     Compute scores using given metrics.
@@ -368,6 +368,7 @@ class MetricsEvaluator:
             scoring_key_mapping=self._scoring_key_mapping,
             dataset_item_content=dataset_item_content,
             task_output=task_output,
+            trace_tool_context=None,
         )
 
         return score_results, mapped_scoring_inputs_with_span
