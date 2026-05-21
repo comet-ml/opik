@@ -131,6 +131,10 @@ public class OpikConfiguration extends JobConfiguration {
             .build();
 
     @Valid @NotNull @JsonProperty
+    private DatasetProjectMigrationConfig datasetProjectMigration = DatasetProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
 
     @Valid @NotNull @JsonProperty
