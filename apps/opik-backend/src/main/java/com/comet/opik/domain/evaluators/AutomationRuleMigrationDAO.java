@@ -66,11 +66,13 @@ public interface AutomationRuleMigrationDAO {
             <endif>
             GROUP BY arp.rule_id
             HAVING COUNT(arp.project_id) > 1
+            LIMIT :limit
             """)
     @UseStringTemplateEngine
     List<UUID> findMultiProjectRuleIds(
             @Bind("workspaceId") String workspaceId,
-            @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "demoRuleNames") List<String> demoRuleNames);
+            @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "demoRuleNames") List<String> demoRuleNames,
+            @Bind("limit") int limit);
 
     @SqlUpdate("DELETE FROM automation_rule_projects WHERE rule_id = :ruleId AND workspace_id = :workspaceId")
     int deleteJunctionByRuleId(@Bind("ruleId") UUID ruleId, @Bind("workspaceId") String workspaceId);
