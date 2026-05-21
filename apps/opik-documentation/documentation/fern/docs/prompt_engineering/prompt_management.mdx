@@ -1799,12 +1799,6 @@ Use `filter_string` (Python OQL) or `filters` (TypeScript JSON array) to narrow 
             filter_string='metadata.environment = "prod"'
         )
 
-        # Filter by sequential version number
-        v3 = client.get_prompt_history(
-            name="summarizer",
-            filter_string='version_number = "v3"'
-        )
-
         # Combine search and filter
         results = client.get_prompt_history(
             name="summarizer",
@@ -1865,13 +1859,6 @@ Use `filter_string` (Python OQL) or `filters` (TypeScript JSON array) to narrow 
           ]),
         });
 
-        // Filter by sequential version number
-        const v3 = await prompt.getVersions({
-          filters: JSON.stringify([
-            { field: "version_number", operator: "=", value: "v3" },
-          ]),
-        });
-
         // Combine search and filter
         const results = await prompt.getVersions({
           search: "customer",
@@ -1891,12 +1878,11 @@ Use `filter_string` (Python OQL) or `filters` (TypeScript JSON array) to narrow 
 
 | Column | Type | Supported operators | Notes |
 |--------|------|---------------------|-------|
-| `id` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
-| `commit` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
-| `version_number` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | Sequential identifier in `"v<N>"` form, e.g. `"v3"` |
-| `template` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
-| `change_description` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
-| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with` | |
+| `id` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `commit` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `template` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `change_description` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
 | `type` | Enum | `=`, `!=` | Values: `"mustache"`, `"jinja2"` |
 | `tags` | List | `contains` | Multiple entries require all tags (AND logic) |
 | `created_at` | DateTime | `>=`, `<=`, `>`, `<` | ISO 8601 format: `"2024-01-01T00:00:00Z"` |
