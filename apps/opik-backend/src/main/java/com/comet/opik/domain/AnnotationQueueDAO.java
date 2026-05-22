@@ -79,6 +79,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 scope,
                 comments_enabled,
                 feedback_definitions,
+                annotators_per_item,
                 created_by,
                 last_updated_by
             ) VALUES
@@ -93,6 +94,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         :scope<item.index>,
                         :comments_enabled<item.index>,
                         :feedback_definitions<item.index>,
+                        :annotators_per_item<item.index>,
                         :user_name,
                         :user_name
                     )
@@ -112,6 +114,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 scope,
                 comments_enabled,
                 feedback_definitions,
+                annotators_per_item,
                 created_at,
             	created_by,
             	last_updated_by
@@ -126,6 +129,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 scope,
                 <if(comments_enabled)> :comments_enabled <else> comments_enabled <endif> as comments_enabled,
                 <if(has_feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
+                <if(annotators_per_item)> :annotators_per_item <else> annotators_per_item <endif> as annotators_per_item,
                 created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -197,6 +201,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     scope,
                     comments_enabled,
                     feedback_definitions,
+                    annotators_per_item,
                     created_by,
                     created_at,
                     last_updated_by,
@@ -357,6 +362,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 q.instructions,
                 q.comments_enabled,
                 q.feedback_definitions,
+                q.annotators_per_item,
                 q.scope,
                 q.created_at,
                 q.created_by,
@@ -524,7 +530,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     .bind("feedback_definitions" + i,
                             annotationQueue.feedbackDefinitionNames() != null
                                     ? annotationQueue.feedbackDefinitionNames().toArray(String[]::new)
-                                    : new String[]{});
+                                    : new String[]{})
+                    .bind("annotators_per_item" + i,
+                            annotationQueue.annotatorsPerItem() != null
+                                    ? annotationQueue.annotatorsPerItem()
+                                    : 1);
             i++;
         }
 
@@ -572,6 +582,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .commentsEnabled(row.get("comments_enabled", Integer.class) == 1)
                 .feedbackDefinitionNames(Arrays.stream(row.get("feedback_definitions", String[].class))
                         .toList())
+                .annotatorsPerItem(Optional.ofNullable(row.get("annotators_per_item", Integer.class)).orElse(1))
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
@@ -683,6 +694,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     template.add("has_feedback_definitions", true);
                     template.add("feedback_definitions", feedbackDefinitionNames.toArray(String[]::new));
                 });
+        Optional.ofNullable(update.annotatorsPerItem())
+                .ifPresent(annotatorsPerItem -> template.add("annotators_per_item", true));
 
         return template;
     }
@@ -700,6 +713,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         Optional.ofNullable(update.feedbackDefinitionNames())
                 .ifPresent(feedbackDefinitionNames -> statement.bind("feedback_definitions",
                         feedbackDefinitionNames.toArray(String[]::new)));
+        Optional.ofNullable(update.annotatorsPerItem())
+                .ifPresent(annotatorsPerItem -> statement.bind("annotators_per_item", annotatorsPerItem));
     }
 
     private void bindSearchCriteria(Statement statement, AnnotationQueueSearchCriteria searchCriteria) {
