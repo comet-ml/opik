@@ -722,6 +722,51 @@ class TraceFilterEvaluationServiceTest {
                             .build()));
         }
 
+        static Stream<Arguments> errorInfoTextFilterTestCases() {
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("asyncio.exceptions.CancelledError")
+                    .message("Request was cancelled")
+                    .traceback("Traceback (most recent call last):\nasyncio.exceptions.CancelledError")
+                    .build();
+
+            return Stream.of(
+                    arguments(errorInfo, Operator.CONTAINS, "asyncio.exceptions.CancelledError", true),
+                    arguments(errorInfo, Operator.CONTAINS, "Request was cancelled", true),
+                    arguments(errorInfo, Operator.CONTAINS, "Traceback", true),
+                    arguments(errorInfo, Operator.CONTAINS, "MissingError", false),
+                    arguments(errorInfo, Operator.NOT_CONTAINS, "MissingError", true),
+                    arguments(errorInfo, Operator.NOT_CONTAINS, "CancelledError", false),
+                    arguments((ErrorInfo) null, Operator.CONTAINS, "CancelledError", false),
+                    arguments((ErrorInfo) null, Operator.NOT_CONTAINS, "CancelledError", false),
+                    arguments(ErrorInfo.builder().build(), Operator.CONTAINS, "CancelledError", false),
+                    arguments(ErrorInfo.builder()
+                            .exceptionType("")
+                            .message(" ")
+                            .traceback("")
+                            .build(), Operator.NOT_CONTAINS, "CancelledError", false));
+        }
+
+        @ParameterizedTest
+        @MethodSource("errorInfoTextFilterTestCases")
+        void matchesFilterWithErrorInfoTextFilter(
+                ErrorInfo errorInfo, Operator operator, String filterValue, boolean expectedResult) {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isEqualTo(expectedResult);
+        }
+
         @Test
         void matchesFilterWithErrorInfoContainsTracebackTerm() {
             // Given
@@ -904,6 +949,31 @@ class TraceFilterEvaluationServiceTest {
 
             // When
             var result = traceFilterEvaluationService.matchesAllFilters(filters, trace);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        void matchesFilterWhenErrorInfoKeyNotFound() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Invalid value")
+                    .traceback("Traceback...")
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .key("unknownField")
+                    .operator(Operator.EQUAL)
+                    .value("value")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
 
             // Then
             assertThat(result).isFalse();
