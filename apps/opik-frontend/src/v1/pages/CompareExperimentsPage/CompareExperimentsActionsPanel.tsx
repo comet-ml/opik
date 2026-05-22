@@ -25,16 +25,69 @@ import {
   EXPERIMENT_ITEM_DATASET_PREFIX,
 } from "@/constants/experiments";
 import { Separator } from "@/ui/separator";
+import { RunStatus } from "@/types/test-suites";
 
 const EVALUATION_EXPORT_COLUMNS = [
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   COLUMN_COMMENTS_ID,
   COLUMN_DURATION_ID,
 ];
+const COLUMN_PASSED_ID = "passed";
 const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
 
 const extractFieldName = (column: string, prefix: string): string =>
   column.replace(`${prefix}.`, "");
+
+const resolvePassedStatus = (
+  row: ExperimentsCompare,
+  items: ExperimentItem[],
+  experimentId?: string,
+) => {
+  if (experimentId) {
+    return (
+      row.run_summaries_by_experiment?.[experimentId]?.status ??
+      items[0]?.status
+    );
+  }
+
+  const summaries = Object.values(row.run_summaries_by_experiment ?? {});
+
+  if (summaries.length > 0) {
+    if (summaries.every((s) => s.status === RunStatus.PASSED)) {
+      return RunStatus.PASSED;
+    }
+    if (summaries.every((s) => s.status === RunStatus.SKIPPED)) {
+      return RunStatus.SKIPPED;
+    }
+    return RunStatus.FAILED;
+  }
+
+  return items[0]?.status;
+};
+
+const processPassedExportColumn = (
+  row: ExperimentsCompare,
+  items: ExperimentItem[],
+  accumulator: Record<string, unknown>,
+  prefix: string = "",
+  experimentId?: string,
+) => {
+  const status = resolvePassedStatus(row, items, experimentId);
+  accumulator[`${prefix}status`] = status ?? "-";
+
+  items
+    .flatMap((item) => item.assertion_results ?? [])
+    .forEach((ar, index) => {
+      const idx = index + 1;
+      accumulator[`${prefix}assertion_${idx}.name`] = ar.value;
+      accumulator[`${prefix}assertion_${idx}.result`] = ar.passed
+        ? "passed"
+        : "failed";
+      if (ar.reason) {
+        accumulator[`${prefix}assertion_${idx}.reason`] = ar.reason;
+      }
+    });
+};
 
 const processNestedExportColumn = (
   item: ExperimentItem,
@@ -122,7 +175,8 @@ const CompareExperimentsActionsPanel: React.FC<
           const prefix = first(column.split(".")) as string;
           const isDatasetColumn = !(
             EVALUATION_EXPORT_COLUMNS.includes(prefix) ||
-            prefix === COLUMN_FEEDBACK_SCORES_ID
+            prefix === COLUMN_FEEDBACK_SCORES_ID ||
+            prefix === COLUMN_PASSED_ID
           );
 
           if (isDatasetColumn) {
@@ -132,6 +186,32 @@ const CompareExperimentsActionsPanel: React.FC<
                 ? column.replace(`${EXPERIMENT_ITEM_DATASET_PREFIX}.`, "")
                 : column;
             accumulator[`dataset.${fieldName}`] = get(row.data, fieldName, "-");
+
+            return accumulator;
+          }
+
+          if (column === COLUMN_PASSED_ID) {
+            if (isCompare) {
+              localExperiments.forEach((experiment) => {
+                const items = (row.experiment_items ?? []).filter(
+                  (item) => item.experiment_id === experiment.id,
+                );
+                const prefix = `${nameMap[experiment.id] ?? "unknown"}.`;
+                processPassedExportColumn(
+                  row,
+                  items,
+                  accumulator,
+                  prefix,
+                  experiment.id,
+                );
+              });
+            } else {
+              processPassedExportColumn(
+                row,
+                row.experiment_items ?? [],
+                accumulator,
+              );
+            }
 
             return accumulator;
           }

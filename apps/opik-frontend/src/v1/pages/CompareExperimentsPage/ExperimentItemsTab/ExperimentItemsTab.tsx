@@ -533,7 +533,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         }
 
         return (
-          selectedColumns.includes(c) || (columnPinning.left || []).includes(c)
+          selectedColumns.includes(c) ||
+          (columnPinning.left || []).includes(c) ||
+          (columnPinning.right || []).includes(c)
         );
       });
   }, [columns, selectedColumns, columnPinning]);
