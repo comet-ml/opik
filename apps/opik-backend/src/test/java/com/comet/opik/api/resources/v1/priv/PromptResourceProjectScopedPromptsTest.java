@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.resources.PromptTestAssertions.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
@@ -52,8 +53,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PromptResourceProjectScopedPromptsTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
-    public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "requestedVersion", "template", "metadata",
-            "changeDescription", "type", "projectName"};
 
     private static final String USER = UUID.randomUUID().toString();
 

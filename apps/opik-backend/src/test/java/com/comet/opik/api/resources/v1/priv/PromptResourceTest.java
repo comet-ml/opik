@@ -104,6 +104,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.resources.PromptTestAssertions.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
@@ -130,8 +131,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class PromptResourceTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
-    public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "requestedVersion", "template", "metadata",
-            "changeDescription", "type", "projectName"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();

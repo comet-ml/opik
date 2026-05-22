@@ -796,6 +796,52 @@ datasetProjectMigration:
   # idle window and don't churn on every tick.
   schedulerThreadTtl: 10s
 
+# Prompt Project Migration configuration (D4)
+# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Runs as a recurring job.
+promptProjectMigration:
+  # Master switch — disabled in tests by default; tests opt in via CustomConfig overrides.
+  enabled: false
+  workspacesPerRun: 20
+  promptBatchSize: 1000
+  interval: 5s
+  # Non-zero so the first scheduled fire lands after the JobTest's initial seed + prime.
+  # ServiceTest disables the job entirely and drives the cycle directly via runMigrationCycle().
+  startupDelay: 5s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
+  schedulerThreadCap: 2
+  schedulerQueuedTaskCap: 50
+  schedulerThreadTtl: 10s
+
+automationRuleProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: false
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: 20
+  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions
+  maxRulesPerCycle: 100
+  # Interval between recurring job runs
+  interval: 5s
+  # Delay before first run after app startup
+  startupDelay: 5s
+  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
+  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
+  lockTimeout: 5s
+  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
+  # lock doesn't block this fire — the next scheduled tick will try again.
+  lockWaitTime: 100ms
+  # Per-cycle timeout — short for tests so hangs fail fast
+  jobTimeout: 30s
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; minimum 2 required by reactor.
+  schedulerThreadCap: 2
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: 50
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
+
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
 migration:
