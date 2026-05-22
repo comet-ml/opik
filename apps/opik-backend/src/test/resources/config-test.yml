@@ -796,6 +796,25 @@ datasetProjectMigration:
   # idle window and don't churn on every tick.
   schedulerThreadTtl: 10s
 
+# Optimization Project Migration configuration (D3)
+# Assigns project_id to orphan optimizations in ClickHouse via experiments-primary + dataset
+# fallback inference. Disabled by default in tests — each test opts in via CustomConfig.
+optimizationProjectMigration:
+  enabled: false
+  # Override the D1/D2 readiness probe so tests with mocked workspaces aren't gated on
+  # production-style prerequisites.
+  allowBeforeDependencies: false
+  workspacesPerRun: 20
+  optimizationBatchSize: 1000
+  interval: 5s
+  startupDelay: 5s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
+  schedulerThreadCap: 2
+  schedulerQueuedTaskCap: 50
+  schedulerThreadTtl: 10s
+
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
 migration:

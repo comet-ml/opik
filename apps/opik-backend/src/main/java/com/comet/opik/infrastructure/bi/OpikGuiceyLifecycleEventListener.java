@@ -6,6 +6,7 @@ import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
+import com.comet.opik.api.resources.v1.jobs.OptimizationProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
@@ -61,6 +62,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
                 scheduleExperimentProjectMigrationJobIfEnabled();
                 scheduleDatasetProjectMigrationJobIfEnabled();
+                scheduleOptimizationProjectMigrationJobIfEnabled();
             }
 
             case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
@@ -325,6 +327,17 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
         scheduleRepeatingJob(DatasetProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleOptimizationProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getOptimizationProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Optimization project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(OptimizationProjectMigrationJob.class,
                 config.interval().toJavaDuration(),
                 config.startupDelay().toJavaDuration());
     }
