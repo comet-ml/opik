@@ -4,23 +4,11 @@ on:
   pull_request:
     paths: 
       - "apps/opik-frontend/src/**"
-      - "apps/opik-frontend/tests/**"
-      - "apps/opik-frontend/package.json"
-      - "apps/opik-frontend/package-lock.json"
-      - "apps/opik-frontend/tsconfig.json"
-      - "apps/opik-frontend/.eslintrc"
-      - "apps/opik-frontend/vite.config.ts"
   push:
     branches: 
       - 'main'
     paths: 
       - "apps/opik-frontend/src/**"
-      - "apps/opik-frontend/tests/**"
-      - "apps/opik-frontend/package.json"
-      - "apps/opik-frontend/package-lock.json"
-      - "apps/opik-frontend/tsconfig.json"
-      - "apps/opik-frontend/.eslintrc"
-      - "apps/opik-frontend/vite.config.ts"
   workflow_dispatch:
 
 concurrency:
