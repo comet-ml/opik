@@ -60,6 +60,7 @@ def stream_dataset_items(
     dataset_items_ids_left: Optional[Set[str]] = (
         set(dataset_item_ids) if dataset_item_ids else None
     )
+    _conflicting_keys_warned = False
 
     filters: Optional[str] = None
     if filter_string:
@@ -125,7 +126,8 @@ def stream_dataset_items(
             # "multiple values for keyword argument" errors. This happens when user data
             # contains a key that matches a DatasetItem field (e.g. 'id' in HotpotQA).
             conflicting = item.data.keys() & dataset_item.DatasetItem.model_fields.keys()
-            if conflicting:
+            if conflicting and not _conflicting_keys_warned:
+                _conflicting_keys_warned = True
                 LOGGER.warning(
                     "Dataset item data contains keys that shadow DatasetItem fields and will be ignored: %s. "
                     "Rename these keys in your dataset to preserve them.",
