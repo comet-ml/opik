@@ -222,6 +222,16 @@ class LLMJudge(base.BaseSuiteEvaluator):
             scoring_strategy
         )
 
+    def get_scoring_strategy(self) -> _strategy_selector.ScoringStrategySelector:
+        """Return the resolved strategy selector currently in effect.
+
+        The result is the same object the judge consults in `score()` —
+        a `HeuristicSelector`, `AlwaysAgentic`, `NeverAgentic`, or a
+        custom subclass the caller injected. Use `isinstance` to
+        recognize the mode without reaching into private state.
+        """
+        return self._strategy_selector_instance
+
     def _has_same_settings(self, other: "LLMJudge") -> bool:
         return (
             self._model_name == other._model_name

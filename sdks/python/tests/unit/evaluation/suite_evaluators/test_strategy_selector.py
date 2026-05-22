@@ -116,33 +116,28 @@ class TestLLMJudgeIntegration:
     def test_default_strategy_is_auto(self):
         judge = llm_judge.LLMJudge(assertions=["a"], track=False)
         assert isinstance(
-            judge._strategy_selector_instance, strategy_selector.HeuristicSelector
+            judge.get_scoring_strategy(), strategy_selector.HeuristicSelector
         )
-        assert judge._scoring_strategy_input == "auto"
 
     def test_string_mode_resolves_to_selector(self):
         judge = llm_judge.LLMJudge(
             assertions=["a"], track=False, scoring_strategy="always"
         )
-        assert isinstance(
-            judge._strategy_selector_instance, strategy_selector.AlwaysAgentic
-        )
+        assert isinstance(judge.get_scoring_strategy(), strategy_selector.AlwaysAgentic)
 
     def test_custom_selector_instance_passes_through(self):
         custom = strategy_selector.NeverAgentic()
         judge = llm_judge.LLMJudge(
             assertions=["a"], track=False, scoring_strategy=custom
         )
-        assert judge._strategy_selector_instance is custom
+        assert judge.get_scoring_strategy() is custom
 
     def test_set_scoring_strategy__overrides_existing(self):
         judge = llm_judge.LLMJudge(
             assertions=["a"], track=False, scoring_strategy="never"
         )
         judge.set_scoring_strategy("always")
-        assert isinstance(
-            judge._strategy_selector_instance, strategy_selector.AlwaysAgentic
-        )
+        assert isinstance(judge.get_scoring_strategy(), strategy_selector.AlwaysAgentic)
 
     def test_merged__propagates_scoring_strategy(self):
         a = llm_judge.LLMJudge(assertions=["x"], track=False, scoring_strategy="always")
@@ -150,7 +145,7 @@ class TestLLMJudgeIntegration:
         merged = llm_judge.LLMJudge.merged([a, b])
         assert merged is not None
         assert isinstance(
-            merged._strategy_selector_instance, strategy_selector.AlwaysAgentic
+            merged.get_scoring_strategy(), strategy_selector.AlwaysAgentic
         )
 
     def test_merged__different_strategies__returns_none(self):
