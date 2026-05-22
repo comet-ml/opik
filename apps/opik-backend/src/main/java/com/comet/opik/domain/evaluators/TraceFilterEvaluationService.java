@@ -1,13 +1,17 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -44,6 +48,16 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
      * @return true if the trace matches the filter, false otherwise
      */
     public boolean matchesFilter(@NonNull TraceFilter filter, @NonNull Trace trace) {
+        return matchesFilter((Filter) filter, trace);
+    }
+
+    @Override
+    public boolean matchesFilter(Filter filter, Trace trace) {
+        if (isErrorInfoTextFilter(filter)) {
+            var errorInfoText = extractErrorInfoText(trace.errorInfo());
+            return errorInfoText != null && evaluateOperator(filter.operator(), errorInfoText, filter.value());
+        }
+
         return super.matchesFilter(filter, trace);
     }
 
@@ -74,10 +88,47 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
                 key != null ? extractFeedbackScore(trace.feedbackScores(), key) : trace.feedbackScores();
             case DURATION -> calculateDuration(trace.startTime(), trace.endTime());
             case TTFT -> trace.ttft();
+            case ERROR_INFO -> key != null ? extractErrorInfoField(trace.errorInfo(), key)
+                    : extractErrorInfoText(trace.errorInfo());
             case THREAD_ID -> trace.threadId();
             case CUSTOM -> extractCustomFieldValue(key, trace);
             default -> {
                 log.warn("Unsupported trace field for filter evaluation: {}", traceField);
+                yield null;
+            }
+        };
+    }
+
+    private boolean isErrorInfoTextFilter(Filter filter) {
+        return filter != null
+                && filter.field() == TraceField.ERROR_INFO
+                && (filter.operator() == Operator.CONTAINS || filter.operator() == Operator.NOT_CONTAINS);
+    }
+
+    private String extractErrorInfoText(ErrorInfo errorInfo) {
+        if (!hasNonEmptyErrorInfo(errorInfo)) {
+            return null;
+        }
+        return extractStringFromJson(errorInfo);
+    }
+
+    private boolean hasNonEmptyErrorInfo(ErrorInfo errorInfo) {
+        return errorInfo != null
+                && (StringUtils.isNotBlank(errorInfo.exceptionType())
+                        || StringUtils.isNotBlank(errorInfo.message())
+                        || StringUtils.isNotBlank(errorInfo.traceback()));
+    }
+
+    private Object extractErrorInfoField(ErrorInfo errorInfo, String key) {
+        if (errorInfo == null || key == null) {
+            return null;
+        }
+        return switch (key.toLowerCase()) {
+            case "exceptiontype", "exception_type" -> errorInfo.exceptionType();
+            case "message" -> errorInfo.message();
+            case "traceback" -> errorInfo.traceback();
+            default -> {
+                log.warn("Unknown ErrorInfo field key: '{}'. Supported keys: exceptionType, message, traceback", key);
                 yield null;
             }
         };

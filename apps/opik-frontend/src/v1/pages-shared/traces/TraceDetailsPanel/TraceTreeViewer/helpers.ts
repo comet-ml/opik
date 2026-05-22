@@ -394,8 +394,7 @@ const applyOperator = (
       return applyCategoryOperator(fieldValue, operator, filterValue);
 
     case COLUMN_TYPE.errors:
-      // For errors, we only support is_empty and is_not_empty which are handled above
-      return false;
+      return applyStringOperator(fieldValue, operator, filterValue);
 
     default:
       return false;
@@ -437,7 +436,15 @@ const filter = (filters: Filters, data: Trace | Span): boolean => {
 
     if (!field || !operator) return true; // Skip invalid filters
 
-    const fieldValue = getFieldValue(field, data, key, type as COLUMN_TYPE);
+    const shouldSearchFullErrorInfo =
+      type === COLUMN_TYPE.errors &&
+      (operator === "contains" || operator === "not_contains");
+    const fieldValue = getFieldValue(
+      field,
+      data,
+      shouldSearchFullErrorInfo ? undefined : key,
+      type as COLUMN_TYPE,
+    );
     return applyOperator(fieldValue, operator, value, type as COLUMN_TYPE);
   });
 };

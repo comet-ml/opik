@@ -66,7 +66,8 @@ describe("helpers.ts", () => {
       error_info: {
         message: "Test error",
         exception_type: "ValidationError",
-        traceback: "",
+        traceback:
+          "Traceback (most recent call last):\nasyncio.exceptions.CancelledError",
       },
     };
 
@@ -780,6 +781,84 @@ describe("helpers.ts", () => {
           expect(filterFunction(mockSpanWithError, isNotEmptyFilter)).toBe(
             true,
           );
+        });
+
+        it("should filter by error_info with contains operator", () => {
+          const containsFilter: Filters = [
+            {
+              id: "filter-1",
+              field: "error_info",
+              operator: "contains",
+              value: "CancelledError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(filterFunction(mockTrace, containsFilter)).toBe(false);
+          expect(filterFunction(mockSpan, containsFilter)).toBe(false);
+          expect(filterFunction(mockSpanWithError, containsFilter)).toBe(true);
+        });
+
+        it("should filter by full error_info for contains when key is present", () => {
+          const containsFilter: Filters = [
+            {
+              id: "filter-1",
+              field: "error_info",
+              key: "message",
+              operator: "contains",
+              value: "CancelledError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(filterFunction(mockSpanWithError, containsFilter)).toBe(true);
+        });
+
+        it("should filter by error_info with not_contains operator", () => {
+          const notContainsFilter: Filters = [
+            {
+              id: "filter-1",
+              field: "error_info",
+              operator: "not_contains",
+              value: "CancelledError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(filterFunction(mockTrace, notContainsFilter)).toBe(false);
+          expect(filterFunction(mockSpan, notContainsFilter)).toBe(false);
+          expect(filterFunction(mockSpanWithError, notContainsFilter)).toBe(
+            false,
+          );
+
+          const keyedNotContainsFilter: Filters = [
+            {
+              id: "filter-2",
+              field: "error_info",
+              key: "message",
+              operator: "not_contains",
+              value: "CancelledError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(
+            filterFunction(mockSpanWithError, keyedNotContainsFilter),
+          ).toBe(false);
+
+          const unrelatedNotContainsFilter: Filters = [
+            {
+              id: "filter-3",
+              field: "error_info",
+              operator: "not_contains",
+              value: "RuntimeError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(
+            filterFunction(mockSpanWithError, unrelatedNotContainsFilter),
+          ).toBe(true);
         });
       });
 

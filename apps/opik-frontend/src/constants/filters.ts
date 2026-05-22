@@ -218,6 +218,14 @@ export const OPERATORS_MAP: Record<
       label: "is not empty",
       value: "is_not_empty",
     },
+    {
+      label: "contains",
+      value: "contains",
+    },
+    {
+      label: "doesn't contain",
+      value: "not_contains",
+    },
   ],
 };
 

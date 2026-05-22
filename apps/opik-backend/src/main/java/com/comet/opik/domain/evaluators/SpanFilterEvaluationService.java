@@ -3,12 +3,15 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -45,6 +48,16 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
      * @return true if the span matches the filter, false otherwise
      */
     public boolean matchesFilter(@NonNull SpanFilter filter, @NonNull Span span) {
+        return matchesFilter((Filter) filter, span);
+    }
+
+    @Override
+    public boolean matchesFilter(Filter filter, Span span) {
+        if (isErrorInfoTextFilter(filter)) {
+            var errorInfoText = extractErrorInfoText(span.errorInfo());
+            return errorInfoText != null && evaluateOperator(filter.operator(), errorInfoText, filter.value());
+        }
+
         return super.matchesFilter(filter, span);
     }
 
@@ -79,13 +92,34 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
             case DURATION ->
                 span.duration() != null ? span.duration() : calculateDuration(span.startTime(), span.endTime());
             case TTFT -> span.ttft();
-            case ERROR_INFO -> key != null ? extractErrorInfoField(span.errorInfo(), key) : span.errorInfo();
+            case ERROR_INFO -> key != null ? extractErrorInfoField(span.errorInfo(), key)
+                    : extractErrorInfoText(span.errorInfo());
             case CUSTOM -> extractCustomFieldValue(key, span);
             default -> {
                 log.warn("Unsupported span field for filter evaluation: {}", spanField);
                 yield null;
             }
         };
+    }
+
+    private boolean isErrorInfoTextFilter(Filter filter) {
+        return filter != null
+                && filter.field() == SpanField.ERROR_INFO
+                && (filter.operator() == Operator.CONTAINS || filter.operator() == Operator.NOT_CONTAINS);
+    }
+
+    private String extractErrorInfoText(ErrorInfo errorInfo) {
+        if (!hasNonEmptyErrorInfo(errorInfo)) {
+            return null;
+        }
+        return extractStringFromJson(errorInfo);
+    }
+
+    private boolean hasNonEmptyErrorInfo(ErrorInfo errorInfo) {
+        return errorInfo != null
+                && (StringUtils.isNotBlank(errorInfo.exceptionType())
+                        || StringUtils.isNotBlank(errorInfo.message())
+                        || StringUtils.isNotBlank(errorInfo.traceback()));
     }
 
     /**

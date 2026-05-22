@@ -21,9 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -35,6 +37,11 @@ public class FiltersFactory {
     private static final String JSON_PREFIX = "$.";
     // Captures index for json key in form of "input[0]", group(1) is the key without index might be empty string, group(2) is the index if available
     private static final Pattern INDEX_PATTERN = Pattern.compile("^(.*?)(\\[\\d+])?$");
+    private static final Set<FieldType> LITERAL_VALUE_FIELD_TYPES = EnumSet.of(
+            FieldType.STRING,
+            FieldType.STRING_EXACT,
+            FieldType.ENUM,
+            FieldType.ERROR_CONTAINER);
 
     private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
             ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
@@ -87,7 +94,7 @@ public class FiltersFactory {
                             return true;
                         }
 
-                        return false;
+                        return StringUtils.isNotBlank(filter.value());
                     })
                     .put(FieldType.DICTIONARY, filter -> {
                         if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
@@ -143,11 +150,9 @@ public class FiltersFactory {
     }
 
     private Filter toValidAndDecoded(Filter filter) {
-        if (filter.field().getType() != FieldType.STRING
-                && filter.field().getType() != FieldType.STRING_EXACT
-                && filter.field().getType() != FieldType.ENUM
+        if (!LITERAL_VALUE_FIELD_TYPES.contains(filter.field().getType())
                 && !Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
-            // don't decode value for string fields or no-value operators (IS_EMPTY, IS_NOT_EMPTY)
+            // don't decode value for literal text fields or no-value operators (IS_EMPTY, IS_NOT_EMPTY)
             try {
                 filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
             } catch (IllegalArgumentException exception) {

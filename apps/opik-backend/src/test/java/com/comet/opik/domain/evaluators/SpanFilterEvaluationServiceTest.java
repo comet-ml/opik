@@ -1,5 +1,6 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.filter.Operator;
@@ -1183,10 +1184,21 @@ class SpanFilterEvaluationServiceTest {
     @DisplayName("Error Info Field Filtering")
     class ErrorInfoFieldFiltering {
 
+        static Stream<Arguments> emptyErrorInfoValues() {
+            return Stream.of(
+                    arguments((ErrorInfo) null),
+                    arguments(ErrorInfo.builder().build()),
+                    arguments(ErrorInfo.builder()
+                            .exceptionType("")
+                            .message("")
+                            .traceback("")
+                            .build()));
+        }
+
         @Test
         void matchesFilterWithErrorInfoExceptionType() {
             // Given
-            var errorInfo = com.comet.opik.api.ErrorInfo.builder()
+            var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
                     .message("Invalid value")
                     .traceback("Traceback...")
@@ -1211,7 +1223,7 @@ class SpanFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithErrorInfoMessage() {
             // Given
-            var errorInfo = com.comet.opik.api.ErrorInfo.builder()
+            var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
                     .message("Invalid value provided")
                     .traceback("Traceback...")
@@ -1236,7 +1248,7 @@ class SpanFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithErrorInfoTraceback() {
             // Given
-            var errorInfo = com.comet.opik.api.ErrorInfo.builder()
+            var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
                     .message("Invalid value")
                     .traceback("File \"script.py\", line 10")
@@ -1256,6 +1268,191 @@ class SpanFilterEvaluationServiceTest {
 
             // Then
             assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithErrorInfoContainsSearchesSerializedJson() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("asyncio.exceptions.CancelledError")
+                    .message("Request was cancelled")
+                    .traceback("Traceback (most recent call last):\nasyncio.exceptions.CancelledError")
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.CONTAINS)
+                    .value("exception_type")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithErrorInfoContainsTracebackTerm() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("asyncio.exceptions.CancelledError")
+                    .message("Request was cancelled")
+                    .traceback("Traceback (most recent call last):\nasyncio.exceptions.CancelledError")
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithErrorInfoContainsIgnoresKeyAndSearchesSerializedJson() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Request was cancelled")
+                    .traceback("Traceback (most recent call last):\nasyncio.exceptions.CancelledError")
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .key("message")
+                    .operator(Operator.CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithErrorInfoNotContainsWhenTracebackContainsTerm() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("asyncio.exceptions.CancelledError")
+                    .message("Request was cancelled")
+                    .traceback("Traceback (most recent call last):\nasyncio.exceptions.CancelledError")
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        void matchesFilterWithErrorInfoNotContainsIgnoresKeyAndSearchesSerializedJson() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Request was cancelled")
+                    .traceback("Traceback (most recent call last):\nasyncio.exceptions.CancelledError")
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .key("message")
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        void matchesFilterWithErrorInfoNotContainsWhenTracebackDoesNotContainTerm() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Invalid value")
+                    .traceback("Traceback (most recent call last):\nValueError: invalid value")
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @ParameterizedTest
+        @MethodSource("emptyErrorInfoValues")
+        void matchesFilterWithErrorInfoNotContainsWhenErrorInfoIsEmpty(ErrorInfo errorInfo) {
+            // Given
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        void matchesAllFiltersWithErrorInfoNotContainsWhenErrorInfoIsNull() {
+            // Given
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(null)
+                    .build();
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("CancelledError")
+                    .build());
+
+            // When
+            var result = spanFilterEvaluationService.matchesAllFilters(filters, span);
+
+            // Then
+            assertThat(result).isFalse();
         }
 
         @Test
@@ -1281,7 +1478,7 @@ class SpanFilterEvaluationServiceTest {
         @Test
         void matchesFilterWhenErrorInfoKeyNotFound() {
             // Given
-            var errorInfo = com.comet.opik.api.ErrorInfo.builder()
+            var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
                     .message("Invalid value")
                     .traceback("Traceback...")

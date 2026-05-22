@@ -152,7 +152,8 @@ public class FilterQueryBuilder {
                             FieldType.DICTIONARY_STATE_DB,
                             "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.MAP,
-                            "ilike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))")))
+                            "ilike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.ERROR_CONTAINER, "ilike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.STRING_EXACT, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
@@ -165,7 +166,9 @@ public class FilterQueryBuilder {
                             FieldType.DICTIONARY,
                             "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.DICTIONARY_STATE_DB,
-                            "JSON_VALUE(%1$s, :filterKey%2$d) NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
+                            "JSON_VALUE(%1$s, :filterKey%2$d) NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.ERROR_CONTAINER,
+                            "notEmpty(%1$s) AND notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_EXACT, "startsWith(%1$s, :filter%2$d)",
