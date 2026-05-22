@@ -276,16 +276,6 @@ def _patch_method_if_present(
     setattr(cls, method_name, wrapper(method, project_name))
 
 
-# harbor 0.8.0 renamed ``Trial._setup_environment`` to
-# ``Trial._setup_agent_environment``. We patch whichever name the installed
-# version exposes — _patch_method_if_present skips missing attributes — so
-# track_harbor() keeps working across the rename.
-_TRIAL_SETUP_ENVIRONMENT_METHOD_NAMES: Tuple[str, ...] = (
-    "_setup_environment",
-    "_setup_agent_environment",
-)
-
-
 def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
     """Internal: Enable Opik tracking for Harbor by patching classes.
 
@@ -294,25 +284,23 @@ def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
     Args:
         project_name: Opik project name. If None, uses OPIK_PROJECT_NAME env var.
     """
-    # Patch Trial methods (only if not already patched)
-    if not hasattr(Trial.run, "opik_tracked"):
-        Trial.run = _wrap_trial_run(Trial.run, project_name)
-
-    for setup_environment_method_name in _TRIAL_SETUP_ENVIRONMENT_METHOD_NAMES:
-        _patch_method_if_present(
-            Trial, setup_environment_method_name, _wrap_setup_environment, project_name
-        )
-
-    if not hasattr(Trial._setup_agent, "opik_tracked"):
-        Trial._setup_agent = _wrap_setup_agent(Trial._setup_agent, project_name)
-
-    if not hasattr(Trial._execute_agent, "opik_tracked"):
-        Trial._execute_agent = _wrap_execute_agent(Trial._execute_agent, project_name)
-
-    if not hasattr(Trial._run_verification, "opik_tracked"):
-        Trial._run_verification = _wrap_run_verification(
-            Trial._run_verification, project_name
-        )
+    # harbor is a moving target — methods get renamed and removed between
+    # minor versions (0.8.0 alone renamed ``_setup_environment`` to
+    # ``_setup_agent_environment`` and dropped ``_execute_agent``). For each
+    # logical hook we list every name we've seen across supported versions;
+    # _patch_method_if_present silently skips any that aren't present on the
+    # installed harbor, so track_harbor() never crashes even if harbor
+    # renames or removes a method we used to patch.
+    trial_patch_targets: Tuple[Tuple[str, Callable], ...] = (
+        ("run", _wrap_trial_run),
+        ("_setup_environment", _wrap_setup_environment),
+        ("_setup_agent_environment", _wrap_setup_environment),
+        ("_setup_agent", _wrap_setup_agent),
+        ("_execute_agent", _wrap_execute_agent),
+        ("_run_verification", _wrap_run_verification),
+    )
+    for method_name, wrapper in trial_patch_targets:
+        _patch_method_if_present(Trial, method_name, wrapper, project_name)
 
     # Patch Verifier (only if not already patched)
     if not hasattr(Verifier.verify, "opik_tracked"):
