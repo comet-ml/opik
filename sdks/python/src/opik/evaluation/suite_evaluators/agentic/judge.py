@@ -1,7 +1,7 @@
 """AgenticLLMJudge — sibling of LLMJudge that drives the tool-call loop.
 
-Kept as a separate class (rather than a branch inside LLMJudge) so the
-agentic complexity stays out of the existing one-shot code path and the
+Kept as a separate class (rather than a branch inside LLMJudge), so the
+agentic complexity stays out of the existing one-shot code path, and the
 diff against the v1 stays small. `LLMJudge.score` instantiates one of
 these lazily when a `TraceToolContext` is available (see
 `metric.py:score`).
@@ -19,7 +19,10 @@ import tenacity
 from opik import exceptions
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import base_model
-from opik.evaluation.suite_evaluators.llm_judge import parsers
+from opik.evaluation.suite_evaluators.llm_judge import (
+    parsers,
+    strategy_selector,
+)
 
 from . import context, loop, prompt
 from .compression import span_tree_serializer
@@ -82,8 +85,16 @@ class AgenticLLMJudge:
         self, ctx: context.TraceToolContext
     ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
-        overview = span_tree_serializer.serialize_overview(
-            ctx.trace, ctx.spans, ctx.parent_by_child
+        # Size the inline overview against the judge model's context
+        # budget — use the largest per-field truncation that still fits,
+        # so capable models receive a richer first-turn view and need
+        # fewer drill-in `read` calls.
+        budget = strategy_selector.compute_budget_tokens(self._model.model_name)
+        _, overview = span_tree_serializer.pick_overview_io_char_limit(
+            trace=ctx.trace,
+            spans=ctx.spans,
+            parent_by_child=ctx.parent_by_child,
+            budget_tokens=budget,
         )
         user_prompt = prompt.AGENTIC_JUDGE_USER_TEMPLATE.format(
             assertions=schema.format_assertions(),

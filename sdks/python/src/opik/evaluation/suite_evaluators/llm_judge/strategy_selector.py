@@ -97,6 +97,56 @@ class NeverAgentic(ScoringStrategySelector):
 _PROMPT_OVERHEAD_TOKENS = 1_500
 
 
+# Default headroom: reserve half the context window for the model's own
+# reasoning/response. Callers tuning cost vs. quality can override via
+# `HeuristicSelector(safety_factor=...)` or by passing `safety_factor`
+# to `compute_budget_tokens`.
+_DEFAULT_SAFETY_FACTOR = 0.5
+
+
+def _capability_for(
+    model_name: str,
+    capabilities: Optional[Dict[str, ModelCapability]] = None,
+) -> ModelCapability:
+    """Resolve a model name to its capability entry.
+
+    Exact match wins; falls back to the longest matching prefix so
+    versioned ids like `"gpt-5-nano-2025-08-07"` still resolve. Unknown
+    models get `_DEFAULT_CAPABILITY` — small window, not single-pass-ok.
+    """
+    table = capabilities or _MODEL_CAPABILITIES
+    if model_name in table:
+        return table[model_name]
+    best: Optional[ModelCapability] = None
+    best_len = -1
+    for key, cap in table.items():
+        if model_name.startswith(key) and len(key) > best_len:
+            best = cap
+            best_len = len(key)
+    return best if best is not None else _DEFAULT_CAPABILITY
+
+
+def compute_budget_tokens(
+    model_name: str,
+    *,
+    safety_factor: float = _DEFAULT_SAFETY_FACTOR,
+    prompt_overhead_tokens: int = _PROMPT_OVERHEAD_TOKENS,
+    capabilities: Optional[Dict[str, ModelCapability]] = None,
+) -> int:
+    """Tokens available for the trace overview / one-shot trace payload.
+
+    `context_window * safety_factor - prompt_overhead_tokens`. The
+    agentic judge uses this to size the inline overview; the heuristic
+    selector uses the same formula to decide one-shot vs. agentic.
+    Single source of truth for "how much of the context can we spend on
+    trace data."
+    """
+    if not 0.0 < safety_factor <= 1.0:
+        raise ValueError("safety_factor must be in (0, 1]")
+    capability = _capability_for(model_name, capabilities)
+    return int(capability.context_window * safety_factor) - prompt_overhead_tokens
+
+
 class HeuristicSelector(ScoringStrategySelector):
     """Pick a strategy from trace size and model capability.
 
@@ -113,7 +163,7 @@ class HeuristicSelector(ScoringStrategySelector):
 
     def __init__(
         self,
-        safety_factor: float = 0.5,
+        safety_factor: float = _DEFAULT_SAFETY_FACTOR,
         prompt_overhead_tokens: int = _PROMPT_OVERHEAD_TOKENS,
         model_capabilities: Optional[Dict[str, ModelCapability]] = None,
     ) -> None:
@@ -133,7 +183,7 @@ class HeuristicSelector(ScoringStrategySelector):
         if trace_tool_context is None:
             return ScoringStrategy.ONE_SHOT
 
-        capability = self._capability_for(model_name)
+        capability = _capability_for(model_name, self._capabilities)
         if not capability.single_pass_quality_ok:
             LOGGER.debug(
                 "HeuristicSelector: model %s not flagged single-pass-capable; using agentic",
@@ -141,8 +191,11 @@ class HeuristicSelector(ScoringStrategySelector):
             )
             return ScoringStrategy.AGENTIC
 
-        budget = int(capability.context_window * self._safety_factor) - (
-            self._prompt_overhead_tokens
+        budget = compute_budget_tokens(
+            model_name,
+            safety_factor=self._safety_factor,
+            prompt_overhead_tokens=self._prompt_overhead_tokens,
+            capabilities=self._capabilities,
         )
         size = _estimate_context_tokens(trace_tool_context)
         if size > budget:
@@ -163,17 +216,9 @@ class HeuristicSelector(ScoringStrategySelector):
         return ScoringStrategy.ONE_SHOT
 
     def _capability_for(self, model_name: str) -> ModelCapability:
-        if model_name in self._capabilities:
-            return self._capabilities[model_name]
-        # Prefix match so "gpt-5-nano-2025-..." still resolves. Pick the
-        # longest matching prefix so "gpt-5-nano" wins over "gpt-5".
-        best: Optional[ModelCapability] = None
-        best_len = -1
-        for key, cap in self._capabilities.items():
-            if model_name.startswith(key) and len(key) > best_len:
-                best = cap
-                best_len = len(key)
-        return best if best is not None else _DEFAULT_CAPABILITY
+        # Preserved as a thin shim for backwards compatibility with the
+        # one existing test that patches via the private helper.
+        return _capability_for(model_name, self._capabilities)
 
 
 def _estimate_context_tokens(trace_tool_context: Any) -> int:
