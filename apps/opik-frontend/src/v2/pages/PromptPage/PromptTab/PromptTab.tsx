@@ -53,7 +53,6 @@ import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { getTimeFromNow } from "@/lib/date";
 import { VersionStage, isProdTag } from "@/utils/version-stages";
-import DeployToEnvironmentMenu from "./DeployToEnvironmentMenu";
 import PromptContentBlock from "./PromptContentBlock";
 import RestoreVersionDialog from "./RestoreVersionDialog";
 import ChatPromptView from "./ChatPromptView";
@@ -77,7 +76,7 @@ const versionHasProdTag = (version: PromptVersion | undefined) =>
 
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const {
-    permissions: { canUsePlayground, canConfigureWorkspaceSettings },
+    permissions: { canUsePlayground },
   } = usePermissions();
   const { toast } = useToast();
 
@@ -361,20 +360,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              {canConfigureWorkspaceSettings && (
-                <>
-                  <Separator orientation="vertical" className="mx-1 h-4" />
-                  <DeployToEnvironmentMenu
-                    promptId={prompt.id}
-                    versionId={effectiveVersionId}
-                    versionLabel={activeVersionLabel}
-                    versions={versions}
-                    totalVersions={total}
-                    activeEnvironment={activeVersionEnvironment}
-                  />
-                </>
-              )}
 
               <Separator orientation="vertical" className="mx-1 h-4" />
 
