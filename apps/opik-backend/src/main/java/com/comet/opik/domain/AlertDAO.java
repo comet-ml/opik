@@ -286,9 +286,6 @@ public interface AlertDAO {
             """)
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
-    record EligibleAlertWorkspace(String workspaceId, long alertCount) {
-    }
-
     default List<EligibleAlertWorkspace> findEligibleAlertWorkspaces(Set<String> excludedWorkspaceIds, int limit) {
         var excluded = new java.util.ArrayList<>(excludedWorkspaceIds);
         var demoNames = DemoData.ALERTS;

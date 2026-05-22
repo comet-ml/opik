@@ -50,8 +50,6 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 @Singleton
 public class AlertProjectMigrationService implements Managed {
 
-    private static final int MAX_ORPHAN_ALERTS_PER_WORKSPACE = 100;
-
     public static final String METRIC_NAMESPACE = "opik.migration.alert_project";
     public static final AttributeKey<String> RESULT_KEY = stringKey("result");
     public static final AttributeKey<String> REASON_KEY = stringKey("reason");
@@ -184,9 +182,9 @@ public class AlertProjectMigrationService implements Managed {
     }
 
     private void doMigrateWorkspace(String workspaceId, long startMillis) {
-        var orphanAlerts = transactionTemplate.inTransaction(READ_ONLY,
+        List<Alert> orphanAlerts = transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AlertDAO.class)
-                        .findByWorkspaceId(workspaceId, true, MAX_ORPHAN_ALERTS_PER_WORKSPACE));
+                        .findByWorkspaceId(workspaceId, true, config.alertBatchSize()));
 
         if (orphanAlerts.isEmpty()) {
             log.info("No orphan alerts found, workspaceId='{}'", workspaceId);

@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 public record AlertProjectMigrationConfig(
         boolean enabled,
         @Min(1) @Max(200) int workspacesPerRun,
+        @Min(1) @Max(10_000) int alertBatchSize,
         @NotNull @MinDuration(value = 5, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration interval,
         @NotNull @MinDuration(value = 0, unit = TimeUnit.SECONDS) @MaxDuration(value = 10, unit = TimeUnit.MINUTES) Duration startupDelay,
         @NotNull @MinDuration(value = 5, unit = TimeUnit.SECONDS) @MaxDuration(value = 30, unit = TimeUnit.MINUTES) Duration lockTimeout,
