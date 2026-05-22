@@ -153,6 +153,13 @@ def main():
         context = OptimizationJobContext.from_job_message(job_message)
         config = OptimizationConfig.from_dict(job_message.get("config", {}))
 
+        # Force LiteLLM to route through its OpenAI handler so it uses
+        # OPENAI_API_BASE (the Opik gateway).  LiteLLM strips the "openai/"
+        # prefix before sending the request, so the backend receives the
+        # original model string (e.g. "vertex_ai/gemini-2.5-flash").
+        if not config.model.startswith("openai/"):
+            config.model = f"openai/{config.model}"
+
         # Ensure optimizer_params is a dict before mutating
         config.optimizer_params = config.optimizer_params or {}
 
