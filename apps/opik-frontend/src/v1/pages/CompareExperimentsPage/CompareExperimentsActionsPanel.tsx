@@ -25,7 +25,7 @@ import {
   EXPERIMENT_ITEM_DATASET_PREFIX,
 } from "@/constants/experiments";
 import { Separator } from "@/ui/separator";
-import { RunStatus } from "@/types/test-suites";
+import { processPassedExportColumn } from "./compareExperimentsExportUtils";
 
 const EVALUATION_EXPORT_COLUMNS = [
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -37,57 +37,6 @@ const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
 
 const extractFieldName = (column: string, prefix: string): string =>
   column.replace(`${prefix}.`, "");
-
-const resolvePassedStatus = (
-  row: ExperimentsCompare,
-  items: ExperimentItem[],
-  experimentId?: string,
-) => {
-  if (experimentId) {
-    return (
-      row.run_summaries_by_experiment?.[experimentId]?.status ??
-      items[0]?.status
-    );
-  }
-
-  const summaries = Object.values(row.run_summaries_by_experiment ?? {});
-
-  if (summaries.length > 0) {
-    if (summaries.every((s) => s.status === RunStatus.PASSED)) {
-      return RunStatus.PASSED;
-    }
-    if (summaries.every((s) => s.status === RunStatus.SKIPPED)) {
-      return RunStatus.SKIPPED;
-    }
-    return RunStatus.FAILED;
-  }
-
-  return items[0]?.status;
-};
-
-const processPassedExportColumn = (
-  row: ExperimentsCompare,
-  items: ExperimentItem[],
-  accumulator: Record<string, unknown>,
-  prefix: string = "",
-  experimentId?: string,
-) => {
-  const status = resolvePassedStatus(row, items, experimentId);
-  accumulator[`${prefix}status`] = status ?? "-";
-
-  items
-    .flatMap((item) => item.assertion_results ?? [])
-    .forEach((ar, index) => {
-      const idx = index + 1;
-      accumulator[`${prefix}assertion_${idx}.name`] = ar.value;
-      accumulator[`${prefix}assertion_${idx}.result`] = ar.passed
-        ? "passed"
-        : "failed";
-      if (ar.reason) {
-        accumulator[`${prefix}assertion_${idx}.reason`] = ar.reason;
-      }
-    });
-};
 
 const processNestedExportColumn = (
   item: ExperimentItem,
