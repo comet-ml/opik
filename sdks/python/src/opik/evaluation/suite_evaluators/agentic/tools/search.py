@@ -112,7 +112,15 @@ class SearchTool(executor.ToolExecutor):
 
         ref: entity_ref.EntityRef = parsed["ref"]
         pattern_str: str = parsed["pattern"]
-        path_expr: Optional[str] = parsed["path"]
+        # `path` is normalized through the shared helper so a missing
+        # leading `.` (e.g. `dataset_item` instead of `.dataset_item`)
+        # doesn't bounce the call back to the model. The regex
+        # `pattern` is deliberately NOT touched — it's not a path.
+        path_expr: Optional[str] = (
+            path_evaluator.normalize_expression(parsed["path"])
+            if parsed["path"]
+            else None
+        )
 
         try:
             pattern = re.compile(pattern_str, re.IGNORECASE)

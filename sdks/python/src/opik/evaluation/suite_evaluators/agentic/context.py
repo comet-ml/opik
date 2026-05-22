@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from opik.message_processing.emulation import (
     emulator_message_processor,
@@ -146,6 +146,74 @@ class TraceToolContext:
         return None
 
 
+# Span names produced by opik's own evaluation plumbing rather than by
+# the user's agent. The judge has no business seeing these:
+#
+# - `metrics_calculation` is emitted by `EvaluationEngine.run_and_score`
+#   to wrap each test case's scoring phase. Its `input` carries the full
+#   `TestCase` envelope including the entire `LLMJudgeConfig` (model,
+#   messages, schema, assertion descriptions). For an LLM-judge
+#   evaluation, that means **the assertion text — including any
+#   literal tokens the assertion mentions — gets echoed back into the
+#   trace the judge is asked to evaluate.** Concretely: an assertion of
+#   the form "the agent processed a payload containing 'MARKER-xyz'"
+#   makes `MARKER-xyz` appear in `metrics_calculation.input` alongside
+#   its legitimate location in the agent's span. The judge then can't
+#   tell whether it observed real agent activity or just the assertion
+#   echoing itself, and burns tool calls disambiguating. Filtering this
+#   span out removes the leak at the source.
+#
+# Descendants of these spans are eval-engine internals too (other
+# scorers, model wrappers, downstream metric calls), so the full
+# subtree gets dropped — see `_filter_internal_spans`.
+_INTERNAL_SPAN_NAMES = frozenset({"metrics_calculation"})
+
+
+def _filter_internal_spans(
+    spans: List[models.SpanModel],
+    parent_by_child: Dict[str, Optional[str]],
+) -> Tuple[List[models.SpanModel], Dict[str, Optional[str]]]:
+    """Drop opik-internal spans (and their descendants) from the agentic view.
+
+    Seeds the "internal" set from `_INTERNAL_SPAN_NAMES` (matched by
+    span name), then sweeps the parent map until closure so any span
+    whose ancestor chain reaches an internal root is also dropped. The
+    whole subtree under `metrics_calculation` is eval-engine plumbing
+    (other scorers, model wrappers) and shouldn't be visible to the
+    judge either.
+
+    Returns a fresh `(spans, parent_by_child)` pair so callers don't
+    mutate the emulator's caches. No-ops (returns the originals
+    unchanged) when no internal-named spans are present, which is the
+    common case for non-suite agentic-judge invocations.
+    """
+    internal_ids: set = {span.id for span in spans if span.name in _INTERNAL_SPAN_NAMES}
+    if not internal_ids:
+        return spans, parent_by_child
+
+    # Sweep descendants. Each pass adds spans whose parent is already
+    # marked internal; loop until the set stops growing. Span trees are
+    # shallow, so a few iterations suffice.
+    changed = True
+    while changed:
+        changed = False
+        for span in spans:
+            if span.id in internal_ids:
+                continue
+            parent = parent_by_child.get(span.id)
+            if parent in internal_ids:
+                internal_ids.add(span.id)
+                changed = True
+
+    kept_spans = [span for span in spans if span.id not in internal_ids]
+    kept_parent_by_child = {
+        span_id: parent
+        for span_id, parent in parent_by_child.items()
+        if span_id not in internal_ids
+    }
+    return kept_spans, kept_parent_by_child
+
+
 def build_trace_tool_context(
     trace_id: str,
     emulator: emulator_message_processor.EmulatorMessageProcessor,
@@ -168,6 +236,7 @@ def build_trace_tool_context(
 
     spans = emulator.spans_for_trace(trace_id)
     parent_by_child = emulator.parent_span_ids_for_trace(trace_id)
+    spans, parent_by_child = _filter_internal_spans(spans, parent_by_child)
     return TraceToolContext(
         trace=trace,
         spans=spans,
@@ -213,6 +282,7 @@ def build_trace_tool_context_from_trace_data(
     synthesized_trace = _trace_model_from_trace_data(trace_data)
     spans = emulator.spans_for_trace(trace_data.id)
     parent_by_child = emulator.parent_span_ids_for_trace(trace_data.id)
+    spans, parent_by_child = _filter_internal_spans(spans, parent_by_child)
     return TraceToolContext(
         trace=synthesized_trace,
         spans=spans,

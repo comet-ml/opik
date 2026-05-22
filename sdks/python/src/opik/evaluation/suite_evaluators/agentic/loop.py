@@ -203,6 +203,27 @@ def run_agentic_judge(
     # Otherwise (max rounds reached, or the last response lacked usable
     # content) force a final, tools-less, structured-output turn so the
     # caller always gets a parseable verdict to retry on.
+    #
+    # If the loop exited via `max_rounds_exhausted` with the last
+    # assistant turn carrying tool_calls, those calls were never given
+    # a tool reply. Providers (OpenAI in particular) reject any further
+    # request on a conversation where an assistant `tool_calls` block
+    # isn't followed by a tool message for every `tool_call_id` — so
+    # we must synthesize stub replies before the wrap-up call.
+    if pending_tool_calls:
+        for call in pending_tool_calls:
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": (
+                        "Tool call not executed: agentic loop reached "
+                        "MAX_TOOL_CALL_ROUNDS. Finalize the verdict now "
+                        "based on what you've already observed."
+                    ),
+                }
+            )
+
     messages.append({"role": "user", "content": wrapup_instruction})
     verdict = model.generate_chat_completion(
         messages=messages,

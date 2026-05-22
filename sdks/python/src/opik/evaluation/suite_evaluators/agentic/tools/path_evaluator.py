@@ -43,6 +43,35 @@ DEFAULT_MAX_RESULTS = 10_000
 
 
 # ---------------------------------------------------------------------------
+# Input normalization
+# ---------------------------------------------------------------------------
+
+
+def normalize_expression(expression: str) -> str:
+    """Auto-prepend a leading `.` when the caller omits it.
+
+    Every valid expression in the SDK's constrained jq dialect begins
+    with `.` (root, field access) or `..` (recursive descent). Models
+    sometimes drop the leading dot — `dataset_item` instead of
+    `.dataset_item` — typically when they pasted a field name from a
+    `read` payload. Silently rewriting to `.<name>` avoids the
+    "Unsupported expression" round-trip without weakening the parser,
+    since no valid expression can begin with an identifier character.
+
+    Shared by `scan` (for its `expression` argument) and `search` (for
+    its optional `path` argument); any future tool that accepts a path
+    expression should route it through this helper before parsing.
+    """
+    stripped = expression.lstrip()
+    if not stripped:
+        return expression
+    first = stripped[0]
+    if first.isalpha() or first == "_":
+        return "." + expression
+    return expression
+
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 

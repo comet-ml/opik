@@ -98,7 +98,7 @@ class ScanTool(executor.ToolExecutor):
             )
 
         ref: entity_ref.EntityRef = parsed["ref"]
-        expression: str = parsed["expression"]
+        expression: str = path_evaluator.normalize_expression(parsed["expression"])
 
         cached = ctx.get_cached(ref)
         if cached is None:
