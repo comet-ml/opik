@@ -78,6 +78,7 @@ class _StubChatModel(base_model.OpikBaseModel):
     ) -> base_model.ConversationDict:
         self.calls.append(
             {
+                "messages": [dict(m) for m in messages],
                 "tool_choice": kwargs.get("tool_choice"),
                 "response_format": response_format,
             }
@@ -141,6 +142,28 @@ def _run_with_responses(responses, tools, ctx, overview_truncated=False):
         overview_truncated=overview_truncated,
     )
     return content, model, tools
+
+
+def _conversation_is_well_formed(messages: List[dict]) -> bool:
+    """Every assistant `tool_calls` block must be followed by one tool
+    message per `tool_call_id`. OpenAI rejects (400) otherwise.
+    """
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            expected_ids = {call["id"] for call in msg["tool_calls"]}
+            seen_ids = set()
+            j = i + 1
+            while j < len(messages) and messages[j].get("role") == "tool":
+                seen_ids.add(messages[j]["tool_call_id"])
+                j += 1
+            if seen_ids != expected_ids:
+                return False
+            i = j
+        else:
+            i += 1
+    return True
 
 
 class TestTelemetryLogging:
@@ -283,6 +306,29 @@ class TestDuplicateToolCallShortCircuit:
     the deterministic fix for the failure mode where a judge model loops
     on the same tool/args instead of drilling in (design doc §9; PR
     review transcript on OPIK-6243)."""
+
+    def test_run_agentic_judge__dedup_path__still_appends_tool_message(self):
+        """Regression: every assistant `tool_calls` block must be followed
+        by a tool reply for every `tool_call_id`, even when the loop
+        short-circuits a duplicate call. Without this, real providers
+        (e.g., OpenAI) reject the next request with a 400.
+        """
+        responses = [
+            {"tool_calls": [_tool_call("c1", "scan")]},
+            {"tool_calls": [_tool_call("c2", "scan")]},
+            {"content": '{"verdict": "ok"}', "tool_calls": []},
+        ]
+        ctx = _ctx(_trace())
+        tool = _StubTool("scan", payload='{"spans": []}')
+
+        _, model, _ = _run_with_responses(responses, [tool], ctx)
+
+        # Final assistant→tool pairing in the conversation sent on every
+        # turn must be well-formed.
+        for call in model.calls:
+            assert _conversation_is_well_formed(call["messages"]), (
+                f"Conversation has an unanswered tool_call:\n{call['messages']}"
+            )
 
     def test_run_agentic_judge__repeated_identical_call__tool_executes_once(
         self,

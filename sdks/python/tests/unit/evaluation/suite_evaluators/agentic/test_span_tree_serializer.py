@@ -103,8 +103,8 @@ class TestSerializeOverview:
 
         truncated = result["trace"]["input"]
         assert truncated != long_input
-        assert truncated[: span_tree_serializer.OVERVIEW_IO_CHAR_LIMIT] == (
-            "x" * span_tree_serializer.OVERVIEW_IO_CHAR_LIMIT
+        assert truncated[: span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT] == (
+            "x" * span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
         )
         # Suffix is actionable: names the tool and the entity ref.
         assert f"read(type='trace', id='{trace.id}')" in truncated

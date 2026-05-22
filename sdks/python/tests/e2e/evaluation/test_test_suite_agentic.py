@@ -2,26 +2,28 @@
 
 The one-shot LLMJudge sees only the dataset item's top-level `input` /
 `output`. The agentic judge — auto-engaged when the local emulator is
-active during `opik.run_tests` — sees the full trace tree via the
-`get_trace_spans` / `read` / `scan` / `search` tools. These tests
-craft assertions that are decidable ONLY from the intermediate span state,
-so a passing verdict is direct evidence the agentic loop ran:
+active during `opik.run_tests` — receives a pre-rendered flat overview
+of the trace plus `read` / `scan` / `search` tools for drilling in.
+These tests craft assertions that are decidable ONLY from the
+intermediate span state, so a passing verdict is direct evidence the
+agentic judge ran:
 
 1. A span-structure assertion ("the agent called the `fetch_user_data`
    helper") — verifiable only by looking at span names in the trace.
 2. A span-error assertion ("no errors occurred without errors") on a
    trace whose inner span recorded an error caught by the task —
    verifiable only by looking at span `error_info`.
-3. A buried-keyword assertion — the marker sits past the
-   `get_trace_spans` overview's 500-char truncation, so the judge must
-   call at least one of `read` / `scan` / `search` to recover it.
+3. A buried-keyword assertion — the marker sits past the overview's
+   floor-tier 500-char truncation, so the judge must call at least one
+   of `read` / `scan` / `search` to recover it. The test pins the
+   overview sizer's ladder to the floor entry to guarantee truncation
+   regardless of the judge model's context budget.
 
 **Judge-model choice.** These tests deliberately override the SDK's
 default judge model (`gpt-5-nano`) with a stronger one. `gpt-5-nano`
 is the canonical "doesn't engage the tool loop" failure mode the
-backend doc (`SupportedJudgeProvider.java`) warns about — it
-satisfies the REQUIRED-on-first-call gate with `get_trace_spans` and
-then judges from that summary alone, never calling `read`. The SDK
+backend doc (`SupportedJudgeProvider.java`) warns about — it tends to
+judge from the inline overview alone, never calling `read`. The SDK
 can't prompt-engineer around that; the design doc §9 explicitly
 classifies model engagement as the operator's call. Here we pick
 `gpt-4o-mini` to match the backend's allow-list second choice — same
@@ -177,22 +179,45 @@ def test_test_suite_agentic__assertion_about_span_error__detects_failure(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
 def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+    opik_client: opik.Opik,
+    dataset_name: str,
+    experiment_name: str,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    """The marker is placed past the 200-char truncation that
-    `get_trace_spans` applies to every span's I/O. The overview alone
-    physically cannot include it, so the judge MUST reach for at least
-    one of `read` / `scan` / `search` to find the marker and pass the
+    """The marker is placed past the floor-tier truncation the overview
+    applies to every span's I/O. The overview alone physically cannot
+    include it, so the judge MUST reach for at least one of
+    `read` / `scan` / `search` to find the marker and pass the
     assertion. We don't pin which tool the model picks — that's a
-    model-quality question. What we prove here is the agentic loop
-    engaged beyond the overview, since a one-shot judge or a judge
-    that only called `get_trace_spans` would lack the evidence.
+    model-quality question. What we prove here is that the agentic loop
+    engages beyond the overview, since a one-shot judge would lack the
+    evidence.
 
     The marker is a synthetic token (`MARKER-` + opaque tail) chosen so
     it can't appear anywhere else in the trace or in the model's
     pretraining. A `score: true` verdict here means the judge actually
     extracted it from span content.
+
+    NOTE on the ladder monkeypatch: the overview sizer normally picks
+    the largest per-field limit that fits the model's context budget,
+    which on `gpt-4o-mini` (128k window) would render this small trace
+    at the `NO_OVERVIEW_TRUNCATION` tier — the marker would be visible
+    inline and the test premise would silently regress. Forcing the
+    ladder to its single floor entry (`OVERVIEW_IO_FLOOR_CHAR_LIMIT`) keeps
+    the truncation guaranteed without needing to produce a multi-MB
+    trace just to overflow the budget. The sizer's own behavior is
+    covered by `test_overview_sizer.py`.
     """
+    from opik.evaluation.suite_evaluators.agentic.compression import (
+        span_tree_serializer,
+    )
+
+    monkeypatch.setattr(
+        span_tree_serializer,
+        "OVERVIEW_IO_LIMIT_LADDER",
+        (span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT,),
+    )
+
     secret_marker = "MARKER-7f3a8c2e9b1d4f60"
     keyword_assertion = (
         f"At least one intermediate step processed a payload containing "
@@ -202,9 +227,9 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
     @opik.track(name="process_step", project_name=PROJECT_NAME)
     def process_step(payload: str) -> str:
         # The output deliberately doesn't echo the marker — it only
-        # references the payload length so the agent can't shortcut
+        # references the payload length, so the agent can't shortcut
         # through `output` alone. The marker lives only in the input,
-        # which is what `get_trace_spans` truncates.
+        # which is what the overview truncates at the floor tier.
         return f"step processed {len(payload)} chars"
 
     @opik.track(name="noop_step", project_name=PROJECT_NAME)
@@ -214,14 +239,15 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
     @opik.track(name="task", project_name=PROJECT_NAME)
     def run_task(item: Dict[str, Any]) -> Dict[str, Any]:
         # Pad with filler so the marker lands well past the overview's
-        # OVERVIEW_IO_CHAR_LIMIT (500 chars) in the JSON-rendered span
+        # OVERVIEW_IO_FLOOR_CHAR_LIMIT (500 chars) in the JSON-rendered span
         # input `{"payload": "<filler><marker>"}`. `padding ` is 8 chars
         # × 70 = 560 chars; with the ~13-char JSON prefix the marker
         # starts past offset 573, so it sits beyond the overview cap by
-        # construction. Mixed-in noop_step guarantees more than one
-        # span exists, so the judge can't trivially infer "must be the
-        # only span."
-        filler = "padding " * 70
+        # construction (the ladder is pinned to the floor by the
+        # monkeypatch above). Mixed-in noop_step guarantees more than
+        # one span exists, so the judge can't trivially infer "must be
+        # the only span."
+        filler = "padding " * 170
         process_step(payload=f"{filler}{secret_marker} trailer")
         noop_step()
         return {"input": item["input"], "output": "completed"}

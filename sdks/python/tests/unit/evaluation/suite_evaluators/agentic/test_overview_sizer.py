@@ -53,6 +53,7 @@ class TestPickOverviewIoCharLimit:
             spans=[_span("s1", {"x": "y"})],
             parent_by_child={"s1": None},
             budget_tokens=1_000_000,
+            ladder=None,
         )
         assert limit == span_tree_serializer.NO_OVERVIEW_TRUNCATION
         assert limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[0]
@@ -76,6 +77,7 @@ class TestPickOverviewIoCharLimit:
             spans=[_span("s1", {"data": big})],
             parent_by_child={"s1": None},
             budget_tokens=1_000_000,
+            ladder=None,
         )
         assert limit == span_tree_serializer.NO_OVERVIEW_TRUNCATION
         span_input = overview["spans"][0]["input"]
@@ -89,6 +91,7 @@ class TestPickOverviewIoCharLimit:
             spans=[_span("s1", {"data": big})],
             parent_by_child={"s1": None},
             budget_tokens=100,
+            ladder=None,
         )
         assert limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[-1]
         # Floor overview is still returned (no extra render needed by
@@ -117,15 +120,13 @@ class TestPickOverviewIoCharLimit:
             spans=[_span("s1", {"data": big})],
             parent_by_child={"s1": None},
             budget_tokens=budget,
+            ladder=None,
         )
         assert chosen == target
 
     def test_zero_budget__returns_floor(self):
         limit, overview = span_tree_serializer.pick_overview_io_char_limit(
-            trace=_trace(),
-            spans=[],
-            parent_by_child={},
-            budget_tokens=0,
+            trace=_trace(), spans=[], parent_by_child={}, budget_tokens=0, ladder=None
         )
         assert limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[-1]
         # Overview still produced for the zero-budget shortcut.
@@ -151,6 +152,32 @@ class TestPickOverviewIoCharLimit:
             ladder=(50_000, 100),
         )
         assert chosen == 100
+
+    def test_monkeypatched_module_ladder_is_honored(self, monkeypatch):
+        """Regression: function defaults are evaluated at definition
+        time, so capturing the module-level ladder as the default value
+        would let monkeypatches silently no-op. The sizer must read the
+        module attribute at call time. The e2e
+        `test_test_suite_agentic__assertion_requires_buried_keyword_lookup`
+        test depends on this behavior to force floor-tier truncation
+        regardless of the model's context budget.
+        """
+        monkeypatch.setattr(
+            span_tree_serializer,
+            "OVERVIEW_IO_LIMIT_LADDER",
+            (span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT,),
+        )
+
+        big = "x" * 5_000
+        chosen, overview = span_tree_serializer.pick_overview_io_char_limit(
+            trace=_trace(input_payload={"prompt": big}),
+            spans=[],
+            parent_by_child={},
+            budget_tokens=1_000_000,  # would normally pick NO_OVERVIEW_TRUNCATION
+            ladder=None,
+        )
+        assert chosen == span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
+        assert "[TRUNCATED" in overview["trace"]["input"]
 
 
 class TestSerializeOverviewIoLimitParam:
