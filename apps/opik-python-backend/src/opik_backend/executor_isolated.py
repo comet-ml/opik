@@ -331,8 +331,18 @@ class IsolatedSubprocessExecutor:
                     }
             else:
                 self.logger.error(
-                    f"Subprocess exited with code {process.returncode}. stderr: {stderr}"
+                    f"Subprocess exited with code {process.returncode}. "
+                    f"stdout: {stdout}. stderr: {stderr}"
                 )
+                # Try to parse error JSON from stdout (optimizer_runner outputs it there)
+                try:
+                    lines = [line for line in stdout.split('\n') if line.strip()]
+                    if lines:
+                        result = json.loads(lines[-1])
+                        if isinstance(result, dict) and "error" in result:
+                            return result
+                except (json.JSONDecodeError, ValueError):
+                    pass
                 return {
                     "code": 500,
                     "error": f"Subprocess execution failed: {stderr}",

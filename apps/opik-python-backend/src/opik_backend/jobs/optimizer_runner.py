@@ -160,6 +160,11 @@ def main():
         if not config.model.startswith("openai/"):
             config.model = f"openai/{config.model}"
 
+        # The gateway requires an explicit stream field; LiteLLM omits it by
+        # default which causes an NPE in the Java backend's Anthropic mapper.
+        config.model_params = config.model_params or {}
+        config.model_params.setdefault("stream", False)
+
         # Ensure optimizer_params is a dict before mutating
         config.optimizer_params = config.optimizer_params or {}
 
