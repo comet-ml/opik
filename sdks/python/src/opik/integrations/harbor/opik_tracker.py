@@ -275,9 +275,9 @@ def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
     if not hasattr(Trial.run, "opik_tracked"):
         Trial.run = _wrap_trial_run(Trial.run, project_name)
 
-    if not hasattr(Trial._setup_environment, "opik_tracked"):
-        Trial._setup_environment = _wrap_setup_environment(
-            Trial._setup_environment, project_name
+    if not hasattr(Trial._setup_agent_environment, "opik_tracked"):
+        Trial._setup_agent_environment = _wrap_setup_agent_environment(
+            Trial._setup_agent_environment, project_name
         )
 
     if not hasattr(Trial._setup_agent, "opik_tracked"):
@@ -427,12 +427,12 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
     return wrapped
 
 
-def _wrap_setup_environment(
+def _wrap_setup_agent_environment(
     original: Callable, project_name: Optional[str]
 ) -> Callable:
-    """Wrap Trial._setup_environment with tracing."""
+    """Wrap Trial._setup_agent_environment with tracing."""
 
-    @track(name="setup_environment", tags=["harbor"], project_name=project_name)
+    @track(name="setup_agent_environment", tags=["harbor"], project_name=project_name)
     @functools.wraps(original)
     async def wrapped(self: Trial) -> None:
         opik_context.update_current_span(

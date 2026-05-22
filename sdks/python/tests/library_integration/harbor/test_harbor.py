@@ -42,11 +42,11 @@ class TestTrackHarborPatching:
             "Trial.run should have opik_tracked attribute after track_harbor()"
         )
 
-    def test_track_harbor_patches_trial_setup_environment(self):
-        """Verify Trial._setup_environment method is patched with opik_tracked attribute."""
+    def test_track_harbor_patches_trial_setup_agent_environment(self):
+        """Verify Trial._setup_agent_environment method is patched with opik_tracked attribute."""
         track_harbor()
-        assert hasattr(Trial._setup_environment, "opik_tracked"), (
-            "Trial._setup_environment should have opik_tracked attribute after track_harbor()"
+        assert hasattr(Trial._setup_agent_environment, "opik_tracked"), (
+            "Trial._setup_agent_environment should have opik_tracked attribute after track_harbor()"
         )
 
     def test_track_harbor_patches_trial_setup_agent(self):
@@ -114,7 +114,7 @@ class TestHarborClassesExist:
         """Verify Trial class has all methods we expect to patch."""
         expected_methods = [
             "run",
-            "_setup_environment",
+            "_setup_agent_environment",
             "_setup_agent",
             "_execute_agent",
             "_run_verification",
