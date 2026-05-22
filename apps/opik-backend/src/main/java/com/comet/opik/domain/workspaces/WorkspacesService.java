@@ -53,7 +53,27 @@ public interface WorkspacesService {
 
     List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    long countExperimentProjectMigrationSkipped();
+    /**
+     * Prompt-cycle parallel of {@link #markExperimentProjectMigrationSkipped}, recording the trap
+     * in the dedicated {@code prompt_project_migration_skipped_at} column so the experiment trap
+     * state isn't disturbed.
+     */
+    boolean markPromptProjectMigrationSkipped(String workspaceId, String reason);
+
+    List<String> findPromptProjectMigrationSkippedWorkspaceIds();
+
+    /**
+     * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
+     * are stamped with the system user — this is the dataset migration job's call site, never a
+     * direct user action.
+     *
+     * @return {@code true} when this caller flipped the flag; {@code false} when it was already set
+     */
+    boolean markDatasetProjectMigrationSkipped(String workspaceId, String reason);
+
+    List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
+
+    List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
 
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
@@ -163,9 +183,69 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     @Override
-    public long countExperimentProjectMigrationSkipped() {
+    public boolean markPromptProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertPromptProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
+    }
+
+    @Override
+    public List<String> findPromptProjectMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countExperimentProjectMigrationSkipped());
+                handle -> handle.attach(WorkspacesDAO.class).findPromptProjectMigrationSkippedWorkspaceIds());
+    }
+
+    /**
+     * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
+     * to the {@code dataset_project_migration_skipped_at} flag. Idempotent: returns {@code false}
+     * when this caller loses the race or the workspace was already trapped.
+     */
+    @Override
+    public boolean markDatasetProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertDatasetProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason,
+                            SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
+    }
+
+    @Override
+    public List<String> findDatasetProjectMigrationSkippedWorkspaceIds() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).findDatasetProjectMigrationSkippedWorkspaceIds());
+    }
+
+    @Override
+    public List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).countDatasetProjectMigrationSkippedByReason());
     }
 
     @Override

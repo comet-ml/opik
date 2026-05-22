@@ -1,20 +1,29 @@
 import React from "react";
 import { Path, useFieldArray, UseFormReturn } from "react-hook-form";
-import { Plus, X } from "lucide-react";
+import { LayoutGrid, Plus, Trash } from "lucide-react";
 import get from "lodash/get";
 
-import { Label } from "@/ui/label";
 import { FormControl, FormField, FormItem } from "@/ui/form";
-import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { Button } from "@/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
 } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
-import { DropdownOption } from "@/types/shared";
-import { AlertFormType, FeedbackScoreConditionType } from "./schema";
+import {
+  AlertFormType,
+  FeedbackScoreConditionGroupType,
+  FeedbackScoreConditionType,
+} from "./schema";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import { cn } from "@/lib/utils";
+import {
+  OPERATOR_VALUES,
+  WINDOW_LABEL_BY_VALUE,
+  WINDOW_OPTIONS,
+} from "./constants";
 
 type FeedbackScoreConditionsProps = {
   form: UseFormReturn<AlertFormType>;
@@ -25,28 +34,41 @@ type FeedbackScoreConditionsProps = {
 
 export const DEFAULT_FEEDBACK_SCORE_CONDITION: FeedbackScoreConditionType = {
   threshold: "",
-  window: "1800",
+  window: "86400",
   name: "",
   operator: ">",
 };
 
-const WINDOW_OPTIONS: DropdownOption<string>[] = [
-  { label: "5 minutes", value: "300" },
-  { label: "15 minutes", value: "900" },
-  { label: "30 minutes", value: "1800" },
-  { label: "1 hour", value: "3600" },
-  { label: "6 hours", value: "21600" },
-  { label: "12 hours", value: "43200" },
-  { label: "24 hours", value: "86400" },
-  { label: "7 days", value: "604800" },
-  { label: "15 days", value: "1296000" },
-  { label: "30 days", value: "2592000" },
-];
+export const DEFAULT_FEEDBACK_SCORE_CONDITION_GROUP: FeedbackScoreConditionGroupType =
+  {
+    conditions: [DEFAULT_FEEDBACK_SCORE_CONDITION],
+  };
 
-const OPERATOR_OPTIONS: DropdownOption<string>[] = [
-  { label: ">", value: ">" },
-  { label: "<", value: "<" },
-];
+const CONDITION_FIELDS = ["name", "operator", "threshold", "window"] as const;
+type ConditionField = (typeof CONDITION_FIELDS)[number];
+
+// Radix tooltips don't fire on elements with pointer-events: none (which
+// disabled buttons get from the Button variants), so when `disabled` is true
+// we wrap the child in a span that intercepts hover/focus for the tooltip.
+const DisabledTooltip: React.FC<{
+  message: string;
+  disabled: boolean;
+  children: React.ReactNode;
+}> = ({ message, disabled, children }) => (
+  <TooltipWrapper content={disabled ? message : null}>
+    <span className={cn("inline-flex", disabled && "cursor-not-allowed")}>
+      {children}
+    </span>
+  </TooltipWrapper>
+);
+
+const SeparatorBadge: React.FC<{ kind: "AND" | "OR" }> = ({ kind }) => (
+  <div className="py-0.5">
+    <span className="text-xs font-medium leading-4 text-violet-600">
+      {kind}
+    </span>
+  </div>
+);
 
 const FeedbackScoreConditions: React.FC<FeedbackScoreConditionsProps> = ({
   form,
@@ -54,264 +76,350 @@ const FeedbackScoreConditions: React.FC<FeedbackScoreConditionsProps> = ({
   eventType,
   projectId,
 }) => {
-  const conditionsFieldArray = useFieldArray({
+  const groupsFieldArray = useFieldArray({
     control: form.control,
-    name: `triggers.${triggerIndex}.conditions` as "triggers.0.conditions",
+    name: `triggers.${triggerIndex}.groups` as "triggers.0.groups",
   });
 
   const scoreSource =
-    eventType === ALERT_EVENT_TYPE.trace_feedback_score
-      ? ScoreSource.TRACES
-      : eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score
-        ? ScoreSource.THREADS
-        : ScoreSource.TRACES;
+    eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score
+      ? ScoreSource.THREADS
+      : ScoreSource.TRACES;
 
-  const addCondition = () => {
-    conditionsFieldArray.append(DEFAULT_FEEDBACK_SCORE_CONDITION);
-  };
+  const addGroup = () =>
+    groupsFieldArray.append({
+      conditions: [{ ...DEFAULT_FEEDBACK_SCORE_CONDITION }],
+    });
 
-  const removeCondition = (conditionIndex: number) => {
-    conditionsFieldArray.remove(conditionIndex);
-  };
+  const removeGroup = (groupIndex: number) =>
+    groupsFieldArray.remove(groupIndex);
 
-  // Helper to get validation errors for a specific field in a condition
-  const getConditionFieldErrors = (
-    conditionIndex: number,
-    fieldName: "name" | "operator" | "threshold" | "window",
-  ) => {
-    return get(form.formState.errors, [
-      "triggers",
-      triggerIndex,
-      "conditions",
-      conditionIndex,
-      fieldName,
-    ]);
-  };
+  const canDeleteGroup = groupsFieldArray.fields.length > 1;
 
   return (
     <div className="flex flex-col gap-2">
-      {conditionsFieldArray.fields.map((condition, conditionIndex) => {
-        const isFirstCondition = conditionIndex === 0;
-        const canDelete = conditionsFieldArray.fields.length > 1;
-
-        const nameErrors = getConditionFieldErrors(conditionIndex, "name");
-        const operatorErrors = getConditionFieldErrors(
-          conditionIndex,
-          "operator",
-        );
-        const thresholdErrors = getConditionFieldErrors(
-          conditionIndex,
-          "threshold",
-        );
-        const windowErrors = getConditionFieldErrors(conditionIndex, "window");
-
-        const hasErrors =
-          nameErrors?.message ||
-          operatorErrors?.message ||
-          thresholdErrors?.message ||
-          windowErrors?.message;
-
-        return (
-          <div key={condition.id} className="flex flex-col gap-1">
-            <div className="flex items-end gap-2.5">
-              {/* Grouped inputs: feedback score name, operator, threshold */}
-              <div className="flex flex-1 items-end">
-                <FormField
-                  control={form.control}
-                  name={
-                    `triggers.${triggerIndex}.conditions.${conditionIndex}.name` as Path<AlertFormType>
-                  }
-                  render={({ field }) => {
-                    const validationErrors = getConditionFieldErrors(
-                      conditionIndex,
-                      "name",
-                    );
-                    return (
-                      <FormItem className="min-w-[150px] flex-1">
-                        {isFirstCondition && (
-                          <Label className="comet-body-s-accented">
-                            When average
-                          </Label>
-                        )}
-                        {!isFirstCondition && (
-                          <Label className="comet-body-s-accented">
-                            Or when average
-                          </Label>
-                        )}
-                        <FormControl>
-                          <FeedbackDefinitionsAndScoresSelectBox
-                            value={field.value as string}
-                            onChange={field.onChange}
-                            scoreSource={scoreSource}
-                            entityIds={[projectId]}
-                            multiselect={false}
-                            className={cn("h-8 rounded-r-none", {
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    );
-                  }}
-                />
-                <FormField
-                  control={form.control}
-                  name={
-                    `triggers.${triggerIndex}.conditions.${conditionIndex}.operator` as Path<AlertFormType>
-                  }
-                  render={({ field }) => {
-                    const validationErrors = getConditionFieldErrors(
-                      conditionIndex,
-                      "operator",
-                    );
-                    return (
-                      <FormItem className="-ml-px w-16">
-                        <FormControl>
-                          <SelectBox
-                            value={field.value as string}
-                            onChange={field.onChange}
-                            options={OPERATOR_OPTIONS}
-                            className={cn("h-8 rounded-none text-left", {
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                            placeholder=">"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    );
-                  }}
-                />
-                <FormField
-                  control={form.control}
-                  name={
-                    `triggers.${triggerIndex}.conditions.${conditionIndex}.threshold` as Path<AlertFormType>
-                  }
-                  render={({ field }) => {
-                    const validationErrors = getConditionFieldErrors(
-                      conditionIndex,
-                      "threshold",
-                    );
-                    return (
-                      <FormItem className="-ml-px w-24">
-                        <FormControl>
-                          <Input
-                            className={cn("h-8 rounded-l-none", {
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                            type="number"
-                            step="0.01"
-                            placeholder="0.7"
-                            value={field.value as string}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            name={field.name}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    );
-                  }}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name={
-                  `triggers.${triggerIndex}.conditions.${conditionIndex}.window` as Path<AlertFormType>
-                }
-                render={({ field }) => {
-                  const validationErrors = getConditionFieldErrors(
-                    conditionIndex,
-                    "window",
-                  );
-                  return (
-                    <FormItem className="min-w-[120px] flex-1">
-                      <Label className="comet-body-s-accented">
-                        In the last
-                      </Label>
-                      <FormControl>
-                        <SelectBox
-                          value={field.value as string}
-                          onChange={field.onChange}
-                          options={WINDOW_OPTIONS}
-                          className={cn("h-8 text-left", {
-                            "border-destructive": Boolean(
-                              validationErrors?.message,
-                            ),
-                          })}
-                          placeholder="Select time window"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  );
-                }}
-              />
-              {canDelete && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="mb-0.5"
-                  onClick={() => removeCondition(conditionIndex)}
-                >
-                  <X className="size-4" />
-                </Button>
-              )}
-            </div>
-            {/* Error messages row - displayed below the inputs */}
-            {hasErrors && (
-              <div className="flex gap-2.5">
-                <div className="flex flex-1 gap-0">
-                  <div className="min-w-[150px] flex-1">
-                    {nameErrors?.message && (
-                      <p className="text-[0.8rem] font-medium text-destructive">
-                        {String(nameErrors.message)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="-ml-px w-16">
-                    {operatorErrors?.message && (
-                      <p className="text-[0.8rem] font-medium text-destructive">
-                        {String(operatorErrors.message)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="-ml-px w-24">
-                    {thresholdErrors?.message && (
-                      <p className="text-[0.8rem] font-medium text-destructive">
-                        {String(thresholdErrors.message)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="min-w-[120px] flex-1">
-                  {windowErrors?.message && (
-                    <p className="text-[0.8rem] font-medium text-destructive">
-                      {String(windowErrors.message)}
-                    </p>
-                  )}
-                </div>
-                {canDelete && <div className="w-8" />}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <div className="flex pt-1">
+      {groupsFieldArray.fields.map((group, groupIndex) => (
+        <React.Fragment key={group.id}>
+          {groupIndex > 0 && <SeparatorBadge kind="OR" />}
+          <ConditionGroup
+            form={form}
+            triggerIndex={triggerIndex}
+            groupIndex={groupIndex}
+            scoreSource={scoreSource}
+            projectId={projectId}
+            label={`Group ${groupIndex + 1}`}
+            onRemove={() => removeGroup(groupIndex)}
+            canRemove={canDeleteGroup}
+          />
+        </React.Fragment>
+      ))}
+      <div className="flex h-8 items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
         <Button
           type="button"
-          variant="outline"
-          size="sm"
-          onClick={addCondition}
+          variant="ghost"
+          size="xs"
+          className="text-foreground hover:text-primary-hover"
+          onClick={addGroup}
         >
-          <Plus className="mr-1 size-3" />
-          Add condition
+          <Plus className="mr-0.5 size-3" />
+          Add OR group
         </Button>
       </div>
+    </div>
+  );
+};
+
+type ConditionGroupProps = {
+  form: UseFormReturn<AlertFormType>;
+  triggerIndex: number;
+  groupIndex: number;
+  scoreSource: ScoreSource;
+  projectId: string;
+  label: string;
+  onRemove: () => void;
+  canRemove: boolean;
+};
+
+const ConditionGroup: React.FC<ConditionGroupProps> = ({
+  form,
+  triggerIndex,
+  groupIndex,
+  scoreSource,
+  projectId,
+  label,
+  onRemove,
+  canRemove,
+}) => {
+  const conditionsFieldArray = useFieldArray({
+    control: form.control,
+    name: `triggers.${triggerIndex}.groups.${groupIndex}.conditions` as "triggers.0.groups.0.conditions",
+  });
+
+  const addCondition = () =>
+    conditionsFieldArray.append({ ...DEFAULT_FEEDBACK_SCORE_CONDITION });
+
+  // Deleting the only condition in a group removes the whole group (so the
+  // user doesn't end up with an empty group), unless this is the last group
+  // — then the delete is disabled to keep at least one group around.
+  const handleDeleteCondition = (conditionIndex: number) => {
+    if (conditionsFieldArray.fields.length === 1) {
+      onRemove();
+    } else {
+      conditionsFieldArray.remove(conditionIndex);
+    }
+  };
+
+  const canDeleteCondition =
+    conditionsFieldArray.fields.length > 1 || canRemove;
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-soft-background">
+      <div className="flex h-8 items-center justify-between pl-2 pr-3">
+        <div className="flex items-center gap-1.5">
+          <span className="flex size-4 items-center justify-center rounded bg-violet-600 text-white">
+            <LayoutGrid className="size-2.5" />
+          </span>
+          <span className="text-xs font-medium leading-4 text-muted-slate">
+            {label}
+          </span>
+        </div>
+        <DisabledTooltip
+          disabled={!canRemove}
+          message="Can't remove — every alert needs at least one group with at least one condition."
+        >
+          <Button
+            type="button"
+            variant="minimal"
+            size="icon-3xs"
+            className="size-3 [&>svg]:size-3"
+            onClick={onRemove}
+            disabled={!canRemove}
+            aria-label="Remove group"
+          >
+            <Trash />
+          </Button>
+        </DisabledTooltip>
+      </div>
+      <div className="flex flex-col gap-1.5 px-1.5 pb-1.5">
+        {conditionsFieldArray.fields.map((condition, conditionIndex) => (
+          <React.Fragment key={condition.id}>
+            {conditionIndex > 0 && <SeparatorBadge kind="AND" />}
+            <ConditionRow
+              form={form}
+              triggerIndex={triggerIndex}
+              groupIndex={groupIndex}
+              conditionIndex={conditionIndex}
+              scoreSource={scoreSource}
+              projectId={projectId}
+              onDelete={() => handleDeleteCondition(conditionIndex)}
+              canDelete={canDeleteCondition}
+            />
+          </React.Fragment>
+        ))}
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="self-start pl-1 text-foreground hover:text-primary-hover"
+          onClick={addCondition}
+        >
+          <Plus className="mr-0.5 size-3" />
+          Add AND condition
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+type ConditionRowProps = {
+  form: UseFormReturn<AlertFormType>;
+  triggerIndex: number;
+  groupIndex: number;
+  conditionIndex: number;
+  scoreSource: ScoreSource;
+  projectId: string;
+  onDelete: () => void;
+  canDelete: boolean;
+};
+
+const fieldPath = (
+  triggerIndex: number,
+  groupIndex: number,
+  conditionIndex: number,
+  field: ConditionField,
+) =>
+  `triggers.${triggerIndex}.groups.${groupIndex}.conditions.${conditionIndex}.${field}` as Path<AlertFormType>;
+
+const ConditionRow: React.FC<ConditionRowProps> = ({
+  form,
+  triggerIndex,
+  groupIndex,
+  conditionIndex,
+  scoreSource,
+  projectId,
+  onDelete,
+  canDelete,
+}) => {
+  const errorBase = [
+    "triggers",
+    triggerIndex,
+    "groups",
+    groupIndex,
+    "conditions",
+    conditionIndex,
+  ] as const;
+  const errors = Object.fromEntries(
+    CONDITION_FIELDS.map((f) => [
+      f,
+      (
+        get(form.formState.errors, [...errorBase, f]) as
+          | { message?: string }
+          | undefined
+      )?.message,
+    ]),
+  ) as Record<ConditionField, string | undefined>;
+  const hasErrors = CONDITION_FIELDS.some((f) => errors[f]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex min-h-11 items-stretch overflow-hidden rounded-md border border-border bg-background">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 px-2 py-1.5">
+          <FormField
+            control={form.control}
+            name={fieldPath(triggerIndex, groupIndex, conditionIndex, "name")}
+            render={({ field }) => (
+              <FormItem className="flex min-w-[160px] flex-1">
+                <FormControl>
+                  <FeedbackDefinitionsAndScoresSelectBox
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    scoreSource={scoreSource}
+                    entityIds={[projectId]}
+                    multiselect={false}
+                    className={cn("h-8 w-full font-normal", {
+                      "border-destructive": Boolean(errors.name),
+                    })}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={fieldPath(
+              triggerIndex,
+              groupIndex,
+              conditionIndex,
+              "operator",
+            )}
+            render={({ field }) => (
+              <FormItem className="shrink-0">
+                <FormControl>
+                  <ToggleGroup
+                    type="single"
+                    variant="secondary"
+                    value={field.value as string}
+                    onValueChange={(v) => v && field.onChange(v)}
+                    className={cn("h-8", {
+                      "border-destructive": Boolean(errors.operator),
+                    })}
+                  >
+                    {OPERATOR_VALUES.map((op) => (
+                      <ToggleGroupItem
+                        key={op}
+                        value={op}
+                        size="sm"
+                        aria-label={op === ">" ? "greater than" : "less than"}
+                      >
+                        {op}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={fieldPath(
+              triggerIndex,
+              groupIndex,
+              conditionIndex,
+              "threshold",
+            )}
+            render={({ field }) => (
+              <FormItem className="w-[87px] shrink-0">
+                <FormControl>
+                  <Input
+                    className={cn("h-8 text-right", {
+                      "border-destructive": Boolean(errors.threshold),
+                    })}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.7"
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={fieldPath(triggerIndex, groupIndex, conditionIndex, "window")}
+            render={({ field }) => (
+              <FormItem className="flex min-w-[160px] flex-1">
+                <FormControl>
+                  <SelectBox
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    options={WINDOW_OPTIONS}
+                    className={cn("h-8 w-full text-left font-normal", {
+                      "border-destructive": Boolean(errors.window),
+                    })}
+                    placeholder="Select time window"
+                    renderTrigger={(value) => {
+                      const label = WINDOW_LABEL_BY_VALUE[value];
+                      if (!label) return null;
+                      return (
+                        <span className="truncate">
+                          <span className="text-muted-slate">In the last</span>{" "}
+                          {label}
+                        </span>
+                      );
+                    }}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+        <DisabledTooltip
+          disabled={!canDelete}
+          message="Can't remove — every alert needs at least one group with at least one condition."
+        >
+          <Button
+            type="button"
+            variant="minimal"
+            size="icon-2xs"
+            className="h-auto w-6 rounded-none border-l border-border opacity-50 hover:opacity-100"
+            onClick={onDelete}
+            disabled={!canDelete}
+            aria-label="Remove condition"
+          >
+            <Trash />
+          </Button>
+        </DisabledTooltip>
+      </div>
+      {hasErrors && (
+        <div className="flex flex-wrap gap-x-2 px-2 text-[0.8rem] font-medium text-destructive">
+          {CONDITION_FIELDS.map(
+            (f) => errors[f] && <span key={f}>{errors[f]}</span>,
+          )}
+        </div>
+      )}
     </div>
   );
 };

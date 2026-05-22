@@ -995,4 +995,62 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       expect(updatedVersion2?.tags?.length).toBe(tags2.length + additionalTags.length);
     }, 30000);
   });
+
+  describe("Sequential Version Numbers", () => {
+    it("should retrieve each version by its sequential version number", async () => {
+      const promptName = `test-sequential-versions-${Date.now()}`;
+
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: "Sequential v1 {{input}}",
+      });
+      createdPromptIds.push(v1.id!);
+
+      await client.createPrompt({
+        name: promptName,
+        prompt: "Sequential v2 {{input}}",
+      });
+      await client.createPrompt({
+        name: promptName,
+        prompt: "Sequential v3 {{input}}",
+      });
+
+      const fetchedV1 = await client.getPrompt({
+        name: promptName,
+        version: "v1",
+      });
+      const fetchedV2 = await client.getPrompt({
+        name: promptName,
+        version: "v2",
+      });
+      const fetchedV3 = await client.getPrompt({
+        name: promptName,
+        version: "v3",
+      });
+      const fetchedLatest = await client.getPrompt({ name: promptName });
+
+      expect(fetchedV1?.prompt).toBe("Sequential v1 {{input}}");
+      expect(fetchedV1?.version).toBe("v1");
+
+      expect(fetchedV2?.prompt).toBe("Sequential v2 {{input}}");
+      expect(fetchedV2?.version).toBe("v2");
+
+      expect(fetchedV3?.prompt).toBe("Sequential v3 {{input}}");
+      expect(fetchedV3?.version).toBe("v3");
+
+      // Fetching without a selector returns the latest version.
+      expect(fetchedLatest?.prompt).toBe("Sequential v3 {{input}}");
+      expect(fetchedLatest?.version).toBe("v3");
+    }, 30000);
+
+    it("should reject when both commit and version are passed", async () => {
+      await expect(
+        client.getPrompt({
+          name: "anything",
+          commit: "abc123de",
+          version: "v1",
+        }),
+      ).rejects.toThrow(/Provide either `commit` or `version`/);
+    });
+  });
 });

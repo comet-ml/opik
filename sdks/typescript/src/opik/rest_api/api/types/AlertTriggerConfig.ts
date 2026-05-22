@@ -7,6 +7,8 @@ export interface AlertTriggerConfig {
     alertTriggerId?: string;
     type: OpikApi.AlertTriggerConfigType;
     configValue?: Record<string, string>;
+    /** Groups configs within a trigger: same group_index means AND between configs, different group_index means OR between groups. Null means a legacy/singleton group of one config. Always null for scope:project configs. */
+    groupIndex?: number;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

@@ -204,9 +204,13 @@ export function buildCacheKey(
   commit: string | undefined,
   projectName: string | undefined,
   templateStructure: string,
-  maskId?: string | null
+  maskId?: string | null,
+  version?: string,
 ): string {
-  return JSON.stringify([name, commit ?? "", projectName ?? "", templateStructure, maskId ?? ""]);
+  // version and commit can never collide (commits are 8 hex chars, versions are "v<N>")
+  // so we reuse the same slot in the key.
+  const pin = version ?? commit ?? "";
+  return JSON.stringify([name, pin, projectName ?? "", templateStructure, maskId ?? ""]);
 }
 
 export async function getOrFetch<T extends BasePrompt>(
@@ -216,11 +220,15 @@ export async function getOrFetch<T extends BasePrompt>(
   templateStructure: string,
   fetchFn: () => Promise<T | null>,
   ttlSeconds?: number,
-  maskId?: string | null
+  maskId?: string | null,
+  version?: string,
 ): Promise<T | null> {
+  // Only commit pins indefinitely. A sequential version like "v3" can be
+  // reassigned by the backend if the underlying version is deleted and
+  // recreated, so it follows the normal TTL refresh.
   const resolvedTtl = commit != null ? null : (ttlSeconds ?? DEFAULT_TTL_SECONDS);
   const refreshCallback = resolvedTtl !== null && !maskId ? fetchFn : undefined;
-  const key = buildCacheKey(name, commit, projectName, templateStructure, maskId);
+  const key = buildCacheKey(name, commit, projectName, templateStructure, maskId, version);
   const result = await globalCache.getOrFetch(key, fetchFn, resolvedTtl, refreshCallback);
   return result as T | null;
 }
