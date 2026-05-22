@@ -6,6 +6,7 @@ import { Clock, User } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
+import { normalizeChatTemplate } from "@/lib/chatTemplate";
 import { PromptVersion } from "@/types/prompts";
 import { cn } from "@/lib/utils";
 import { formatDate, getTimeFromNow } from "@/lib/date";
@@ -41,7 +42,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   );
 
   const baseText = useMemo(
-    () => baseVersion?.template || "",
+    () => normalizeChatTemplate(baseVersion?.template || ""),
     [baseVersion?.template],
   );
 
@@ -55,7 +56,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   }, [baseVersion]);
 
   const diffText = useMemo(
-    () => diffVersion?.template || "",
+    () => normalizeChatTemplate(diffVersion?.template || ""),
     [diffVersion?.template],
   );
 
@@ -130,6 +131,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     version: PromptVersion | undefined,
     c1: string,
     c2: string,
+    side: "base" | "diff",
   ) => {
     if (!version) return null;
 
@@ -166,7 +168,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
           )}
         >
           <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-3">
-            <TextDiff content1={c1} content2={c2} mode="words" />
+            <TextDiff content1={c1} content2={c2} mode="words" side={side} />
           </div>
         </div>
       </div>
@@ -194,8 +196,8 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <div className="flex flex-col gap-4 pb-2">
             <div className="grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none">
-              {renderVersionColumn(baseVersion, baseText, baseText)}
-              {renderVersionColumn(diffVersion, baseText, diffText)}
+              {renderVersionColumn(baseVersion, baseText, diffText, "base")}
+              {renderVersionColumn(diffVersion, baseText, diffText, "diff")}
             </div>
             {(imagesHaveChanges || videosHaveChanges || audiosHaveChanges) && (
               <>
