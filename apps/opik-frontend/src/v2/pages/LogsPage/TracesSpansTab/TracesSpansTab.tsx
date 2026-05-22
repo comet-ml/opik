@@ -130,6 +130,7 @@ import { LOGS_TYPE } from "@/constants/traces";
 import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 import {
   COLUMNS_TAGS_ORDER_KEY_SUFFIX,
+  getTraceDynamicColumnIdsExcludedFromSelectAll,
   useTagFilterHandler,
   useTraceTagColumns,
 } from "@/hooks/useTraceTagColumns";
@@ -742,7 +743,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setPage(1);
   }, [setSearch, setFilters, setEnvironment, setPage]);
   const handleTagClick = useTagFilterHandler({
-    filters,
     setFilters,
     setPage,
   });
@@ -831,15 +831,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return buildDynamicMetadataColumns(normalizedPaths);
   }, [metadataPaths]);
 
-  const {
-    tagColumnsData,
-    tagColumnsOrder,
-    setTagColumnsOrder,
-    tagColumnIdsExcludedFromSelectAll,
-  } = useTraceTagColumns({
-    rows,
-    storageKey: `${type}-${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
-  });
+  const { tagColumns, tagColumnSection, tagColumnIdsExcludedFromSelectAll } =
+    useTraceTagColumns({
+      rows,
+      storageKey: `${type}-${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
+      selectedColumns,
+      sortableColumns: sortableBy,
+    });
 
   // Only include feedback scores in dynamic columns cache (auto-selects new ones)
   // Metadata columns are NOT auto-selected - users must manually choose them
@@ -1227,14 +1225,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           sortableColumns: sortableBy,
         },
       ),
-      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
-        tagColumnsData,
-        {
-          columnsOrder: tagColumnsOrder,
-          selectedColumns,
-          sortableColumns: sortableBy,
-        },
-      ),
+      ...tagColumns,
     ];
   }, [
     sortableBy,
@@ -1245,8 +1236,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     scoresColumnsOrder,
     metadataColumnsData,
     metadataColumnsOrder,
-    tagColumnsData,
-    tagColumnsOrder,
+    tagColumns,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -1324,13 +1314,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       });
     }
 
-    if (tagColumnsData.length > 0) {
-      sections.push({
-        title: "Tag values",
-        columns: tagColumnsData,
-        order: tagColumnsOrder,
-        onOrderChange: setTagColumnsOrder,
-      });
+    if (tagColumnSection) {
+      sections.push(tagColumnSection);
     }
 
     return sections;
@@ -1341,16 +1326,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsData,
     metadataColumnsOrder,
     setMetadataColumnsOrder,
-    tagColumnsData,
-    tagColumnsOrder,
-    setTagColumnsOrder,
+    tagColumnSection,
   ]);
 
   const dynamicColumnIdsExcludedFromSelectAll = useMemo(
-    () => [
-      ...metadataColumnsData.map((col) => col.id),
-      ...tagColumnIdsExcludedFromSelectAll,
-    ],
+    () =>
+      getTraceDynamicColumnIdsExcludedFromSelectAll(
+        metadataColumnsData,
+        tagColumnIdsExcludedFromSelectAll,
+      ),
     [metadataColumnsData, tagColumnIdsExcludedFromSelectAll],
   );
 

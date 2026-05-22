@@ -6,6 +6,7 @@ import { COLUMN_TYPE } from "@/types/shared";
 import { BaseTraceData } from "@/types/traces";
 import {
   COLUMNS_TAGS_ORDER_KEY_SUFFIX,
+  getTraceDynamicColumnIdsExcludedFromSelectAll,
   useTagFilterHandler,
   useTraceTagColumns,
 } from "./useTraceTagColumns";
@@ -32,7 +33,6 @@ describe("useTagFilterHandler", () => {
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
-        filters: [],
         setFilters,
         setPage,
       }),
@@ -69,7 +69,6 @@ describe("useTagFilterHandler", () => {
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
-        filters: currentFilters,
         setFilters,
         setPage,
       }),
@@ -77,8 +76,8 @@ describe("useTagFilterHandler", () => {
 
     act(() => result.current("myprotein-en-gb"));
 
-    expect(setFilters).not.toHaveBeenCalled();
-    expect(nextFilters).toBeUndefined();
+    expect(setFilters).toHaveBeenCalledWith(expect.any(Function));
+    expect(nextFilters).toBe(currentFilters);
     expect(setPage).not.toHaveBeenCalled();
   });
 
@@ -91,7 +90,6 @@ describe("useTagFilterHandler", () => {
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
-        filters: [],
         setFilters,
         setPage,
       }),
@@ -108,7 +106,7 @@ describe("useTagFilterHandler", () => {
       operator: "contains",
       value: "myprotein-en-gb",
     });
-    expect(setPage).toHaveBeenCalledTimes(2);
+    expect(setPage).toHaveBeenCalledTimes(1);
     expect(setPage).toHaveBeenCalledWith(1);
   });
 
@@ -126,7 +124,6 @@ describe("useTagFilterHandler", () => {
     });
     const { result } = renderHook(() =>
       useTagFilterHandler({
-        filters: [],
         setFilters,
         setPage,
       }),
@@ -170,10 +167,11 @@ describe("useTraceTagColumns", () => {
           { tags: ["myprotein-en-gb"] },
         ],
         storageKey: "trace-tags",
+        selectedColumns: ["tags.alpha"],
+        sortableColumns: ["tags.*"],
       }),
     );
 
-    expect(result.current.tagColumnsOrder).toEqual(["tags.beta"]);
     expect(
       result.current.tagColumnsData.map(({ id, label, type, sortable }) => ({
         id,
@@ -216,5 +214,26 @@ describe("useTraceTagColumns", () => {
         tags: ["beta"],
       } as BaseTraceData),
     ).toBe("-");
+    expect(
+      result.current.tagColumns.map(
+        (column) => "accessorKey" in column && column.accessorKey,
+      ),
+    ).toEqual(["tags.alpha"]);
+    expect(result.current.tagColumnSection).toMatchObject({
+      title: "Tag values",
+      columns: result.current.tagColumnsData,
+      order: ["tags.beta"],
+    });
+  });
+});
+
+describe("getTraceDynamicColumnIdsExcludedFromSelectAll", () => {
+  it("combines metadata and tag column ids", () => {
+    expect(
+      getTraceDynamicColumnIdsExcludedFromSelectAll(
+        [{ id: "metadata.user" }],
+        ["tags.alpha"],
+      ),
+    ).toEqual(["metadata.user", "tags.alpha"]);
   });
 });

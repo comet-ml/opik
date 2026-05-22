@@ -97,6 +97,7 @@ import { Filter } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import {
   COLUMNS_TAGS_ORDER_KEY_SUFFIX,
+  getTraceDynamicColumnIdsExcludedFromSelectAll,
   useTagFilterHandler,
   useTraceTagColumns,
 } from "@/hooks/useTraceTagColumns";
@@ -652,7 +653,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setFilters([]);
   }, [setSearch, setFilters]);
   const handleTagClick = useTagFilterHandler({
-    filters,
     setFilters,
     setPage,
   });
@@ -726,15 +726,13 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     return buildDynamicMetadataColumns(normalizedPaths);
   }, [metadataPaths]);
 
-  const {
-    tagColumnsData,
-    tagColumnsOrder,
-    setTagColumnsOrder,
-    tagColumnIdsExcludedFromSelectAll,
-  } = useTraceTagColumns({
-    rows,
-    storageKey: `${TLS_STORAGE_PREFIX}${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
-  });
+  const { tagColumns, tagColumnSection, tagColumnIdsExcludedFromSelectAll } =
+    useTraceTagColumns({
+      rows,
+      storageKey: `${TLS_STORAGE_PREFIX}${COLUMNS_TAGS_ORDER_KEY_SUFFIX}`,
+      selectedColumns,
+      sortableColumns: sortableBy,
+    });
 
   const dynamicColumnsIds = useMemo(
     () => dynamicScoresColumns.map((c) => c.id),
@@ -844,11 +842,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           sortableColumns: sortableBy,
         },
       ),
-      ...convertColumnDataToColumn<BaseTraceData, Trace>(tagColumnsData, {
-        columnsOrder: tagColumnsOrder,
-        selectedColumns,
-        sortableColumns: sortableBy,
-      }),
+      ...tagColumns,
     ];
   }, [
     sortableBy,
@@ -858,8 +852,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     scoresColumnsOrder,
     metadataColumnsData,
     metadataColumnsOrder,
-    tagColumnsData,
-    tagColumnsOrder,
+    tagColumns,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -945,13 +938,8 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       });
     }
 
-    if (tagColumnsData.length > 0) {
-      sections.push({
-        title: "Tag values",
-        columns: tagColumnsData,
-        order: tagColumnsOrder,
-        onOrderChange: setTagColumnsOrder,
-      });
+    if (tagColumnSection) {
+      sections.push(tagColumnSection);
     }
 
     return sections;
@@ -962,16 +950,15 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     metadataColumnsData,
     metadataColumnsOrder,
     setMetadataColumnsOrder,
-    tagColumnsData,
-    tagColumnsOrder,
-    setTagColumnsOrder,
+    tagColumnSection,
   ]);
 
   const dynamicColumnIdsExcludedFromSelectAll = useMemo(
-    () => [
-      ...metadataColumnsData.map((col) => col.id),
-      ...tagColumnIdsExcludedFromSelectAll,
-    ],
+    () =>
+      getTraceDynamicColumnIdsExcludedFromSelectAll(
+        metadataColumnsData,
+        tagColumnIdsExcludedFromSelectAll,
+      ),
     [metadataColumnsData, tagColumnIdsExcludedFromSelectAll],
   );
 

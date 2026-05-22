@@ -1,15 +1,16 @@
 import { useCallback, useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { generateTagFilter } from "@/lib/filters";
+import { convertColumnDataToColumn } from "@/lib/table";
 import { buildDynamicTagColumns } from "@/lib/tags";
 import { Filter } from "@/types/filters";
 import { BaseTraceData } from "@/types/traces";
 import { ColumnData } from "@/types/shared";
 
 export const COLUMNS_TAGS_ORDER_KEY_SUFFIX = "tag-columns-order";
+const TAG_COLUMNS_SECTION_TITLE = "Tag values";
 
 type UseTagFilterHandlerParams = {
-  filters: Filter[];
   setFilters: (
     filters: Filter[] | ((filters?: Filter[] | null) => Filter[]),
   ) => void;
@@ -25,13 +26,12 @@ const hasTagFilter = (filters: Filter[], tag: string) =>
   );
 
 export const useTagFilterHandler = ({
-  filters,
   setFilters,
   setPage,
 }: UseTagFilterHandlerParams) => {
   return useCallback(
     (tag: string) => {
-      if (hasTagFilter(filters, tag)) return;
+      let didAppendFilter = false;
 
       setFilters((currentFilters) => {
         const latestFilters = Array.isArray(currentFilters)
@@ -42,23 +42,48 @@ export const useTagFilterHandler = ({
           return latestFilters;
         }
 
+        didAppendFilter = true;
         return [...latestFilters, ...generateTagFilter(tag)];
       });
 
-      setPage(1);
+      if (didAppendFilter) {
+        setPage(1);
+      }
     },
-    [filters, setFilters, setPage],
+    [setFilters, setPage],
   );
 };
+
+export const getTraceDynamicColumnIdsExcludedFromSelectAll = (
+  metadataColumnsData: Array<Pick<ColumnData<BaseTraceData>, "id">>,
+  tagColumnIdsExcludedFromSelectAll: string[],
+) => [
+  ...metadataColumnsData.map((col) => col.id),
+  ...tagColumnIdsExcludedFromSelectAll,
+];
 
 type UseTraceTagColumnsParams<Row extends Pick<BaseTraceData, "tags">> = {
   rows: Row[];
   storageKey: string;
+  selectedColumns?: string[];
+  sortableColumns?: string[];
 };
 
-export const useTraceTagColumns = <Row extends Pick<BaseTraceData, "tags">>({
+type TraceTagColumnSection = {
+  title: string;
+  columns: ColumnData<BaseTraceData>[];
+  order: string[];
+  onOrderChange: (order: string[]) => void;
+};
+
+export const useTraceTagColumns = <
+  Row extends Pick<BaseTraceData, "tags">,
+  TableRow = Row,
+>({
   rows,
   storageKey,
+  selectedColumns,
+  sortableColumns = [],
 }: UseTraceTagColumnsParams<Row>) => {
   const [tagColumnsOrder, setTagColumnsOrder] = useLocalStorageState<string[]>(
     storageKey,
@@ -88,10 +113,31 @@ export const useTraceTagColumns = <Row extends Pick<BaseTraceData, "tags">>({
     [tagColumnsData],
   );
 
+  const tagColumns = useMemo(
+    () =>
+      convertColumnDataToColumn<BaseTraceData, TableRow>(tagColumnsData, {
+        columnsOrder: tagColumnsOrder,
+        selectedColumns,
+        sortableColumns,
+      }),
+    [tagColumnsData, tagColumnsOrder, selectedColumns, sortableColumns],
+  );
+
+  const tagColumnSection = useMemo<TraceTagColumnSection | undefined>(() => {
+    if (tagColumnsData.length === 0) return undefined;
+
+    return {
+      title: TAG_COLUMNS_SECTION_TITLE,
+      columns: tagColumnsData,
+      order: tagColumnsOrder,
+      onOrderChange: setTagColumnsOrder,
+    };
+  }, [tagColumnsData, tagColumnsOrder, setTagColumnsOrder]);
+
   return {
+    tagColumns,
     tagColumnsData,
-    tagColumnsOrder,
-    setTagColumnsOrder,
+    tagColumnSection,
     tagColumnIdsExcludedFromSelectAll,
   };
 };
