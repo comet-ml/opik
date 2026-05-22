@@ -13,7 +13,6 @@ import { ChevronDown, Plus, Sparkles } from "lucide-react";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { Label } from "@/ui/label";
 import { Button } from "@/ui/button";
-import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
 import { useActiveProjectId } from "@/store/AppStore";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
@@ -54,8 +53,6 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
 }) => {
   const activeProjectId = useActiveProjectId();
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
-
-  const [viewMode, setViewMode] = useState<"pretty" | "raw">("raw");
 
   const metadataString = promptMetadata
     ? JSON.stringify(promptMetadata, null, 2)
@@ -99,7 +96,6 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
     setShowRawView(false);
     setRawJsonValue("");
     setIsRawJsonValid(true);
-    setViewMode("raw");
   }, [open]);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
@@ -255,43 +251,13 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
             <div className="space-y-1.5">
               <Label>Prompt</Label>
               <div className="rounded-md border bg-soft-background">
-                <div className="flex items-center justify-between border-b px-3 py-1.5">
-                  <Button
-                    variant="ghost"
-                    size="2xs"
-                    onClick={() =>
-                      setViewMode((m) => (m === "pretty" ? "raw" : "pretty"))
-                    }
-                  >
-                    {viewMode === "pretty" ? (
-                      <>
-                        Pretty <Sparkles className="ml-1 size-3" />
-                      </>
-                    ) : (
-                      <>Raw</>
-                    )}
-                    <ChevronDown className="ml-1 size-3" />
-                  </Button>
-                </div>
                 <div className="min-h-[120px] p-3">
-                  {viewMode === "pretty" ? (
-                    localText ? (
-                      <MarkdownPreview className="prose-sm">
-                        {localText}
-                      </MarkdownPreview>
-                    ) : (
-                      <span className="comet-body-s text-light-slate">
-                        Type your prompt...
-                      </span>
-                    )
-                  ) : (
-                    <AutoResizeTextarea
-                      value={localText}
-                      onChange={handleContentChange}
-                      placeholder="Type your prompt..."
-                      className="comet-body-s"
-                    />
-                  )}
+                  <AutoResizeTextarea
+                    value={localText}
+                    onChange={handleContentChange}
+                    placeholder="Type your prompt..."
+                    className="comet-body-s"
+                  />
                 </div>
               </div>
               <p className="comet-body-xs text-light-slate">
