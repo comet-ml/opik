@@ -263,6 +263,29 @@ def _patch_step_class() -> None:
     setattr(_patch_step_class, "_patched", True)
 
 
+def _patch_method_if_present(
+    cls: type,
+    method_name: str,
+    wrapper: Callable[[Callable, Optional[str]], Callable],
+    project_name: Optional[str],
+) -> None:
+    """Wrap ``cls.method_name`` with ``wrapper`` iff the method exists and isn't already tracked."""
+    method = getattr(cls, method_name, None)
+    if method is None or hasattr(method, "opik_tracked"):
+        return
+    setattr(cls, method_name, wrapper(method, project_name))
+
+
+# harbor 0.8.0 renamed ``Trial._setup_environment`` to
+# ``Trial._setup_agent_environment``. We patch whichever name the installed
+# version exposes — _patch_method_if_present skips missing attributes — so
+# track_harbor() keeps working across the rename.
+_TRIAL_SETUP_ENVIRONMENT_METHOD_NAMES: Tuple[str, ...] = (
+    "_setup_environment",
+    "_setup_agent_environment",
+)
+
+
 def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
     """Internal: Enable Opik tracking for Harbor by patching classes.
 
@@ -275,9 +298,9 @@ def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
     if not hasattr(Trial.run, "opik_tracked"):
         Trial.run = _wrap_trial_run(Trial.run, project_name)
 
-    if not hasattr(Trial._setup_agent_environment, "opik_tracked"):
-        Trial._setup_agent_environment = _wrap_setup_agent_environment(
-            Trial._setup_agent_environment, project_name
+    for setup_environment_method_name in _TRIAL_SETUP_ENVIRONMENT_METHOD_NAMES:
+        _patch_method_if_present(
+            Trial, setup_environment_method_name, _wrap_setup_environment, project_name
         )
 
     if not hasattr(Trial._setup_agent, "opik_tracked"):
@@ -427,12 +450,18 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
     return wrapped
 
 
-def _wrap_setup_agent_environment(
+def _wrap_setup_environment(
     original: Callable, project_name: Optional[str]
 ) -> Callable:
-    """Wrap Trial._setup_agent_environment with tracing."""
+    """Wrap Trial's environment-setup method with tracing.
 
-    @track(name="setup_agent_environment", tags=["harbor"], project_name=project_name)
+    Used for both harbor < 0.8 (``_setup_environment``) and harbor >= 0.8
+    (``_setup_agent_environment``) — the underlying signature ``(self: Trial)
+    -> None`` is identical, only the attribute name changed. The span name
+    stays as ``setup_environment`` so existing dashboards keep working.
+    """
+
+    @track(name="setup_environment", tags=["harbor"], project_name=project_name)
     @functools.wraps(original)
     async def wrapped(self: Trial) -> None:
         opik_context.update_current_span(

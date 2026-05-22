@@ -42,8 +42,23 @@ class TestTrackHarborPatching:
             "Trial.run should have opik_tracked attribute after track_harbor()"
         )
 
+    @pytest.mark.skipif(
+        not hasattr(Trial, "_setup_environment"),
+        reason="harbor >= 0.8.0 renamed _setup_environment to _setup_agent_environment",
+    )
+    def test_track_harbor_patches_trial_setup_environment(self):
+        """Verify Trial._setup_environment method is patched (harbor < 0.8.0)."""
+        track_harbor()
+        assert hasattr(Trial._setup_environment, "opik_tracked"), (
+            "Trial._setup_environment should have opik_tracked attribute after track_harbor()"
+        )
+
+    @pytest.mark.skipif(
+        not hasattr(Trial, "_setup_agent_environment"),
+        reason="harbor < 0.8.0 exposed _setup_environment; this method only exists from 0.8.0",
+    )
     def test_track_harbor_patches_trial_setup_agent_environment(self):
-        """Verify Trial._setup_agent_environment method is patched with opik_tracked attribute."""
+        """Verify Trial._setup_agent_environment method is patched (harbor >= 0.8.0)."""
         track_harbor()
         assert hasattr(Trial._setup_agent_environment, "opik_tracked"), (
             "Trial._setup_agent_environment should have opik_tracked attribute after track_harbor()"
@@ -114,7 +129,6 @@ class TestHarborClassesExist:
         """Verify Trial class has all methods we expect to patch."""
         expected_methods = [
             "run",
-            "_setup_agent_environment",
             "_setup_agent",
             "_execute_agent",
             "_run_verification",
@@ -123,6 +137,16 @@ class TestHarborClassesExist:
             assert hasattr(Trial, method_name), (
                 f"Trial class should have {method_name} method"
             )
+
+        # The environment-setup method was renamed in harbor 0.8.0 from
+        # _setup_environment to _setup_agent_environment. The integration
+        # supports both, so at least one of the two must exist.
+        assert hasattr(Trial, "_setup_environment") or hasattr(
+            Trial, "_setup_agent_environment"
+        ), (
+            "Trial should expose either _setup_environment (harbor < 0.8) or "
+            "_setup_agent_environment (harbor >= 0.8)"
+        )
 
     def test_verifier_class_has_verify_method(self):
         """Verify Verifier class has verify method."""
