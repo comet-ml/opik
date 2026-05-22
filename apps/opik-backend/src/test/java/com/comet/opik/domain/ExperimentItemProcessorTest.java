@@ -1,10 +1,13 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.llm.ChatCompletionService;
@@ -72,13 +75,16 @@ class ExperimentItemProcessorTest {
     @Mock
     private MustacheParser mustacheParser;
 
+    @Mock
+    private PromptService promptService;
+
     private ExperimentItemProcessor processor;
 
     @BeforeEach
     void setUp() {
         var messageRenderer = new ExperimentMessageRenderer(mustacheParser);
         var tracePersistence = new ExperimentTracePersistence(
-                traceService, spanService, experimentItemService, llmProviderFactory, idGenerator);
+                traceService, spanService, experimentItemService, llmProviderFactory, idGenerator, promptService);
         processor = new ExperimentItemProcessor(
                 chatCompletionService, messageRenderer, tracePersistence, datasetItemService, idGenerator);
     }
@@ -133,6 +139,20 @@ class ExperimentItemProcessorTest {
             String projectName,
             String workspaceId,
             String userName) {
+        return buildMessage(prompt, datasetItem, experimentId, datasetId, versionHash, projectName, workspaceId,
+                userName, null);
+    }
+
+    private ExperimentItemToProcess buildMessage(
+            ExperimentExecutionRequest.PromptVariant prompt,
+            DatasetItem datasetItem,
+            UUID experimentId,
+            UUID datasetId,
+            String versionHash,
+            String projectName,
+            String workspaceId,
+            String userName,
+            List<Experiment.PromptVersionLink> promptVersions) {
         when(datasetItemService.get(datasetItem.id())).thenReturn(Mono.just(datasetItem));
         return ExperimentItemToProcess.builder()
                 .batchId(UUID.randomUUID())
@@ -145,6 +165,7 @@ class ExperimentItemProcessorTest {
                 .workspaceId(workspaceId)
                 .userName(userName)
                 .allExperimentIds(List.of(experimentId))
+                .promptVersions(promptVersions)
                 .build();
     }
 
@@ -604,6 +625,109 @@ class ExperimentItemProcessorTest {
             verify(chatCompletionService).create(captor.capture(), eq(WORKSPACE_ID));
 
             assertThat(captor.getValue().stream()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("opik_prompts metadata")
+    class OpikPromptsMetadata {
+
+        @Test
+        void processWritesOpikPromptsMetadataWhenPromptVersionsAreLinked() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            var promptId = UUID.randomUUID();
+            var versionId = UUID.randomUUID();
+            var promptVersion = PromptVersion.builder()
+                    .id(versionId)
+                    .promptId(promptId)
+                    .commit("abc12345")
+                    .versionNumber("v3")
+                    .template("Hello {{name}}")
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId)
+                    .promptId(promptId)
+                    .promptName("greeting")
+                    .commit("abc12345")
+                    .build();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(Map.of(versionId, promptVersion)));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, List.of(link))).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+
+            var metadata = captor.getValue().metadata();
+            assertThat(metadata.has("opik_prompts")).isTrue();
+            var opikPrompts = metadata.get("opik_prompts");
+            assertThat(opikPrompts.isArray()).isTrue();
+            assertThat(opikPrompts).hasSize(1);
+
+            var promptNode = opikPrompts.get(0);
+            assertThat(promptNode.get("id").asText()).isEqualTo(promptId.toString());
+            assertThat(promptNode.get("name").asText()).isEqualTo("greeting");
+            assertThat(promptNode.get("template_structure").asText()).isEqualTo("text");
+            assertThat(promptNode.get("version").get("id").asText()).isEqualTo(versionId.toString());
+            assertThat(promptNode.get("version").get("commit").asText()).isEqualTo("abc12345");
+            assertThat(promptNode.get("version").get("version_number").asText()).isEqualTo("v3");
+            assertThat(promptNode.get("version").get("template").asText()).isEqualTo("Hello {{name}}");
+        }
+
+        @Test
+        void processSkipsOpikPromptsMetadataWhenNoPromptVersions() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+            assertThat(captor.getValue().metadata().has("opik_prompts")).isFalse();
+        }
+
+        @Test
+        void processOmitsOpikPromptsMetadataWhenVersionLookupFails() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            var versionId = UUID.randomUUID();
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId)
+                    .promptId(UUID.randomUUID())
+                    .build();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.error(new RuntimeException("not found")));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, List.of(link))).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+            assertThat(captor.getValue().metadata().has("opik_prompts")).isFalse();
         }
     }
 

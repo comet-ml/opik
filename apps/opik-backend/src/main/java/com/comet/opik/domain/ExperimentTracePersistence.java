@@ -1,20 +1,24 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -23,18 +27,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Singleton
+@Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ExperimentTracePersistence {
 
     private static final String TRACE_SPAN_NAME = "chat_completion_create";
+    private static final String OPIK_PROMPTS_METADATA_KEY = "opik_prompts";
 
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull PromptService promptService;
 
     @lombok.Builder
     record PersistenceContext(
@@ -50,7 +58,8 @@ class ExperimentTracePersistence {
             @NonNull UUID experimentId,
             @NonNull UUID datasetId,
             String versionHash,
-            @NonNull UUID datasetItemId) {
+            @NonNull UUID datasetItemId,
+            List<Experiment.PromptVersionLink> promptVersions) {
     }
 
     Mono<Void> persistTraceSpanAndItem(@NonNull PersistenceContext ctx) {
@@ -65,6 +74,13 @@ class ExperimentTracePersistence {
 
     private Mono<Void> createTrace(PersistenceContext ctx, ObjectNode input, ObjectNode output) {
 
+        return resolveOpikPrompts(ctx.promptVersions())
+                .map(opikPrompts -> buildTrace(ctx, input, output, opikPrompts))
+                .flatMap(trace -> traceService.create(trace).then());
+    }
+
+    private Trace buildTrace(PersistenceContext ctx, ObjectNode input, ObjectNode output, ArrayNode opikPrompts) {
+
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
         metadata.put(TestSuiteMetadataKeys.DATASET_ID, ctx.datasetId().toString());
@@ -74,6 +90,9 @@ class ExperimentTracePersistence {
         metadata.put(TestSuiteMetadataKeys.DATASET_ITEM_ID, ctx.datasetItemId().toString());
         metadata.put(TestSuiteMetadataKeys.MODEL, ctx.prompt().model());
         metadata.put(TestSuiteMetadataKeys.EXPERIMENT_ID, ctx.experimentId().toString());
+        if (opikPrompts != null && !opikPrompts.isEmpty()) {
+            metadata.set(OPIK_PROMPTS_METADATA_KEY, opikPrompts);
+        }
 
         var traceBuilder = Trace.builder()
                 .id(ctx.traceId())
@@ -94,10 +113,71 @@ class ExperimentTracePersistence {
                     .build());
         }
 
-        var trace = traceBuilder.build();
+        return traceBuilder.build();
+    }
 
-        return traceService.create(trace)
-                .then();
+    private Mono<ArrayNode> resolveOpikPrompts(List<Experiment.PromptVersionLink> promptVersions) {
+        if (promptVersions == null || promptVersions.isEmpty()) {
+            return Mono.just(JsonUtils.createArrayNode());
+        }
+
+        Set<UUID> versionIds = promptVersions.stream()
+                .map(Experiment.PromptVersionLink::id)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (versionIds.isEmpty()) {
+            return Mono.just(JsonUtils.createArrayNode());
+        }
+
+        return promptService.findVersionByIds(versionIds)
+                .map(versionsById -> buildOpikPromptsArray(promptVersions, versionsById))
+                .onErrorResume(error -> {
+                    log.warn("Failed to resolve prompt versions for opik_prompts metadata; "
+                            + "trace will not be linked to its prompt(s)",
+                            error);
+                    return Mono.just(JsonUtils.createArrayNode());
+                });
+    }
+
+    private ArrayNode buildOpikPromptsArray(List<Experiment.PromptVersionLink> promptVersions,
+            Map<UUID, PromptVersion> versionsById) {
+        ArrayNode array = JsonUtils.createArrayNode();
+        for (Experiment.PromptVersionLink link : promptVersions) {
+            PromptVersion version = versionsById.get(link.id());
+            if (version == null) {
+                continue;
+            }
+            ObjectNode promptNode = JsonUtils.createObjectNode();
+            promptNode.put("id", version.promptId() != null
+                    ? version.promptId().toString()
+                    : (link.promptId() != null ? link.promptId().toString() : null));
+            if (link.promptName() != null) {
+                promptNode.put("name", link.promptName());
+            }
+            if (version.templateStructure() != null) {
+                promptNode.put("template_structure", version.templateStructure().getValue());
+            }
+
+            ObjectNode versionNode = JsonUtils.createObjectNode();
+            versionNode.put("id", version.id().toString());
+            if (version.template() != null) {
+                versionNode.set("template", JsonUtils.getJsonNodeFromStringWithFallback(version.template()));
+            }
+            if (version.commit() != null) {
+                versionNode.put("commit", version.commit());
+            }
+            if (version.versionNumber() != null) {
+                versionNode.put("version_number", version.versionNumber());
+            }
+            if (version.metadata() != null) {
+                versionNode.set("metadata", version.metadata());
+            }
+            promptNode.set("version", versionNode);
+
+            array.add(promptNode);
+        }
+        return array;
     }
 
     private Mono<Void> createSpan(PersistenceContext ctx, ObjectNode input, ObjectNode output) {

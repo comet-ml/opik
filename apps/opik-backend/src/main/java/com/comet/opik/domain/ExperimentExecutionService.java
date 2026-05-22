@@ -237,6 +237,9 @@ public class ExperimentExecutionService {
             for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
                 var prompt = request.prompts().get(promptIdx);
                 UUID experimentId = experimentIds.get(promptIdx);
+                var promptVersions = prompt.promptVersions() != null
+                        ? prompt.promptVersions()
+                        : request.promptVersions();
 
                 messages.add(ExperimentItemToProcess.builder()
                         .batchId(batchId)
@@ -249,6 +252,7 @@ public class ExperimentExecutionService {
                         .workspaceId(workspaceId)
                         .userName(userName)
                         .allExperimentIds(experimentIds)
+                        .promptVersions(promptVersions)
                         .build());
             }
         }
