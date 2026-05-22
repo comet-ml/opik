@@ -151,6 +151,9 @@ public abstract class FilterEvaluationServiceBase<E> {
     }
 
     protected Object extractErrorInfoValue(ErrorInfo errorInfo, String key) {
+        if (errorInfo == null) {
+            return null;
+        }
         return key != null ? extractErrorInfoField(errorInfo, key) : extractErrorInfoText(errorInfo);
     }
 
