@@ -286,12 +286,6 @@ public interface AlertDAO {
             """)
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
-    default List<EligibleAlertWorkspace> findEligibleAlertWorkspaces(Set<String> excludedWorkspaceIds, int limit) {
-        var excluded = new java.util.ArrayList<>(excludedWorkspaceIds);
-        var demoNames = DemoData.ALERTS;
-        return findEligibleAlertWorkspacesQuery(!excluded.isEmpty(), excluded, !demoNames.isEmpty(), demoNames, limit);
-    }
-
     @SqlQuery("""
             SELECT workspace_id, COUNT(*) AS alert_count
             FROM alerts
@@ -304,7 +298,7 @@ public interface AlertDAO {
             """)
     @UseStringTemplateEngine
     @RegisterConstructorMapper(EligibleAlertWorkspace.class)
-    List<EligibleAlertWorkspace> findEligibleAlertWorkspacesQuery(
+    List<EligibleAlertWorkspace> findEligibleAlertWorkspaces(
             @Define("hasExcluded") boolean hasExcluded,
             @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE) List<String> excludedWorkspaceIds,
             @Define("hasDemoNames") boolean hasDemoNames,
@@ -319,9 +313,9 @@ public interface AlertDAO {
             @Define("project_id_is_null") boolean projectIdIsNull,
             @Define("limit") @Bind("limit") int limit);
 
-    @SqlUpdate("UPDATE alerts SET project_id = :projectId WHERE id = :alertId AND workspace_id = :workspaceId")
+    @SqlUpdate("UPDATE alerts SET project_id = :projectId, last_updated_by = :userName WHERE id = :alertId AND workspace_id = :workspaceId")
     void updateAlertProjectId(@Bind("alertId") UUID alertId, @Bind("projectId") UUID projectId,
-            @Bind("workspaceId") String workspaceId);
+            @Bind("workspaceId") String workspaceId, @Bind("userName") String userName);
 
     @SqlUpdate("""
             DELETE FROM alert_trigger_configs

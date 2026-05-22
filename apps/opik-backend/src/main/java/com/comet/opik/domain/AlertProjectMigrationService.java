@@ -63,6 +63,7 @@ public class AlertProjectMigrationService implements Managed {
 
     private final TransactionTemplate transactionTemplate;
     private final ProjectService projectService;
+    private final IdGenerator idGenerator;
     private final AlertProjectMigrationConfig config;
     private final MigrationConfig migrationConfig;
 
@@ -80,10 +81,12 @@ public class AlertProjectMigrationService implements Managed {
     public AlertProjectMigrationService(
             @NonNull TransactionTemplate transactionTemplate,
             @NonNull ProjectService projectService,
+            @NonNull IdGenerator idGenerator,
             @NonNull @Config("alertProjectMigration") AlertProjectMigrationConfig config,
             @NonNull @Config("migration") MigrationConfig migrationConfig) {
         this.transactionTemplate = transactionTemplate;
         this.projectService = projectService;
+        this.idGenerator = idGenerator;
         this.config = config;
         this.migrationConfig = migrationConfig;
 
@@ -152,9 +155,7 @@ public class AlertProjectMigrationService implements Managed {
             log.info(
                     "Starting alert project migration cycle, workspacesPerRun='{}', envExcludedWorkspaces='{}'",
                     config.workspacesPerRun(), envExcluded.size());
-            var eligible = transactionTemplate.inTransaction(READ_ONLY,
-                    handle -> handle.attach(AlertDAO.class).findEligibleAlertWorkspaces(envExcluded,
-                            config.workspacesPerRun()));
+            var eligible = fetchEligibleWorkspaces(envExcluded);
             cycleEligibleWorkspaces.record(eligible.size());
             if (eligible.isEmpty()) {
                 log.info("No workspaces with orphan alerts found, consider disabling the job");
@@ -182,9 +183,7 @@ public class AlertProjectMigrationService implements Managed {
     }
 
     private void doMigrateWorkspace(String workspaceId, long startMillis) {
-        List<Alert> orphanAlerts = transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AlertDAO.class)
-                        .findByWorkspaceId(workspaceId, true, config.alertBatchSize()));
+        List<Alert> orphanAlerts = fetchOrphanAlerts(workspaceId);
 
         if (orphanAlerts.isEmpty()) {
             log.info("No orphan alerts found, workspaceId='{}'", workspaceId);
@@ -231,11 +230,7 @@ public class AlertProjectMigrationService implements Managed {
                     workspaceId, alert.id(), rawProjectIds.size(), validProjectIds.size());
         }
 
-        transactionTemplate.inTransaction(WRITE, handle -> {
-            executeAlertMigration(workspaceId, alert, rawProjectIds, validProjectIds, defaultProjectIdSupplier,
-                    handle);
-            return null;
-        });
+        executeMigrationTransaction(workspaceId, alert, rawProjectIds, validProjectIds, defaultProjectIdSupplier);
     }
 
     private void executeAlertMigration(
@@ -250,7 +245,7 @@ public class AlertProjectMigrationService implements Managed {
 
         if (validProjectIds.isEmpty()) {
             var defaultProjectId = defaultProjectIdSupplier.get();
-            alertDAO.updateAlertProjectId(alert.id(), defaultProjectId, workspaceId);
+            alertDAO.updateAlertProjectId(alert.id(), defaultProjectId, workspaceId, SYSTEM_USER);
             if (!isWorkspaceWide) {
                 alertDAO.deleteScopeProjectConfigs(alert.id());
             }
@@ -284,7 +279,7 @@ public class AlertProjectMigrationService implements Managed {
                     alertDAO.deleteTriggersByIds(toDelete);
                 }
             }
-            alertDAO.updateAlertProjectId(alert.id(), firstProjectId, workspaceId);
+            alertDAO.updateAlertProjectId(alert.id(), firstProjectId, workspaceId, SYSTEM_USER);
             alertDAO.deleteScopeProjectConfigs(alert.id());
 
             // Workspace-wide + deleted-project triggers get their own new Default Project alert.
@@ -318,10 +313,39 @@ public class AlertProjectMigrationService implements Managed {
         }
     }
 
+    private List<EligibleAlertWorkspace> fetchEligibleWorkspaces(Set<String> excluded) {
+        var excludedList = new ArrayList<>(excluded);
+        var demoNames = DemoData.ALERTS;
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AlertDAO.class).findEligibleAlertWorkspaces(
+                        !excludedList.isEmpty(), excludedList,
+                        !demoNames.isEmpty(), demoNames,
+                        config.workspacesPerRun()));
+    }
+
+    private List<Alert> fetchOrphanAlerts(String workspaceId) {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AlertDAO.class)
+                        .findByWorkspaceId(workspaceId, true, config.alertBatchSize()));
+    }
+
+    private void executeMigrationTransaction(
+            String workspaceId,
+            Alert alert,
+            Set<UUID> rawProjectIds,
+            Set<UUID> validProjectIds,
+            Supplier<UUID> defaultProjectIdSupplier) {
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            executeAlertMigration(workspaceId, alert, rawProjectIds, validProjectIds, defaultProjectIdSupplier,
+                    handle);
+            return null;
+        });
+    }
+
     private void cloneAlertForProject(String workspaceId, Alert source, UUID targetProjectId,
             List<AlertTrigger> triggers, Handle handle) {
-        var newAlertId = UUID.randomUUID();
-        var newWebhookId = UUID.randomUUID();
+        var newAlertId = idGenerator.generateId();
+        var newWebhookId = idGenerator.generateId();
 
         var newWebhook = source.webhook().toBuilder()
                 .id(newWebhookId)
@@ -404,13 +428,13 @@ public class AlertProjectMigrationService implements Managed {
     }
 
     private AlertTrigger cloneTrigger(AlertTrigger source, UUID newAlertId) {
-        var newTriggerId = UUID.randomUUID();
+        var newTriggerId = idGenerator.generateId();
         List<AlertTriggerConfig> nonScopeConfigs = source.triggerConfigs() == null
                 ? null
                 : source.triggerConfigs().stream()
                         .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
                         .map(c -> c.toBuilder()
-                                .id(UUID.randomUUID())
+                                .id(idGenerator.generateId())
                                 .alertTriggerId(newTriggerId)
                                 .createdAt(null)
                                 .lastUpdatedAt(null)
