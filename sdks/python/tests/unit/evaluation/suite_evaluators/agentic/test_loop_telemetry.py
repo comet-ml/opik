@@ -127,7 +127,7 @@ def _tool_call(tool_id: str, name: str, arguments: str = "{}") -> dict:
     }
 
 
-def _run_with_responses(responses, tools, ctx):
+def _run_with_responses(responses, tools, ctx, overview_truncated=False):
     model = _StubChatModel(responses)
     registry = tool_registry.ToolRegistry(tools=tools)
     content = loop.run_agentic_judge(
@@ -138,6 +138,7 @@ def _run_with_responses(responses, tools, ctx):
         registry=registry,
         ctx=ctx,
         response_format=_WrapupSchema,
+        overview_truncated=overview_truncated,
     )
     return content, model, tools
 
@@ -195,20 +196,27 @@ class TestTelemetryLogging:
         assert "read=1, scan=1" in message
 
 
-class TestZeroReadOnLargeTraceWarning:
-    def test_run_agentic_judge__zero_read_on_large_trace__warns(self, loop_log_records):
-        # Trace whose JSON-rendered composite exceeds LARGE_TRACE_BYTES,
-        # and the judge only calls `scan` (no `read`). The
-        # warning fires.
-        big_input = {"prompt": "x" * (loop.LARGE_TRACE_BYTES + 100)}
+class TestZeroReadOnTruncatedOverviewWarning:
+    """The "low engagement" warning fires when the inline overview was
+    truncated AND the judge never called `read` — a signal the model
+    isn't following the truncation hints. Suppressed when the overview
+    was rendered at the no-truncation tier (no-`read` is correct) or
+    when the model did call `read` at least once.
+    """
+
+    def test_run_agentic_judge__zero_read_with_truncated_overview__warns(
+        self, loop_log_records
+    ):
         responses = [
             {"tool_calls": [_tool_call("c1", "scan")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
-        ctx = _ctx(_trace(input_payload=big_input))
+        ctx = _ctx(_trace())
 
-        _run_with_responses(responses, [_StubTool("scan")], ctx)
+        _run_with_responses(
+            responses, [_StubTool("scan")], ctx, overview_truncated=True
+        )
 
         warnings = [
             r
@@ -218,10 +226,11 @@ class TestZeroReadOnLargeTraceWarning:
         ]
         assert len(warnings) == 1
 
-    def test_run_agentic_judge__small_trace_zero_read__does_not_warn(
+    def test_run_agentic_judge__zero_read_with_full_overview__does_not_warn(
         self, loop_log_records
     ):
-        # Tiny trace, no `read` → the warning would be noise; suppress it.
+        # The sizer picked the no-truncation tier, so no `read` is the
+        # correct outcome — warning would be a false positive.
         responses = [
             {"tool_calls": [_tool_call("c1", "scan")]},
             {"content": "", "tool_calls": []},
@@ -229,7 +238,9 @@ class TestZeroReadOnLargeTraceWarning:
         ]
         ctx = _ctx(_trace())
 
-        _run_with_responses(responses, [_StubTool("scan")], ctx)
+        _run_with_responses(
+            responses, [_StubTool("scan")], ctx, overview_truncated=False
+        )
 
         warnings = [
             r
@@ -239,19 +250,23 @@ class TestZeroReadOnLargeTraceWarning:
         ]
         assert warnings == []
 
-    def test_run_agentic_judge__read_called_on_large_trace__does_not_warn(
+    def test_run_agentic_judge__read_called_with_truncated_overview__does_not_warn(
         self, loop_log_records
     ):
-        # Large trace BUT the judge does call `read` once. No warning.
-        big_input = {"prompt": "x" * (loop.LARGE_TRACE_BYTES + 100)}
+        # Truncated overview BUT the judge did call `read` once. No warning.
         responses = [
             {"tool_calls": [_tool_call("c1", "read")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
-        ctx = _ctx(_trace(input_payload=big_input))
+        ctx = _ctx(_trace())
 
-        _run_with_responses(responses, [_StubTool("read", payload='{"data": {}}')], ctx)
+        _run_with_responses(
+            responses,
+            [_StubTool("read", payload='{"data": {}}')],
+            ctx,
+            overview_truncated=True,
+        )
 
         warnings = [
             r

@@ -2,12 +2,15 @@
 
 Drives the loop with a stub ChatModel that returns a canned tool-call
 sequence: first turn -> `read(...)`, second turn (after tool result) ->
-no more tool calls, wrap-up turn -> structured JSON verdict.
+structured JSON verdict (no separate wrap-up round-trip).
 
 Confirms:
 - `tool_choice="auto"` on the first turn (overview is pre-seeded into
   the user message, so the loop no longer forces a tool call).
-- The wrap-up turn receives `response_format` and no `tools`.
+- `response_format` is set on every turn so the model can finalize as
+  soon as it stops calling tools.
+- The wrap-up call is skipped when the last response already carries
+  the structured verdict.
 - Verdict JSON is parsed into ScoreResult.
 """
 
@@ -117,9 +120,10 @@ def test_score__full_loop__calls_read_and_produces_verdict():
                 }
             ],
         },
-        # Turn 2 (auto): model produces no more tool calls -> exit loop
-        {"role": "assistant", "content": "Looks good."},
-        # Wrap-up turn: structured JSON verdict
+        # Turn 2 (auto): model produces the structured verdict directly —
+        # `response_format` is set on every turn, so when no tool call is
+        # requested the content is already JSON and the loop skips the
+        # wrap-up round-trip.
         {"role": "assistant", "content": verdict},
     ]
     model = _StubChatModel(responses)
@@ -131,10 +135,11 @@ def test_score__full_loop__calls_read_and_produces_verdict():
     assert results[0].value is True
     assert results[0].reason == "tool_call span found"
 
-    # Inspect what the loop sent the model.
-    assert len(model.calls) == 3
-    first, second, wrapup = model.calls
+    # Inspect what the loop sent the model — two calls, no wrap-up.
+    assert len(model.calls) == 2
+    first, second = model.calls
     assert first["tool_choice"] == "auto"
+    assert first["response_format"] is not None
     assert first["tools"] and any(
         spec["function"]["name"] == "read" for spec in first["tools"]
     )
@@ -142,10 +147,10 @@ def test_score__full_loop__calls_read_and_produces_verdict():
     assert not any(
         spec["function"]["name"] == "get_trace_spans" for spec in first["tools"]
     )
+    # Second (finalizing) turn carries both tools and response_format —
+    # the model elected to skip tools and emit the verdict directly.
     assert second["tool_choice"] == "auto"
-    # Wrap-up turn carries the response format and drops tools.
-    assert wrapup["response_format"] is not None
-    assert wrapup["tools"] is None
+    assert second["response_format"] is not None
 
 
 def test_score__model_loops_forever__terminates_within_max_rounds():
