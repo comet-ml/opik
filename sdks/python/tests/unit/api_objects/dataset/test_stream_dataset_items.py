@@ -36,7 +36,9 @@ def test_stream_dataset_items__colliding_id_key__uses_real_id_and_warns(caplog):
     assert items[0].id == real_id
     assert "COLLISION" not in vars(items[0]).get("id", "")
 
-    warning_records = [r for r in caplog.records if r.levelname == "WARNING" and "shadow" in r.message]
+    warning_records = [
+        r for r in caplog.records if r.levelname == "WARNING" and "shadow" in r.message
+    ]
     assert len(warning_records) == 1
     assert "['id']" in warning_records[0].message
 
@@ -63,5 +65,7 @@ def test_stream_dataset_items__colliding_id_key__warning_emitted_only_once(caplo
         )
 
     assert len(result) == 3
-    warning_records = [r for r in caplog.records if r.levelname == "WARNING" and "shadow" in r.message]
+    warning_records = [
+        r for r in caplog.records if r.levelname == "WARNING" and "shadow" in r.message
+    ]
     assert len(warning_records) == 1

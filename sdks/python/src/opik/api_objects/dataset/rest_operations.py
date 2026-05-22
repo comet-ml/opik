@@ -125,7 +125,9 @@ def stream_dataset_items(
             # Strip DatasetItem field names from user data before unpacking to avoid
             # "multiple values for keyword argument" errors. This happens when user data
             # contains a key that matches a DatasetItem field (e.g. 'id' in HotpotQA).
-            conflicting = item.data.keys() & dataset_item.DatasetItem.model_fields.keys()
+            conflicting = (
+                item.data.keys() & dataset_item.DatasetItem.model_fields.keys()
+            )
             if conflicting and not _conflicting_keys_warned:
                 _conflicting_keys_warned = True
                 LOGGER.warning(
@@ -133,7 +135,11 @@ def stream_dataset_items(
                     "Rename these keys in your dataset to preserve them.",
                     sorted(conflicting),
                 )
-            extra_data = {k: v for k, v in item.data.items() if k not in dataset_item.DatasetItem.model_fields}
+            extra_data = {
+                k: v
+                for k, v in item.data.items()
+                if k not in dataset_item.DatasetItem.model_fields
+            }
 
             reconstructed_item = dataset_item.DatasetItem(
                 id=item.id,
