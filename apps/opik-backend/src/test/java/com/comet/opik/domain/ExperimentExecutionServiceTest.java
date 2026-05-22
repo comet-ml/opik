@@ -60,6 +60,9 @@ class ExperimentExecutionServiceTest {
     @Mock
     private IdGenerator idGenerator;
 
+    @Mock
+    private PromptService promptService;
+
     private ExperimentExecutionService service;
 
     @BeforeEach
@@ -68,7 +71,7 @@ class ExperimentExecutionServiceTest {
         var evaluatorMapper = new TestSuiteEvaluatorMapper(testSuiteConfig);
         service = new ExperimentExecutionService(
                 experimentService, datasetItemService, datasetVersionService,
-                itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig());
+                itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
 
         lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
     }
