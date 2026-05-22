@@ -121,6 +121,18 @@ def stream_dataset_items(
                     pass_threshold=item.execution_policy.pass_threshold,
                 )
 
+            # Strip DatasetItem field names from user data before unpacking to avoid
+            # "multiple values for keyword argument" errors. This happens when user data
+            # contains a key that matches a DatasetItem field (e.g. 'id' in HotpotQA).
+            conflicting = item.data.keys() & dataset_item.DatasetItem.model_fields.keys()
+            if conflicting:
+                LOGGER.warning(
+                    "Dataset item data contains keys that shadow DatasetItem fields and will be ignored: %s. "
+                    "Rename these keys in your dataset to preserve them.",
+                    sorted(conflicting),
+                )
+            extra_data = {k: v for k, v in item.data.items() if k not in dataset_item.DatasetItem.model_fields}
+
             reconstructed_item = dataset_item.DatasetItem(
                 id=item.id,
                 trace_id=item.trace_id,
@@ -129,7 +141,7 @@ def stream_dataset_items(
                 description=item.description,
                 evaluators=evaluators,
                 execution_policy=execution_policy,
-                **item.data,
+                **extra_data,
             )
 
             yield reconstructed_item
