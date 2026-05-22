@@ -1,9 +1,12 @@
 """Unit tests for stream_dataset_items() in rest_operations."""
 
+import logging
 from unittest.mock import Mock, patch
 
 from opik.api_objects.dataset import rest_operations
 from opik.rest_api.types import dataset_item as rest_dataset_item
+
+_LOGGER_NAME = "opik.api_objects.dataset.rest_operations"
 
 
 def _make_rest_item(item_id: str, data: dict) -> rest_dataset_item.DatasetItem:
@@ -20,6 +23,7 @@ def test_stream_dataset_items__colliding_id_key__uses_real_id_and_warns(caplog):
 
     mock_rest_client = Mock()
 
+    caplog.set_level(logging.WARNING, logger=_LOGGER_NAME)
     with patch(
         "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
         side_effect=[[rest_item], []],
@@ -52,6 +56,7 @@ def test_stream_dataset_items__colliding_id_key__warning_emitted_only_once(caplo
 
     mock_rest_client = Mock()
 
+    caplog.set_level(logging.WARNING, logger=_LOGGER_NAME)
     with patch(
         "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
         side_effect=[items_data, []],
