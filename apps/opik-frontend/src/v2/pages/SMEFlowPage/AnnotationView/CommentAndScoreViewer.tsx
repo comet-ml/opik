@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { cn } from "@/lib/utils";
+import { CircleCheck } from "lucide-react";
 import FeedbackScoresEditor from "@/v2/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor";
 import UserCommentForm from "@/shared/UserComment/UserCommentForm";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
@@ -10,7 +10,11 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { useSMEFlow, ITEM_STATE } from "@/v2/pages/SMEFlowPage/SMEFlowContext";
 import { SME_ACTION, SME_HOTKEYS } from "@/v2/pages/SMEFlowPage/hotkeys";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
+import {
+  getAnnotationQueueItemId,
+  isItemProcessedByUser,
+} from "@/lib/annotation-queues";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 const isFromEditableElement = (keyboardEvent: KeyboardEvent): boolean => {
   const target = keyboardEvent.target as HTMLElement;
@@ -39,9 +43,21 @@ const CommentAndScoreViewer: React.FC = () => {
     permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
+
   const isCompleted = currentItem
     ? itemStates[getAnnotationQueueItemId(currentItem)] === ITEM_STATE.COMPLETED
     : false;
+
+  const userHasAnnotated = currentItem
+    ? isItemProcessedByUser(
+        currentItem,
+        annotationQueue?.feedback_definition_names ?? [],
+        currentUserName,
+      )
+    : false;
+
+  const isLockedForUser = isCompleted && !userHasAnnotated;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackScoresRef = useRef<HTMLDivElement>(null);
@@ -53,13 +69,13 @@ const CommentAndScoreViewer: React.FC = () => {
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].key,
     (keyboardEvent: KeyboardEvent) => {
-      if (isCompleted) return;
+      if (isLockedForUser) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       textareaRef.current?.focus();
     },
     { enableOnFormTags: true },
-    [isCompleted],
+    [isLockedForUser],
   );
 
   useHotkeys(
@@ -74,7 +90,7 @@ const CommentAndScoreViewer: React.FC = () => {
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].key,
     (keyboardEvent: KeyboardEvent) => {
-      if (!hasFeedbackDefinitions || isCompleted) return;
+      if (!hasFeedbackDefinitions || isLockedForUser) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       const firstInput = feedbackScoresRef.current?.querySelector(
@@ -83,16 +99,22 @@ const CommentAndScoreViewer: React.FC = () => {
       firstInput?.focus();
     },
     { enableOnFormTags: true },
-    [hasFeedbackDefinitions, isCompleted],
+    [hasFeedbackDefinitions, isLockedForUser],
   );
 
+  if (isLockedForUser) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
+        <CircleCheck className="size-5 text-success" />
+        <p className="comet-body-xs max-w-[250px]">
+          This item has already been scored by the required number of annotators
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        isCompleted &&
-          "cursor-not-allowed opacity-50 [&_*]:pointer-events-none",
-      )}
-    >
+    <div>
       {canAnnotateTraceSpanThread && (
         <>
           <div className="flex items-center justify-between gap-1 pb-2">
@@ -110,12 +132,9 @@ const CommentAndScoreViewer: React.FC = () => {
           </div>
           <UserCommentForm.StandaloneTextareaField
             ref={textareaRef}
-            placeholder={
-              isCompleted ? "This item has been completed" : "Add a comment..."
-            }
+            placeholder="Add a comment..."
             value={currentAnnotationState.comment?.text || ""}
             onValueChange={updateComment}
-            disabled={isCompleted}
           />
         </>
       )}
