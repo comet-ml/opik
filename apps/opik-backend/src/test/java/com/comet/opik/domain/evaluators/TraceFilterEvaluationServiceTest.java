@@ -746,6 +746,26 @@ class TraceFilterEvaluationServiceTest {
                             .build(), Operator.NOT_CONTAINS, "CancelledError", false));
         }
 
+        static Stream<Arguments> errorInfoValueFilterTestCases() {
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Invalid value provided")
+                    .traceback("File \"script.py\", line 10")
+                    .build();
+
+            return Stream.of(
+                    arguments(errorInfo, "exceptionType", Operator.EQUAL, "ValueError", true),
+                    arguments(errorInfo, "message", Operator.EQUAL, "Invalid value provided", true),
+                    arguments(errorInfo, "traceback", Operator.EQUAL, "File \"script.py\", line 10", true),
+                    arguments(errorInfo, "message", Operator.EQUAL, "Different value", false),
+                    arguments(errorInfo, "unknownField", Operator.IS_EMPTY, "", true),
+                    arguments(errorInfo, null, Operator.IS_NOT_EMPTY, "", true),
+                    arguments(errorInfo, null, Operator.IS_EMPTY, "", false),
+                    arguments((ErrorInfo) null, "message", Operator.IS_EMPTY, "", true),
+                    arguments((ErrorInfo) null, null, Operator.IS_EMPTY, "", true),
+                    arguments(ErrorInfo.builder().build(), null, Operator.IS_EMPTY, "", true));
+        }
+
         @ParameterizedTest
         @MethodSource("errorInfoTextFilterTestCases")
         void matchesFilterWithErrorInfoTextFilter(
@@ -756,6 +776,28 @@ class TraceFilterEvaluationServiceTest {
                     .build();
             var filter = TraceFilter.builder()
                     .field(TraceField.ERROR_INFO)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isEqualTo(expectedResult);
+        }
+
+        @ParameterizedTest
+        @MethodSource("errorInfoValueFilterTestCases")
+        void matchesFilterWithErrorInfoValueFilter(
+                ErrorInfo errorInfo, String key, Operator operator, String filterValue, boolean expectedResult) {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .key(key)
                     .operator(operator)
                     .value(filterValue)
                     .build();

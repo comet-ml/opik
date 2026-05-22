@@ -150,6 +150,10 @@ public abstract class FilterEvaluationServiceBase<E> {
         return extractStringFromJson(errorInfo);
     }
 
+    protected Object extractErrorInfoValue(ErrorInfo errorInfo, String key) {
+        return key != null ? extractErrorInfoField(errorInfo, key) : extractErrorInfoText(errorInfo);
+    }
+
     private boolean hasNonEmptyErrorInfo(ErrorInfo errorInfo) {
         return errorInfo != null
                 && (StringUtils.isNotBlank(errorInfo.exceptionType())

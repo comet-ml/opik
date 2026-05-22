@@ -88,9 +88,7 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
             case DURATION ->
                 span.duration() != null ? span.duration() : calculateDuration(span.startTime(), span.endTime());
             case TTFT -> span.ttft();
-            case ERROR_INFO -> key != null
-                    ? extractErrorInfoField(span.errorInfo(), key)
-                    : extractErrorInfoText(span.errorInfo());
+            case ERROR_INFO -> extractErrorInfoValue(span.errorInfo(), key);
             case CUSTOM -> extractCustomFieldValue(key, span);
             default -> {
                 log.warn("Unsupported span field for filter evaluation: {}", spanField);
