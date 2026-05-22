@@ -10,6 +10,7 @@ Sync-only for Phase 1. Async will follow in a later phase if needed —
 the tool-call loop's data shape is the same.
 """
 
+import json
 import logging
 from typing import Any, List, Optional
 
@@ -21,7 +22,8 @@ from opik.evaluation.models import base_model
 from opik.evaluation.suite_evaluators.llm_judge import parsers
 
 from . import context, loop, prompt
-from .tools import get_trace_spans, read, registry as tool_registry, scan, search
+from .compression import span_tree_serializer
+from .tools import read, registry as tool_registry, scan, search
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,10 +82,14 @@ class AgenticLLMJudge:
         self, ctx: context.TraceToolContext
     ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
+        overview = span_tree_serializer.serialize_overview(
+            ctx.trace, ctx.spans, ctx.parent_by_child
+        )
         user_prompt = prompt.AGENTIC_JUDGE_USER_TEMPLATE.format(
             assertions=schema.format_assertions(),
             input=_format_value(ctx.trace.input),
             output=_format_value(ctx.trace.output),
+            overview=json.dumps(overview, indent=2, default=str),
         )
         content = loop.run_agentic_judge(
             model=self._model,
@@ -100,7 +106,6 @@ class AgenticLLMJudge:
 def _default_registry() -> tool_registry.ToolRegistry:
     return tool_registry.ToolRegistry(
         tools=[
-            get_trace_spans.GetTraceSpansTool(),
             read.ReadTool(),
             scan.ScanTool(),
             search.SearchTool(),

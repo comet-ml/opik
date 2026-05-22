@@ -1,12 +1,10 @@
 """Tool-call loop driver for the agentic LLM judge.
 
-Mirrors the backend `OnlineScoringLlmAsJudgeScorer` protocol:
-- First call forces `tool_choice="required"` so the judge MUST call
-  `get_trace_spans` (or any later tool) and see the trace before forming
-  a verdict.
-- Subsequent calls flip to `tool_choice="auto"`.
-- A final, no-tool, structured-output turn produces the JSON verdict the
-  caller parses.
+The opening user message carries a pre-rendered flat trace overview, so
+the judge can decide on the first turn whether any drill-in tool
+(`read` / `scan` / `search`) is needed. `tool_choice` stays on `"auto"`
+throughout. A final, no-tool, structured-output turn produces the JSON
+verdict the caller parses.
 
 Telemetry is emitted via `LOGGER` at the end of each loop run so an
 operator running `evaluate()` over a dataset can spot misconfigured
@@ -50,7 +48,7 @@ LARGE_TRACE_BYTES = trace_compressor.FULL_TOKEN_LIMIT * 4
 # verdict now" off-ramp. That branch conflicted with the system prompt's
 # "MUST call the indicated tool when you see a truncation hint" rule —
 # weaker judge models (gpt-4o-mini class) exploited the conflict by
-# duplicating `get_trace_spans` to trigger this hint, then taking the
+# duplicating tool calls to trigger this hint, then taking the
 # verdict-now license to skip the drill-in. The rewrite removes that
 # license and instead points at the most common forward path (`read` on
 # a truncation hint), so the path of least resistance is "call a
@@ -119,14 +117,13 @@ def run_agentic_judge(
         {"role": "user", "content": user_prompt},
     ]
 
-    # First turn: force the judge to engage at least one tool. Models
-    # vary in how aggressively they call tools when offered; requiring
-    # one call on the first turn guarantees the overview lands in
-    # context before the judge forms a verdict.
+    # First turn: the overview is already in the user message, so the
+    # judge may either drill in via a tool call or short-circuit to the
+    # wrap-up turn when the overview alone is enough.
     response = model.generate_chat_completion(
         messages=messages,
         tools=tool_specs,
-        tool_choice="required",
+        tool_choice="auto",
         temperature=0,
     )
     messages.append(_assistant_message_from_response(response))

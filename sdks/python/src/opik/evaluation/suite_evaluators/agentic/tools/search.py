@@ -49,7 +49,7 @@ SEARCH_SPEC: Dict[str, Any] = {
         "description": (
             "Case-insensitive regex search across every string value in a "
             "cached trace or span. Returns up to 50 matches, each as "
-            "'<jq-path>: <value>'. Use after `get_trace_spans` when an "
+            "'<jq-path>: <value>'. Use against the active trace when an "
             "assertion mentions a keyword (an error string, a tool name, "
             "a model id) but you don't yet know which span holds it — "
             "then `scan` the surfaced path for the full value."

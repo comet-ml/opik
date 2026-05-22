@@ -46,7 +46,7 @@ def test_default_registry__judge_built_with_no_injection__exposes_overview_and_r
 
     registered = judge._registry.names()  # noqa: SLF001 — guarding surface
 
-    assert sorted(registered) == ["get_trace_spans", "read", "scan", "search"]
+    assert sorted(registered) == ["read", "scan", "search"]
 
 
 def test_default_registry__specs__are_well_formed():
@@ -56,7 +56,7 @@ def test_default_registry__specs__are_well_formed():
 
     # Each spec is an OpenAI-style tool descriptor with a function name.
     spec_names = {spec["function"]["name"] for spec in specs}
-    assert spec_names == {"get_trace_spans", "read", "scan", "search"}
+    assert spec_names == {"read", "scan", "search"}
 
 
 def test_default_registry__read_tool_dispatch__reaches_execute():

@@ -1,12 +1,12 @@
 """Integration test for the agentic-judge tool-call loop.
 
 Drives the loop with a stub ChatModel that returns a canned tool-call
-sequence: first turn -> `get_trace_spans()`, second turn (after tool
-result) -> no more tool calls, wrap-up turn -> structured JSON verdict.
+sequence: first turn -> `read(...)`, second turn (after tool result) ->
+no more tool calls, wrap-up turn -> structured JSON verdict.
 
 Confirms:
-- `tool_choice=required` is requested on the first turn.
-- `get_trace_spans` is invoked.
+- `tool_choice="auto"` on the first turn (overview is pre-seeded into
+  the user message, so the loop no longer forces a tool call).
 - The wrap-up turn receives `response_format` and no `tools`.
 - Verdict JSON is parsed into ScoreResult.
 """
@@ -92,7 +92,7 @@ def _build_ctx() -> TraceToolContext:
     )
 
 
-def test_score__full_loop__calls_overview_and_produces_verdict():
+def test_score__full_loop__calls_read_and_produces_verdict():
     verdict = json.dumps(
         {
             "assertion_1": {
@@ -103,14 +103,17 @@ def test_score__full_loop__calls_overview_and_produces_verdict():
         }
     )
     responses: List[base_model.ConversationDict] = [
-        # Turn 1 (required): model calls get_trace_spans
+        # Turn 1 (auto): model decides to drill in via read
         {
             "role": "assistant",
             "tool_calls": [
                 {
                     "id": "call-1",
                     "type": "function",
-                    "function": {"name": "get_trace_spans", "arguments": "{}"},
+                    "function": {
+                        "name": "read",
+                        "arguments": '{"type": "span", "id": "s-1"}',
+                    },
                 }
             ],
         },
@@ -131,8 +134,12 @@ def test_score__full_loop__calls_overview_and_produces_verdict():
     # Inspect what the loop sent the model.
     assert len(model.calls) == 3
     first, second, wrapup = model.calls
-    assert first["tool_choice"] == "required"
+    assert first["tool_choice"] == "auto"
     assert first["tools"] and any(
+        spec["function"]["name"] == "read" for spec in first["tools"]
+    )
+    # `get_trace_spans` is no longer in the default registry.
+    assert not any(
         spec["function"]["name"] == "get_trace_spans" for spec in first["tools"]
     )
     assert second["tool_choice"] == "auto"
@@ -158,11 +165,14 @@ def test_score__model_loops_forever__terminates_within_max_rounds():
             {
                 "id": "c",
                 "type": "function",
-                "function": {"name": "get_trace_spans", "arguments": "{}"},
+                "function": {
+                    "name": "read",
+                    "arguments": '{"type": "trace", "id": "t-1"}',
+                },
             }
         ],
     }
-    # 1 forced first turn + 10 follow-up turns (the loop body runs
+    # 1 first turn + 10 follow-up turns (the loop body runs
     # MAX_TOOL_CALL_ROUNDS=10 times) + 1 wrap-up == 12 responses.
     responses: List[base_model.ConversationDict] = [looping_call] * 11 + [
         {"role": "assistant", "content": verdict}

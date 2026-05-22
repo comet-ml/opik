@@ -26,7 +26,7 @@ def _serialize_span(
     """Serialize a SpanModel to a JSON-shaped dict.
 
     Child spans are intentionally NOT inlined here; the span tree is rendered
-    separately via SpanTreeSerializer / GetTraceSpansTool so that the cache
+    separately via SpanTreeSerializer (used to render the inlined overview) so that the cache
     holds one entry per span and `read(type=span, id=...)` returns just that
     span. Children references would otherwise produce duplicate data and
     inconsistent caching behavior.

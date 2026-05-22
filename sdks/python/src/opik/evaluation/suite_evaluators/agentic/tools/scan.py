@@ -40,9 +40,10 @@ SCAN_SPEC: Dict[str, Any] = {
         "name": "scan",
         "description": (
             "Query a cached trace or span via a small jq-shaped path "
-            "expression. Use after `read` (or after `get_trace_spans` "
-            "for the active trace) when you need a specific value, "
-            "field, or filtered subset out of an entity's JSON. "
+            "expression. Use after `read` (or directly against the "
+            "active trace whose overview is shown in the opening "
+            "message) when you need a specific value, field, or "
+            "filtered subset out of an entity's JSON. "
             "Supports dotted field access, integer index, slice, `[]` "
             "iteration, `..` recursive descent, `..|strings`, and "
             "`..|select(<predicate>)`. Predicates accept `==`, `!=`, "

@@ -147,17 +147,17 @@ class TestTelemetryLogging:
         self, loop_log_records
     ):
         # Sequence:
-        #  1) forced tool turn → calls get_trace_spans once
+        #  1) first turn (auto) → calls scan once
         #  2) auto turn → no tool calls (loop ends)
         #  3) wrap-up → JSON verdict
         responses = [
-            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c1", "scan")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
         ctx = _ctx(_trace())
 
-        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+        _run_with_responses(responses, [_StubTool("scan")], ctx)
 
         finished = [
             r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
@@ -165,7 +165,7 @@ class TestTelemetryLogging:
         assert len(finished) == 1
         message = finished[0].getMessage()
         assert "rounds=1" in message
-        assert "get_trace_spans=1" in message
+        assert "scan=1" in message
 
     def test_run_agentic_judge__multi_tool_round__counts_per_tool(
         self, loop_log_records
@@ -198,17 +198,17 @@ class TestTelemetryLogging:
 class TestZeroReadOnLargeTraceWarning:
     def test_run_agentic_judge__zero_read_on_large_trace__warns(self, loop_log_records):
         # Trace whose JSON-rendered composite exceeds LARGE_TRACE_BYTES,
-        # and the judge only calls `get_trace_spans` (no `read`). The
+        # and the judge only calls `scan` (no `read`). The
         # warning fires.
         big_input = {"prompt": "x" * (loop.LARGE_TRACE_BYTES + 100)}
         responses = [
-            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c1", "scan")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
         ctx = _ctx(_trace(input_payload=big_input))
 
-        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+        _run_with_responses(responses, [_StubTool("scan")], ctx)
 
         warnings = [
             r
@@ -223,13 +223,13 @@ class TestZeroReadOnLargeTraceWarning:
     ):
         # Tiny trace, no `read` → the warning would be noise; suppress it.
         responses = [
-            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c1", "scan")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
         ctx = _ctx(_trace())
 
-        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+        _run_with_responses(responses, [_StubTool("scan")], ctx)
 
         warnings = [
             r
@@ -266,22 +266,22 @@ class TestDuplicateToolCallShortCircuit:
     """The loop short-circuits identical (name, args) tool calls — same
     args returns a dedup hint instead of re-executing the tool. This is
     the deterministic fix for the failure mode where a judge model loops
-    on `get_trace_spans()` instead of drilling in (design doc §9; PR
+    on the same tool/args instead of drilling in (design doc §9; PR
     review transcript on OPIK-6243)."""
 
     def test_run_agentic_judge__repeated_identical_call__tool_executes_once(
         self,
     ):
-        # Two rounds, both call get_trace_spans({}); the second should
+        # Two rounds, both call scan({}); the second should
         # be short-circuited and the tool should execute only once.
         responses = [
-            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
-            {"tool_calls": [_tool_call("c2", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c1", "scan")]},
+            {"tool_calls": [_tool_call("c2", "scan")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
         ctx = _ctx(_trace())
-        tool = _StubTool("get_trace_spans", payload='{"spans": []}')
+        tool = _StubTool("scan", payload='{"spans": []}')
 
         _run_with_responses(responses, [tool], ctx)
 
@@ -317,21 +317,21 @@ class TestDuplicateToolCallShortCircuit:
         # them); the separate `duplicates=N` field reports how many were
         # short-circuited. Asserting on both keeps the contract explicit.
         responses = [
-            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
-            {"tool_calls": [_tool_call("c2", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c1", "scan")]},
+            {"tool_calls": [_tool_call("c2", "scan")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
         ctx = _ctx(_trace())
 
-        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+        _run_with_responses(responses, [_StubTool("scan")], ctx)
 
         finished = [
             r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
         ]
         assert len(finished) == 1
         message = finished[0].getMessage()
-        assert "get_trace_spans=2" in message
+        assert "scan=2" in message
         assert "duplicates=1" in message
 
     def test_run_agentic_judge__no_duplicates__telemetry_reports_zero(
@@ -339,13 +339,13 @@ class TestDuplicateToolCallShortCircuit:
     ):
         # Sanity: when nothing is deduped, the duplicates counter is 0.
         responses = [
-            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c1", "scan")]},
             {"content": "", "tool_calls": []},
             {"content": '{"verdict": "ok"}'},
         ]
         ctx = _ctx(_trace())
 
-        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+        _run_with_responses(responses, [_StubTool("scan")], ctx)
 
         finished = [
             r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
