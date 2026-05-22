@@ -117,16 +117,33 @@ def test_test_suite_agentic__assertion_about_span_error__detects_failure(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """The agentic judge must inspect `error_info` on a nested span to
-    fail an assertion that claims no errors occurred. The task catches
-    the exception so the trace's top-level output looks healthy — a
-    one-shot judge would incorrectly pass the assertion.
+    confirm a *specific* exception type and message. The task catches
+    the exception so the trace's top-level output looks healthy.
+
+    Why the assertion names the exception type AND a phrase from the
+    message: the inline overview already carries each span's
+    `has_error` flag, so an assertion of the form "no errors occurred"
+    would be decidable from the overview alone — the test would pass
+    without ever calling `read` and prove nothing about drill-in. By
+    pinning the verdict on the exception's type and message — both of
+    which live only in `error_info` and are NOT in the overview — the
+    correct verdict is only reachable by reading the span. A judge
+    that stops at `has_error: true` lacks the evidence to confirm
+    "type=RuntimeError" or "message contains 'internal failure'" and
+    must drill in.
     """
-    no_errors_assertion = "Execution completed without errors in any internal step"
+    span_error_assertion = (
+        "An internal step raised an exception of type `RuntimeError` "
+        "whose message contains the phrase 'internal failure'"
+    )
 
     @opik.track(name="risky_step", project_name=PROJECT_NAME)
     def risky_step() -> str:
         # @opik.track captures `error_info` on the inner span when this
-        # raises, even though the caller swallows the exception.
+        # raises, even though the caller swallows the exception. The
+        # exception type and message are recorded in `error_info` —
+        # *not* exposed via the overview's `has_error` flag — which is
+        # what forces the judge to call `read`.
         raise RuntimeError("internal failure")
 
     @opik.track(name="task", project_name=PROJECT_NAME)
@@ -139,14 +156,14 @@ def test_test_suite_agentic__assertion_about_span_error__detects_failure(
 
     suite = opik_client.create_test_suite(
         name=dataset_name,
-        description="Agentic judge — span-error assertion",
+        description="Agentic judge — span-error assertion (type + message)",
         project_name=PROJECT_NAME,
     )
     suite.insert(
         [
             {
                 "data": {"input": {"question": "do the thing"}},
-                "assertions": [no_errors_assertion],
+                "assertions": [span_error_assertion],
             }
         ]
     )
@@ -159,18 +176,21 @@ def test_test_suite_agentic__assertion_about_span_error__detects_failure(
         model=AGENTIC_JUDGE_MODEL,
     )
 
-    # The single assertion is false (an inner step errored), so the
-    # item must fail — proving the agentic judge saw the span's
-    # `error_info`. A one-shot judge would see only `output="completed"`
-    # and pass the assertion.
+    # The assertion is TRUE — the inner step did raise a RuntimeError
+    # with message "internal failure". A judge that stayed at the
+    # overview level would only see `has_error: true` with no type or
+    # message info, so per the "absence of evidence" rule it would
+    # fail the assertion (score=false). A passing verdict means it
+    # drilled into `error_info` to verify both the type and the
+    # message phrase.
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
         items_total=1,
-        items_passed=0,
+        items_passed=1,
         experiment_items_count=1,
         total_feedback_scores=1,
-        expected_score_names={no_errors_assertion},
+        expected_score_names={span_error_assertion},
         project_name=PROJECT_NAME,
     )
 
