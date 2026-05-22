@@ -12,13 +12,13 @@ const SMEFlowLayout: React.FC<SMEFlowLayoutProps> = ({
   footer,
 }) => {
   return (
-    <div className="m-auto flex h-full min-h-[400px] w-[90vw] min-w-[1040px] flex-col overflow-x-auto overflow-y-hidden">
-      {header && <div className="py-10">{header}</div>}
+    <div className="flex h-full flex-col overflow-hidden px-10 pb-4 pt-8">
+      {header && <div className="pb-4">{header}</div>}
       <div className="flex-auto overflow-y-auto overflow-x-hidden pb-4">
         {children}
       </div>
       {footer && (
-        <div className="flex justify-between gap-2 border-t border-border pb-6 pt-4">
+        <div className="flex justify-between gap-2 border-t border-border pt-3">
           {footer}
         </div>
       )}
