@@ -23,6 +23,8 @@ interface PromptTemplateViewProps {
   search?: string;
   truncate?: boolean;
   labelClassName?: string;
+  hideHeader?: boolean;
+  bareContent?: boolean;
   children?: React.ReactNode;
 }
 
@@ -32,6 +34,8 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
   search,
   truncate = false,
   labelClassName,
+  hideHeader = false,
+  bareContent = false,
   children,
 }) => {
   const [showRawView, setShowRawView] = useState(false);
@@ -131,7 +135,10 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
     if (isTextPrompt) {
       return (
         <div
-          className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground"
+          className={cn(
+            "comet-body-s whitespace-pre-wrap break-words text-foreground",
+            !bareContent && "rounded-md border bg-primary-foreground p-3",
+          )}
           data-testid="prompt-text-content"
         >
           {textContent}
@@ -150,12 +157,14 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <div className={cn("comet-body-s-accented", labelClassName)}>
-          {isChatPrompt ? "Chat messages" : "Prompt"}
+      {!hideHeader && (
+        <div className="flex items-center justify-between">
+          <div className={cn("comet-body-s-accented", labelClassName)}>
+            {isChatPrompt ? "Chat messages" : "Prompt"}
+          </div>
+          {renderToggleButton()}
         </div>
-        {renderToggleButton()}
-      </div>
+      )}
 
       {renderContent()}
 

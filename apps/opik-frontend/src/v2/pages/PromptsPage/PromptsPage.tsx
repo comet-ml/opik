@@ -6,8 +6,14 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { PlusIcon } from "lucide-react";
-import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import {
+  ExternalLink,
+  FileText,
+  MessagesSquare,
+  PlusIcon,
+} from "lucide-react";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyPromptLibraryLightUrl from "/images/empty-prompt-library-light.svg";
 import emptyPromptLibraryDarkUrl from "/images/empty-prompt-library-dark.svg";
@@ -19,10 +25,15 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import TagCell from "@/shared/DataTableCells/TagCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
-import Loader from "@/shared/Loader/Loader";
+import PromptTypeCell from "@/v2/pages/PromptsPage/PromptTypeCell";
 import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { Separator } from "@/ui/separator";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -40,7 +51,7 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/v2/pages/PromptsPage/PromptRowActionsCell";
-import AddEditPromptDialog from "@/v2/pages/PromptsPage/AddEditPromptDialog";
+import CreatePromptSheet from "@/v2/pages/PromptsPage/CreatePromptSheet";
 import PromptsActionsPanel from "@/v2/pages/PromptsPage/PromptsActionsPanel";
 import {
   generateActionsColumDef,
@@ -76,7 +87,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: "template_structure",
     label: "Type",
     type: COLUMN_TYPE.category,
-    cell: TagCell as never,
+    cell: PromptTypeCell as never,
     size: 80,
     accessorFn: (row) => {
       const structure =
@@ -85,7 +96,6 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
         ? PROMPT_TEMPLATE_STRUCTURE.CHAT
         : PROMPT_TEMPLATE_STRUCTURE.TEXT;
     },
-    customMeta: { colored: false },
   },
   {
     id: "description",
@@ -203,6 +213,8 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [createTemplateStructure, setCreateTemplateStructure] =
+    useState<PROMPT_TEMPLATE_STRUCTURE>(PROMPT_TEMPLATE_STRUCTURE.TEXT);
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -231,6 +243,12 @@ const PromptsPage: React.FunctionComponent = () => {
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const { themeMode } = useTheme();
+  const emptyImageUrl =
+    themeMode === THEME_MODE.DARK
+      ? emptyPromptLibraryDarkUrl
+      : emptyPromptLibraryLightUrl;
 
   const { data, isPending, isPlaceholderData, isFetching } =
     useProjectPromptsList(
@@ -331,16 +349,18 @@ const PromptsPage: React.FunctionComponent = () => {
     [navigate, workspaceName, activeProjectId],
   );
 
-  const handleNewPromptClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
+  const handleNewPromptClick = useCallback(
+    (structure: PROMPT_TEMPLATE_STRUCTURE = PROMPT_TEMPLATE_STRUCTURE.TEXT) => {
+      setCreateTemplateStructure(structure);
+      setOpenDialog(true);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [],
+  );
 
-  if (isPending || (isPlaceholderData && prompts.length === 0)) {
-    return <Loader />;
-  }
-
-  const isEmpty = noData && prompts.length === 0;
+  const isTableLoading =
+    isPending || (isPlaceholderData && prompts.length === 0);
+  const isEmpty = !isTableLoading && noData && prompts.length === 0;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -349,24 +369,118 @@ const PromptsPage: React.FunctionComponent = () => {
           Prompt library
         </h1>
         {canCreatePrompts && (
-          <Button variant="default" size="xs" onClick={handleNewPromptClick}>
-            <PlusIcon className="mr-1 size-4" />
-            Create prompt
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="default" size="xs">
+                <PlusIcon className="mr-1 size-4" />
+                Prompt
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-96">
+              <DropdownMenuItem
+                onClick={() =>
+                  handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.TEXT)
+                }
+              >
+                <FileText className="mr-2 size-4 shrink-0 text-[var(--color-turquoise)]" />
+                <div className="flex flex-col">
+                  <span className="comet-body-s-accented">Text prompt</span>
+                  <span className="comet-body-xs text-light-slate">
+                    Simple prompts with variable substitution.
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.CHAT)
+                }
+              >
+                <MessagesSquare className="mr-2 size-4 shrink-0 text-[var(--color-burgundy)]" />
+                <div className="flex flex-col">
+                  <span className="comet-body-s-accented">Chat prompt</span>
+                  <span className="comet-body-xs text-light-slate">
+                    Message-based prompts for conversational AI.
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       {isEmpty ? (
-        <PageEmptyState
-          lightImageUrl={emptyPromptLibraryLightUrl}
-          darkImageUrl={emptyPromptLibraryDarkUrl}
-          title="No prompts yet"
-          description={
-            "Create and manage prompts in one place.\nVersion them, improve and reuse, and keep your workflows consistent."
-          }
-          primaryActionLabel="Create your first prompt"
-          onPrimaryAction={handleNewPromptClick}
-          docsUrl={buildDocsUrl("/development/agent-configuration/overview")}
-        />
+        <div className="flex flex-1 items-center justify-center gap-12 px-8 py-10">
+          <div className="flex w-full max-w-md flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <h2 className="comet-title-s text-foreground">No prompts yet</h2>
+              <p className="comet-body-s text-muted-slate">
+                Manage your prompts outside your codebase. Version them, update
+                them without redeploying, and keep a full history of every
+                change.
+              </p>
+            </div>
+
+            {canCreatePrompts && (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.TEXT)
+                  }
+                  className="group flex w-full flex-col gap-1 rounded-md border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText className="size-4 shrink-0 text-[var(--color-turquoise)]" />
+                    <span className="comet-body-s-accented text-foreground">
+                      Create a text prompt
+                    </span>
+                  </span>
+                  <span className="comet-body-xs text-muted-slate">
+                    Start with a simple prompt with variable substitution.
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.CHAT)
+                  }
+                  className="group flex w-full flex-col gap-1 rounded-md border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary"
+                >
+                  <span className="flex items-center gap-2">
+                    <MessagesSquare className="size-4 shrink-0 text-[var(--color-burgundy)]" />
+                    <span className="comet-body-s-accented text-foreground">
+                      Create a chat prompt
+                    </span>
+                  </span>
+                  <span className="comet-body-xs text-muted-slate">
+                    Start with a message-based prompt for conversational AI.
+                  </span>
+                </button>
+              </div>
+            )}
+
+            <div>
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href={buildDocsUrl(
+                    "/development/agent-configuration/overview",
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View docs
+                  <ExternalLink className="ml-1.5 size-3.5" />
+                </a>
+              </Button>
+            </div>
+          </div>
+
+          <img
+            src={emptyImageUrl}
+            alt="No prompts yet"
+            className="hidden max-w-sm shrink-0 lg:block"
+          />
+        </div>
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
@@ -416,13 +530,16 @@ const PromptsPage: React.FunctionComponent = () => {
             noData={
               <DataTableNoData title={noDataText}>
                 {noData && canCreatePrompts && (
-                  <Button variant="link" onClick={handleNewPromptClick}>
+                  <Button variant="link" onClick={() => handleNewPromptClick()}>
                     Create prompt
                   </Button>
                 )}
               </DataTableNoData>
             }
-            showLoadingOverlay={isPlaceholderData && isFetching}
+            showSkeleton={isTableLoading}
+            showLoadingOverlay={
+              !isTableLoading && isPlaceholderData && isFetching
+            }
           />
           <div className="py-4">
             <DataTablePagination
@@ -435,10 +552,11 @@ const PromptsPage: React.FunctionComponent = () => {
           </div>
         </>
       )}
-      <AddEditPromptDialog
+      <CreatePromptSheet
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        templateStructure={createTemplateStructure}
       />
     </div>
   );
