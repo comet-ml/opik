@@ -112,10 +112,10 @@ navigation:
             path: ../docs-v2/observability/agent_sandbox.mdx
             slug: agent-playground
           - page: Prompt playground
-            path: ../docs-v2/prompt_engineering/advanced/playground.mdx
+            path: ../docs-v2/prompt_engineering/playground.mdx
             slug: prompt-playground
-          - section: Agent configuration
-            slug: /agent-configuration
+          - section: Prompt library
+            slug: /prompt-library
             contents:
               - page: Overview
                 path: ../docs-v2/prompt_engineering/overview.mdx
@@ -123,18 +123,15 @@ navigation:
               - page: Getting started
                 path: ../docs-v2/prompt_engineering/getting-started.mdx
                 slug: getting-started
+              - page: Text and chat prompts
+                path: ../docs-v2/prompt_engineering/prompt_types.mdx
+                slug: prompt-types
               - page: MCP server
                 path: ../docs-v2/prompt_engineering/mcp_server.mdx
                 slug: mcp-server
-              - page: Concepts
-                path: ../docs-v2/prompt_engineering/concepts.mdx
-                slug: concepts
               - page: Version control
-                path: ../docs-v2/prompt_engineering/advanced/version_control.mdx
+                path: ../docs-v2/prompt_engineering/version_control.mdx
                 slug: version-control
-              - page: Guaranteed availability
-                path: ../docs-v2/prompt_engineering/advanced/guaranted_availability.mdx
-                slug: guaranteed-availability
           - section: Optimization runs
             slug: /optimization-runs
             contents:
