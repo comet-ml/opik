@@ -46,6 +46,26 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     [baseVersion?.template],
   );
 
+  const stringifyMetadata = (m: unknown): string => {
+    if (m === undefined || m === null) return "";
+    if (typeof m === "object" && Object.keys(m as object).length === 0)
+      return "";
+    try {
+      return JSON.stringify(m, null, 2);
+    } catch {
+      return String(m);
+    }
+  };
+
+  const baseMetadataText = useMemo(
+    () => stringifyMetadata(baseVersion?.metadata),
+    [baseVersion?.metadata],
+  );
+  const diffMetadataText = useMemo(
+    () => stringifyMetadata(diffVersion?.metadata),
+    [diffVersion?.metadata],
+  );
+
   const {
     images: baseImages,
     videos: baseVideos,
@@ -164,7 +184,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         <div
           className={cn(
             "overflow-y-auto bg-background p-3",
-            imagesHaveChanges ? "h-[520px]" : "h-[620px]",
+            imagesHaveChanges ? "max-h-[520px]" : "max-h-[620px]",
           )}
         >
           <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-3">
@@ -198,6 +218,49 @@ const ComparePromptVersionDialog: React.FunctionComponent<
             <div className="grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none">
               {renderVersionColumn(baseVersion, baseText, diffText, "base")}
               {renderVersionColumn(diffVersion, baseText, diffText, "diff")}
+            </div>
+            <div>
+              <div className="comet-body-s-accented mb-2 text-foreground">
+                Metadata
+              </div>
+              <div className="grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none">
+                <div className="overflow-hidden rounded-md border bg-background">
+                  <div className="max-h-[320px] overflow-y-auto p-3">
+                    <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-3">
+                      {baseMetadataText ? (
+                        <TextDiff
+                          content1={baseMetadataText}
+                          content2={diffMetadataText}
+                          mode="words"
+                          side="base"
+                        />
+                      ) : (
+                        <span className="comet-body-xs text-light-slate">
+                          No metadata
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-hidden rounded-md border bg-background">
+                  <div className="max-h-[320px] overflow-y-auto p-3">
+                    <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-3">
+                      {diffMetadataText ? (
+                        <TextDiff
+                          content1={baseMetadataText}
+                          content2={diffMetadataText}
+                          mode="words"
+                          side="diff"
+                        />
+                      ) : (
+                        <span className="comet-body-xs text-light-slate">
+                          No metadata
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             {(imagesHaveChanges || videosHaveChanges || audiosHaveChanges) && (
               <>

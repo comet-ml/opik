@@ -16,7 +16,6 @@ import { LLMMessage } from "@/types/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import ChatPromptRawView from "@/v2/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
-import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
@@ -30,8 +29,6 @@ type CreatePromptSheetProps = {
   setOpen: (open: boolean) => void;
   templateStructure: PROMPT_TEMPLATE_STRUCTURE;
 };
-
-type PromptView = "raw" | "pretty";
 
 const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
   open,
@@ -51,7 +48,6 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
   const [template, setTemplate] = useState("");
   const [metadata, setMetadata] = useState("");
   const [description, setDescription] = useState("");
-  const [promptView, setPromptView] = useState<PromptView>("raw");
   const [messages, setMessages] = useState<LLMMessage[]>([
     generateDefaultLLMPromptMessage(),
   ]);
@@ -170,23 +166,7 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
             <div className="space-y-1.5">
               <Label>Prompt</Label>
               <div className="rounded-md border bg-soft-background">
-                <div className="flex items-center justify-between border-b px-3 py-1.5">
-                  <Button
-                    variant="ghost"
-                    size="2xs"
-                    onClick={() =>
-                      setPromptView((v) => (v === "pretty" ? "raw" : "pretty"))
-                    }
-                  >
-                    {promptView === "pretty" ? (
-                      <>
-                        Pretty <Sparkles className="ml-1 size-3" />
-                      </>
-                    ) : (
-                      <>Raw</>
-                    )}
-                    <ChevronDown className="ml-1 size-3" />
-                  </Button>
+                <div className="flex items-center justify-end border-b px-3 py-1.5">
                   <TooltipWrapper content="Copy prompt">
                     <Button
                       variant="minimal"
@@ -198,24 +178,12 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
                   </TooltipWrapper>
                 </div>
                 <div className="min-h-[120px] p-3">
-                  {promptView === "pretty" ? (
-                    template ? (
-                      <MarkdownPreview className="prose-sm">
-                        {template}
-                      </MarkdownPreview>
-                    ) : (
-                      <span className="comet-body-s text-light-slate">
-                        Type your prompt...
-                      </span>
-                    )
-                  ) : (
-                    <AutoResizeTextarea
-                      value={template}
-                      onChange={setTemplate}
-                      placeholder="Type your prompt..."
-                      className="comet-body-s"
-                    />
-                  )}
+                  <AutoResizeTextarea
+                    value={template}
+                    onChange={setTemplate}
+                    placeholder="Type your prompt..."
+                    className="comet-body-s"
+                  />
                 </div>
               </div>
               <p className="comet-body-xs text-light-slate">
