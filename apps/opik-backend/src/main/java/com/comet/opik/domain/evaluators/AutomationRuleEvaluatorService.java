@@ -90,6 +90,8 @@ public interface AutomationRuleEvaluatorService {
             @NonNull String workspaceId, AutomationRuleEvaluatorType type);
 
     Mono<LogPage> getLogs(LogCriteria criteria);
+
+    void evictCache(String workspaceId);
 }
 
 @Singleton
@@ -705,5 +707,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         // Use polymorphic method to update the model with projects and legacy fields
         return model.withProjectDetails(projectId, projectName, projects);
+    }
+
+    @Override
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
+    public void evictCache(@NonNull String workspaceId) {
+        log.debug("Evicted automation rule cache for workspace, workspaceId='{}'", workspaceId);
     }
 }
