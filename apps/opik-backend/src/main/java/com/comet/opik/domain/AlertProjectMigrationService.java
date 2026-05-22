@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -48,6 +49,8 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 @Slf4j
 @Singleton
 public class AlertProjectMigrationService implements Managed {
+
+    private static final int MAX_ORPHAN_ALERTS_PER_WORKSPACE = 100;
 
     public static final String METRIC_NAMESPACE = "opik.migration.alert_project";
     public static final AttributeKey<String> RESULT_KEY = stringKey("result");
@@ -165,7 +168,7 @@ public class AlertProjectMigrationService implements Managed {
                 .subscribeOn(migrationScheduler)
                 .flatMapMany(Flux::fromIterable)
                 .publishOn(migrationScheduler)
-                .concatMap(workspace -> migrateWorkspace(workspace.workspaceId()))
+                .flatMap(workspace -> migrateWorkspace(workspace.workspaceId()), config.schedulerThreadCap())
                 .then();
     }
 
@@ -182,10 +185,8 @@ public class AlertProjectMigrationService implements Managed {
 
     private void doMigrateWorkspace(String workspaceId, long startMillis) {
         var orphanAlerts = transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AlertDAO.class).findByWorkspaceId(workspaceId))
-                .stream()
-                .filter(alert -> alert.projectId() == null)
-                .toList();
+                handle -> handle.attach(AlertDAO.class)
+                        .findByWorkspaceId(workspaceId, true, MAX_ORPHAN_ALERTS_PER_WORKSPACE));
 
         if (orphanAlerts.isEmpty()) {
             log.info("No orphan alerts found, workspaceId='{}'", workspaceId);
@@ -197,15 +198,15 @@ public class AlertProjectMigrationService implements Managed {
                 workspaceId, orphanAlerts.size());
 
         // Default Project is resolved lazily and at most once per workspace cycle.
-        UUID[] defaultProjectIdHolder = {null};
+        AtomicReference<UUID> defaultProjectIdRef = new AtomicReference<>();
         Supplier<UUID> defaultProjectIdSupplier = () -> {
-            if (defaultProjectIdHolder[0] == null) {
-                defaultProjectIdHolder[0] = projectService
-                        .getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, SYSTEM_USER).id();
-                log.info("Resolved Default Project, workspaceId='{}', projectId='{}'",
-                        workspaceId, defaultProjectIdHolder[0]);
+            UUID id = defaultProjectIdRef.get();
+            if (id == null) {
+                id = projectService.getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, SYSTEM_USER).id();
+                defaultProjectIdRef.set(id);
+                log.info("Resolved Default Project, workspaceId='{}', projectId='{}'", workspaceId, id);
             }
-            return defaultProjectIdHolder[0];
+            return id;
         };
 
         for (var alert : orphanAlerts) {

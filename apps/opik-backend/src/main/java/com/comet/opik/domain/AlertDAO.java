@@ -75,6 +75,7 @@ public interface AlertDAO {
                 WHERE a.workspace_id = :workspaceId
                     <if(id)> AND a.id = :id <endif>
                     <if(project_id)> AND a.project_id = :project_id <endif>
+                    <if(project_id_is_null)> AND a.project_id IS NULL <endif>
             ),
             trigger_ids AS (
                 SELECT id
@@ -316,7 +317,10 @@ public interface AlertDAO {
     @SqlQuery(FIND)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    List<Alert> findByWorkspaceId(@Bind("workspaceId") String workspaceId);
+    List<Alert> findByWorkspaceId(
+            @Bind("workspaceId") String workspaceId,
+            @Define("project_id_is_null") boolean projectIdIsNull,
+            @Define("limit") @Bind("limit") int limit);
 
     @SqlUpdate("UPDATE alerts SET project_id = :projectId WHERE id = :alertId AND workspace_id = :workspaceId")
     void updateAlertProjectId(@Bind("alertId") UUID alertId, @Bind("projectId") UUID projectId,
