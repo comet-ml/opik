@@ -98,7 +98,7 @@ public interface DatasetDAO {
             SELECT COUNT(id) FROM datasets
             WHERE workspace_id = :workspace_id
             <if(name)> AND name like concat('%', :name, '%') <endif>
-            <if(project_id)> AND project_id = :project_id <endif>
+            <if(project_id)> AND (project_id = :project_id OR project_id IS NULL) <endif>
             <if(filters)> AND <filters> <endif>
             <if(visibility)> AND visibility = :visibility <endif>
             <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>
@@ -188,7 +188,7 @@ public interface DatasetDAO {
             SELECT * FROM datasets
             WHERE workspace_id = :workspace_id
             <if(name)> AND name like concat('%', :name, '%') <endif>
-            <if(project_id)> AND project_id = :project_id <endif>
+            <if(project_id)> AND (project_id = :project_id OR project_id IS NULL) <endif>
             <if(filters)> AND <filters> <endif>
             <if(visibility)> AND visibility = :visibility <endif>
             <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>

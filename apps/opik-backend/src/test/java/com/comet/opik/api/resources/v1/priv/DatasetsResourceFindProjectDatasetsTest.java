@@ -603,6 +603,46 @@ class DatasetsResourceFindProjectDatasetsTest {
     }
 
     @Test
+    @DisplayName("when workspace-level datasets exist, then include them alongside project-scoped datasets")
+    void getProjectDatasets__includesWorkspaceLevelDatasets() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+
+        List<UUID> projectDatasetIds = buildDatasets().stream()
+                .map(d -> d.toBuilder().projectId(projectId).build())
+                .map(dataset -> createAndAssert(dataset, apiKey, workspaceName))
+                .toList();
+
+        // workspace-level datasets (projectId=null) simulate V1 / pre-migration datasets
+        List<UUID> workspaceDatasetIds = buildDatasets().stream()
+                .map(dataset -> createAndAssert(dataset, apiKey, workspaceName))
+                .toList();
+
+        // datasets in another project — must not appear
+        buildDatasets().stream()
+                .map(d -> d.toBuilder().projectId(otherProjectId).build())
+                .forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+
+        int totalExpected = projectDatasetIds.size() + workspaceDatasetIds.size();
+        var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, totalExpected + 50, workspaceName,
+                apiKey);
+
+        var expectedIds = new HashSet<UUID>();
+        expectedIds.addAll(projectDatasetIds);
+        expectedIds.addAll(workspaceDatasetIds);
+
+        var actualIds = new HashSet<>(actualPage.content().stream().map(Dataset::id).toList());
+
+        assertThat(actualPage.total()).isEqualTo(totalExpected);
+        assertThat(actualIds).isEqualTo(expectedIds);
+    }
+
+    @Test
     @DisplayName("when searching by dataset name, then return matching datasets")
     void getProjectDatasets__whenSearchingByDatasetName__thenReturnMatchingDatasets() {
         UUID datasetSuffix = UUID.randomUUID();
