@@ -170,7 +170,8 @@ public abstract class FilterEvaluationServiceBase<E> {
             case "message" -> errorInfo.message();
             case "traceback" -> errorInfo.traceback();
             default -> {
-                log.warn("Unknown ErrorInfo field key. Supported keys: exceptionType, message, traceback. Provided: '{}'",
+                log.warn(
+                        "Unknown ErrorInfo field key. Supported keys: exceptionType, message, traceback. Provided: '{}'",
                         key);
                 yield null;
             }

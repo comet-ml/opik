@@ -88,7 +88,8 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
             case DURATION ->
                 span.duration() != null ? span.duration() : calculateDuration(span.startTime(), span.endTime());
             case TTFT -> span.ttft();
-            case ERROR_INFO -> key != null ? extractErrorInfoField(span.errorInfo(), key)
+            case ERROR_INFO -> key != null
+                    ? extractErrorInfoField(span.errorInfo(), key)
                     : extractErrorInfoText(span.errorInfo());
             case CUSTOM -> extractCustomFieldValue(key, span);
             default -> {
