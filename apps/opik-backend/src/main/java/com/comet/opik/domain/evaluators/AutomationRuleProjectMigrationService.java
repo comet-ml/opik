@@ -245,8 +245,6 @@ public class AutomationRuleProjectMigrationService {
             rulesSkipped.add(deletedCount, SKIP_REASON_PARTIAL_DELETED);
         }
 
-        var sortedProjectIds = validProjectIds.stream().sorted().toList();
-
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var migrationDao = handle.attach(AutomationRuleMigrationDAO.class);
             var ruleDao = handle.attach(AutomationRuleDAO.class);
@@ -256,16 +254,24 @@ public class AutomationRuleProjectMigrationService {
                 return SplitResult.builder().outcome(SplitOutcome.NO_OP).build();
             }
 
+            var orderedValidIds = freshJunctions.stream()
+                    .filter(validProjectIds::contains)
+                    .toList();
+
+            if (orderedValidIds.isEmpty()) {
+                return SplitResult.builder().outcome(SplitOutcome.NO_OP).build();
+            }
+
             migrationDao.deleteJunctionByRuleId(ruleId, workspaceId);
 
-            var firstProjectId = sortedProjectIds.getFirst();
+            var firstProjectId = orderedValidIds.getFirst();
             migrationDao.insertJunction(ruleId, firstProjectId, workspaceId);
             ruleDao.clearLegacyProjectId(ruleId, workspaceId);
 
             int newRules = 0;
-            for (int i = 1; i < sortedProjectIds.size(); i++) {
+            for (int i = 1; i < orderedValidIds.size(); i++) {
                 var newRuleId = idGenerator.generateId();
-                var projectId = sortedProjectIds.get(i);
+                var projectId = orderedValidIds.get(i);
 
                 migrationDao.copyBaseRule(newRuleId, ruleId, workspaceId);
                 migrationDao.copyEvaluator(newRuleId, ruleId);
