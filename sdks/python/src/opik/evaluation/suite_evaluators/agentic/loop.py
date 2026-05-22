@@ -155,13 +155,19 @@ def run_agentic_judge(
                 else:
                     seen_calls.add(call_key)
                     result = registry.execute(tool_name, arguments, ctx)
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call["id"],
-                            "content": result,
-                        }
-                    )
+                # Append the tool reply unconditionally: OpenAI (and other
+                # providers) reject a conversation where an assistant
+                # `tool_calls` block isn't followed by a tool message for
+                # every `tool_call_id`. The dedup path still needs to
+                # echo *something* back so the conversation stays well-
+                # formed; the hint text plays that role.
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call["id"],
+                        "content": result,
+                    }
+                )
                 span.output = {"output": result}
 
         # Follow-up turns let the model decide whether more tools are

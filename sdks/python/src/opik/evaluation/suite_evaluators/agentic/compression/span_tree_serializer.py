@@ -23,16 +23,18 @@ from . import tokens
 # content if the budget allows" as a first-class tier.
 NO_OVERVIEW_TRUNCATION: int = sys.maxsize
 
-# Matches the backend's `SpanTreeSerializer.OVERVIEW_TRUNCATION_LENGTH`
-# (500). Earlier value was 200, which was small enough that even modest
-# real-world payloads tripped truncation and forced the judge to drill
-# in for every span — a per-token tax with no benefit, and a known
-# engagement hazard. (A `gpt-4o-mini`-class judge interprets truncated
-# content as evidence of absence rather than "go fetch the full value".)
-# 500 gives the overview enough headroom for the common case while
-# still bounding worst-case overview size. Kept as the floor of the
-# ladder below.
-OVERVIEW_IO_CHAR_LIMIT = 500
+# Floor entry of the ladder: the smallest per-field truncation limit
+# the sizer will fall back to when nothing larger fits the model's
+# context budget. Matches the backend's
+# `SpanTreeSerializer.OVERVIEW_TRUNCATION_LENGTH` (500). Earlier value
+# was 200, which was small enough that even modest real-world payloads
+# tripped truncation and forced the judge to drill in for every span —
+# a per-token tax with no benefit, and a known engagement hazard. (A
+# `gpt-4o-mini`-class judge interprets truncated content as evidence of
+# absence rather than "go fetch the full value".) 500 gives the
+# overview enough headroom for the common case while still bounding
+# worst-case overview size.
+OVERVIEW_IO_FLOOR_CHAR_LIMIT = 500
 
 
 # Candidate per-field truncation limits, large → small. Callers pick
@@ -53,7 +55,7 @@ OVERVIEW_IO_LIMIT_LADDER: Tuple[int, ...] = (
     4_000,
     2_000,
     1_000,
-    OVERVIEW_IO_CHAR_LIMIT,
+    OVERVIEW_IO_FLOOR_CHAR_LIMIT,
 )
 
 # Truncation suffix carries an *actionable* hint pointing at the
@@ -75,7 +77,7 @@ def _truncate_text(
     value: Any,
     entity_type: str,
     entity_id: str,
-    limit: int = OVERVIEW_IO_CHAR_LIMIT,
+    limit: int = OVERVIEW_IO_FLOOR_CHAR_LIMIT,
 ) -> Any:
     """Truncate strings or string-rendered dict/list to `limit` chars.
 
@@ -139,7 +141,7 @@ def serialize_overview(
     trace: models.TraceModel,
     spans: List[models.SpanModel],
     parent_by_child: Dict[str, Optional[str]],
-    io_char_limit: int = OVERVIEW_IO_CHAR_LIMIT,
+    io_char_limit: int = OVERVIEW_IO_FLOOR_CHAR_LIMIT,
 ) -> Dict[str, Any]:
     """Render a flat overview of the trace + its spans.
 
@@ -199,7 +201,7 @@ def pick_overview_io_char_limit(
     spans: List[models.SpanModel],
     parent_by_child: Dict[str, Optional[str]],
     budget_tokens: int,
-    ladder: Tuple[int, ...] = OVERVIEW_IO_LIMIT_LADDER,
+    ladder: Optional[Tuple[int, ...]] = None,
 ) -> Tuple[int, Dict[str, Any]]:
     """Pick the largest ladder entry whose rendered overview fits the budget.
 
@@ -212,10 +214,17 @@ def pick_overview_io_char_limit(
     back to the smallest entry (re-rendered) if nothing fits — the
     agentic loop's drill-in tools can still rescue the run from there.
 
-    Rendering is O(spans) per candidate; the ladder has 6 entries by
-    default, so worst-case is one digit of millis on the data we cache
+    `ladder` defaults to the module-level `OVERVIEW_IO_LIMIT_LADDER`,
+    read at call time rather than at function-definition time so tests
+    can `monkeypatch.setattr(span_tree_serializer,
+    "OVERVIEW_IO_LIMIT_LADDER", ...)` and have it take effect.
+
+    Rendering is O(spans) per candidate; the default ladder has 9
+    entries, so worst-case is one digit of millis on the data we cache
     in `TraceToolContext`. Cheap relative to a single LLM round-trip.
     """
+    if ladder is None:
+        ladder = OVERVIEW_IO_LIMIT_LADDER
     if not ladder:
         raise ValueError("ladder must not be empty")
     if budget_tokens <= 0:
