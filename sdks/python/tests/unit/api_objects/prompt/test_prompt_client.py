@@ -31,6 +31,8 @@ def _make_mock_version(
     template: str = "test template",
     version_type: str = "mustache",
     metadata: Optional[dict] = None,
+    version_number: Optional[str] = "v1",
+    tags: Optional[list] = None,
 ) -> prompt_version_detail.PromptVersionDetail:
     """Helper to create a mock PromptVersionDetail."""
     return prompt_version_detail.PromptVersionDetail(
@@ -40,6 +42,8 @@ def _make_mock_version(
         type=version_type,
         metadata=metadata,
         commit="abc123",
+        version_number=version_number,
+        tags=tags,
         template_structure="text",
     )
 
@@ -56,13 +60,14 @@ class TestPromptClientEndpointSelection:
     def test_create_new_prompt_with_container_params_calls_create_prompt(
         self, client, mock_rest_client
     ):
-        """When creating a new prompt with id/description/tags, should call create_prompt endpoint."""
+        """When creating a new prompt with id/description/tags, should call create_prompt endpoint.
+        Also asserts that version_number survives the tag-rebuild branch."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             _make_404_error(),
-            _make_mock_version(),
+            _make_mock_version(tags=None),
         ]
 
-        client.create_prompt(
+        result = client.create_prompt(
             name="test-prompt",
             prompt="test template",
             metadata=None,
@@ -80,17 +85,20 @@ class TestPromptClientEndpointSelection:
         assert call_kwargs["id"] == "custom-id"
         assert call_kwargs["description"] == "A test prompt"
         assert call_kwargs["tags"] == ["test", "unit"]
+        assert result.version_number == "v1"
+        assert result.tags == ["test", "unit"]
 
     def test_create_new_prompt_without_container_params_calls_create_version(
         self, client, mock_rest_client
     ):
-        """When creating a new prompt without id/description/tags, should call create_prompt_version."""
+        """When creating a new prompt without id/description/tags, should call create_prompt_version.
+        Also asserts that version_number from the create response is surfaced."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
         mock_rest_client.prompts.create_prompt_version.return_value = (
             _make_mock_version()
         )
 
-        client.create_prompt(
+        result = client.create_prompt(
             name="test-prompt",
             prompt="test template",
             metadata=None,
@@ -99,6 +107,7 @@ class TestPromptClientEndpointSelection:
 
         mock_rest_client.prompts.create_prompt_version.assert_called_once()
         mock_rest_client.prompts.create_prompt.assert_not_called()
+        assert result.version_number == "v1"
 
     def test_update_existing_prompt_always_calls_create_version(
         self, client, mock_rest_client
@@ -166,13 +175,15 @@ class TestPromptClientEndpointSelection:
     def test_create_new_prompt_with_only_tags_calls_create_prompt(
         self, client, mock_rest_client
     ):
-        """When creating a new prompt with only tags parameter, should call create_prompt."""
+        """When creating a new prompt with only tags parameter, should call create_prompt.
+        Tags-only takes the rebuild branch — assert version_number survives it
+        (regression for the bug where tag injection dropped version_number)."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             _make_404_error(),
-            _make_mock_version(),
+            _make_mock_version(tags=None),
         ]
 
-        client.create_prompt(
+        result = client.create_prompt(
             name="test-prompt",
             prompt="test template",
             metadata=None,
@@ -182,6 +193,8 @@ class TestPromptClientEndpointSelection:
 
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
+        assert result.version_number == "v1"
+        assert result.tags == ["test"]
 
 
 class TestInternalCreateMask:
