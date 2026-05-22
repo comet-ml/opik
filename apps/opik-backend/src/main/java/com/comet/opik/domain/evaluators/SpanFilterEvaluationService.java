@@ -1,17 +1,14 @@
 package com.comet.opik.domain.evaluators;
 
-import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
-import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -54,8 +51,7 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
     @Override
     public boolean matchesFilter(Filter filter, Span span) {
         if (isErrorInfoTextFilter(filter)) {
-            var errorInfoText = extractErrorInfoText(span.errorInfo());
-            return errorInfoText != null && evaluateOperator(filter.operator(), errorInfoText, filter.value());
+            return matchesErrorInfoTextFilter(filter, span.errorInfo());
         }
 
         return super.matchesFilter(filter, span);
@@ -102,26 +98,6 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
         };
     }
 
-    private boolean isErrorInfoTextFilter(Filter filter) {
-        return filter != null
-                && filter.field() == SpanField.ERROR_INFO
-                && (filter.operator() == Operator.CONTAINS || filter.operator() == Operator.NOT_CONTAINS);
-    }
-
-    private String extractErrorInfoText(ErrorInfo errorInfo) {
-        if (!hasNonEmptyErrorInfo(errorInfo)) {
-            return null;
-        }
-        return extractStringFromJson(errorInfo);
-    }
-
-    private boolean hasNonEmptyErrorInfo(ErrorInfo errorInfo) {
-        return errorInfo != null
-                && (StringUtils.isNotBlank(errorInfo.exceptionType())
-                        || StringUtils.isNotBlank(errorInfo.message())
-                        || StringUtils.isNotBlank(errorInfo.traceback()));
-    }
-
     /**
      * Extracts value from a custom field filter.
      * Custom filters have a key in format "input.path" or "output.path" where path is the JSON path.
@@ -147,25 +123,6 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
             case "output" -> extractNestedValue(span.output(), nestedKey);
             default -> {
                 log.warn("Unsupported base field in custom filter key: '{}'. Supported: 'input', 'output'", baseField);
-                yield null;
-            }
-        };
-    }
-
-    /**
-     * Extracts a field value from ErrorInfo object.
-     * Supports: exceptionType, message, traceback
-     */
-    private Object extractErrorInfoField(ErrorInfo errorInfo, String key) {
-        if (errorInfo == null || key == null) {
-            return null;
-        }
-        return switch (key.toLowerCase()) {
-            case "exceptiontype", "exception_type" -> errorInfo.exceptionType();
-            case "message" -> errorInfo.message();
-            case "traceback" -> errorInfo.traceback();
-            default -> {
-                log.warn("Unknown ErrorInfo field key: '{}'. Supported keys: exceptionType, message, traceback", key);
                 yield null;
             }
         };

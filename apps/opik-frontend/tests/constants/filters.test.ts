@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "./filters";
+import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
 import { COLUMN_TYPE } from "@/types/shared";
 
 describe("filter constants", () => {

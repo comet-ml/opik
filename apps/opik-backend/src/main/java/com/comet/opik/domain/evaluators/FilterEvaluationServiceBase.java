@@ -1,7 +1,9 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.utils.JsonUtils;
@@ -127,6 +129,52 @@ public abstract class FilterEvaluationServiceBase<E> {
             log.warn("Failed to convert value to string", e);
             return jsonValue.toString();
         }
+    }
+
+    protected boolean isErrorInfoTextFilter(Filter filter) {
+        return filter != null
+                && filter.field() != null
+                && filter.field().getType() == FieldType.ERROR_CONTAINER
+                && (filter.operator() == Operator.CONTAINS || filter.operator() == Operator.NOT_CONTAINS);
+    }
+
+    protected boolean matchesErrorInfoTextFilter(Filter filter, ErrorInfo errorInfo) {
+        var errorInfoText = extractErrorInfoText(errorInfo);
+        return errorInfoText != null && evaluateOperator(filter.operator(), errorInfoText, filter.value());
+    }
+
+    protected String extractErrorInfoText(ErrorInfo errorInfo) {
+        if (!hasNonEmptyErrorInfo(errorInfo)) {
+            return null;
+        }
+        return extractStringFromJson(errorInfo);
+    }
+
+    private boolean hasNonEmptyErrorInfo(ErrorInfo errorInfo) {
+        return errorInfo != null
+                && (StringUtils.isNotBlank(errorInfo.exceptionType())
+                        || StringUtils.isNotBlank(errorInfo.message())
+                        || StringUtils.isNotBlank(errorInfo.traceback()));
+    }
+
+    /**
+     * Extracts a field value from ErrorInfo object.
+     * Supports: exceptionType, message, traceback
+     */
+    protected Object extractErrorInfoField(ErrorInfo errorInfo, String key) {
+        if (errorInfo == null || key == null) {
+            return null;
+        }
+        return switch (key.toLowerCase()) {
+            case "exceptiontype", "exception_type" -> errorInfo.exceptionType();
+            case "message" -> errorInfo.message();
+            case "traceback" -> errorInfo.traceback();
+            default -> {
+                log.warn("Unknown ErrorInfo field key. Supported keys: exceptionType, message, traceback. Provided: '{}'",
+                        key);
+                yield null;
+            }
+        };
     }
 
     /**
