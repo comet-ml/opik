@@ -18,6 +18,7 @@ import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
+import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -74,6 +75,7 @@ public interface AlertDAO {
                 WHERE a.workspace_id = :workspaceId
                     <if(id)> AND a.id = :id <endif>
                     <if(project_id)> AND a.project_id = :project_id <endif>
+                    <if(project_id_is_null)> AND a.project_id IS NULL <endif>
             ),
             trigger_ids AS (
                 SELECT id
@@ -283,6 +285,50 @@ public interface AlertDAO {
                     WHERE  a.id IN (<ids>) AND a.workspace_id = :workspaceId;
             """)
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("""
+            SELECT workspace_id, COUNT(*) AS alert_count
+            FROM alerts
+            WHERE project_id IS NULL
+            <if(hasExcluded)> AND workspace_id NOT IN (<excludedWorkspaceIds>) <endif>
+            <if(hasDemoNames)> AND name NOT IN (<demoNames>) <endif>
+            GROUP BY workspace_id
+            ORDER BY alert_count ASC
+            LIMIT :limit
+            """)
+    @UseStringTemplateEngine
+    @RegisterConstructorMapper(EligibleAlertWorkspace.class)
+    List<EligibleAlertWorkspace> findEligibleAlertWorkspaces(
+            @Define("hasExcluded") boolean hasExcluded,
+            @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE) List<String> excludedWorkspaceIds,
+            @Define("hasDemoNames") boolean hasDemoNames,
+            @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE) List<String> demoNames,
+            @Bind("limit") int limit);
+
+    @SqlQuery(FIND)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Alert> findByWorkspaceId(
+            @Bind("workspaceId") String workspaceId,
+            @Define("project_id_is_null") boolean projectIdIsNull,
+            @Define("limit") @Bind("limit") int limit);
+
+    @SqlUpdate("UPDATE alerts SET project_id = :projectId, last_updated_by = :userName WHERE id = :alertId AND workspace_id = :workspaceId")
+    void updateAlertProjectId(@Bind("alertId") UUID alertId, @Bind("projectId") UUID projectId,
+            @Bind("workspaceId") String workspaceId, @Bind("userName") String userName);
+
+    @SqlUpdate("""
+            DELETE FROM alert_trigger_configs
+            WHERE alert_trigger_id IN (SELECT id FROM alert_triggers WHERE alert_id = :alertId)
+            AND config_type = 'scope:project'
+            """)
+    void deleteScopeProjectConfigs(@Bind("alertId") UUID alertId);
+
+    @SqlUpdate("DELETE FROM alert_trigger_configs WHERE alert_trigger_id IN (<triggerIds>)")
+    void deleteTriggerConfigsByIds(@BindList("triggerIds") Set<UUID> triggerIds);
+
+    @SqlUpdate("DELETE FROM alert_triggers WHERE id IN (<triggerIds>)")
+    void deleteTriggersByIds(@BindList("triggerIds") Set<UUID> triggerIds);
 
     @Slf4j
     class AlertWithWebhookRowMapper implements RowMapper<Alert> {

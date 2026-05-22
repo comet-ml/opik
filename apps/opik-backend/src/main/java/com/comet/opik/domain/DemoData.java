@@ -57,4 +57,7 @@ public class DemoData {
 
     /** MySQL (utf8mb4_unicode_ci) — matching is case-insensitive, no need for case variants. */
     public static final List<String> AUTOMATION_RULES = List.of();
+
+    /** MySQL (utf8mb4_unicode_ci) — matching is case-insensitive, no need for case variants. */
+    public static final List<String> ALERTS = List.of();
 }
