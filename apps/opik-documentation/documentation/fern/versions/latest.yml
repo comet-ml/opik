@@ -123,6 +123,9 @@ navigation:
               - page: Getting started
                 path: ../docs-v2/prompt_engineering/getting-started.mdx
                 slug: getting-started
+              - page: MCP server
+                path: ../docs-v2/prompt_engineering/mcp_server.mdx
+                slug: mcp-server
               - page: Concepts
                 path: ../docs-v2/prompt_engineering/concepts.mdx
                 slug: concepts
