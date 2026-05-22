@@ -228,7 +228,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         The result is the same object the judge consults in `score()` —
         a `HeuristicSelector`, `AlwaysAgentic`, `NeverAgentic`, or a
         custom subclass the caller injected. Use `isinstance` to
-        recognize the mode without reaching into private state.
+        recognize the mode without reaching into the private state.
         """
         return self._strategy_selector_instance
 

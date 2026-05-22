@@ -283,6 +283,13 @@ def build_trace_tool_context_from_trace_data(
     spans = emulator.spans_for_trace(trace_data.id)
     parent_by_child = emulator.parent_span_ids_for_trace(trace_data.id)
     spans, parent_by_child = _filter_internal_spans(spans, parent_by_child)
+    LOGGER.debug(
+        "[diag] build_trace_tool_context_from_trace_data trace_id=%s "
+        "trace.output=%r span_outputs=%s",
+        trace_data.id,
+        synthesized_trace.output,
+        [(s.id, s.output) for s in spans],
+    )
     return TraceToolContext(
         trace=synthesized_trace,
         spans=spans,

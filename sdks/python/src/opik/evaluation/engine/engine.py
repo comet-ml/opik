@@ -310,6 +310,12 @@ class EvaluationEngine:
             LOGGER.debug(
                 "[engine] Task done for item %s in %.1fs", item.id, task_execution_time
             )
+            LOGGER.debug(
+                "[diag] trial_id=%s trace_id=%s task_output=%r",
+                trial_id,
+                trace_data.id,
+                task_output_,
+            )
 
             opik_context.update_current_trace(output=task_output_)
 
@@ -341,6 +347,15 @@ class EvaluationEngine:
                 "[engine] Scoring done for item %s in %.1fs",
                 item.id,
                 test_result_.scoring_time,
+            )
+            LOGGER.debug(
+                "[diag] trial_id=%s trace_id=%s scores=%s",
+                trial_id,
+                trace_data.id,
+                [
+                    (s.name, s.value, getattr(s, "reason", None))
+                    for s in test_result_.score_results
+                ],
             )
 
         return test_result_
