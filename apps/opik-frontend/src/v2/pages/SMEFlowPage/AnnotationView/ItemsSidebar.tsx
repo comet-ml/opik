@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { User, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSMEFlow, ITEM_STATE } from "../SMEFlowContext";
@@ -41,11 +41,6 @@ const ItemsSidebar: React.FunctionComponent = () => {
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [currentIndex]);
 
-  const handleItemClick = useCallback(
-    (index: number) => navigateToItem(index),
-    [navigateToItem],
-  );
-
   const itemPreviews = useMemo(
     () =>
       queueItems.map((item) => {
@@ -79,7 +74,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
             <button
               key={itemId}
               ref={isActive ? activeRef : undefined}
-              onClick={() => handleItemClick(index)}
+              onClick={() => navigateToItem(index)}
               className={cn(
                 "flex w-full flex-col gap-0.5 p-2 text-left transition-colors",
                 "hover:bg-muted/50",
