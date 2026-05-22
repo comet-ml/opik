@@ -30,7 +30,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -218,11 +218,11 @@ public class AlertProjectMigrationService implements Managed {
     private void migrateAlert(String workspaceId, Alert alert, Supplier<UUID> defaultProjectIdSupplier) {
         var rawProjectIds = collectScopeProjectIds(alert);
 
-        var validProjectIds = rawProjectIds.isEmpty()
-                ? Set.<UUID>of()
+        List<UUID> validProjectIds = rawProjectIds.isEmpty()
+                ? List.of()
                 : projectService.findByIds(workspaceId, rawProjectIds).stream()
                         .map(Project::id)
-                        .collect(Collectors.toUnmodifiableSet());
+                        .collect(Collectors.toUnmodifiableList());
 
         if (!rawProjectIds.isEmpty() && validProjectIds.size() < rawProjectIds.size()) {
             log.info(
@@ -237,7 +237,7 @@ public class AlertProjectMigrationService implements Managed {
             String workspaceId,
             Alert alert,
             Set<UUID> rawProjectIds,
-            Set<UUID> validProjectIds,
+            List<UUID> validProjectIds,
             Supplier<UUID> defaultProjectIdSupplier,
             Handle handle) {
         var alertDAO = handle.attach(AlertDAO.class);
@@ -256,10 +256,8 @@ public class AlertProjectMigrationService implements Managed {
         } else {
             // One or more valid projects. Group triggers per project.
             // null key holds workspace-wide + all-deleted-project triggers → own Default Project alert.
-            List<UUID> sortedProjectIds = validProjectIds.stream()
-                    .sorted(Comparator.comparing(UUID::toString))
-                    .collect(Collectors.toList());
-            UUID firstProjectId = sortedProjectIds.get(0);
+            // validProjectIds is already ordered by id (ORDER BY id in findByIds query).
+            UUID firstProjectId = validProjectIds.get(0);
 
             Map<UUID, List<AlertTrigger>> triggersByProject = groupTriggersByProject(alert, validProjectIds);
             List<AlertTrigger> defaultTriggers = triggersByProject.getOrDefault(null, List.of());
@@ -294,17 +292,17 @@ public class AlertProjectMigrationService implements Managed {
             }
 
             // Remaining valid projects get new alerts with only their own triggers.
-            for (int i = 1; i < sortedProjectIds.size(); i++) {
-                UUID projectId = sortedProjectIds.get(i);
+            for (int i = 1; i < validProjectIds.size(); i++) {
+                UUID projectId = validProjectIds.get(i);
                 List<AlertTrigger> triggersForProject = triggersByProject.getOrDefault(projectId, List.of());
                 cloneAlertForProject(workspaceId, alert, projectId, triggersForProject, handle);
                 newAlertsCreated.add(1);
             }
 
-            if (sortedProjectIds.size() > 1) {
+            if (validProjectIds.size() > 1) {
                 alertsSplit.add(1);
                 log.info("Alert split, workspaceId='{}', alertId='{}', projectCount='{}'",
-                        workspaceId, alert.id(), sortedProjectIds.size());
+                        workspaceId, alert.id(), validProjectIds.size());
             } else {
                 alertsAssigned.add(1);
                 log.info("Alert assigned to single project, workspaceId='{}', alertId='{}', projectId='{}'",
@@ -333,7 +331,7 @@ public class AlertProjectMigrationService implements Managed {
             String workspaceId,
             Alert alert,
             Set<UUID> rawProjectIds,
-            Set<UUID> validProjectIds,
+            List<UUID> validProjectIds,
             Supplier<UUID> defaultProjectIdSupplier) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             executeAlertMigration(workspaceId, alert, rawProjectIds, validProjectIds, defaultProjectIdSupplier,
@@ -383,7 +381,7 @@ public class AlertProjectMigrationService implements Managed {
         }
     }
 
-    private Map<UUID, List<AlertTrigger>> groupTriggersByProject(Alert alert, Set<UUID> validProjectIds) {
+    private Map<UUID, List<AlertTrigger>> groupTriggersByProject(Alert alert, Collection<UUID> validProjectIds) {
         Map<UUID, List<AlertTrigger>> groups = new HashMap<>();
         if (alert.triggers() == null) {
             return groups;

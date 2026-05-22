@@ -52,7 +52,7 @@ interface ProjectDAO {
     @SqlQuery("SELECT * FROM projects WHERE id = :id AND workspace_id = :workspaceId")
     Project findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT * FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+    @SqlQuery("SELECT * FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId ORDER BY id")
     List<Project> findByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("SELECT COUNT(*) FROM projects " +
