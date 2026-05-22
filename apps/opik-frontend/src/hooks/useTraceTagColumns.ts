@@ -9,36 +9,45 @@ import { ColumnData } from "@/types/shared";
 export const COLUMNS_TAGS_ORDER_KEY_SUFFIX = "tag-columns-order";
 
 type UseTagFilterHandlerParams = {
+  filters: Filter[];
   setFilters: (
     filters: Filter[] | ((filters?: Filter[] | null) => Filter[]),
   ) => void;
   setPage: (page: number) => void;
 };
 
+const hasTagFilter = (filters: Filter[], tag: string) =>
+  filters.some(
+    (filter) =>
+      filter.field === "tags" &&
+      filter.operator === "contains" &&
+      filter.value === tag,
+  );
+
 export const useTagFilterHandler = ({
+  filters,
   setFilters,
   setPage,
 }: UseTagFilterHandlerParams) => {
   return useCallback(
     (tag: string) => {
-      setFilters((currentFilters) => {
-        const filters = Array.isArray(currentFilters) ? currentFilters : [];
-        const tagFilterExists = filters.some(
-          (filter) =>
-            filter.field === "tags" &&
-            filter.operator === "contains" &&
-            filter.value === tag,
-        );
+      if (hasTagFilter(filters, tag)) return;
 
-        if (tagFilterExists) {
-          return filters;
+      setFilters((currentFilters) => {
+        const latestFilters = Array.isArray(currentFilters)
+          ? currentFilters
+          : [];
+
+        if (hasTagFilter(latestFilters, tag)) {
+          return latestFilters;
         }
 
-        setPage(1);
-        return [...filters, ...generateTagFilter(tag)];
+        return [...latestFilters, ...generateTagFilter(tag)];
       });
+
+      setPage(1);
     },
-    [setFilters, setPage],
+    [filters, setFilters, setPage],
   );
 };
 

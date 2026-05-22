@@ -44,6 +44,7 @@ type TraceDetailsPanelProps = {
   open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
+  onClickTag?: (tag: string) => void;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -57,6 +58,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onClose,
   open,
   onRowChange,
+  onClickTag,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -219,6 +221,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               setActiveSection={setActiveSection}
               isSpansLazyLoading={isSpansLazyLoading}
               search={search}
+              onClickTag={onClickTag}
             />
           </ResizablePanel>
           {Boolean(activeSection) && (

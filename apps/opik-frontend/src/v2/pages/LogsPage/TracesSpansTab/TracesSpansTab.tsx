@@ -132,7 +132,7 @@ import {
   COLUMNS_TAGS_ORDER_KEY_SUFFIX,
   useTagFilterHandler,
   useTraceTagColumns,
-} from "@/v2/pages-shared/traces/useTraceTagColumns";
+} from "@/hooks/useTraceTagColumns";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -742,6 +742,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setPage(1);
   }, [setSearch, setFilters, setEnvironment, setPage]);
   const handleTagClick = useTagFilterHandler({
+    filters,
     setFilters,
     setPage,
   });

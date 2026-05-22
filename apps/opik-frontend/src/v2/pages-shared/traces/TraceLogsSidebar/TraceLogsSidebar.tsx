@@ -99,7 +99,7 @@ import {
   COLUMNS_TAGS_ORDER_KEY_SUFFIX,
   useTagFilterHandler,
   useTraceTagColumns,
-} from "@/v2/pages-shared/traces/useTraceTagColumns";
+} from "@/hooks/useTraceTagColumns";
 
 const getRowId = (d: Trace) => d.id;
 
@@ -652,6 +652,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setFilters([]);
   }, [setSearch, setFilters]);
   const handleTagClick = useTagFilterHandler({
+    filters,
     setFilters,
     setPage,
   });

@@ -32,6 +32,7 @@ describe("useTagFilterHandler", () => {
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
+        filters: [],
         setFilters,
         setPage,
       }),
@@ -68,6 +69,7 @@ describe("useTagFilterHandler", () => {
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
+        filters: currentFilters,
         setFilters,
         setPage,
       }),
@@ -75,8 +77,8 @@ describe("useTagFilterHandler", () => {
 
     act(() => result.current("myprotein-en-gb"));
 
-    expect(setFilters).toHaveBeenCalledWith(expect.any(Function));
-    expect(nextFilters).toBe(currentFilters);
+    expect(setFilters).not.toHaveBeenCalled();
+    expect(nextFilters).toBeUndefined();
     expect(setPage).not.toHaveBeenCalled();
   });
 
@@ -89,6 +91,7 @@ describe("useTagFilterHandler", () => {
     const setPage = vi.fn();
     const { result } = renderHook(() =>
       useTagFilterHandler({
+        filters: [],
         setFilters,
         setPage,
       }),
@@ -105,7 +108,33 @@ describe("useTagFilterHandler", () => {
       operator: "contains",
       value: "myprotein-en-gb",
     });
-    expect(setPage).toHaveBeenCalledTimes(1);
+    expect(setPage).toHaveBeenCalledTimes(2);
+    expect(setPage).toHaveBeenCalledWith(1);
+  });
+
+  it("resets pagination after the filter updater has completed", () => {
+    let isApplyingFilters = false;
+    const setFilters = vi.fn((updater) => {
+      isApplyingFilters = true;
+      if (typeof updater === "function") {
+        updater([]);
+      }
+      isApplyingFilters = false;
+    });
+    const setPage = vi.fn(() => {
+      expect(isApplyingFilters).toBe(false);
+    });
+    const { result } = renderHook(() =>
+      useTagFilterHandler({
+        filters: [],
+        setFilters,
+        setPage,
+      }),
+    );
+
+    act(() => result.current("myprotein-en-gb"));
+
+    expect(setPage).toHaveBeenCalledWith(1);
   });
 });
 
