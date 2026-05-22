@@ -7,6 +7,7 @@ import {
   usePromptMap,
   useSetPromptMap,
   useSetDatasetType,
+  useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -50,6 +51,7 @@ function useLoadPlayground() {
   const promptMap = usePromptMap();
   const setPromptMap = useSetPromptMap();
   const setDatasetType = useSetDatasetType();
+  const setSelectedRuleIds = useSetSelectedRuleIds();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -210,6 +212,7 @@ function useLoadPlayground() {
       if (datasetId && datasetVersionId) {
         const versionKey = formatDatasetVersionKey(datasetId, datasetVersionId);
         setDatasetVersionKey(versionKey);
+        setSelectedRuleIds(null);
       } else if (datasetId) {
         console.warn(
           "useLoadPlayground: datasetId provided without datasetVersionId — dataset context will not be set",
@@ -231,6 +234,7 @@ function useLoadPlayground() {
       setPromptMap,
       setDatasetVersionKey,
       setDatasetType,
+      setSelectedRuleIds,
       workspaceName,
     ],
   );

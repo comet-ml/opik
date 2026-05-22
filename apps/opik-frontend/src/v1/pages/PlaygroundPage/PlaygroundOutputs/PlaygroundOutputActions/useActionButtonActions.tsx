@@ -70,6 +70,7 @@ const useActionButtonActions = ({
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
   const selectedRuleIds = useSelectedRuleIds();
+  const selectedRuleIdsForRun = datasetId ? selectedRuleIds : null;
   const abortControllersRef = useRef(new Map<string, AbortController>());
 
   // Get the minimum maxConcurrentRequests from all prompts
@@ -200,7 +201,7 @@ const useActionButtonActions = ({
       datasetItems,
       datasetName,
       datasetVersionId,
-      selectedRuleIds,
+      selectedRuleIds: selectedRuleIdsForRun,
       addAbortController,
       deleteAbortController,
       throttlingSeconds,

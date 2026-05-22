@@ -27,9 +27,7 @@ import useRulesList from "@/api/automations/useRulesList";
 import {
   useIsRunning,
   useRecentDatasetIdByType,
-  useSelectAllMetricsByDefault,
   useScoresByDatasetId,
-  useSetSelectAllMetricsByDefault,
 } from "@/store/PlaygroundStore";
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -38,10 +36,6 @@ import {
   parseDatasetVersionKey,
   toPlainDatasetId,
 } from "@/utils/datasetVersionStorage";
-import {
-  getDefaultMetricRuleSelection,
-  getMetricRuleSelectionOrDefault,
-} from "@/lib/playgroundMetricSelection";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
 
@@ -100,8 +94,6 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
   const activeProjectId = useActiveProjectId();
   const recentDatasetIdByType = useRecentDatasetIdByType();
   const scoresByDatasetId = useScoresByDatasetId();
-  const selectAllMetricsByDefault = useSelectAllMetricsByDefault();
-  const setSelectAllMetricsByDefault = useSetSelectAllMetricsByDefault();
 
   const {
     permissions: { canCreateDatasets, canUsePlayground },
@@ -121,10 +113,6 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
   const [didApplyDefaults, setDidApplyDefaults] = useState(false);
 
   const config = SEGMENT_COPY[selectedType];
-  const defaultSelectedRuleIds = useMemo<string[] | null>(
-    () => getDefaultMetricRuleSelection(selectAllMetricsByDefault),
-    [selectAllMetricsByDefault],
-  );
 
   const { data: datasetsData } = useProjectDatasetsList(
     {
@@ -183,18 +171,9 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
         return { datasetId: null, scores: null };
       }
       const stored = scoresByDatasetId[plainRecent];
-      return {
-        datasetId: recent,
-        scores: getMetricRuleSelectionOrDefault(stored, defaultSelectedRuleIds),
-      };
+      return { datasetId: recent, scores: stored ?? null };
     },
-    [
-      datasetsOnly,
-      testSuitesOnly,
-      recentDatasetIdByType,
-      scoresByDatasetId,
-      defaultSelectedRuleIds,
-    ],
+    [datasetsOnly, testSuitesOnly, recentDatasetIdByType, scoresByDatasetId],
   );
 
   // Writes the resolved slot only if the segment hasn't already been hydrated.
@@ -321,16 +300,13 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
         const stored = scoresByDatasetId[plain];
         setScoresByType((prev) => ({
           ...prev,
-          [selectedType]: getMetricRuleSelectionOrDefault(
-            stored,
-            defaultSelectedRuleIds,
-          ),
+          [selectedType]: stored !== undefined ? stored : null,
         }));
       } else {
         setScoresByType((prev) => ({ ...prev, [selectedType]: null }));
       }
     },
-    [selectedType, scoresByDatasetId, defaultSelectedRuleIds],
+    [selectedType, scoresByDatasetId],
   );
 
   const handleSelectedRuleIdsChange = useCallback(
@@ -360,10 +336,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
     [selectedType],
   );
 
-  const selectedRuleIds = getMetricRuleSelectionOrDefault(
-    scoresByType[selectedType],
-    defaultSelectedRuleIds,
-  );
+  const selectedRuleIds = scoresByType[selectedType] ?? null;
 
   const handleRun = useCallback(() => {
     if (!datasetId || !datasetName) return;
@@ -484,7 +457,6 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
                       workspaceName={workspaceName}
                       projectId={activeProjectId ?? undefined}
                       canUsePlayground={canUsePlayground}
-                      onSelectAllChange={setSelectAllMetricsByDefault}
                     />
                   </div>
                 )}

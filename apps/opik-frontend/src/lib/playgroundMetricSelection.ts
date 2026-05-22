@@ -10,6 +10,91 @@ export const getMetricRuleSelectionOrDefault = (
 ): MetricRuleSelection =>
   selection !== undefined ? selection : defaultSelection;
 
+export const getResolvedMetricRuleSelectionDefault = (
+  ruleIds: string[],
+  selectAllMetricsByDefault: boolean,
+): MetricRuleSelection | undefined => {
+  if (!selectAllMetricsByDefault) {
+    return [];
+  }
+
+  return ruleIds.length > 0 ? ruleIds : undefined;
+};
+
+export const getDatasetMetricRuleSelectionUpdate = ({
+  datasetId,
+  trackedDatasetId,
+  selectedRuleIds,
+  ruleIds,
+  selectAllMetricsByDefault,
+}: {
+  datasetId: string | null;
+  trackedDatasetId: string | null | undefined;
+  selectedRuleIds: MetricRuleSelection;
+  ruleIds: string[];
+  selectAllMetricsByDefault: boolean;
+}): {
+  trackedDatasetId: string | null | undefined;
+  nextSelectedRuleIds?: MetricRuleSelection;
+} => {
+  if (!datasetId) {
+    if (trackedDatasetId === undefined) {
+      return { trackedDatasetId };
+    }
+
+    return {
+      trackedDatasetId: null,
+      nextSelectedRuleIds: selectedRuleIds === null ? undefined : null,
+    };
+  }
+
+  const isInitialHydration = trackedDatasetId === undefined;
+  const isDatasetChanged =
+    !isInitialHydration && trackedDatasetId !== datasetId;
+  const hasExplicitSelection = selectedRuleIds !== null;
+  const hasLoadedRules = ruleIds.length > 0;
+
+  if (isInitialHydration && hasExplicitSelection) {
+    if (!hasLoadedRules) {
+      return { trackedDatasetId };
+    }
+
+    const ruleIdsSet = new Set(ruleIds);
+    const isSelectionForCurrentRules = selectedRuleIds.every((ruleId) =>
+      ruleIdsSet.has(ruleId),
+    );
+
+    if (isSelectionForCurrentRules) {
+      return { trackedDatasetId: datasetId };
+    }
+  }
+
+  if (!isInitialHydration && !isDatasetChanged && hasExplicitSelection) {
+    return { trackedDatasetId: datasetId };
+  }
+
+  const defaultRuleIds = getResolvedMetricRuleSelectionDefault(
+    ruleIds,
+    selectAllMetricsByDefault,
+  );
+
+  if (defaultRuleIds !== undefined) {
+    return {
+      trackedDatasetId: datasetId,
+      nextSelectedRuleIds: defaultRuleIds,
+    };
+  }
+
+  if (hasExplicitSelection) {
+    return {
+      trackedDatasetId,
+      nextSelectedRuleIds: null,
+    };
+  }
+
+  return { trackedDatasetId };
+};
+
 export const toggleMetricRuleSelection = (
   ruleIds: string[],
   selectedRuleIds: MetricRuleSelection,
