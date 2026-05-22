@@ -20,6 +20,7 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { toggleMetricRuleSelection } from "@/lib/playgroundMetricSelection";
 
 const MAX_VISIBLE_TAGS = 3;
 
@@ -31,6 +32,7 @@ interface MetricSelectorProps {
   workspaceName: string;
   projectId?: string;
   canUsePlayground: boolean;
+  onSelectAllChange?: (selectAll: boolean) => void;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -41,6 +43,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   workspaceName,
   projectId,
   canUsePlayground,
+  onSelectAllChange,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -55,6 +58,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     () => new Set(selectedRuleIds ?? []),
     [selectedRuleIds],
   );
+  const ruleIds = useMemo(() => rules.map((rule) => rule.id), [rules]);
 
   const selectedRules = useMemo(() => {
     if (!selectedRuleIds) return rules;
@@ -76,33 +80,17 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const handleSelect = useCallback(
     (ruleId: string) => {
-      if (selectedRuleIds === null || selectedRuleIds.length === rules.length) {
-        // If all selected (null) or all specific items selected, deselect this one
-        const allRuleIds = rules.map((r) => r.id);
-        const newSelection = allRuleIds.filter((id) => id !== ruleId);
-        onSelectionChange(newSelection.length > 0 ? newSelection : []);
-      } else {
-        // Some items selected or none selected
-        const isSelected = selectedRuleIdsSet.has(ruleId);
-        if (isSelected) {
-          const newSelection = selectedRuleIds.filter((id) => id !== ruleId);
-          // If deselecting the last one, set to empty array (none selected)
-          onSelectionChange(newSelection.length > 0 ? newSelection : []);
-        } else {
-          const newSelection = [...selectedRuleIds, ruleId];
-          // If all are now selected, set to null (all selected)
-          onSelectionChange(
-            newSelection.length === rules.length ? null : newSelection,
-          );
-        }
-      }
+      onSelectionChange(
+        toggleMetricRuleSelection(ruleIds, selectedRuleIds, ruleId),
+      );
     },
-    [selectedRuleIds, selectedRuleIdsSet, rules, onSelectionChange],
+    [selectedRuleIds, ruleIds, onSelectionChange],
   );
 
   const handleSelectAll = useCallback(() => {
+    onSelectAllChange?.(!isAllSelected);
     onSelectionChange(isAllSelected ? [] : null);
-  }, [onSelectionChange, isAllSelected]);
+  }, [onSelectionChange, onSelectAllChange, isAllSelected]);
 
   const openChangeHandler = useCallback((newOpen: boolean) => {
     if (deletingRef.current) {

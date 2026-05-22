@@ -117,6 +117,7 @@ export type PlaygroundStore = {
   experimentByPromptId: Record<string, string>;
   recentDatasetIdByType: Partial<Record<DATASET_TYPE, string>>;
   scoresByDatasetId: Record<string, string[] | null>;
+  selectAllMetricsByDefault: boolean;
 
   setPromptMap: (
     promptIds: string[],
@@ -162,6 +163,7 @@ export type PlaygroundStore = {
   setExperimentByPromptId: (map: Record<string, string>) => void;
   setRecentDatasetForType: (type: DATASET_TYPE, datasetId: string) => void;
   setScoresForDataset: (datasetId: string, ruleIds: string[] | null) => void;
+  setSelectAllMetricsByDefault: (selectAll: boolean) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -189,6 +191,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       experimentByPromptId: {},
       recentDatasetIdByType: {},
       scoresByDatasetId: {},
+      selectAllMetricsByDefault: true,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -476,6 +479,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           },
         }));
       },
+      setSelectAllMetricsByDefault: (selectAll) => {
+        set((state) => ({
+          ...state,
+          selectAllMetricsByDefault: selectAll,
+        }));
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -757,5 +766,11 @@ export const useScoresByDatasetId = () =>
 
 export const useSetScoresForDataset = () =>
   usePlaygroundStore((state) => state.setScoresForDataset);
+
+export const useSelectAllMetricsByDefault = () =>
+  usePlaygroundStore((state) => state.selectAllMetricsByDefault);
+
+export const useSetSelectAllMetricsByDefault = () =>
+  usePlaygroundStore((state) => state.setSelectAllMetricsByDefault);
 
 export default usePlaygroundStore;

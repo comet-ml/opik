@@ -25,7 +25,9 @@ import {
   usePromptCount,
   usePromptMap,
   useResetOutputMap,
+  useSelectAllMetricsByDefault,
   useSelectedRuleIds,
+  useSetSelectAllMetricsByDefault,
   useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
 import useActionButtonActions from "@/v1/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
@@ -91,6 +93,8 @@ const PlaygroundOutputActions = ({
   const resetOutputMap = useResetOutputMap();
   const selectedRuleIds = useSelectedRuleIds();
   const setSelectedRuleIds = useSetSelectedRuleIds();
+  const selectAllMetricsByDefault = useSelectAllMetricsByDefault();
+  const setSelectAllMetricsByDefault = useSetSelectAllMetricsByDefault();
   const queryClient = useQueryClient();
   const createProjectMutation = useProjectCreateMutation();
 
@@ -384,10 +388,18 @@ const PlaygroundOutputActions = ({
     if (!datasetId) {
       setSelectedRuleIds(null);
     } else if (selectedRuleIds === null && rules.length > 0) {
-      // Resolve null (="all rules") to actual IDs so the backend can score non-SDK traces
-      setSelectedRuleIds(rules.map((r) => r.id));
+      // Resolve the default metric selection so the backend can score non-SDK traces
+      setSelectedRuleIds(
+        selectAllMetricsByDefault ? rules.map((r) => r.id) : [],
+      );
     }
-  }, [datasetId, selectedRuleIds, rules, setSelectedRuleIds]);
+  }, [
+    datasetId,
+    selectedRuleIds,
+    rules,
+    selectAllMetricsByDefault,
+    setSelectedRuleIds,
+  ]);
 
   useEffect(() => {
     // stop streaming whenever a user leaves a page
@@ -497,6 +509,7 @@ const PlaygroundOutputActions = ({
                   onCreateRuleClick={handleCreateRuleClick}
                   workspaceName={workspaceName}
                   canUsePlayground={canUsePlayground}
+                  onSelectAllChange={setSelectAllMetricsByDefault}
                 />
               </div>
               {datasetId && (
