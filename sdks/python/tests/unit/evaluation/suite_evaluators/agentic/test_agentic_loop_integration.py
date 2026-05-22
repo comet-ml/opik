@@ -190,3 +190,28 @@ def test_score__model_loops_forever__terminates_within_max_rounds():
     assert results[0].value is False
     # Verify the loop didn't run away — exactly the budget was used.
     assert len(model.calls) == 12
+
+    # Regression: the loop must synthesize tool replies for the unanswered
+    # tool_calls left on the final assistant turn before sending the
+    # wrap-up. Otherwise OpenAI rejects the wrap-up with "must be followed
+    # by tool messages." Verify the wrap-up call's `messages` is
+    # well-formed: every assistant `tool_calls` block is followed by a
+    # tool message per `tool_call_id`.
+    wrapup_messages = model.calls[-1]["messages"]
+    pending_assistant_calls = None
+    for message in wrapup_messages:
+        if pending_assistant_calls is not None:
+            assert message.get("role") == "tool", (
+                "Wrap-up conversation is malformed: assistant tool_calls "
+                "must be followed immediately by tool replies."
+            )
+            assert message["tool_call_id"] in pending_assistant_calls
+            pending_assistant_calls.discard(message["tool_call_id"])
+            if not pending_assistant_calls:
+                pending_assistant_calls = None
+        elif message.get("role") == "assistant" and message.get("tool_calls"):
+            pending_assistant_calls = {c["id"] for c in message["tool_calls"]}
+    assert pending_assistant_calls is None, (
+        "Wrap-up conversation ends with unanswered tool_calls; OpenAI "
+        "would reject this with a 400."
+    )

@@ -246,6 +246,57 @@ class TestPathNarrowing:
         # the anchor-rooted path expectation tight.
         assert body == ".spans[0].input.k: needle"
 
+    def test_search__path_missing_leading_dot__auto_prepended(self):
+        """Regression: models sometimes drop the leading `.` on the
+        optional `path` argument (e.g. `spans[0]` instead of `.spans[0]`).
+        Search routes `path` through `path_evaluator.normalize_expression`,
+        so the call succeeds rather than bouncing back with an error.
+        """
+        trace = _trace()
+        spans = [_span("a", input={"k": "target string"})]
+        ctx = _ctx(trace, spans)
+        tool = search_module.SearchTool()
+
+        result = tool.execute(
+            json.dumps(
+                {
+                    "type": "trace",
+                    "id": trace.id,
+                    "pattern": "target",
+                    "path": "spans[0]",  # missing leading `.`
+                }
+            ),
+            ctx,
+        )
+
+        assert "ERROR" not in result
+        assert result.split("\n", 1)[1] == ".spans[0].input.k: target string"
+
+    def test_search__pattern_is_not_normalized(self):
+        """Sanity: only the path expression is normalized. The regex
+        `pattern` is opaque to the grammar and must not be touched —
+        otherwise patterns starting with an identifier (very common)
+        would silently get a leading `.` prepended and stop matching.
+        """
+        trace = _trace(input={"k": "target string"})
+        ctx = _ctx(trace, [])
+        tool = search_module.SearchTool()
+
+        result = tool.execute(
+            json.dumps(
+                {
+                    "type": "trace",
+                    "id": trace.id,
+                    "pattern": "target",  # would break if rewritten to `.target`
+                }
+            ),
+            ctx,
+        )
+
+        # Original pattern still matches; envelope echoes it verbatim.
+        assert "pattern='target'" in result
+        assert ".trace.input.k: target string" in result
+
     def test_search__unsupported_path_form__returns_structured_error(self):
         # Recursive descent isn't allowed as a search-narrowing path.
         ctx = _ctx(_trace(), [])

@@ -173,6 +173,67 @@ class TestErrorPropagation:
         assert "ERROR" in result
         assert "not found" in result.lower()
 
+    def test_scan__missing_leading_dot__auto_prepended(self):
+        """Regression: models sometimes drop the leading `.` (e.g. paste
+        `trace.input.dataset_item` instead of `.trace.input.dataset_item`).
+        The scan tool now auto-prepends rather than erroring, since every
+        valid expression in the constrained dialect begins with `.`."""
+        ctx = _ctx(_trace(input={"dataset_item": "hello"}), [])
+        tool = scan_module.ScanTool()
+
+        result = tool.execute(
+            json.dumps(
+                {
+                    "type": "trace",
+                    "id": "t-1",
+                    "expression": "trace.input.dataset_item",
+                }
+            ),
+            ctx,
+        )
+
+        assert "ERROR" not in result
+        body = result.split("\n", 1)[1]
+        assert body == "hello"
+
+    def test_scan__missing_leading_dot_underscore_prefix__auto_prepended(self):
+        # Identifier starting with `_` — also rewritten to `._foo`.
+        ctx = _ctx(_trace(input={"_private": "ok"}), [])
+        tool = scan_module.ScanTool()
+
+        result = tool.execute(
+            json.dumps(
+                {
+                    "type": "trace",
+                    "id": "t-1",
+                    "expression": "trace.input._private",
+                }
+            ),
+            ctx,
+        )
+
+        assert "ERROR" not in result
+
+    def test_scan__non_identifier_start__still_errors(self):
+        # Sanity: malformed expressions that don't start with an
+        # identifier (e.g. a stray operator) shouldn't be magically
+        # repaired — the parser still rejects them.
+        ctx = _ctx(_trace(), [])
+        tool = scan_module.ScanTool()
+
+        result = tool.execute(
+            json.dumps(
+                {
+                    "type": "trace",
+                    "id": "t-1",
+                    "expression": "|strings",
+                }
+            ),
+            ctx,
+        )
+
+        assert "ERROR" in result
+
     def test_scan__unsupported_grammar__returns_structured_error(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()

@@ -105,3 +105,63 @@ class TestBuildTraceToolContext:
         assert [s.id for s in ctx.spans] == ["s-1", "s-2"]
         # Parent links are pulled from the emulator alongside the spans.
         assert ctx.parent_by_child == {"s-1": None, "s-2": None}
+
+    def test_build__filters_metrics_calculation_and_its_subtree(self):
+        """`metrics_calculation` is opik's eval-engine plumbing — it
+        echoes the assertion config back into the trace, which leaks
+        the assertion text and confuses the judge. The agentic context
+        must drop it (and its descendants — child scorer spans, model
+        wrappers, etc.) before the judge sees the trace.
+        """
+        trace = _trace()
+        # User-agent spans we want to keep.
+        agent_root = models.SpanModel(
+            id="agent",
+            start_time=_now(),
+            source="sdk",
+            name="task",
+            type="general",
+        )
+        agent_child = models.SpanModel(
+            id="agent-child",
+            start_time=_now() + datetime.timedelta(milliseconds=1),
+            source="sdk",
+            name="process_step",
+            type="general",
+        )
+        # Eval-engine spans we want filtered.
+        metrics_root = models.SpanModel(
+            id="metrics",
+            start_time=_now() + datetime.timedelta(milliseconds=2),
+            source="sdk",
+            name="metrics_calculation",
+            type="general",
+        )
+        metrics_child = models.SpanModel(
+            id="metrics-child",
+            start_time=_now() + datetime.timedelta(milliseconds=3),
+            source="sdk",
+            name="some_scorer",
+            type="general",
+        )
+        emulator = _seeding.make_emulator()
+        _seeding.seed_trace(emulator, trace)
+        _seeding.seed_span(emulator, agent_root, trace_id=trace.id)
+        _seeding.seed_span(
+            emulator, agent_child, trace_id=trace.id, parent_span_id="agent"
+        )
+        _seeding.seed_span(emulator, metrics_root, trace_id=trace.id)
+        _seeding.seed_span(
+            emulator,
+            metrics_child,
+            trace_id=trace.id,
+            parent_span_id="metrics",
+        )
+
+        ctx = build_trace_tool_context(trace.id, emulator)
+        assert ctx is not None
+        kept_ids = {s.id for s in ctx.spans}
+        assert kept_ids == {"agent", "agent-child"}
+        # Parent map also pruned of internal-span entries.
+        assert "metrics" not in ctx.parent_by_child
+        assert "metrics-child" not in ctx.parent_by_child
