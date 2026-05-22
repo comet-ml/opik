@@ -1,15 +1,5 @@
 export type MetricRuleSelection = string[] | null;
 
-export const getDefaultMetricRuleSelection = (
-  selectAllMetricsByDefault: boolean,
-): MetricRuleSelection => (selectAllMetricsByDefault ? null : []);
-
-export const getMetricRuleSelectionOrDefault = (
-  selection: MetricRuleSelection | undefined,
-  defaultSelection: MetricRuleSelection,
-): MetricRuleSelection =>
-  selection !== undefined ? selection : defaultSelection;
-
 export const getResolvedMetricRuleSelectionDefault = (
   ruleIds: string[],
   selectAllMetricsByDefault: boolean,

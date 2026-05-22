@@ -2,31 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   getDatasetMetricRuleSelectionUpdate,
-  getDefaultMetricRuleSelection,
-  getMetricRuleSelectionOrDefault,
   getResolvedMetricRuleSelectionDefault,
   toggleMetricRuleSelection,
 } from "./playgroundMetricSelection";
 
 describe("playgroundMetricSelection", () => {
-  describe("getDefaultMetricRuleSelection", () => {
-    it("should use null for select-all defaults and [] for select-none defaults", () => {
-      expect(getDefaultMetricRuleSelection(true)).toBeNull();
-      expect(getDefaultMetricRuleSelection(false)).toEqual([]);
-    });
-  });
-
-  describe("getMetricRuleSelectionOrDefault", () => {
-    it("should use the default only when no saved or unsaved selection exists", () => {
-      expect(getMetricRuleSelectionOrDefault(undefined, [])).toEqual([]);
-      expect(getMetricRuleSelectionOrDefault(null, [])).toBeNull();
-      expect(getMetricRuleSelectionOrDefault([], null)).toEqual([]);
-      expect(getMetricRuleSelectionOrDefault(["rule-1"], null)).toEqual([
-        "rule-1",
-      ]);
-    });
-  });
-
   describe("getResolvedMetricRuleSelectionDefault", () => {
     it("should resolve select-none defaults before rules are loaded", () => {
       expect(getResolvedMetricRuleSelectionDefault([], false)).toEqual([]);
