@@ -72,6 +72,13 @@ TRUNCATED_SUFFIX_TEMPLATE = (
     "to see full]"
 )
 
+# Unique substring that appears in any value emitted by `_truncate_text`
+# when actual truncation happened. Used by `overview_has_truncations`
+# to detect whether the rendered overview contains hidden content the
+# judge would need `read` to recover. Keeping it as a module constant
+# means the detector stays in lockstep with the template.
+_TRUNCATED_MARKER = "[TRUNCATED "
+
 
 def _truncate_text(
     value: Any,
@@ -193,6 +200,35 @@ def serialize_overview(
         },
         "spans": flat_nodes,
     }
+
+
+def overview_has_truncations(overview: Dict[str, Any]) -> bool:
+    """Return True iff at least one field in the rendered overview was
+    actually truncated by `_truncate_text`.
+
+    Direct evidence beats inference from the chosen tier. A small trace
+    rendered at the floor tier may still have every field comfortably
+    under the per-field limit — in that case the overview is complete
+    even though the sizer didn't pick the no-truncation tier. The
+    agentic loop's "judge produced a verdict without ever calling
+    `read`" warning depends on this distinction to avoid false
+    positives.
+    """
+    return _payload_contains_marker(overview, _TRUNCATED_MARKER)
+
+
+def _payload_contains_marker(payload: Any, marker: str) -> bool:
+    """Walk a JSON-shaped payload and check whether `marker` appears in
+    any string value. Bounded by the cached overview's own size cap, so
+    cheap relative to a single LLM round-trip.
+    """
+    if isinstance(payload, str):
+        return marker in payload
+    if isinstance(payload, dict):
+        return any(_payload_contains_marker(v, marker) for v in payload.values())
+    if isinstance(payload, list):
+        return any(_payload_contains_marker(item, marker) for item in payload)
+    return False
 
 
 def pick_overview_io_char_limit(

@@ -90,13 +90,19 @@ class AgenticLLMJudge:
         # so capable models receive a richer first-turn view and need
         # fewer drill-in `read` calls.
         budget = strategy_selector.compute_budget_tokens(self._model.model_name)
-        chosen_limit, overview = span_tree_serializer.pick_overview_io_char_limit(
+        _, overview = span_tree_serializer.pick_overview_io_char_limit(
             trace=ctx.trace,
             spans=ctx.spans,
             parent_by_child=ctx.parent_by_child,
             budget_tokens=budget,
         )
-        overview_truncated = chosen_limit != span_tree_serializer.NO_OVERVIEW_TRUNCATION
+        # Derived from the rendered overview rather than from the chosen
+        # ladder tier: the sizer may pick a finite tier whose per-field
+        # limit no real field actually exceeds, which would otherwise
+        # mark the overview as "truncated" when it's intact. The "no
+        # `read` after truncated overview" warning depends on this
+        # distinction being honest.
+        overview_truncated = span_tree_serializer.overview_has_truncations(overview)
         user_prompt = prompt.AGENTIC_JUDGE_USER_TEMPLATE.format(
             assertions=schema.format_assertions(),
             input=_format_value(ctx.trace.input),
