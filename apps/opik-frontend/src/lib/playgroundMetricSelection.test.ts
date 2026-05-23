@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getDatasetMetricRuleSelectionUpdate,
   getResolvedMetricRuleSelectionDefault,
+  isMetricRuleSelectionAll,
   toggleMetricRuleSelection,
 } from "./playgroundMetricSelection";
 
@@ -177,17 +178,48 @@ describe("playgroundMetricSelection", () => {
 
   describe("toggleMetricRuleSelection", () => {
     it("should keep manual all-selection explicit when null is reserved as a default sentinel", () => {
-      expect(
-        toggleMetricRuleSelection(["rule-1", "rule-2"], ["rule-1"], "rule-2", {
+      const ruleIds = ["rule-1", "rule-2"];
+      const selection = toggleMetricRuleSelection(
+        ruleIds,
+        ["rule-1"],
+        "rule-2",
+        {
           useExplicitRuleIdsForAll: true,
-        }),
-      ).toEqual(["rule-1", "rule-2"]);
+        },
+      );
+
+      expect(selection).toEqual(ruleIds);
+      expect(selection).not.toBe(ruleIds);
     });
 
     it("should use null for all-selection when explicit rule IDs are not required", () => {
       expect(
-        toggleMetricRuleSelection(["rule-1", "rule-2"], ["rule-1"], "rule-2"),
+        toggleMetricRuleSelection(["rule-1", "rule-2"], ["rule-1"], "rule-2", {
+          useExplicitRuleIdsForAll: false,
+        }),
       ).toBeNull();
+    });
+  });
+
+  describe("isMetricRuleSelectionAll", () => {
+    it("should return true when all rule IDs are selected explicitly", () => {
+      expect(
+        isMetricRuleSelectionAll(["rule-1", "rule-2"], ["rule-1", "rule-2"]),
+      ).toBe(true);
+    });
+
+    it("should return true when all rule IDs are selected by sentinel", () => {
+      expect(isMetricRuleSelectionAll(["rule-1"], null)).toBe(true);
+    });
+
+    it("should return false when only some rule IDs are selected", () => {
+      expect(isMetricRuleSelectionAll(["rule-1", "rule-2"], ["rule-1"])).toBe(
+        false,
+      );
+    });
+
+    it("should return false when no rule IDs are selected", () => {
+      expect(isMetricRuleSelectionAll(["rule-1"], [])).toBe(false);
     });
   });
 });

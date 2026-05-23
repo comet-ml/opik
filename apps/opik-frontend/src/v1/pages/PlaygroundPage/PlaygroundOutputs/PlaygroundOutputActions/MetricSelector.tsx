@@ -13,7 +13,10 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { toggleMetricRuleSelection } from "@/lib/playgroundMetricSelection";
+import {
+  isMetricRuleSelectionAll,
+  toggleMetricRuleSelection,
+} from "@/lib/playgroundMetricSelection";
 
 interface MetricSelectorProps {
   rules: EvaluatorsRule[];
@@ -56,13 +59,21 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const handleSelect = useCallback(
     (ruleId: string) => {
-      onSelectionChange(
-        toggleMetricRuleSelection(ruleIds, selectedRuleIds, ruleId, {
+      const nextSelectedRuleIds = toggleMetricRuleSelection(
+        ruleIds,
+        selectedRuleIds,
+        ruleId,
+        {
           useExplicitRuleIdsForAll: true,
-        }),
+        },
       );
+
+      onSelectAllChange?.(
+        isMetricRuleSelectionAll(ruleIds, nextSelectedRuleIds),
+      );
+      onSelectionChange(nextSelectedRuleIds);
     },
-    [selectedRuleIds, ruleIds, onSelectionChange],
+    [selectedRuleIds, ruleIds, onSelectionChange, onSelectAllChange],
   );
 
   const handleSelectAll = useCallback(

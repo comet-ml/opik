@@ -1,5 +1,12 @@
 export type MetricRuleSelection = string[] | null;
 
+export const isMetricRuleSelectionAll = (
+  ruleIds: string[],
+  selectedRuleIds: MetricRuleSelection,
+) =>
+  ruleIds.length > 0 &&
+  (selectedRuleIds === null || selectedRuleIds.length === ruleIds.length);
+
 export const getResolvedMetricRuleSelectionDefault = (
   ruleIds: string[],
   selectAllMetricsByDefault: boolean,
@@ -114,5 +121,5 @@ export const toggleMetricRuleSelection = (
     return newSelection;
   }
 
-  return useExplicitRuleIdsForAll ? ruleIds : null;
+  return useExplicitRuleIdsForAll ? [...ruleIds] : null;
 };
