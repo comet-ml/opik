@@ -720,6 +720,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
+        autoWidth
         stickyHeader
         meta={meta}
         showLoadingOverlay={isPlaceholderData && isFetching}

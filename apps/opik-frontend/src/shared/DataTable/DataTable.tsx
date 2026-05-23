@@ -406,9 +406,11 @@ const DataTable = <TData, TValue>({
         <DataTableTooltipContext>
           <Table
             ref={tableRef}
-            className="comet-cell-borders"
+            className={cn("comet-cell-borders", autoWidth && "w-auto")}
             style={{
-              ...(!autoWidth && { minWidth: table.getTotalSize() }),
+              ...(autoWidth
+                ? { width: table.getTotalSize() }
+                : { minWidth: table.getTotalSize() }),
               ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
             }}
           >
