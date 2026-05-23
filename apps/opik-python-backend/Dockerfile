@@ -23,8 +23,9 @@ RUN apk add --no-cache --upgrade libexpat
 # Only runtime dependencies needed
 RUN apk add --no-cache tini python3
 
-# Create non-root user for security
-RUN addgroup -S opik && adduser -S opik -G opik
+# Create non-root user for security (added to docker group for optional DinD strategy)
+RUN addgroup -S opik && adduser -S opik -G opik && \
+    addgroup opik docker 2>/dev/null || true
 
 WORKDIR /opt/opik-python-backend
 

@@ -232,12 +232,9 @@ services:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
     hostname: python-backend
-    # NOTE: If PYTHON_CODE_EXECUTOR_STRATEGY=docker (Docker-in-Docker), uncomment privileged: true
-    # or use the cap_add below. Default strategy is "process" which needs no extra privileges.
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - apparmor:unconfined
+    # NOTE: Default strategy is "process" which needs no extra privileges.
+    # If PYTHON_CODE_EXECUTOR_STRATEGY=docker (Docker-in-Docker), uncomment:
+    # privileged: true
     environment:
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
