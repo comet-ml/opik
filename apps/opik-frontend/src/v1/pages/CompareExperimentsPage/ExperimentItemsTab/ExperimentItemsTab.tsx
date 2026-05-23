@@ -682,6 +682,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
+            experimentsIds={experimentsIds}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector

@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getExperimentExportIds,
+  getExperimentExportPrefix,
+} from "@/lib/compare-experiments-export";
+import {
   processPassedExportColumn,
   resolvePassedStatus,
 } from "@/v1/pages/CompareExperimentsPage/compareExperimentsExportUtils";
 import {
   DATASET_ITEM_SOURCE,
   type Evaluator,
+  type Experiment,
   type ExperimentItem,
   type ExperimentsCompare,
 } from "@/types/datasets";
@@ -46,6 +51,49 @@ const evaluators: Evaluator[] = [
 ];
 
 describe("CompareExperimentsActionsPanel export helpers", () => {
+  describe("getExperimentExportIds", () => {
+    it("should keep selected experiment order and append unresolved row experiments", () => {
+      // Arrange
+      const localExperiments = [
+        { id: "experiment-2", name: "Experiment 2" } as Experiment,
+      ];
+
+      // Act
+      const experimentIds = getExperimentExportIds(
+        ["experiment-1", "experiment-2"],
+        localExperiments,
+        ["experiment-3", "experiment-1"],
+      );
+
+      // Assert
+      expect(experimentIds).toEqual([
+        "experiment-1",
+        "experiment-2",
+        "experiment-3",
+      ]);
+    });
+  });
+
+  describe("getExperimentExportPrefix", () => {
+    it("should use a unique unknown prefix when experiment metadata is missing", () => {
+      // Act
+      const prefix = getExperimentExportPrefix("experiment-1", {});
+
+      // Assert
+      expect(prefix).toBe("unknown(experiment-1).");
+    });
+
+    it("should avoid colliding with loaded experiment names", () => {
+      // Act
+      const prefix = getExperimentExportPrefix("experiment-1", {
+        "experiment-2": "unknown(experiment-1)",
+      });
+
+      // Assert
+      expect(prefix).toBe("unknown(experiment-1) 2.");
+    });
+  });
+
   describe("resolvePassedStatus", () => {
     it("should fall back to the first item status when summaries are missing", () => {
       // Arrange
