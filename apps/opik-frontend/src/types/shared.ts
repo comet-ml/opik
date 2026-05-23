@@ -37,6 +37,7 @@ export const COLUMN_CREATED_AT_ID = "created_at";
 export const COLUMN_DATASET_ID = "dataset_id";
 export const COLUMN_PROJECT_ID = "project_id";
 export const COLUMN_DURATION_ID = "duration";
+export const COLUMN_PASSED_ID = "passed";
 export const COLUMN_CUSTOM_ID = "custom";
 export const COLUMN_EXPERIMENT_ID = "experiment_id";
 export const COLUMN_ENVIRONMENT_ID = "environment";

@@ -3,6 +3,7 @@ import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
 import first from "lodash/first";
+import groupBy from "lodash/groupBy";
 
 import CompareExperimentsButton from "@/v1/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
@@ -19,6 +20,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_DURATION_ID,
+  COLUMN_PASSED_ID,
 } from "@/types/shared";
 import {
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -32,7 +34,6 @@ const EVALUATION_EXPORT_COLUMNS = [
   COLUMN_COMMENTS_ID,
   COLUMN_DURATION_ID,
 ];
-const COLUMN_PASSED_ID = "passed";
 const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
 
 const extractFieldName = (column: string, prefix: string): string =>
@@ -111,8 +112,14 @@ const CompareExperimentsActionsPanel: React.FC<
     );
 
     const isCompare = localExperiments?.length > 1;
+    const shouldGroupItemsByExperiment =
+      isCompare && columnsToExport.includes(COLUMN_PASSED_ID);
 
     return rows.map((row) => {
+      const itemsByExperiment = shouldGroupItemsByExperiment
+        ? groupBy(row.experiment_items ?? [], (item) => item.experiment_id)
+        : {};
+
       return columnsToExport.reduce<Record<string, unknown>>(
         (accumulator, column) => {
           if (FLAT_COLUMNS.includes(column)) {
@@ -121,17 +128,17 @@ const CompareExperimentsActionsPanel: React.FC<
             return accumulator;
           }
 
-          const prefix = first(column.split(".")) as string;
+          const columnPrefix = first(column.split(".")) as string;
           const isDatasetColumn = !(
-            EVALUATION_EXPORT_COLUMNS.includes(prefix) ||
-            prefix === COLUMN_FEEDBACK_SCORES_ID ||
-            prefix === COLUMN_PASSED_ID
+            EVALUATION_EXPORT_COLUMNS.includes(columnPrefix) ||
+            columnPrefix === COLUMN_FEEDBACK_SCORES_ID ||
+            columnPrefix === COLUMN_PASSED_ID
           );
 
           if (isDatasetColumn) {
             // Handle dataset columns with "data." prefix
             const fieldName =
-              prefix === EXPERIMENT_ITEM_DATASET_PREFIX
+              columnPrefix === EXPERIMENT_ITEM_DATASET_PREFIX
                 ? column.replace(`${EXPERIMENT_ITEM_DATASET_PREFIX}.`, "")
                 : column;
             accumulator[`dataset.${fieldName}`] = get(row.data, fieldName, "-");
@@ -142,15 +149,15 @@ const CompareExperimentsActionsPanel: React.FC<
           if (column === COLUMN_PASSED_ID) {
             if (isCompare) {
               localExperiments.forEach((experiment) => {
-                const items = (row.experiment_items ?? []).filter(
-                  (item) => item.experiment_id === experiment.id,
-                );
-                const prefix = `${nameMap[experiment.id] ?? "unknown"}.`;
+                const items = itemsByExperiment[experiment.id] ?? [];
+                const experimentPrefix = `${
+                  nameMap[experiment.id] ?? "unknown"
+                }.`;
                 processPassedExportColumn(
                   row,
                   items,
                   accumulator,
-                  prefix,
+                  experimentPrefix,
                   experiment.id,
                 );
               });
@@ -167,13 +174,15 @@ const CompareExperimentsActionsPanel: React.FC<
 
           if (isCompare) {
             (row.experiment_items ?? []).forEach((item) => {
-              const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
+              const experimentPrefix = `${
+                nameMap[item.experiment_id] ?? "unknown"
+              }.`;
               processNestedExportColumn(
                 item,
                 column,
                 accumulator,
                 row.data,
-                prefix,
+                experimentPrefix,
               );
             });
           } else {

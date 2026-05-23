@@ -19,6 +19,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_DURATION_ID,
+  COLUMN_PASSED_ID,
   COLUMN_USAGE_ID,
 } from "@/types/shared";
 import {
@@ -27,7 +28,6 @@ import {
 } from "@/constants/experiments";
 import { Separator } from "@/ui/separator";
 
-const COLUMN_PASSED_ID = "passed";
 const COLUMN_TOTAL_ESTIMATED_COST_ID = "total_estimated_cost";
 
 const EXPERIMENT_ITEM_COLUMNS = [
@@ -134,17 +134,17 @@ const CompareExperimentsActionsPanel: React.FC<
             return accumulator;
           }
 
-          const prefix = first(column.split(".")) as string;
+          const columnPrefix = first(column.split(".")) as string;
           const isDatasetColumn = !(
-            EXPERIMENT_ITEM_COLUMNS.includes(prefix) ||
-            prefix === COLUMN_FEEDBACK_SCORES_ID ||
-            prefix === COLUMN_PASSED_ID
+            EXPERIMENT_ITEM_COLUMNS.includes(columnPrefix) ||
+            columnPrefix === COLUMN_FEEDBACK_SCORES_ID ||
+            columnPrefix === COLUMN_PASSED_ID
           );
 
           if (isDatasetColumn) {
             // Handle dataset columns with "data." prefix
             const fieldName =
-              prefix === EXPERIMENT_ITEM_DATASET_PREFIX
+              columnPrefix === EXPERIMENT_ITEM_DATASET_PREFIX
                 ? column.replace(`${EXPERIMENT_ITEM_DATASET_PREFIX}.`, "")
                 : column;
             accumulator[`dataset.${fieldName}`] = get(row.data, fieldName, "-");
@@ -154,13 +154,15 @@ const CompareExperimentsActionsPanel: React.FC<
 
           if (isCompare) {
             (row.experiment_items ?? []).forEach((item) => {
-              const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
+              const experimentPrefix = `${
+                nameMap[item.experiment_id] ?? "unknown"
+              }.`;
               processNestedExportColumn(
                 item,
                 column,
                 accumulator,
                 row.data,
-                prefix,
+                experimentPrefix,
               );
             });
           } else {

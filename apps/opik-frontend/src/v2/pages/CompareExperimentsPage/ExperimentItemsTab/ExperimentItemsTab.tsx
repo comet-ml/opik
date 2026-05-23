@@ -14,6 +14,7 @@ import {
   COLUMN_DURATION_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
+  COLUMN_PASSED_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   COLUMN_USAGE_ID,
@@ -82,7 +83,6 @@ const calculateVerticalAlignment = (count: number) =>
 const columnHelper = createColumnHelper<ExperimentsCompare>();
 
 const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
-const COLUMN_PASSED_ID = "passed";
 const STORAGE_PREFIX = "compare-experiments";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 const EVAL_SUITE_ECHOED_OUTPUT_KEY = "input";
