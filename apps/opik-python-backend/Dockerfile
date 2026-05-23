@@ -23,6 +23,9 @@ RUN apk add --no-cache --upgrade libexpat
 # Only runtime dependencies needed
 RUN apk add --no-cache tini python3
 
+# Create non-root user for security
+RUN addgroup -S opik && adduser -S opik -G opik
+
 WORKDIR /opt/opik-python-backend
 
 # Copy the virtual environment from builder stage
@@ -37,6 +40,9 @@ COPY src ./src
 
 COPY entrypoint.sh demo_data_entrypoint.sh ./
 RUN chmod u+x entrypoint.sh demo_data_entrypoint.sh
+
+# Ensure the non-root user owns the working directory
+RUN chown -R opik:opik /opt/opik-python-backend
 
 EXPOSE 8000
 
@@ -54,6 +60,9 @@ ENV PYTHON_CODE_EXECUTOR_STRATEGY="docker"
 ENV PYTHON_CODE_EXECUTOR_ALLOW_NETWORK=false
 
 ENV OPIK_VERSION=${OPIK_VERSION}
+
+# Run as non-root user
+USER opik
 
 ENTRYPOINT ["tini", "--"]
 

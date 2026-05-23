@@ -232,7 +232,12 @@ services:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
     hostname: python-backend
-    privileged: true # Required for Docker-in-Docker, so it can launch containers
+    # NOTE: If PYTHON_CODE_EXECUTOR_STRATEGY=docker (Docker-in-Docker), uncomment privileged: true
+    # or use the cap_add below. Default strategy is "process" which needs no extra privileges.
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
     environment:
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
