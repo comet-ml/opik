@@ -746,6 +746,20 @@ class TraceFilterEvaluationServiceTest {
                             .build(), Operator.NOT_CONTAINS, "CancelledError", false));
         }
 
+        static Stream<Arguments> errorInfoValuesWithoutTraceback() {
+            return Stream.of(
+                    arguments((ErrorInfo) null),
+                    arguments(ErrorInfo.builder()
+                            .exceptionType("ValueError")
+                            .message("Request was cancelled")
+                            .traceback("")
+                            .build()),
+                    arguments(ErrorInfo.builder()
+                            .exceptionType("ValueError")
+                            .message("Request was cancelled")
+                            .build()));
+        }
+
         static Stream<Arguments> errorInfoValueFilterTestCases() {
             var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
@@ -755,6 +769,7 @@ class TraceFilterEvaluationServiceTest {
 
             return Stream.of(
                     arguments(errorInfo, "exceptionType", Operator.EQUAL, "ValueError", true),
+                    arguments(errorInfo, " EXCEPTION_TYPE ", Operator.EQUAL, "ValueError", true),
                     arguments(errorInfo, "message", Operator.EQUAL, "Invalid value provided", true),
                     arguments(errorInfo, "traceback", Operator.EQUAL, "File \"script.py\", line 10", true),
                     arguments(errorInfo, "message", Operator.EQUAL, "Different value", false),
@@ -859,7 +874,7 @@ class TraceFilterEvaluationServiceTest {
         }
 
         @Test
-        void matchesFilterWithErrorInfoContainsIgnoresKeyAndSearchesSerializedJson() {
+        void matchesFilterWithErrorInfoContainsUsesSelectedKey() {
             // Given
             var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
@@ -880,7 +895,7 @@ class TraceFilterEvaluationServiceTest {
             var result = traceFilterEvaluationService.matchesFilter(filter, trace);
 
             // Then
-            assertThat(result).isTrue();
+            assertThat(result).isFalse();
         }
 
         @Test
@@ -908,7 +923,7 @@ class TraceFilterEvaluationServiceTest {
         }
 
         @Test
-        void matchesFilterWithErrorInfoNotContainsIgnoresKeyAndSearchesSerializedJson() {
+        void matchesFilterWithErrorInfoNotContainsUsesSelectedKey() {
             // Given
             var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
@@ -921,6 +936,27 @@ class TraceFilterEvaluationServiceTest {
             var filter = TraceFilter.builder()
                     .field(TraceField.ERROR_INFO)
                     .key("message")
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @ParameterizedTest
+        @MethodSource("errorInfoValuesWithoutTraceback")
+        void matchesFilterWithErrorInfoTracebackNotContainsWhenTracebackIsMissing(ErrorInfo errorInfo) {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .key("traceback")
                     .operator(Operator.NOT_CONTAINS)
                     .value("CancelledError")
                     .build();

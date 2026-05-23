@@ -23,6 +23,7 @@ import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataT
 import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
+import ErrorInfoFieldSelect from "@/shared/FiltersContent/ErrorInfoFieldSelect";
 import { Skeleton } from "@/ui/skeleton";
 import SpanDetailsButton from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
 import useTreeDetailsStore, {
@@ -169,6 +170,9 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
               .map((key) => ({ value: key, label: key })),
             placeholder: "Select score",
           },
+        },
+        error_info: {
+          keySelectorComponent: ErrorInfoFieldSelect,
         },
         [COLUMN_GUARDRAILS_ID]: {
           keyComponentProps: {

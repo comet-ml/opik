@@ -19,6 +19,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -139,8 +140,10 @@ public abstract class FilterEvaluationServiceBase<E> {
     }
 
     protected boolean matchesErrorInfoTextFilter(Filter filter, ErrorInfo errorInfo) {
-        var errorInfoText = extractErrorInfoText(errorInfo);
-        return errorInfoText != null && evaluateOperator(filter.operator(), errorInfoText, filter.value());
+        var errorInfoText = extractErrorInfoValue(errorInfo, filter.key());
+        return errorInfoText instanceof String text
+                && StringUtils.isNotEmpty(text)
+                && evaluateOperator(filter.operator(), text, filter.value());
     }
 
     protected String extractErrorInfoText(ErrorInfo errorInfo) {
@@ -154,7 +157,7 @@ public abstract class FilterEvaluationServiceBase<E> {
         if (errorInfo == null) {
             return null;
         }
-        return key != null ? extractErrorInfoField(errorInfo, key) : extractErrorInfoText(errorInfo);
+        return StringUtils.isNotBlank(key) ? extractErrorInfoField(errorInfo, key) : extractErrorInfoText(errorInfo);
     }
 
     private boolean hasNonEmptyErrorInfo(ErrorInfo errorInfo) {
@@ -172,7 +175,7 @@ public abstract class FilterEvaluationServiceBase<E> {
         if (errorInfo == null || key == null) {
             return null;
         }
-        return switch (key.toLowerCase()) {
+        return switch (normalizeErrorInfoKey(key)) {
             case "exceptiontype", "exception_type" -> errorInfo.exceptionType();
             case "message" -> errorInfo.message();
             case "traceback" -> errorInfo.traceback();
@@ -183,6 +186,10 @@ public abstract class FilterEvaluationServiceBase<E> {
                 yield null;
             }
         };
+    }
+
+    private String normalizeErrorInfoKey(String key) {
+        return StringUtils.trimToEmpty(key).toLowerCase(Locale.ROOT);
     }
 
     /**

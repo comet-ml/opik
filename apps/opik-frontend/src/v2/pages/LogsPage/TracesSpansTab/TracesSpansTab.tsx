@@ -68,6 +68,7 @@ import emptyLogsLightUrl from "/images/empty-logs-light.svg";
 import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import ErrorInfoFieldSelect from "@/shared/FiltersContent/ErrorInfoFieldSelect";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -556,6 +557,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             projectId,
             type,
           },
+        },
+        error_info: {
+          keySelectorComponent: ErrorInfoFieldSelect,
         },
         ...getTagsFilterConfig({
           projectId,

@@ -1219,6 +1219,20 @@ class SpanFilterEvaluationServiceTest {
                             .build(), Operator.NOT_CONTAINS, "CancelledError", false));
         }
 
+        static Stream<Arguments> errorInfoValuesWithoutTraceback() {
+            return Stream.of(
+                    arguments((ErrorInfo) null),
+                    arguments(ErrorInfo.builder()
+                            .exceptionType("ValueError")
+                            .message("Request was cancelled")
+                            .traceback("")
+                            .build()),
+                    arguments(ErrorInfo.builder()
+                            .exceptionType("ValueError")
+                            .message("Request was cancelled")
+                            .build()));
+        }
+
         @ParameterizedTest
         @MethodSource("errorInfoTextFilterTestCases")
         void matchesFilterWithErrorInfoTextFilter(
@@ -1253,7 +1267,7 @@ class SpanFilterEvaluationServiceTest {
                     .build();
             var filter = SpanFilter.builder()
                     .field(SpanField.ERROR_INFO)
-                    .key("exceptionType")
+                    .key(" EXCEPTION_TYPE ")
                     .operator(Operator.EQUAL)
                     .value("ValueError")
                     .build();
@@ -1364,7 +1378,7 @@ class SpanFilterEvaluationServiceTest {
         }
 
         @Test
-        void matchesFilterWithErrorInfoContainsIgnoresKeyAndSearchesSerializedJson() {
+        void matchesFilterWithErrorInfoContainsUsesSelectedKey() {
             // Given
             var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
@@ -1385,7 +1399,7 @@ class SpanFilterEvaluationServiceTest {
             var result = spanFilterEvaluationService.matchesFilter(filter, span);
 
             // Then
-            assertThat(result).isTrue();
+            assertThat(result).isFalse();
         }
 
         @Test
@@ -1413,7 +1427,7 @@ class SpanFilterEvaluationServiceTest {
         }
 
         @Test
-        void matchesFilterWithErrorInfoNotContainsIgnoresKeyAndSearchesSerializedJson() {
+        void matchesFilterWithErrorInfoNotContainsUsesSelectedKey() {
             // Given
             var errorInfo = ErrorInfo.builder()
                     .exceptionType("ValueError")
@@ -1426,6 +1440,27 @@ class SpanFilterEvaluationServiceTest {
             var filter = SpanFilter.builder()
                     .field(SpanField.ERROR_INFO)
                     .key("message")
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("CancelledError")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @ParameterizedTest
+        @MethodSource("errorInfoValuesWithoutTraceback")
+        void matchesFilterWithErrorInfoTracebackNotContainsWhenTracebackIsMissing(ErrorInfo errorInfo) {
+            // Given
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .key("traceback")
                     .operator(Operator.NOT_CONTAINS)
                     .value("CancelledError")
                     .build();

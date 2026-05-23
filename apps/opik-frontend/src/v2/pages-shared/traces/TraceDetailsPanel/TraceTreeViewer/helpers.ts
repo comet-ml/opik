@@ -14,7 +14,6 @@ import every from "lodash/every";
 import startsWith from "lodash/startsWith";
 import endsWith from "lodash/endsWith";
 import includes from "lodash/includes";
-import isUndefined from "lodash/isUndefined";
 import { JSONPath } from "jsonpath-plus";
 
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
@@ -180,34 +179,55 @@ const getFieldValue = (
 ): unknown => {
   if (!data) return undefined;
   const fieldValue = get(data, fieldId, undefined);
+  const fieldKey = getFieldKey(fieldId, key);
 
   if (type === COLUMN_TYPE.numberDictionary) {
     if (isArray(fieldValue)) {
       return (
-        (fieldValue as Array<TraceFeedbackScore>).find((s) => s.name === key)
-          ?.value ?? undefined
+        (fieldValue as Array<TraceFeedbackScore>).find(
+          (s) => s.name === fieldKey,
+        )?.value ?? undefined
       );
     } else {
       return undefined;
     }
   }
 
-  if (key && !isUndefined(fieldValue)) {
+  if (fieldKey && !isNil(fieldValue)) {
     try {
       // Ensure the path starts with $ for JSONPath
-      const jsonPath = key.startsWith("$") ? key : `$.${key}`;
+      const jsonPath = fieldKey.startsWith("$") ? fieldKey : `$.${fieldKey}`;
       const result = JSONPath({ path: jsonPath, json: fieldValue });
 
       if (result.length === 0) return undefined;
       if (result.length === 1) return result[0];
       return result;
     } catch (error) {
-      console.warn(`Invalid JSONPath expression: ${key}`, error);
+      console.warn(`Invalid JSONPath expression: ${fieldKey}`, error);
       return undefined;
     }
   }
 
   return fieldValue;
+};
+
+const getFieldKey = (fieldId: string, key?: string): string | undefined => {
+  if (fieldId !== "error_info" || !key) return key;
+
+  const normalizedKey = trim(key);
+  if (!normalizedKey) return undefined;
+
+  switch (normalizedKey.toLowerCase()) {
+    case "exceptiontype":
+    case "exception_type":
+      return "exception_type";
+    case "message":
+      return "message";
+    case "traceback":
+      return "traceback";
+    default:
+      return normalizedKey;
+  }
 };
 
 const isValueEmpty = (value: unknown): boolean => {
@@ -433,16 +453,18 @@ const filter = (filters: Filters, data: Trace | Span): boolean => {
 
   return every(filters, (filterItem) => {
     const { field, key, type, operator, value } = processFilter(filterItem);
+    const fieldKey = getFieldKey(field, key);
 
     if (!field || !operator) return true; // Skip invalid filters
 
     const shouldSearchFullErrorInfo =
       type === COLUMN_TYPE.errors &&
+      !fieldKey &&
       (operator === "contains" || operator === "not_contains");
     const fieldValue = getFieldValue(
       field,
       data,
-      shouldSearchFullErrorInfo ? undefined : key,
+      shouldSearchFullErrorInfo ? undefined : fieldKey,
       type as COLUMN_TYPE,
     );
     return applyOperator(fieldValue, operator, value, type as COLUMN_TYPE);

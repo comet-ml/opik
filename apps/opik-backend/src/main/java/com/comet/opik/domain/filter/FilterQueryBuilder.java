@@ -31,6 +31,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -98,6 +99,11 @@ public class FilterQueryBuilder {
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
     private static final String ERROR_TYPE_DB = "simpleJSONExtractString(error_info, 'exception_type')";
+    private static final Map<String, String> ERROR_INFO_KEY_DB_FIELDS = Map.of(
+            "exceptiontype", ERROR_TYPE_DB,
+            "exception_type", ERROR_TYPE_DB,
+            "message", "simpleJSONExtractString(error_info, 'message')",
+            "traceback", "simpleJSONExtractString(error_info, 'traceback')");
     private static final String STATUS_DB = "status";
     public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
     public static final String SCOPE_DB = "scope";
@@ -955,9 +961,25 @@ public class FilterQueryBuilder {
 
     private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
-        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i);
+        var dbField = getAnalyticsDbField(filter, filterStrategy, i);
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
         return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
+    }
+
+    private static String getAnalyticsDbField(Filter filter, FilterStrategy filterStrategy, int i) {
+        if (filter.field().getType() == FieldType.ERROR_CONTAINER && StringUtils.isNotBlank(filter.key())) {
+            return ERROR_INFO_KEY_DB_FIELDS.getOrDefault(normalizeErrorInfoKey(filter.key()), "''");
+        }
+
+        return getAnalyticsDbField(filter.field(), filterStrategy, i);
+    }
+
+    public static boolean isSupportedErrorInfoKey(String key) {
+        return StringUtils.isBlank(key) || ERROR_INFO_KEY_DB_FIELDS.containsKey(normalizeErrorInfoKey(key));
+    }
+
+    private static String normalizeErrorInfoKey(String key) {
+        return StringUtils.trimToEmpty(key).toLowerCase(Locale.ROOT);
     }
 
     private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {

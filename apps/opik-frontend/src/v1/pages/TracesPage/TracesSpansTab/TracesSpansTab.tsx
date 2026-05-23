@@ -56,6 +56,7 @@ import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import NoTracesPage from "@/v1/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import ErrorInfoFieldSelect from "@/shared/FiltersContent/ErrorInfoFieldSelect";
 import TracesActionsPanel from "@/v1/pages/TracesPage/TracesSpansTab/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
@@ -500,6 +501,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             projectId,
             type,
           },
+        },
+        error_info: {
+          keySelectorComponent: ErrorInfoFieldSelect,
         },
         [COLUMN_GUARDRAILS_ID]: {
           keyComponentProps: {

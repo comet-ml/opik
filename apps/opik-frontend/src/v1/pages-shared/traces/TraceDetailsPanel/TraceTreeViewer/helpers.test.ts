@@ -799,7 +799,7 @@ describe("helpers.ts", () => {
           expect(filterFunction(mockSpanWithError, containsFilter)).toBe(true);
         });
 
-        it("should filter by full error_info for contains when key is present", () => {
+        it("should filter by selected error_info key for contains", () => {
           const containsFilter: Filters = [
             {
               id: "filter-1",
@@ -811,7 +811,52 @@ describe("helpers.ts", () => {
             },
           ];
 
-          expect(filterFunction(mockSpanWithError, containsFilter)).toBe(true);
+          expect(filterFunction(mockSpanWithError, containsFilter)).toBe(false);
+
+          const tracebackContainsFilter: Filters = [
+            {
+              id: "filter-2",
+              field: "error_info",
+              key: "traceback",
+              operator: "contains",
+              value: "CancelledError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(
+            filterFunction(mockSpanWithError, tracebackContainsFilter),
+          ).toBe(true);
+
+          const exceptionTypeContainsFilter: Filters = [
+            {
+              id: "filter-3",
+              field: "error_info",
+              key: " EXCEPTION_TYPE ",
+              operator: "contains",
+              value: "Validation",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(
+            filterFunction(mockSpanWithError, exceptionTypeContainsFilter),
+          ).toBe(true);
+
+          const blankKeyContainsFilter: Filters = [
+            {
+              id: "filter-4",
+              field: "error_info",
+              key: "   ",
+              operator: "contains",
+              value: "CancelledError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(
+            filterFunction(mockSpanWithError, blankKeyContainsFilter),
+          ).toBe(true);
         });
 
         it("should filter by error_info with not_contains operator", () => {
@@ -844,6 +889,39 @@ describe("helpers.ts", () => {
 
           expect(
             filterFunction(mockSpanWithError, keyedNotContainsFilter),
+          ).toBe(true);
+
+          const emptyTracebackSpan = {
+            ...mockSpanWithError,
+            error_info: {
+              message: "Test error",
+              exception_type: "ValidationError",
+              traceback: "",
+            },
+          };
+          const nullErrorInfoSpan = {
+            ...mockSpanWithError,
+            error_info: null,
+          } as unknown as Span;
+          const tracebackNotContainsFilter: Filters = [
+            {
+              id: "filter-4",
+              field: "error_info",
+              key: "traceback",
+              operator: "not_contains",
+              value: "CancelledError",
+              type: COLUMN_TYPE.errors,
+            },
+          ];
+
+          expect(filterFunction(mockSpan, tracebackNotContainsFilter)).toBe(
+            false,
+          );
+          expect(
+            filterFunction(nullErrorInfoSpan, tracebackNotContainsFilter),
+          ).toBe(false);
+          expect(
+            filterFunction(emptyTracebackSpan, tracebackNotContainsFilter),
           ).toBe(false);
 
           const unrelatedNotContainsFilter: Filters = [

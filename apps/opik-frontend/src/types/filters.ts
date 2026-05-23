@@ -24,6 +24,16 @@ export interface Filter {
   value: string | number;
   error?: string;
 }
+
+export type FilterKeySelectorComponentProps = {
+  className?: string;
+  placeholder?: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  disabled?: boolean;
+  "data-testid"?: string;
+};
+
 export type FilterRowConfig = {
   keyComponent?: React.FC<unknown> & {
     placeholder: string;
@@ -31,6 +41,8 @@ export type FilterRowConfig = {
     onValueChange: (value: string) => void;
   };
   keyComponentProps?: unknown;
+  keySelectorComponent?: React.ComponentType<FilterKeySelectorComponentProps>;
+  keySelectorComponentProps?: Partial<FilterKeySelectorComponentProps>;
   defaultOperator?: FilterOperator;
   operators?: DropdownOption<FilterOperator>[];
   validateFilter?: (filter: Filter) => string | undefined;

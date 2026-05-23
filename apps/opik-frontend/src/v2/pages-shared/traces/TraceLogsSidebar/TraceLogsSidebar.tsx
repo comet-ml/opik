@@ -50,6 +50,7 @@ import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import ErrorInfoFieldSelect from "@/shared/FiltersContent/ErrorInfoFieldSelect";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
@@ -539,6 +540,9 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             projectId,
             type,
           },
+        },
+        error_info: {
+          keySelectorComponent: ErrorInfoFieldSelect,
         },
       },
     }),

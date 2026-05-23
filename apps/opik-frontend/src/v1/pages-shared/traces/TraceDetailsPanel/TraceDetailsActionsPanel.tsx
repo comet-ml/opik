@@ -44,6 +44,7 @@ import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
+import ErrorInfoFieldSelect from "@/shared/FiltersContent/ErrorInfoFieldSelect";
 import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { TREE_FILTER_COLUMNS } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
@@ -367,6 +368,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               .map((key) => ({ value: key, label: key })),
             placeholder: "Select score",
           },
+        },
+        error_info: {
+          keySelectorComponent: ErrorInfoFieldSelect,
         },
         [COLUMN_GUARDRAILS_ID]: {
           keyComponentProps: {

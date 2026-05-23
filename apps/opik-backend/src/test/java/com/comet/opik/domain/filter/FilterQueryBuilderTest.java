@@ -64,6 +64,82 @@ class FilterQueryBuilderTest {
     }
 
     @Test
+    void toAnalyticsDbFilters__whenSpanErrorInfoTracebackDoesNotContain__thenSearchesNonEmptyTraceback() {
+        var filter = SpanFilter.builder()
+                .field(SpanField.ERROR_INFO)
+                .key("traceback")
+                .operator(Operator.NOT_CONTAINS)
+                .value("CancelledError")
+                .build();
+
+        var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
+
+        assertThat(sql).hasValueSatisfying(value -> assertThat(value)
+                .contains("notEmpty(simpleJSONExtractString(error_info, 'traceback'))")
+                .contains("notILike(simpleJSONExtractString(error_info, 'traceback'), CONCAT('%', :filter0 ,'%'))"));
+    }
+
+    @Test
+    void toAnalyticsDbFilters__whenSpanErrorInfoTracebackIsEmpty__thenChecksTracebackOnly() {
+        var filter = SpanFilter.builder()
+                .field(SpanField.ERROR_INFO)
+                .key("traceback")
+                .operator(Operator.IS_EMPTY)
+                .value("")
+                .build();
+
+        var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
+
+        assertThat(sql).hasValueSatisfying(value -> assertThat(value)
+                .contains("empty(simpleJSONExtractString(error_info, 'traceback'))"));
+    }
+
+    @Test
+    void toAnalyticsDbFilters__whenSpanErrorInfoTracebackIsNotEmpty__thenChecksTracebackOnly() {
+        var filter = SpanFilter.builder()
+                .field(SpanField.ERROR_INFO)
+                .key("traceback")
+                .operator(Operator.IS_NOT_EMPTY)
+                .value("")
+                .build();
+
+        var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
+
+        assertThat(sql).hasValueSatisfying(value -> assertThat(value)
+                .contains("notEmpty(simpleJSONExtractString(error_info, 'traceback'))"));
+    }
+
+    @Test
+    void toAnalyticsDbFilters__whenTraceErrorInfoMessageContains__thenSearchesMessage() {
+        var filter = TraceFilter.builder()
+                .field(TraceField.ERROR_INFO)
+                .key("message")
+                .operator(Operator.CONTAINS)
+                .value("timeout")
+                .build();
+
+        var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.TRACE);
+
+        assertThat(sql).hasValueSatisfying(value -> assertThat(value)
+                .contains("ilike(simpleJSONExtractString(error_info, 'message'), CONCAT('%', :filter0 ,'%'))"));
+    }
+
+    @Test
+    void toAnalyticsDbFilters__whenTraceErrorInfoExceptionTypeContains__thenSearchesExceptionType() {
+        var filter = TraceFilter.builder()
+                .field(TraceField.ERROR_INFO)
+                .key(" EXCEPTION_TYPE ")
+                .operator(Operator.CONTAINS)
+                .value("ValueError")
+                .build();
+
+        var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.TRACE);
+
+        assertThat(sql).hasValueSatisfying(value -> assertThat(value)
+                .contains("ilike(simpleJSONExtractString(error_info, 'exception_type'), CONCAT('%', :filter0 ,'%'))"));
+    }
+
+    @Test
     void validateFilter__whenErrorInfoContainsHasValue__thenAcceptsFilter() {
         var filter = SpanFilter.builder()
                 .field(SpanField.ERROR_INFO)
@@ -112,6 +188,20 @@ class FilterQueryBuilderTest {
                 .field(SpanField.ERROR_INFO)
                 .operator(Operator.CONTAINS)
                 .value(" ")
+                .build();
+
+        assertThatThrownBy(() -> filtersFactory.validateFilter(List.of(filter)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid value");
+    }
+
+    @Test
+    void validateFilter__whenErrorInfoKeyIsUnsupported__thenRejectsFilter() {
+        var filter = SpanFilter.builder()
+                .field(SpanField.ERROR_INFO)
+                .key("unknown")
+                .operator(Operator.CONTAINS)
+                .value("CancelledError")
                 .build();
 
         assertThatThrownBy(() -> filtersFactory.validateFilter(List.of(filter)))
