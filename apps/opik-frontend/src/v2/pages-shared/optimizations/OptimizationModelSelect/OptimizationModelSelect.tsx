@@ -224,7 +224,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
     );
   };
 
-  const displayTitle = selectedInfo?.title ?? value;
+  const displayTitle = selectedInfo?.title;
   const Icon = selectedInfo?.icon;
 
   return (
@@ -235,17 +235,19 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
         onOpenChange={handleOpenChange}
         disabled={disabled}
       >
-        <TooltipWrapper content={displayTitle}>
+        <TooltipWrapper content={displayTitle ?? ""}>
           <SelectTrigger
             className={cn("size-full data-[placeholder]:text-light-slate", {
               "border-destructive": hasError,
             })}
           >
             <SelectValue placeholder="Select an LLM model">
-              <div className="flex items-center gap-2">
-                {Icon && <Icon className="min-w-3.5 text-foreground" />}
-                <span className="truncate">{displayTitle}</span>
-              </div>
+              {displayTitle && (
+                <div className="flex items-center gap-2">
+                  {Icon && <Icon className="min-w-3.5 text-foreground" />}
+                  <span className="truncate">{displayTitle}</span>
+                </div>
+              )}
             </SelectValue>
           </SelectTrigger>
         </TooltipWrapper>
