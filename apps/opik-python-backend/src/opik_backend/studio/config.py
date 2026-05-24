@@ -5,12 +5,10 @@ import os
 # Opik Configuration
 OPIK_URL = os.getenv("OPIK_URL_OVERRIDE")
 
-# LLM API Keys
-LLM_API_KEYS = {
-    "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
-    "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
-    "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY"),
-}
+# Gateway base URL for LLM calls — points at the Opik backend's
+# OpenAI-compatible completions endpoint so that all provider/key
+# resolution happens in the Java backend (same path as the playground).
+OPIK_GATEWAY_BASE_URL = f"{OPIK_URL}/v1/private" if OPIK_URL else None
 
 # Metric Defaults
 DEFAULT_REFERENCE_KEY = "answer"
