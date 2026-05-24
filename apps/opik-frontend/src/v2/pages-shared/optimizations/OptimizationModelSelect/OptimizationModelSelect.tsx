@@ -15,11 +15,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -54,31 +50,25 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
     permissions: { canUpdateAIProviders },
   } = usePermissions();
 
-  const { data } = useProviderKeys(
-    { workspaceName },
-    { staleTime: 1000 },
-  );
+  const { data } = useProviderKeys({ workspaceName }, { staleTime: 1000 });
 
   const configuredProvidersList = useMemo(
     () => data?.content ?? [],
     [data?.content],
   );
 
-  const {
-    freeModelOption,
-    groupOptions,
-    filteredFreeModel,
-    filteredGroups,
-  } = useModelOptions(configuredProvidersList, providerModels, filterValue);
+  const { freeModelOption, groupOptions, filteredFreeModel, filteredGroups } =
+    useModelOptions(configuredProvidersList, providerModels, filterValue);
 
   const selectedInfo = useMemo(() => {
     if (!value) return null;
 
-    if (
-      freeModelOption &&
-      value === freeModelOption.value
-    ) {
-      return { icon: freeModelOption.icon, label: freeModelOption.label, title: freeModelOption.label };
+    if (freeModelOption && value === freeModelOption.value) {
+      return {
+        icon: freeModelOption.icon,
+        label: freeModelOption.label,
+        title: freeModelOption.label,
+      };
     }
 
     for (const group of groupOptions) {
