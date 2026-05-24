@@ -223,6 +223,20 @@ class IsolatedSubprocessExecutor:
         env["LOG_FORMAT"] = 'json'
         return env
 
+    @staticmethod
+    def _parse_last_json_line(stdout: str) -> tuple[Optional[dict], Optional[str]]:
+        """Parse the last non-empty stdout line as JSON.
+
+        Returns (result, None) on success, or (None, error_message) on failure.
+        """
+        lines = [line for line in stdout.split('\n') if line.strip()]
+        if not lines:
+            return None, "No output produced by subprocess"
+        try:
+            return json.loads(lines[-1]), None
+        except (json.JSONDecodeError, ValueError) as e:
+            return None, f"Invalid JSON response from subprocess: {str(e)}"
+
     def _execute_in_subprocess(
         self,
         process: subprocess.Popen,
@@ -316,33 +330,23 @@ class IsolatedSubprocessExecutor:
 
             # Parse result from stdout
             if process.returncode == 0:
-                try:
-                    # Extract last non-empty line from stdout as the result JSON
-                    lines = [line for line in stdout.split('\n') if line.strip()]
-                    if not lines:
-                        raise ValueError("No output produced by subprocess")
-                    result = json.loads(lines[-1])
-                    return result
-                except (json.JSONDecodeError, ValueError) as e:
+                result, parse_error = self._parse_last_json_line(stdout)
+                if result is None:
                     self.logger.error(f"Failed to parse subprocess output: {stdout}")
                     return {
                         "code": 500,
-                        "error": f"Invalid JSON response from subprocess: {str(e)}",
+                        "error": parse_error,
                     }
+                return result
             else:
                 self.logger.error(
                     f"Subprocess exited with code {process.returncode}. "
                     f"stdout: {stdout}. stderr: {stderr}"
                 )
-                # Try to parse error JSON from stdout (optimizer_runner outputs it there)
-                try:
-                    lines = [line for line in stdout.split('\n') if line.strip()]
-                    if lines:
-                        result = json.loads(lines[-1])
-                        if isinstance(result, dict) and "error" in result:
-                            return result
-                except (json.JSONDecodeError, ValueError):
-                    pass
+                # optimizer_runner emits error JSON on stdout; prefer it over generic message
+                result, _ = self._parse_last_json_line(stdout)
+                if isinstance(result, dict) and "error" in result:
+                    return result
                 return {
                     "code": 500,
                     "error": f"Subprocess execution failed: {stderr}",

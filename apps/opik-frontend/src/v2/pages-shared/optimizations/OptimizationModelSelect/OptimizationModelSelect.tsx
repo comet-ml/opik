@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ChevronRight, Search, Settings2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -9,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/ui/select";
-import { ChevronRight, Search, Settings2 } from "lucide-react";
 import { ListAction } from "@/ui/list-action";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/ui/input";
