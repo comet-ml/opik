@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -211,10 +211,8 @@ const PromptsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
 
-  const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const [createTemplateStructure, setCreateTemplateStructure] =
-    useState<PROMPT_TEMPLATE_STRUCTURE>(PROMPT_TEMPLATE_STRUCTURE.TEXT);
+  type OpenCreate = { key: number; structure: PROMPT_TEMPLATE_STRUCTURE };
+  const [openCreate, setOpenCreate] = useState<OpenCreate | null>(null);
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -351,9 +349,7 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const handleNewPromptClick = useCallback(
     (structure: PROMPT_TEMPLATE_STRUCTURE = PROMPT_TEMPLATE_STRUCTURE.TEXT) => {
-      setCreateTemplateStructure(structure);
-      setOpenDialog(true);
-      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+      setOpenCreate((prev) => ({ key: (prev?.key ?? 0) + 1, structure }));
     },
     [],
   );
@@ -553,10 +549,14 @@ const PromptsPage: React.FunctionComponent = () => {
         </>
       )}
       <CreatePromptSheet
-        key={resetDialogKeyRef.current}
-        open={openDialog}
-        setOpen={setOpenDialog}
-        templateStructure={createTemplateStructure}
+        key={openCreate?.key ?? "closed"}
+        open={openCreate !== null}
+        setOpen={(v) => {
+          if (!v) setOpenCreate(null);
+        }}
+        templateStructure={
+          openCreate?.structure ?? PROMPT_TEMPLATE_STRUCTURE.TEXT
+        }
       />
     </div>
   );
