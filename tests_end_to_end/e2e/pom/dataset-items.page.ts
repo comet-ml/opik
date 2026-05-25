@@ -25,7 +25,7 @@ export class DatasetItemsPage {
     ]);
   }
 
-  /** Rendered row count — the "Showing X of Y" text is stale during drafts. */
+  /** Rendered row count on the current page. Table is paginated (default 10/page); the "Showing X of Y" text is stale during drafts. */
   async countItems(): Promise<number> {
     return this.itemsTableBody.locator('tr[data-row-id]').count();
   }
