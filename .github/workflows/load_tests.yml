@@ -57,14 +57,20 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Python SDK load tests
-        # -n auto + --dist=worksteal runs each scenario in its own worker
-        # process (9 tests, ubuntu-latest has 4 vCPUs). Each test uses a
-        # unique project so isolation holds. Worksteal balances the very
-        # uneven per-test durations (spread is window-locked at 600 s,
+        # -n 2 + --dist=worksteal runs two scenarios in parallel at a time.
+        # `-n auto` (= 4 workers on ubuntu-latest) was the previous setting
+        # but reliably OOM-killed the heaviest scenarios
+        # (test_many_traces_one_span_each, test_many_spans_per_trace) when
+        # they ended up co-scheduled with other heavy tests against the
+        # same docker-compose Opik stack on the runner's 7 GB RAM. -n 2
+        # halves concurrent backend pressure and per-runner memory, at the
+        # cost of ~1.5x wall-clock (~32 min -> ~50 min). Each test still
+        # uses a unique project so isolation holds. Worksteal balances the
+        # very uneven per-test durations (spread is window-locked at 600 s,
         # others run in 1-6 min).
         run: |
           cd ${{ github.workspace }}/tests_load
-          pytest suite/python_sdk -n auto --dist=worksteal --junitxml=${{ github.workspace }}/load_test_results.xml
+          pytest suite/python_sdk -n 2 --dist=worksteal --junitxml=${{ github.workspace }}/load_test_results.xml
 
       - name: Render metrics into job summary
         if: always()
