@@ -3,4 +3,5 @@
 # the repo root, or `pip install opik` for the published package) — this
 # file only pins the suite's runtime dependencies.
 pytest
+pytest-timeout
 pytest-xdist
