@@ -5,7 +5,10 @@ import { IntegrationStep } from "@/v2/pages-shared/onboarding/IntegrationExplore
 import { useActiveWorkspaceName, useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
-import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
+import {
+  INSTALL_OPIK_SECTION_TITLE,
+  PROJECT_NAME_PLACEHOLDER,
+} from "@/constants/shared";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 import { Separator } from "@/ui/separator";
@@ -65,35 +68,68 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
       <AgentCopyButtons agentName={agentName} />
 
       <IntegrationStep
-        title={`${INSTALL_OPIK_SECTION_TITLE}.`}
-        description="Install Opik from the command line using pip."
+        title={integration.installTitle ?? `${INSTALL_OPIK_SECTION_TITLE}.`}
+        description={
+          integration.installDescription ??
+          "Install Opik from the command line using pip."
+        }
         className="mb-2 border-0 p-0"
       >
         <div className="flex flex-col gap-3">
           <div className="min-h-7 overflow-hidden rounded-md border">
             <CodeHighlighter data={integration.installCommand} />
           </div>
-          <div className="overflow-hidden rounded-md border">
-            <CodeHighlighter
-              data={`import opik\n\nopik.configure(use_local=False, project_name="${agentName}")`}
-              highlightedLines={[1, 3]}
-            />
-          </div>
+          {!integration.installTitle && (
+            <div className="overflow-hidden rounded-md border">
+              <CodeHighlighter
+                data={`import opik\n\nopik.configure(use_local=False, project_name="${agentName}")`}
+                highlightedLines={[1, 3]}
+              />
+            </div>
+          )}
         </div>
       </IntegrationStep>
 
-      <IntegrationStep
-        title={`2. Run the following code to get started with ${integration.title}`}
-        className="mb-2 border-0 p-0"
-      >
-        <div className="overflow-hidden rounded-md border">
-          <CodeHighlighter
-            data={codeWithConfig}
-            copyData={codeWithConfigToCopy}
-            highlightedLines={lines}
-          />
-        </div>
-      </IntegrationStep>
+      {integration.additionalSteps ? (
+        integration.additionalSteps.map((step, idx) => {
+          const { code: stepCode } = putConfigInCode({
+            code: step.code,
+            workspaceName,
+            apiKey,
+            shouldMaskApiKey: true,
+            projectName: agentName,
+          });
+          return (
+            <IntegrationStep
+              key={idx}
+              title={step.title}
+              description={step.description?.replaceAll(
+                PROJECT_NAME_PLACEHOLDER,
+                agentName,
+              )}
+              className="mb-2 border-0 p-0"
+            >
+              <div className="min-h-7 overflow-hidden rounded-md border">
+                <CodeHighlighter data={stepCode} language={step.language} />
+              </div>
+            </IntegrationStep>
+          );
+        })
+      ) : (
+        <IntegrationStep
+          title={`2. Run the following code to get started with ${integration.title}`}
+          className="mb-2 border-0 p-0"
+        >
+          <div className="overflow-hidden rounded-md border">
+            <CodeHighlighter
+              data={codeWithConfig}
+              copyData={codeWithConfigToCopy}
+              highlightedLines={lines}
+              language={integration.codeLanguage}
+            />
+          </div>
+        </IntegrationStep>
+      )}
     </div>
   );
 };

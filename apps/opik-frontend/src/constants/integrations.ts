@@ -51,7 +51,6 @@ import dspyCode from "@/integrations/integration-scripts/DSPy.py?raw";
 import { integrationLogsMap } from "@/integrations/integration-logs";
 
 import ollamaCode from "@/integrations/integration-scripts/Ollama.py?raw";
-import openclawCode from "@/integrations/integration-scripts/OpenClaw.sh?raw";
 import crewaiCode from "@/integrations/integration-scripts/CrewAI.py?raw";
 import adkCode from "@/integrations/integration-scripts/ADK.py?raw";
 import openrouterCode from "@/integrations/integration-scripts/OpenRouter.py?raw";
@@ -71,6 +70,13 @@ import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 // import watsonxCode from "@/integration-scripts/WatsonX.py?raw";
 // import openAIAgentsCode from "@/integration-scripts/OpenAIAgents.py?raw";
 
+export type IntegrationStepConfig = {
+  title: string;
+  description?: string;
+  code: string;
+  language?: SUPPORTED_LANGUAGE;
+};
+
 export type Integration = {
   id: string;
   title: string;
@@ -84,6 +90,12 @@ export type Integration = {
   installTitle?: string;
   installDescription?: string;
   codeLanguage?: SUPPORTED_LANGUAGE;
+  // When set, the dialog renders these instead of the single
+  // "Run the following code" block. Each entry becomes its own
+  // IntegrationStep row. Useful for integrations with a multi-step
+  // CLI/config flow (e.g. OpenClaw) where one big code block doesn't
+  // map cleanly to the underlying README structure.
+  additionalSteps?: IntegrationStepConfig[];
   docsLink: string;
   executionUrl?: string;
   executionLogs?: string[];
@@ -149,12 +161,33 @@ export const INTEGRATIONS: Integration[] = [
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: openclawLogoUrl,
-    code: openclawCode,
+    code: "",
     installCommand: "openclaw plugins install clawhub:@opik/opik-openclaw",
     installTitle: "1. Install the OpenClaw plugin",
     installDescription:
       "Run this in your OpenClaw Gateway environment to install the Opik plugin.",
-    codeLanguage: SUPPORTED_LANGUAGE.bash,
+    additionalSteps: [
+      {
+        title: "2. Configure the plugin",
+        description:
+          "The setup wizard validates your endpoint and credentials, then writes config under plugins.entries.opik-openclaw.",
+        code: "openclaw opik configure",
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+      {
+        title: "3. Check effective settings",
+        description: "Print the active Opik configuration to verify the setup.",
+        code: "openclaw opik status",
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+      {
+        title: "4. Start the gateway and send a test message",
+        description:
+          'Traces will stream into your "PROJECT_NAME_PLACEHOLDER" Opik project.',
+        code: 'openclaw gateway run\nopenclaw message send "hello from openclaw"',
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+    ],
     docsLink: buildDocsUrl("/integrations/openclaw"),
   },
   {
