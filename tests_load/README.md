@@ -39,6 +39,7 @@ down for local smoke runs.
 | `test_bursts.py::test_spread_over_time` | 10k traces evenly spread over 10 minutes |
 | `test_bursts.py::test_concurrent_writers_share_one_client` | 30 threads × 1k traces = 30k traces sharing one client |
 | `test_bursts.py::test_concurrent_writers_race_stress` | 100 threads × 500 traces, no think-time, batcher flush interval monkey-patched 2 s → 5 ms — tuned specifically to surface missing-lock regressions in `BatchManager.flush_ready` (OPIK-6444 shape) |
+| `test_dataset_items.py::test_dataset_insert_many_versions` | 50 sequential `Dataset.insert()` calls × 50 items × ~4 KB payload = 2.5k items across 50 versions. Verifies `dataset.get_items()` round-trips the full count — catches the multi-replica ClickHouse `COPY_VERSION_ITEMS` short-read truncation that drops items on prod (won't reproduce against single-replica localhost) |
 
 Every test:
 
