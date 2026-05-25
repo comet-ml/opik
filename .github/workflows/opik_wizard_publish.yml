@@ -23,7 +23,6 @@ on:
         type: string
         required: true
         description: Version
-        default: ""
       is_release:
         type: boolean
         required: false
@@ -130,16 +129,16 @@ jobs:
       - name: Workflow summary
         if: always()
         run: |
-          echo "## Workflow Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: ${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Is Release**: ${{ env.IS_RELEASE }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Workflow Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version**: ${{ env.VERSION }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Is Release**: ${{ env.IS_RELEASE }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Branch**: ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Triggered by**: @${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ env.IS_RELEASE }}" == "true" ]; then
-            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Git tag created: configure-v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ Git tag created: configure-v${{ env.VERSION }}" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "ℹ️ Dry run completed - no changes published" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ Dry run completed - no changes published" >> "$GITHUB_STEP_SUMMARY"
           fi

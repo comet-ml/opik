@@ -32,7 +32,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Span(
-        @JsonView( {
+        @JsonView({
                 Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) UUID id,
         @JsonView({
@@ -86,7 +86,7 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) Source source,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
-                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Size(max = 150, message = "cannot exceed 150 characters") String environment){
+                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Size(max = 150, message = "cannot exceed 150 characters") String environment) {
 
     @Builder(toBuilder = true)
     public record SpanPage(

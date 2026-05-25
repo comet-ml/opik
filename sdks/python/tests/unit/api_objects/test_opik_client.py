@@ -11,6 +11,9 @@ from opik.api_objects import prompt as prompt_module
 from opik.api_objects.prompt import client as prompt_client_module
 from opik.message_processing import messages
 from opik.types import BatchFeedbackScoreDict
+from opik import context_storage
+from opik.api_objects.trace import trace_data as trace_data_mod
+from opik.api_objects.span import span_data as span_data_mod
 
 
 @pytest.mark.parametrize(
@@ -1409,3 +1412,77 @@ def test_opik_client__log_assertion_results__nothing_valid__does_not_emit():
     )
 
     mock_streamer.put.assert_not_called()
+
+
+class TestGetPromptAutoInjectionDedup:
+    """Tests for deduplication in the opik_prompts auto-injection path.
+
+    Uses real TraceData/SpanData inside temporary_context so the tests exercise
+    the actual metadata accumulation path rather than pre-populated mocks.
+    """
+
+    def _make_prompt(self, prompt_id="pid-1", commit="abc123", name="my-prompt"):
+        info = {"id": prompt_id, "commit": commit, "name": name, "version": {}}
+        p = Mock()
+        p.__internal_api__to_info_dict__ = Mock(return_value=info)
+        p.__internal_api__prompt_id__ = prompt_id
+        return p
+
+    def _get_prompt(self, client_, mock_prompt):
+        """Call get_prompt with the cache layer bypassed."""
+        with patch(
+            "opik.api_objects.prompt.client.prompt_cache.get_or_fetch",
+            return_value=mock_prompt,
+        ):
+            return client_.get_prompt(
+                name=mock_prompt.__internal_api__to_info_dict__()["name"]
+            )
+
+    def _make_context(self):
+        trace = trace_data_mod.TraceData(name="test-trace")
+        span = span_data_mod.SpanData(trace_id=trace.id, name="test-span")
+        return trace, span
+
+    def test_single_call_injects_prompt_into_trace_and_span(self):
+        client_ = opik_client.Opik(project_name="test")
+        mock_prompt = self._make_prompt()
+        trace, span = self._make_context()
+
+        with context_storage.temporary_context(span, trace_data=trace):
+            self._get_prompt(client_, mock_prompt)
+
+        assert trace.metadata is not None
+        assert span.metadata is not None
+        assert len(trace.metadata["opik_prompts"]) == 1
+        assert trace.metadata["opik_prompts"][0]["id"] == "pid-1"
+        assert len(span.metadata["opik_prompts"]) == 1
+
+    def test_two_calls_with_same_prompt_inject_only_once(self):
+        """Calling get_prompt twice for the same prompt inside a @track body must
+        result in exactly one entry in opik_prompts, not two."""
+        client_ = opik_client.Opik(project_name="test")
+        mock_prompt = self._make_prompt()
+        trace, span = self._make_context()
+
+        with context_storage.temporary_context(span, trace_data=trace):
+            self._get_prompt(client_, mock_prompt)
+            self._get_prompt(client_, mock_prompt)
+
+        assert len(trace.metadata["opik_prompts"]) == 1
+        assert len(span.metadata["opik_prompts"]) == 1
+
+    def test_two_different_prompts_both_injected(self):
+        """Two distinct prompts inside one @track body should each appear once."""
+        client_ = opik_client.Opik(project_name="test")
+        prompt_a = self._make_prompt(prompt_id="pid-1", commit="abc", name="prompt-a")
+        prompt_b = self._make_prompt(prompt_id="pid-2", commit="def", name="prompt-b")
+        trace, span = self._make_context()
+
+        with context_storage.temporary_context(span, trace_data=trace):
+            self._get_prompt(client_, prompt_a)
+            self._get_prompt(client_, prompt_b)
+
+        injected = trace.metadata["opik_prompts"]
+        assert len(injected) == 2
+        ids = {p["id"] for p in injected}
+        assert ids == {"pid-1", "pid-2"}

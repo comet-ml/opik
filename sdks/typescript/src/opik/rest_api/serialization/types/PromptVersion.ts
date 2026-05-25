@@ -6,15 +6,19 @@ import type * as serializers from "../index.js";
 import { JsonNode } from "./JsonNode.js";
 import { PromptVersionTemplateStructure } from "./PromptVersionTemplateStructure.js";
 import { PromptVersionType } from "./PromptVersionType.js";
+import { PromptVersionVersionType } from "./PromptVersionVersionType.js";
 
 export const PromptVersion: core.serialization.ObjectSchema<serializers.PromptVersion.Raw, OpikApi.PromptVersion> =
     core.serialization.object({
         id: core.serialization.string().optional(),
         promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
         commit: core.serialization.string().optional(),
+        versionNumber: core.serialization.property("version_number", core.serialization.string().optional()),
         template: core.serialization.string(),
         metadata: JsonNode.optional(),
         type: PromptVersionType.optional(),
+        versionType: core.serialization.property("version_type", PromptVersionVersionType.optional()),
+        environment: core.serialization.string().optional(),
         changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
         tags: core.serialization.list(core.serialization.string()).optional(),
         variables: core.serialization.list(core.serialization.string()).optional(),
@@ -28,9 +32,12 @@ export declare namespace PromptVersion {
         id?: string | null;
         prompt_id?: string | null;
         commit?: string | null;
+        version_number?: string | null;
         template: string;
         metadata?: JsonNode.Raw | null;
         type?: PromptVersionType.Raw | null;
+        version_type?: PromptVersionVersionType.Raw | null;
+        environment?: string | null;
         change_description?: string | null;
         tags?: string[] | null;
         variables?: string[] | null;

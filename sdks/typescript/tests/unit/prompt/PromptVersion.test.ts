@@ -23,6 +23,7 @@ describe("PromptVersion", () => {
         name: "test-prompt",
         prompt: "Hello {{name}}!",
         commit: "abc123de",
+        version: "v3",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
         metadata: { version: "1.0" },
@@ -37,6 +38,7 @@ describe("PromptVersion", () => {
       expect(version.name).toBe("test-prompt");
       expect(version.prompt).toBe("Hello {{name}}!");
       expect(version.commit).toBe("abc123de");
+      expect(version.version).toBe("v3");
       expect(version.type).toBe(PromptType.MUSTACHE);
       expect(version.metadata).toEqual({ version: "1.0" });
       expect(version.changeDescription).toBe("Initial version");
@@ -60,6 +62,7 @@ describe("PromptVersion", () => {
       expect(version.name).toBe("minimal-prompt");
       expect(version.prompt).toBe("Minimal template");
       expect(version.commit).toBe("commit123");
+      expect(version.version).toBeUndefined();
       expect(version.type).toBe(PromptType.MUSTACHE);
       expect(version.metadata).toBeUndefined();
       expect(version.changeDescription).toBeUndefined();
@@ -262,6 +265,7 @@ describe("PromptVersion", () => {
         name: "full-info-prompt",
         prompt: "Test",
         commit: "abc123de",
+        version: "v3",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
         createdAt: new Date("2024-01-15T10:30:00Z"),
@@ -272,8 +276,21 @@ describe("PromptVersion", () => {
       const info = version.getVersionInfo();
 
       expect(info).toBe(
-        "[abc123de] 2024-01-15 by user@example.com - Added new feature",
+        "[v3] 2024-01-15 by user@example.com - Added new feature",
       );
+    });
+
+    it("should fall back to commit when version is absent (e.g. mask version)", () => {
+      const version = new PromptVersion({
+        versionId: "version-123",
+        name: "mask-prompt",
+        prompt: "Test",
+        commit: "abc123de",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      expect(version.getVersionInfo()).toBe("[abc123de]");
     });
 
     it("should format version info with partial fields", () => {
@@ -378,12 +395,13 @@ describe("PromptVersion", () => {
   });
 
   describe("compareTo", () => {
-    it("should return unified diff output", () => {
+    it("should return unified diff output with version labels", () => {
       const version1 = new PromptVersion({
         versionId: "version-1",
         name: "test-prompt",
         prompt: "Hello {{name}}!",
         commit: "commit1",
+        version: "v2",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
       });
@@ -393,6 +411,7 @@ describe("PromptVersion", () => {
         name: "test-prompt",
         prompt: "Hi {{name}}!",
         commit: "commit2",
+        version: "v1",
         promptId: "prompt-123",
         type: PromptType.MUSTACHE,
       });
@@ -401,6 +420,31 @@ describe("PromptVersion", () => {
 
       expect(diff).toContain("Current version");
       expect(diff).toContain("Other version");
+      expect(diff).toContain("[v2]");
+      expect(diff).toContain("[v1]");
+    });
+
+    it("should fall back to commit in diff labels when version is absent", () => {
+      const version1 = new PromptVersion({
+        versionId: "version-1",
+        name: "mask-prompt",
+        prompt: "Hello!",
+        commit: "commit1",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const version2 = new PromptVersion({
+        versionId: "version-2",
+        name: "mask-prompt",
+        prompt: "Hi!",
+        commit: "commit2",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const diff = version1.compareTo(version2);
+
       expect(diff).toContain("[commit1]");
       expect(diff).toContain("[commit2]");
     });
@@ -869,6 +913,7 @@ Please enjoy your extended stay.`;
         id: "version-id",
         promptId: "prompt-id",
         commit: "abc123de",
+        versionNumber: "v3",
         template: "Hello {{name}}!",
         type: "mustache",
         createdAt: new Date("2024-01-01T10:00:00Z"),
@@ -884,6 +929,7 @@ Please enjoy your extended stay.`;
       expect(version.name).toBe("test-prompt");
       expect(version.prompt).toBe("Hello {{name}}!");
       expect(version.commit).toBe("abc123de");
+      expect(version.version).toBe("v3");
       expect(version.type).toBe(PromptType.MUSTACHE);
       expect(version.metadata).toEqual({ version: "1.0" });
       expect(version.changeDescription).toBe("Initial version");
@@ -910,6 +956,7 @@ Please enjoy your extended stay.`;
       expect(version.name).toBe("minimal-prompt");
       expect(version.prompt).toBe("Minimal template");
       expect(version.commit).toBe("commit123");
+      expect(version.version).toBeUndefined();
       expect(version.metadata).toBeUndefined();
       expect(version.changeDescription).toBeUndefined();
       expect(version.createdAt).toBeUndefined();

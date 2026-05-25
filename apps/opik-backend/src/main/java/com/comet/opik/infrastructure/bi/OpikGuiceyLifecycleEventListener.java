@@ -1,10 +1,14 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.AlertProjectMigrationJob;
+import com.comet.opik.api.resources.v1.jobs.AutomationRuleProjectMigrationJob;
+import com.comet.opik.api.resources.v1.jobs.DatasetProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
+import com.comet.opik.api.resources.v1.jobs.PromptProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
@@ -59,6 +63,10 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setLlmModelRegistryRefreshJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
                 scheduleExperimentProjectMigrationJobIfEnabled();
+                scheduleDatasetProjectMigrationJobIfEnabled();
+                schedulePromptProjectMigrationJobIfEnabled();
+                scheduleAutomationRuleProjectMigrationJobIfEnabled();
+                scheduleAlertProjectMigrationJobIfEnabled();
             }
 
             case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
@@ -312,6 +320,50 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
         scheduleRepeatingJob(ExperimentProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleDatasetProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getDatasetProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Dataset project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(DatasetProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void schedulePromptProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getPromptProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Prompt project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(PromptProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleAutomationRuleProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getAutomationRuleProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Automation rule project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(AutomationRuleProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleAlertProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getAlertProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Alert project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(AlertProjectMigrationJob.class,
                 config.interval().toJavaDuration(),
                 config.startupDelay().toJavaDuration());
     }

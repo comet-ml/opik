@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.domain.ExperimentDAO;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.LocalWorkspacePermissionsService;
 import com.comet.opik.domain.OptimizationDAO;
 import com.comet.opik.domain.RemoteWorkspacePermissionsService;
@@ -86,18 +87,19 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
             TransactionTemplate transactionTemplate,
             ExperimentDAO experimentDAO,
             OptimizationDAO optimizationDAO,
+            FeedbackScoreDAO feedbackScoreDAO,
             CacheManager cacheManager,
             WorkspacesService workspacesService,
             AnalyticsService analyticsService) {
         if (!authenticationConfig.isEnabled()) {
             log.info("Authentication disabled, using UnauthWorkspaceVersionService");
             return new UnauthWorkspaceVersionService(
-                    transactionTemplate, experimentDAO, optimizationDAO, serviceTogglesConfig, cacheManager,
-                    cacheConfiguration, workspacesService, analyticsService);
+                    transactionTemplate, experimentDAO, optimizationDAO, feedbackScoreDAO, serviceTogglesConfig,
+                    cacheManager, cacheConfiguration, workspacesService, analyticsService);
         }
         log.info("Authentication enabled, using AuthWorkspaceVersionService");
         return new AuthWorkspaceVersionService(
-                transactionTemplate, experimentDAO, optimizationDAO, serviceTogglesConfig, cacheManager,
-                cacheConfiguration, workspacesService, analyticsService);
+                transactionTemplate, experimentDAO, optimizationDAO, feedbackScoreDAO, serviceTogglesConfig,
+                cacheManager, cacheConfiguration, workspacesService, analyticsService);
     }
 }

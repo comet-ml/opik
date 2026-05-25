@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -19,6 +20,7 @@ import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -33,14 +35,17 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
-import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
@@ -63,6 +68,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
     @Mock
     private OnlineScoringConfig onlineScoringConfig;
+    @Mock
+    private ServiceTogglesConfig serviceTogglesConfig;
     @Mock
     private RedissonReactiveClient redissonClient;
     @Mock
@@ -118,6 +125,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         scorer = new OnlineScoringLlmAsJudgeScorer(
                 onlineScoringConfig,
+                serviceTogglesConfig,
                 redissonClient,
                 feedbackScoreService,
                 aiProxyService,
@@ -138,6 +146,140 @@ class OnlineScoringLlmAsJudgeScorerTest {
         }
     }
 
+    @Nested
+    class ShouldFetchSpansTests {
+
+        // Truth table for the spans-fetch gate. Spans are fetched when EITHER:
+        //   (a) the agentic-tools path is possible (provider supports tools AND (experimentId
+        //       OR isAgenticToolsEnabled)), OR
+        //   (b) the inline {{spans}} template path applies — AND ALSO gated by
+        //       isAgenticToolsEnabled, so both pathways ship as one feature behind one toggle.
+        // Goal of the gate: skip the SpanService.getByTraceIds I/O on rules that don't need
+        // spans, and let ops kill the spans-in-prompts feature org-wide via a single flip.
+        @ParameterizedTest(name = "expId={0}, toggle={1}, provider={2}, sentinelInVars={3}, templateHasSpans={4} → expected={5}")
+        @CsvSource({
+                // Agentic-tools branch: provider supports tools AND (experimentId OR toggle).
+                "true,  false, OPEN_AI, false, false, true",
+                "false, true,  OPEN_AI, false, false, true",
+                // Provider doesn't support tools → agentic-tools branch off; with the new
+                // gating the template path also requires the toggle, so toggle=false means no
+                // fetch regardless of variables/template content.
+                "true,  true,  OLLAMA,  false, false, false",
+                "false, true,  OLLAMA,  false, false, false",
+                // Toggle off + no experimentId + no template → no fetch.
+                "false, false, OPEN_AI, false, false, false",
+                // Toggle off + template-only — feature gated, no fetch (regression test for the
+                // new isAgenticToolsEnabled gate on the template path).
+                "false, false, OPEN_AI, false, true,  false",
+                "false, false, OLLAMA,  false, true,  false",
+                // Toggle off + sentinel-in-variables — same gating applies: no fetch.
+                "false, false, OPEN_AI, true,  false, false",
+                // Toggle on + template-only on a non-tool-calling provider → fetch via template path.
+                "false, true,  OLLAMA,  false, true,  true",
+                // Toggle on + sentinel-in-variables on a non-tool-calling provider → fetch.
+                "false, true,  OLLAMA,  true,  false, true",
+                // Toggle off + experimentId path → spans fetched for the agentic-tools cache
+                // seed; the template substitution piggy-backs on the already-fetched data.
+                "true,  false, OPEN_AI, false, true,  true",
+                // Both branches on → still just one fetch (idempotent OR).
+                "true,  true,  OPEN_AI, true,  true,  true",
+        })
+        void gateMatchesTruthTable(
+                boolean hasExperimentId, boolean toggleEnabled, LlmProvider provider,
+                boolean sentinelInVariables, boolean templateHasSpans, boolean expected) {
+            String modelName = "gpt-test";
+            TraceToScoreLlmAsJudge message = buildSpansFetchMessage(
+                    hasExperimentId, sentinelInVariables, templateHasSpans);
+            // Both lenient: the agenticToolsPathPossible expression short-circuits, so
+            // !supportsToolCalling AND experimentIdPath both skip the toggle check; the
+            // provider lookup is also skipped when the agentic-tools branch isn't probed.
+            lenient().when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
+            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+
+            assertThat(scorer.shouldFetchSpans(message)).isEqualTo(expected);
+        }
+
+        private TraceToScoreLlmAsJudge buildSpansFetchMessage(
+                boolean hasExperimentId, boolean sentinelInVariables, boolean templateHasSpans) {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .build();
+            LlmAsJudgeCode code = mock(LlmAsJudgeCode.class);
+            LlmAsJudgeModelParameters modelParams = mock(LlmAsJudgeModelParameters.class);
+            lenient().when(code.model()).thenReturn(modelParams);
+            lenient().when(modelParams.name()).thenReturn("gpt-test");
+            lenient().when(code.variables()).thenReturn(sentinelInVariables
+                    ? Map.of("mySpans", "spans")
+                    : Map.of());
+            lenient().when(code.messages()).thenReturn(templateHasSpans
+                    ? List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                            .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                            .content("Spans: {{spans}}")
+                            .build())
+                    : List.of());
+            return new TraceToScoreLlmAsJudge(
+                    trace,
+                    UUID.randomUUID(),
+                    "rule",
+                    code,
+                    "ws-1",
+                    "user-1",
+                    null,
+                    Map.of(),
+                    PromptType.MUSTACHE,
+                    hasExperimentId ? UUID.randomUUID() : null);
+        }
+    }
+
+    @Nested
+    class RoutingGateTests {
+
+        // Truth table: experimentId × toggle × tokens >= threshold × provider supports tools → useTools.
+        // Tools fire when EITHER (a) the experimentId branch is on OR (b) the size branch is on,
+        // AND the provider supports tool-calling. Without the provider check, a non-tool-calling
+        // model selected via test_suite_model metadata would crash inside the chat call when the
+        // request carries tool specs (Logical bug surfaced by review of the experimentId path).
+        @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4} → expected useTools={5}")
+        @CsvSource({
+                // experimentId path → tools when provider supports them
+                "true,  false, 0,     50000, OPEN_AI, true",
+                "true,  true,  60000, 50000, OPEN_AI, true",
+                // experimentId set BUT provider doesn't support tools → fall back to inline with a warn
+                // (assertions that depend on tool-driven span inspection won't be reliable for this model;
+                // we surface the misconfig loudly rather than crash inside the chat call).
+                "true,  true,  60000, 50000, OLLAMA,  false",
+                // size-based path — all three preconditions must hold
+                "false, true,  60000, 50000, OPEN_AI, true",
+                "false, true,  50000, 50000, OPEN_AI, true",
+                // below threshold → inline
+                "false, true,  49999, 50000, OPEN_AI, false",
+                // toggle off → inline even on huge contexts
+                "false, false, 60000, 50000, OPEN_AI, false",
+                // provider doesn't support tool calling → inline (operator must pick a different model)
+                "false, true,  60000, 50000, OLLAMA,  false",
+                // no preconditions met
+                "false, false, 0,     50000, OPEN_AI, false",
+        })
+        void gateMatchesTruthTable(
+                boolean hasExperimentId, boolean toggleEnabled, int estimatedTokens,
+                int thresholdTokens, LlmProvider provider, boolean expectedUseTools) {
+            String modelName = "gpt-test";
+            TraceToScoreLlmAsJudge message = hasExperimentId
+                    ? newMessage(UUID.randomUUID())
+                    : newMessageWithoutExperimentId(UUID.randomUUID());
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(thresholdTokens);
+            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+
+            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName);
+
+            assertThat(useTools).isEqualTo(expectedUseTools);
+        }
+    }
+
     @Test
     void addToolSpecsPreservesOriginalRequestFields() {
         // Original request carries non-message, non-tool fields (parameters here stand in for any
@@ -151,7 +293,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .parameters(params)
                 .build();
 
-        ChatRequest withTools = scorer.addToolSpecs(original, ToolChoice.REQUIRED);
+        ChatRequest withTools = OnlineScoringEngine.addToolSpecs(original, ToolChoice.REQUIRED,
+                new ToolRegistry(Set.of(
+                        stubTool(GetTraceSpansTool.NAME, "{}"),
+                        stubTool(ReadTool.NAME, "{}"))));
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).
         assertThat(withTools.toolSpecifications())
@@ -180,7 +325,9 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
         TraceToScoreLlmAsJudge message = newMessage(UUID.randomUUID());
 
-        ChatResponse result = scorer.handleToolCalls(plainResponse, toolRequest, structuredRequest, message);
+        ChatResponse result = scorer
+                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of())
+                .block();
 
         assertThat(result).isSameAs(plainResponse);
         verifyNoInteractions(aiProxyService);
@@ -191,9 +338,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
     void handleToolCallsAccumulatesResultsAndFinalizesWithStructuredRequestShape() {
         UUID traceId = UUID.randomUUID();
         TraceToScoreLlmAsJudge message = newMessage(traceId);
-
-        // Spans for the active trace (empty list is fine — the pre-seed just caches an empty composite).
-        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
 
         // Initial response: model wants to call get_trace_spans.
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
@@ -224,7 +368,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .messages(UserMessage.from("score"))
                 .build();
 
-        ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message);
+        ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message,
+                List.of(), null, Map.of()).block();
 
         assertThat(result).isSameAs(finalResponse);
 
@@ -234,32 +379,36 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         List<ChatRequest> sent = requests.getAllValues();
 
-        // Round-1 follow-up: keeps tool specs (the distinguishing feature of in-loop calls).
-        // Note on size: handleToolCalls reuses the same `messages` ArrayList for the round-1
-        // follow-up and the final re-issue, then appends the forcing UserMessage after the
-        // loop. ArgumentCaptor captures the request by reference, so by assertion time the
-        // captured round-1 messages list reflects the final 4-element state (original
-        // UserMessage + AiMessage + ToolExecutionResultMessage + forcing UserMessage). We
-        // assert the shape that's still distinguishable: tool specs presence + ordering of
-        // the first three message types.
+        // Round-1 follow-up: keeps tool specs (the distinguishing feature of in-loop calls)
+        // and is a 3-element snapshot at send time (original UserMessage + the AiMessage
+        // carrying tool calls + the tool-execution result). handleToolCalls defensive-copies
+        // the `messages` list when building each round's request, so ArgumentCaptor's by-
+        // reference capture reflects the state at THE TIME OF THAT ROUND, not the final
+        // accumulated state. That copy is intentional: ChatRequestBuilder stores the list by
+        // reference, so without it any async chat client reading messages after the call
+        // returns would see later mutations bleed in.
         ChatRequest roundOne = sent.getFirst();
         assertThat(roundOne.toolSpecifications())
                 .extracting(ToolSpecification::name)
                 .containsExactly(GetTraceSpansTool.NAME);
-        assertThat(roundOne.messages()).hasSize(4);
+        assertThat(roundOne.messages()).hasSize(3);
         assertThat(roundOne.messages().get(0)).isInstanceOf(UserMessage.class);
         assertThat(roundOne.messages().get(1)).isInstanceOf(AiMessage.class);
         assertThat(roundOne.messages().get(2)).isInstanceOf(ToolExecutionResultMessage.class);
 
-        // Final re-issue: uses structuredRequest's shape (no tool specs). The forcing
-        // UserMessage is the last accumulated message — soft signal "stop calling tools,
-        // emit only JSON now" that complements the provider-native structured output.
+        // Final re-issue: uses structuredRequest's shape (no tool specs) and includes the
+        // forcing UserMessage as the last accumulated message — soft signal "stop calling
+        // tools, emit only JSON now" that complements the provider-native structured output.
+        // 5 elements: round-1's three + the terminal AiMessage from round-1's response (the
+        // loop's no-tool-calls early return now appends it so the wrap-up keeps the assistant's
+        // last turn in the conversation history) + the forcing UserMessage appended after.
         ChatRequest finalSent = sent.get(1);
         assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
-        assertThat(finalSent.messages()).hasSize(4);
-        assertThat(finalSent.messages()).isEqualTo(roundOne.messages());
-        assertThat(finalSent.messages().get(3)).isInstanceOf(UserMessage.class);
-        assertThat(((UserMessage) finalSent.messages().get(3)).singleText())
+        assertThat(finalSent.messages()).hasSize(5);
+        assertThat(finalSent.messages().get(3)).isInstanceOf(AiMessage.class);
+        assertThat(((AiMessage) finalSent.messages().get(3)).text()).isEqualTo("ok");
+        assertThat(finalSent.messages().get(4)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) finalSent.messages().get(4)).singleText())
                 .contains("Now respond with ONLY the JSON object");
     }
 
@@ -267,8 +416,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
     void handleToolCallsPropagatesScoreTraceFailureMidLoop() {
         UUID traceId = UUID.randomUUID();
         TraceToScoreLlmAsJudge message = newMessage(traceId);
-
-        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
 
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
                 .id("call-1")
@@ -298,7 +445,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         org.assertj.core.api.Assertions
                 .assertThatThrownBy(() -> scorer.handleToolCalls(
-                        initialResponse, toolRequest, structuredRequest, message))
+                        initialResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block())
                 .isSameAs(providerFailure);
 
         // Exactly one provider call attempted; the loop did not swallow + continue.
@@ -309,8 +456,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
     void handleToolCallsCapsAtMaxRoundsAndStillFiresWrapUpStructuredCall() {
         UUID traceId = UUID.randomUUID();
         TraceToScoreLlmAsJudge message = newMessage(traceId);
-
-        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
 
         // Initial response (passed in by the caller) carries a tool call — round 0's tools.
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
@@ -353,7 +498,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(
-                toolCallingResponse, toolRequest, structuredRequest, message);
+                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block();
 
         // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
         assertThat(result).isSameAs(finalResponse);
@@ -393,14 +538,22 @@ class OnlineScoringLlmAsJudgeScorerTest {
             }
 
             @Override
-            public String execute(String arguments,
+            public Mono<String> execute(String arguments,
                     com.comet.opik.api.resources.v1.events.tools.TraceToolContext ctx) {
-                return result;
+                return Mono.just(result);
             }
         };
     }
 
     private static TraceToScoreLlmAsJudge newMessage(UUID traceId) {
+        return buildMessage(traceId, UUID.randomUUID());
+    }
+
+    private static TraceToScoreLlmAsJudge newMessageWithoutExperimentId(UUID traceId) {
+        return buildMessage(traceId, null);
+    }
+
+    private static TraceToScoreLlmAsJudge buildMessage(UUID traceId, UUID experimentId) {
         Trace trace = Trace.builder()
                 .id(traceId)
                 .projectId(UUID.randomUUID())
@@ -421,7 +574,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 null,
                 Map.of(),
                 PromptType.MUSTACHE,
-                UUID.randomUUID());
+                experimentId);
     }
 
     /** Silences "unused import" on Span — used implicitly through Flux<Span>. */

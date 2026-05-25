@@ -9,6 +9,8 @@ import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
 } from "./AgentOnboardingContext";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import onboardingImageLightUrl from "/images/onboarding_image_light.svg";
 import onboardingImageDarkUrl from "/images/onboarding_image_dark.svg";
 
@@ -17,16 +19,26 @@ const SelectIntentStep: React.FC = () => {
   const { themeMode } = useTheme();
   const workspaceName = useActiveWorkspaceName();
   const navigate = useNavigate();
+  const demoDataEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DEMO_DATA_ENABLED,
+  );
 
-  const { data: demoProject } = useDemoProject({ workspaceName, poll: false });
+  const { data: demoProject } = useDemoProject(
+    { workspaceName, poll: false },
+    { enabled: demoDataEnabled },
+  );
 
   const illustrationUrl =
     themeMode === THEME_MODE.DARK
       ? onboardingImageDarkUrl
       : onboardingImageLightUrl;
 
-  const handlePickDemo = () => {
+  const handleNoAgent = () => {
     trackEvent(OpikEvent.ONBOARDING_INTENT_SELECTED, { intent: "no-app" });
+    if (!demoDataEnabled) {
+      goToStep(AGENT_ONBOARDING_STEPS.DONE, { agentName: "" });
+      return;
+    }
     goToStep(AGENT_ONBOARDING_STEPS.DEMO_LOADING, { agentName: "" });
     if (demoProject) {
       void navigate({
@@ -65,7 +77,7 @@ const SelectIntentStep: React.FC = () => {
           </button>
 
           <button
-            onClick={handlePickDemo}
+            onClick={handleNoAgent}
             className="rounded-lg border border-border bg-background p-4 text-left transition-colors hover:border-primary hover:bg-muted"
           >
             <p className="comet-body-s font-medium">

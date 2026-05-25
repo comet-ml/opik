@@ -2027,12 +2027,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not Found - CSV upload feature is disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets/{dataset_id}/items/from-spans:
     post:
       tags:
@@ -5095,12 +5089,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/pairing/sessions:
     post:
       tags:
@@ -5141,12 +5129,6 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "429":
           description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
           content:
             application/json:
               schema:
@@ -6008,7 +5990,9 @@ paths:
       tags:
       - Prompts
       summary: Get prompt by id
-      description: Get prompt by id
+      description: "Get prompt by id; when mask_id or environment is provided, requestedVersion\
+        \ is populated with the resolved version. mask_id and environment are mutually\
+        \ exclusive."
       operationId: getPromptById
       parameters:
       - name: id
@@ -6017,6 +6001,22 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: mask_id
+        in: query
+        description: "Optional mask version id; when set, requestedVersion is the\
+          \ mask row for that id"
+        schema:
+          type: string
+          format: uuid
+      - name: environment
+        in: query
+        description: "Optional environment name; when set, requestedVersion is the\
+          \ version mapped to that environment for the prompt"
+        schema:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
       responses:
         "200":
           description: Prompt resource
@@ -6024,6 +6024,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Prompt_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
         "404":
           description: Not Found
           content:
@@ -6166,6 +6172,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PromptVersion_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/{promptId}/versions/by-number/{versionNumber}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt version by sequential number
+      description: Get a prompt version by its sequential v<N> number for the given
+        prompt.
+      operationId: getPromptVersionByNumber
+      parameters:
+      - name: promptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: versionNumber
+        in: path
+        required: true
+        schema:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+      responses:
+        "200":
+          description: Prompt version resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
         "404":
           description: Not Found
           content:
@@ -6318,6 +6366,73 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/versions/retrieve-by-ids:
+    post:
+      tags:
+      - Prompts
+      summary: Retrieve prompt versions by ids
+      description: Retrieve a batch of prompt versions by their ids. Typically used
+        by the UI to resolve mask overlays.
+      operationId: retrievePromptVersionsByIds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionIdsRequest_Detail"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PromptVersion_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/versions/{versionId}/environments:
+    patch:
+      tags:
+      - Prompts
+      summary: Set prompt version environment
+      description: |
+        Set or clear the environment owned by a prompt version.
+        Setting a non-null environment moves ownership atomically: any previous owner of that
+        environment for the same prompt has its environment cleared in the same transaction.
+        Setting null clears the environment from the version.
+        The environment must already exist in the workspace registry; unknown names return 404.
+      operationId: setPromptVersionEnvironment
+      parameters:
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionEnvironmentUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects/{projectId}/activities:
     get:
       tags:
@@ -8826,6 +8941,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -8895,6 +9017,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
     AlertTrigger_Write:
       required:
       - event_type
@@ -9036,6 +9165,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -16426,7 +16562,19 @@ components:
           format: uuid
         mask_id:
           type: string
+          description: Deprecated. Use prompt_masks to pass one or more mask overlays
+            keyed by prompt id.
           format: uuid
+          deprecated: true
+        prompt_masks:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Mask overlays to apply during agent execution, keyed by\
+              \ prompt id."
+            format: uuid
+          description: "Mask overlays to apply during agent execution, keyed by prompt\
+            \ id."
         blueprint_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -16527,7 +16675,19 @@ components:
           format: uuid
         mask_id:
           type: string
+          description: Deprecated. Use prompt_masks to read one or more mask overlays
+            keyed by prompt id.
           format: uuid
+          deprecated: true
+        prompt_masks:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Mask overlays to apply during agent execution, keyed by\
+              \ prompt id."
+            format: uuid
+          description: "Mask overlays to apply during agent execution, keyed by prompt\
+            \ id."
         blueprint_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -18115,6 +18275,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18126,6 +18290,17 @@ components:
           - mustache
           - jinja2
           - python
+        version_type:
+          type: string
+          description: version type discriminator; defaults to prompt_version
+          enum:
+          - prompt_version
+          - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
         change_description:
           type: string
         tags:
@@ -18229,6 +18404,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18240,6 +18419,17 @@ components:
           - mustache
           - jinja2
           - python
+        version_type:
+          type: string
+          description: version type discriminator; defaults to prompt_version
+          enum:
+          - prompt_version
+          - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
         change_description:
           type: string
         tags:
@@ -18271,13 +18461,10 @@ components:
     ErrorMessage_Detail:
       type: object
       properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
+        errors:
+          type: array
+          items:
+            type: string
     CreatePromptVersion_Detail:
       required:
       - name
@@ -18404,6 +18591,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18415,6 +18606,17 @@ components:
           - mustache
           - jinja2
           - python
+        version_type:
+          type: string
+          description: version type discriminator; defaults to prompt_version
+          enum:
+          - prompt_version
+          - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
         change_description:
           type: string
         tags:
@@ -18458,10 +18660,49 @@ components:
           type: string
         commit:
           type: string
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "If provided, resolves to the version mapped to this environment\
+            \ for the prompt; mutually exclusive with commit and version_number"
+        version_number:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+          description: "If provided, resolves to the version with this sequential\
+            \ number (e.g. v3); mutually exclusive with commit and environment"
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If provided, scopes the search to the specified project"
+    PromptVersionIdsRequest_Detail:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            type: string
+            format: uuid
+    PromptVersionEnvironmentUpdate:
+      type: object
+      properties:
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+      description: |
+        Set or clear the environment owned by a prompt version.
+        - non-null name: maps the environment to this version; if another version of the same prompt currently owns the environment, ownership is moved atomically.
+        - null: clears the environment from this version.
+        The environment must already exist in the workspace registry; unknown names return 404.
     Prompt_Updatable:
       required:
       - name
@@ -18675,19 +18916,20 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
-      - collaboratorsTabEnabled
-      - csvUploadEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
+      - demoDataEnabled
       - exportEnabled
       - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
+      - ollieEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -18718,8 +18960,6 @@ components:
           type: boolean
         welcomeWizardEnabled:
           type: boolean
-        csvUploadEnabled:
-          type: boolean
         exportEnabled:
           type: boolean
         optimizationStudioEnabled:
@@ -18727,6 +18967,8 @@ components:
         datasetVersioningEnabled:
           type: boolean
         datasetExportEnabled:
+          type: boolean
+        demoDataEnabled:
           type: boolean
         openaiProviderEnabled:
           type: boolean
@@ -18744,10 +18986,10 @@ components:
           type: boolean
         ollamaProviderEnabled:
           type: boolean
-        collaboratorsTabEnabled:
+        ollieEnabled:
           type: boolean
-          deprecated: true
-          description: "Deprecated (OPIK-6434): the Collaborators tab is always enabled on the frontend. Field retained for response-shape compatibility with older SDK clients; will be removed in a future release."
+        agenticToolsEnabled:
+          type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true
           type: array

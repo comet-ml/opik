@@ -274,6 +274,13 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: 100
+  # Default: 50000
+  # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes
+  #   through the agentic-tools path. Below the threshold the inline path is used.
+  agenticToolsThresholdTokens: 50000
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
+  agenticToolsCharsPerToken: 4
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -570,9 +577,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: "false"
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
@@ -582,6 +586,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
   datasetExportEnabled: "true"
+  # Default: true
+  # Description: Whether the deployment is expected to produce demo project data on signup
+  demoDataEnabled: "true"
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
@@ -610,8 +617,11 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
   # Default: false
-  # Deprecated (OPIK-6434): kept for SDK response-shape compatibility; UI no longer reads this.
-  collaboratorsTabEnabled: "false"
+  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  ollieEnabled: "false"
+  # Default: false
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
+  agenticToolsEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
@@ -728,7 +738,7 @@ datasetVersioningMigration:
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).
 # Runs as a recurring job, processing workspaces in batches.
 experimentProjectMigration:
-  # Master switch — disabled in tests by default
+  # Master switch — disabled by default, enable for staged rollout
   enabled: false
   # Number of workspaces to process per job run (smallest first)
   workspacesPerRun: 20
@@ -737,7 +747,39 @@ experimentProjectMigration:
   # Interval between recurring job runs
   interval: 5s
   # Delay before first run after app startup
-  startupDelay: 0s
+  startupDelay: 5s
+  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
+  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
+  lockTimeout: 5s
+  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
+  # lock doesn't block this fire — the next scheduled tick will try again.
+  lockWaitTime: 100ms
+  # Per-cycle timeout — short for tests so hangs fail fast
+  jobTimeout: 30s
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: 2
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: 50
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
+
+# Dataset Project Migration configuration
+# Assigns project_id to orphan datasets (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+datasetProjectMigration:
+  # Master switch — disabled in tests by default
+  enabled: false
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: 20
+  # Number of datasets to update per MySQL UPDATE batch
+  datasetBatchSize: 1000
+  # Interval between recurring job runs
+  interval: 5s
+  # Delay before first run after app startup — gives tests time to seed preconditions
+  # (workspaces, datasets, experiments, traces) before the first cycle fires
+  startupDelay: 5s
   # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
   # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
   lockTimeout: 5s
@@ -745,6 +787,75 @@ experimentProjectMigration:
   lockWaitTime: 100ms
   # Per-cycle timeout — short for tests so hangs fail fast
   jobTimeout: 30s
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: 2
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: 50
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
+
+# Prompt Project Migration configuration (D4)
+# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Runs as a recurring job.
+promptProjectMigration:
+  # Master switch — disabled in tests by default; tests opt in via CustomConfig overrides.
+  enabled: false
+  workspacesPerRun: 20
+  promptBatchSize: 1000
+  interval: 5s
+  # Non-zero so the first scheduled fire lands after the JobTest's initial seed + prime.
+  # ServiceTest disables the job entirely and drives the cycle directly via runMigrationCycle().
+  startupDelay: 5s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
+  schedulerThreadCap: 2
+  schedulerQueuedTaskCap: 50
+  schedulerThreadTtl: 10s
+
+automationRuleProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: false
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: 20
+  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions
+  maxRulesPerCycle: 100
+  # Interval between recurring job runs
+  interval: 5s
+  # Delay before first run after app startup
+  startupDelay: 5s
+  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
+  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
+  lockTimeout: 5s
+  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
+  # lock doesn't block this fire — the next scheduled tick will try again.
+  lockWaitTime: 100ms
+  # Per-cycle timeout — short for tests so hangs fail fast
+  jobTimeout: 30s
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; minimum 2 required by reactor.
+  schedulerThreadCap: 2
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: 50
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
+
+# Alert Project Migration configuration
+# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
+alertProjectMigration:
+  enabled: false
+  workspacesPerRun: 20
+  alertBatchSize: 100
+  interval: 5s
+  startupDelay: 5s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
+  schedulerThreadCap: 2
+  schedulerQueuedTaskCap: 50
+  schedulerThreadTtl: 10s
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list

@@ -11,6 +11,7 @@ import get from "lodash/get";
 import md5 from "md5";
 
 import {
+  DATASET_TYPE,
   Experiment,
   EXPERIMENT_TYPE,
   ExperimentsGroupNode,
@@ -99,6 +100,7 @@ type UseGroupedExperimentsListResponse = {
     aggregationMap: Record<string, ExperimentsAggregations>;
     sortable_by: string[];
     total: number;
+    datasetTypeMap: Record<string, DATASET_TYPE>;
   };
   isPending: boolean;
   isPlaceholderData: boolean;
@@ -480,6 +482,16 @@ export default function useGroupedExperimentsList(
     [datasetsData?.content],
   );
 
+  const datasetTypeMap = useMemo<Record<string, DATASET_TYPE>>(() => {
+    const map: Record<string, DATASET_TYPE> = {};
+    datasetsData?.content?.forEach((dataset) => {
+      if (dataset.type) {
+        map[dataset.id] = dataset.type;
+      }
+    });
+    return map;
+  }, [datasetsData?.content]);
+
   const projectOrderMap = useMemo(
     () => buildOrderMap(projectsData?.content),
     [projectsData?.content],
@@ -705,6 +717,7 @@ export default function useGroupedExperimentsList(
         ? groupedData.sortable_by
         : data?.sortable_by ?? [],
       total: hasGroups ? groupedData.total : data?.total ?? 0,
+      datasetTypeMap,
     }),
     [
       hasGroups,
@@ -716,6 +729,7 @@ export default function useGroupedExperimentsList(
       data?.sortable_by,
       data?.total,
       aggregationMap,
+      datasetTypeMap,
     ],
   );
 

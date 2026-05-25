@@ -4,6 +4,7 @@ import { createMockHttpResponsePromise } from "@tests/mockUtils";
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import type { LocalRunnerJob } from "@/rest_api/api/types/LocalRunnerJob";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
+import { getActiveMaskForPrompt } from "@/prompt/maskContext";
 
 function createMockApi() {
   return {
@@ -405,5 +406,88 @@ describe("InProcessRunnerLoop", () => {
         result: { answer: "42", score: 1.0 },
       })
     );
+  });
+
+  it("activates promptMasks context during agent execution", async () => {
+    vi.useRealTimers();
+
+    const api = createMockApi();
+    const captured: { p1: string | null; p2: string | null; unknown: string | null } = {
+      p1: null,
+      p2: null,
+      unknown: null,
+    };
+
+    register({
+      func: () => {
+        captured.p1 = getActiveMaskForPrompt("prompt-1");
+        captured.p2 = getActiveMaskForPrompt("prompt-2");
+        captured.unknown = getActiveMaskForPrompt("prompt-unknown");
+        return "ok";
+      },
+      name: "mask-agent",
+      project: "default",
+      params: [],
+      docstring: "",
+    });
+
+    const job = createJob({
+      agentName: "mask-agent",
+      inputs: {},
+      promptMasks: { "prompt-1": "mask-a", "prompt-2": "mask-b" },
+    });
+
+    let callCount = 0;
+    (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return createMockHttpResponsePromise(job);
+      return createMockHttpResponsePromise(null);
+    });
+
+    const loop = new InProcessRunnerLoop(api, "runner-1");
+    loop.start();
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    loop.shutdown();
+
+    expect(captured.p1).toBe("mask-a");
+    expect(captured.p2).toBe("mask-b");
+    expect(captured.unknown).toBeNull();
+    expect(getActiveMaskForPrompt("prompt-1")).toBeNull();
+  });
+
+  it("does not activate mask context when promptMasks is absent", async () => {
+    vi.useRealTimers();
+
+    const api = createMockApi();
+    let captured: string | null = "sentinel";
+
+    register({
+      func: () => {
+        captured = getActiveMaskForPrompt("prompt-1");
+        return "ok";
+      },
+      name: "no-mask-agent",
+      project: "default",
+      params: [],
+      docstring: "",
+    });
+
+    const job = createJob({ agentName: "no-mask-agent", inputs: {} });
+
+    let callCount = 0;
+    (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return createMockHttpResponsePromise(job);
+      return createMockHttpResponsePromise(null);
+    });
+
+    const loop = new InProcessRunnerLoop(api, "runner-1");
+    loop.start();
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    loop.shutdown();
+
+    expect(captured).toBeNull();
   });
 });

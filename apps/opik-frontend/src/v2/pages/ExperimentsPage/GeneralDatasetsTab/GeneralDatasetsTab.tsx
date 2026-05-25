@@ -24,7 +24,6 @@ import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import IdCell from "@/shared/DataTableCells/IdCell";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
@@ -82,7 +81,9 @@ import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
 import { Skeleton } from "@/ui/skeleton";
 
@@ -126,7 +127,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
-  "dataset_version",
   "pass_rate",
   "trace_count",
   "duration.p50",
@@ -204,23 +204,13 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: ITEM_SOURCE_LABEL,
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
         },
-      },
-      {
-        id: "dataset_version",
-        label: "Test suite version",
-        type: COLUMN_TYPE.string,
-        iconType: "version" as const,
-        accessorFn: (row: GroupedExperiment) =>
-          row.dataset_version_summary?.version_name || "",
-        cell: DatasetVersionCell as never,
       },
       {
         id: "created_at",
@@ -412,6 +402,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [data?.aggregationMap],
   );
 
+  const datasetTypeMap = useMemo(
+    () => data?.datasetTypeMap ?? {},
+    [data?.datasetTypeMap],
+  );
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -450,6 +445,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
+    datasetTypeMap,
   });
 
   const handleRowClick = useCallback(
@@ -483,14 +479,10 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [setGroupLimit],
   );
 
-  // Filter out name and dataset columns when grouping by dataset
+  // Name becomes the grouping anchor when any grouping is active and is rendered
+  // by the group cell, so hide it from the columns menu in that case.
   const availableColumns = useMemo(() => {
-    const isGroupingByDataset = groups.some(
-      (g) => g.field === COLUMN_DATASET_ID,
-    );
-
     return columnsDef.filter((col) => {
-      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
       if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
       return true;
     });
@@ -517,7 +509,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           id: datasetId,
           name: [
             {
-              label: "Test suite",
+              label: ITEM_SOURCE_LABEL,
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -554,11 +546,17 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                   undefined,
                 );
 
+                const groupField = groups[index]?.field;
+                const groupLabel =
+                  groupField === COLUMN_DATASET_ID
+                    ? ITEM_SOURCE_LABEL
+                    : calculateGroupLabel(groups[index]);
+
                 return {
-                  label: calculateGroupLabel(groups[index]),
+                  label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted test suite"
+                      ? "Deleted dataset"
                       : label || value || "Undefined",
                 };
               }),

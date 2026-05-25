@@ -257,6 +257,9 @@ describe("API backward compatibility — no projectName specified anywhere", () 
           type: "mustache",
         })
       );
+      vi.spyOn(client.api.projects, "retrieveProject").mockRejectedValue(
+        new Error("Project not found")
+      );
       vi.spyOn(client.api.prompts, "getPromptById").mockImplementation(() =>
         createMockHttpResponsePromise({
           id: "prompt-id",

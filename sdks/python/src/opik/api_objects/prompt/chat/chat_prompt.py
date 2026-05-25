@@ -63,6 +63,11 @@ class ChatPrompt(base_prompt.BasePrompt):
             ValidationError: If messages structure is invalid.
         """
 
+        LOGGER.warning(
+            "opik.ChatPrompt() is deprecated. Use client.create_chat_prompt() to create or "
+            "client.get_chat_prompt() to retrieve chat prompts instead."
+        )
+
         # Validate messages structure
         self._validate_inputs(messages=messages)
 
@@ -81,6 +86,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._tags = copy.copy(tags) if tags else []
         self._project_name = project_name
         self._commit: Optional[str] = None
+        self._version: Optional[str] = None
         self.__internal_api__prompt_id__: Optional[str] = None
         self.__internal_api__version_id__: Optional[str] = None
         self._synced: bool = False
@@ -131,6 +137,7 @@ class ChatPrompt(base_prompt.BasePrompt):
             )
 
             self._commit = prompt_version.commit
+            self._version = prompt_version.version_number
             self.__internal_api__prompt_id__ = prompt_version.prompt_id
             self.__internal_api__version_id__ = prompt_version.id
             # Update fields from backend response to ensure consistency
@@ -164,8 +171,19 @@ class ChatPrompt(base_prompt.BasePrompt):
     @property
     @override
     def commit(self) -> Optional[str]:
-        """The commit hash of the prompt."""
+        """Legacy commit hash of the prompt version.
+
+        DEPRECATED — use :attr:`version` (e.g. ``"v3"``) instead. ``commit``
+        is no longer surfaced in the Opik UI and is kept only for backwards
+        compatibility with older SDK callers.
+        """
         return self._commit
+
+    @property
+    @override
+    def version(self) -> Optional[str]:
+        """The sequential version selector for the prompt (e.g. ``"v3"``)."""
+        return self._version
 
     @property
     @override
@@ -268,6 +286,9 @@ class ChatPrompt(base_prompt.BasePrompt):
         if self.commit is not None:
             info_dict["version"]["commit"] = self.commit
 
+        if self.version is not None:
+            info_dict["version"]["version_number"] = self.version
+
         if self.__internal_api__version_id__ is not None:
             info_dict["version"]["id"] = self.__internal_api__version_id__
 
@@ -300,6 +321,7 @@ class ChatPrompt(base_prompt.BasePrompt):
             or prompt_types.PromptType.MUSTACHE,
         )
         chat_prompt._commit = prompt_version.commit
+        chat_prompt._version = prompt_version.version_number
         chat_prompt._metadata = prompt_version.metadata
         chat_prompt._type = prompt_version.type
         chat_prompt._id = prompt_version.id

@@ -30,7 +30,7 @@
         <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
-        <redisson.version>4.3.1</redisson.version>
+        <redisson.version>4.4.0</redisson.version>
         <opentelmetry.version>2.27.0</opentelmetry.version>
         <aws.java.sdk.version>2.44.0</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
@@ -64,14 +64,28 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.14.0</version>
+                <version>1.15.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
-                <version>4.2.6.Final</version>
+                <version>4.2.13.Final</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-bom</artifactId>
+                <version>12.1.7</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty.ee10</groupId>
+                <artifactId>jetty-ee10-bom</artifactId>
+                <version>12.1.7</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -269,7 +283,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <version>5.6</version>
+            <version>5.6.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -493,7 +507,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>3.4.0</version>
+                <version>3.5.1</version>
                 <executions>
                     <execution>
                         <phase>validate</phase>

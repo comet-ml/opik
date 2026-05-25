@@ -4,6 +4,7 @@ import com.comet.opik.api.Trace;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
@@ -31,7 +32,7 @@ class ToolRegistryTest {
         var registry = new ToolRegistry(Set.of(tool));
 
         var ctx = newContext();
-        var result = registry.execute("alpha", "{\"x\":1}", ctx);
+        var result = registry.execute("alpha", "{\"x\":1}", ctx).block();
 
         assertThat(result).isEqualTo("ok:alpha");
         assertThat(captured.get()).isEqualTo("{\"x\":1}");
@@ -41,7 +42,7 @@ class ToolRegistryTest {
     void executeReturnsErrorJsonForUnknownTool() {
         var registry = new ToolRegistry(Set.of(stub("alpha")));
 
-        var result = registry.execute("nope", "{}", newContext());
+        var result = registry.execute("nope", "{}", newContext()).block();
 
         assertThat(result).isEqualTo("{\"error\": \"Unknown tool: nope\"}");
     }
@@ -64,15 +65,15 @@ class ToolRegistryTest {
             }
 
             @Override
-            public String execute(String arguments, TraceToolContext ctx) {
+            public Mono<String> execute(String arguments, TraceToolContext ctx) {
                 ctxRef.set(ctx);
-                return "{}";
+                return Mono.just("{}");
             }
         };
         var registry = new ToolRegistry(Set.of(tool));
 
         var ctx = newContext();
-        registry.execute("ctx_tool", "{}", ctx);
+        registry.execute("ctx_tool", "{}", ctx).block();
 
         assertThat(ctxRef.get()).isSameAs(ctx);
     }
@@ -94,15 +95,54 @@ class ToolRegistryTest {
             }
 
             @Override
-            public String execute(String arguments, TraceToolContext ctx) {
+            public Mono<String> execute(String arguments, TraceToolContext ctx) {
                 throw new IllegalStateException("kaboom");
             }
         };
         var registry = new ToolRegistry(Set.of(tool));
 
-        var result = registry.execute("boom", "{}", newContext());
+        var result = registry.execute("boom", "{}", newContext()).block();
 
-        assertThat(result).contains("\"error\"").contains("boom").contains("kaboom");
+        // Tool name is fine to surface back to the LLM (it picked the name to begin with),
+        // but the raw exception message ("kaboom") is NOT — it could carry ClickHouse query
+        // fragments, internal paths, or other implementation details. The contract is:
+        // error envelope + tool name + correlation id, nothing more.
+        assertThat(result).contains("\"error\"").contains("boom").contains("ref:");
+        assertThat(result).doesNotContain("kaboom");
+    }
+
+    @Test
+    void executeReturnsErrorJsonWhenToolEmitsMonoError() {
+        // Tools can also surface failures via Mono.error rather than a synchronous throw —
+        // the registry's onErrorResume must convert both into the same error JSON shape so
+        // the judge loop stays alive either way.
+        var tool = new ToolExecutor() {
+            @Override
+            public String name() {
+                return "async_boom";
+            }
+
+            @Override
+            public ToolSpecification spec() {
+                return ToolSpecification.builder()
+                        .name("async_boom")
+                        .parameters(JsonObjectSchema.builder().build())
+                        .build();
+            }
+
+            @Override
+            public Mono<String> execute(String arguments, TraceToolContext ctx) {
+                return Mono.error(new IllegalStateException("async kaboom"));
+            }
+        };
+        var registry = new ToolRegistry(Set.of(tool));
+
+        var result = registry.execute("async_boom", "{}", newContext()).block();
+
+        // Same redaction contract as the sync-throw test above: tool name + correlation id,
+        // no raw exception message even when surfaced via Mono.error.
+        assertThat(result).contains("\"error\"").contains("async_boom").contains("ref:");
+        assertThat(result).doesNotContain("async kaboom");
     }
 
     @Test
@@ -122,14 +162,14 @@ class ToolRegistryTest {
             }
 
             @Override
-            public String execute(String arguments, TraceToolContext ctx) {
+            public Mono<String> execute(String arguments, TraceToolContext ctx) {
                 throw new StackOverflowError("recursive tool");
             }
         };
         var registry = new ToolRegistry(Set.of(tool));
 
         org.assertj.core.api.Assertions
-                .assertThatThrownBy(() -> registry.execute("fatal", "{}", newContext()))
+                .assertThatThrownBy(() -> registry.execute("fatal", "{}", newContext()).block())
                 .isInstanceOf(StackOverflowError.class);
     }
 
@@ -138,7 +178,7 @@ class ToolRegistryTest {
         var registry = new ToolRegistry(Set.of());
 
         assertThat(registry.specs()).isEmpty();
-        assertThat(registry.execute("anything", "{}", newContext()))
+        assertThat(registry.execute("anything", "{}", newContext()).block())
                 .isEqualTo("{\"error\": \"Unknown tool: anything\"}");
     }
 
@@ -158,8 +198,8 @@ class ToolRegistryTest {
             }
 
             @Override
-            public String execute(String arguments, TraceToolContext ctx) {
-                return "{}";
+            public Mono<String> execute(String arguments, TraceToolContext ctx) {
+                return Mono.just("{}");
             }
         };
     }
@@ -170,7 +210,7 @@ class ToolRegistryTest {
                 .name("trace")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 
     private record RecordingTool(String name, AtomicReference<String> captured) implements ToolExecutor {
@@ -183,9 +223,9 @@ class ToolRegistryTest {
         }
 
         @Override
-        public String execute(String arguments, TraceToolContext ctx) {
+        public Mono<String> execute(String arguments, TraceToolContext ctx) {
             captured.set(arguments);
-            return "ok:" + name;
+            return Mono.just("ok:" + name);
         }
     }
 }

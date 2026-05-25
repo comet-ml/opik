@@ -24,7 +24,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record LlmAsJudgeMessage(
-        @JsonView( {
+        @JsonView({
                 AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) @NotNull ChatMessageType role,
         @JsonView({
@@ -32,7 +32,7 @@ public record LlmAsJudgeMessage(
                 AutomationRuleEvaluator.View.Write.class}) String content,
         @JsonView({
                 AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) List<LlmAsJudgeMessageContent> contentArray){
+                AutomationRuleEvaluator.View.Write.class}) List<LlmAsJudgeMessageContent> contentArray) {
 
     /**
      * Check if content is a string.

@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -7,7 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
-from opik.cli.pairing import RunnerType
+from opik.cli.local_runner.pairing import RunnerType
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.local_runner_heartbeat_response import (
     LocalRunnerHeartbeatResponse,
@@ -45,6 +46,8 @@ def _make_supervisor(
         api=api,
         watch=watch,
         runner_type=runner_type,
+        project_name="test-project",
+        workspace=None,
         heartbeat_interval_seconds=0.05,
         graceful_timeout_seconds=0.1,
         main_loop_tick_seconds=0.05,
@@ -314,6 +317,208 @@ class TestHeartbeat:
         t.join(timeout=5)
 
         assert sup._shutdown_event.is_set()
+
+
+class TestDisconnectNotification:
+    def test_disconnect_called_on_shutdown(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+
+        sup = _make_supervisor(api=api, watch=False)
+
+        t = threading.Thread(target=sup.run, daemon=True)
+        t.start()
+
+        time.sleep(0.2)
+        sup._shutdown_event.set()
+        t.join(timeout=10)
+
+        api.runners.disconnect_runner.assert_called_once()
+        args, _ = api.runners.disconnect_runner.call_args
+        assert args[0] == sup._runner_id
+
+    def test_disconnect_error_is_non_fatal(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+        api.runners.disconnect_runner.side_effect = ApiError(status_code=503, body=None)
+
+        sup = _make_supervisor(api=api, watch=False)
+
+        t = threading.Thread(target=sup.run, daemon=True)
+        t.start()
+
+        time.sleep(0.2)
+        sup._shutdown_event.set()
+        t.join(timeout=10)
+
+        assert not t.is_alive()
+        api.runners.disconnect_runner.assert_called_once()
+
+    def test_disconnect_called_in_standalone_mode(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+
+        sup = _make_supervisor(command=None, api=api, watch=False)
+
+        t = threading.Thread(target=sup.run, daemon=True)
+        t.start()
+
+        time.sleep(0.1)
+        sup._shutdown_event.set()
+        t.join(timeout=10)
+
+        api.runners.disconnect_runner.assert_called_once()
+
+    def test_signal_handler_sets_shutdown_event(self) -> None:
+        # Without this, "if event set, disconnect fires" tests don't prove that SIGINT/SIGTERM
+        # actually drive the event. The CLI runs on the main thread in production, so
+        # signal.signal() installs cleanly there; this exercises that path directly.
+        sup = _make_supervisor()
+
+        original_sigint = signal.getsignal(signal.SIGINT)
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            sup._install_signal_handlers()
+
+            installed_sigint = signal.getsignal(signal.SIGINT)
+            installed_sigterm = signal.getsignal(signal.SIGTERM)
+            assert callable(installed_sigint)
+            assert callable(installed_sigterm)
+            assert installed_sigint is installed_sigterm
+
+            assert not sup._shutdown_event.is_set()
+            installed_sigint(signal.SIGINT, None)
+            assert sup._shutdown_event.is_set()
+        finally:
+            signal.signal(signal.SIGINT, original_sigint)
+            signal.signal(signal.SIGTERM, original_sigterm)
+
+    def test_disconnect_called_on_heartbeat_410_eviction(self) -> None:
+        # A 410 from the heartbeat loop sets _shutdown_event from a background thread.
+        # The main loop must still tear down via the finally block, including disconnect.
+        api = MagicMock()
+        api.runners.heartbeat.side_effect = ApiError(status_code=410, body=None)
+
+        sup = _make_supervisor(api=api, watch=False)
+
+        t = threading.Thread(target=sup.run, daemon=True)
+        t.start()
+        t.join(timeout=10)
+
+        assert not t.is_alive()
+        api.runners.disconnect_runner.assert_called_once()
+
+
+# Subprocess driver used by TestSignalDeliveryEndToEnd. Lives at module scope so its
+# source can be passed via `python -c`. Runs Supervisor in standalone mode (no child
+# process) so the test isolates the shutdown path, and writes a marker file from a
+# fake disconnect_runner so the parent can verify the call happened.
+_SIGNAL_INTEGRATION_SCRIPT = """
+import json
+import sys
+from pathlib import Path
+
+ready_path = Path(sys.argv[1])
+marker_path = Path(sys.argv[2])
+
+from opik.cli.local_runner.pairing import RunnerType
+from opik.rest_api.types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
+from opik.runner.supervisor import Supervisor
+
+
+class _FakeRunners:
+    def heartbeat(self, *_a, **_kw):
+        return LocalRunnerHeartbeatResponse()
+
+    def patch_checklist(self, *_a, **_kw):
+        return None
+
+    def disconnect_runner(self, runner_id, *, request_options=None):
+        marker_path.write_text(json.dumps({"runner_id": runner_id}))
+
+
+class _FakeApi:
+    runners = _FakeRunners()
+
+
+sup = Supervisor(
+    command=None,
+    env={},
+    repo_root=Path.cwd(),
+    runner_id="runner-xyz",
+    api=_FakeApi(),
+    runner_type=RunnerType.ENDPOINT,
+    project_name="signal-integration",
+    workspace=None,
+    heartbeat_interval_seconds=60,
+    graceful_timeout_seconds=0.1,
+    main_loop_tick_seconds=0.05,
+)
+
+# Signal readiness only after the signal handlers are in place. We piggyback on
+# the file-watcher branch: when watch=False (standalone mode), run() reaches the
+# wait() after installing handlers. Touch the ready file just before that by
+# wrapping _install_signal_handlers.
+_original_install = sup._install_signal_handlers
+
+
+def _install_and_signal_ready():
+    _original_install()
+    ready_path.write_text("ready")
+
+
+sup._install_signal_handlers = _install_and_signal_ready
+sup.run()
+"""
+
+
+class TestSignalDeliveryEndToEnd:
+    # Mock-driven tests above cover the wiring; this exercises the real OS-signal path
+    # by spawning a subprocess (so the supervisor runs on a real main thread) and
+    # checking that `disconnect_runner` actually fires before exit.
+
+    def _run_subprocess_with_signal(self, sig: signal.Signals, tmp_path: Path) -> Path:
+        ready = tmp_path / "ready"
+        marker = tmp_path / "disconnect-called.json"
+
+        proc = subprocess.Popen(
+            [sys.executable, "-c", _SIGNAL_INTEGRATION_SCRIPT, str(ready), str(marker)],
+            env={**os.environ},
+        )
+        try:
+            deadline = time.monotonic() + 10
+            while not ready.exists():
+                if time.monotonic() > deadline:
+                    proc.kill()
+                    raise AssertionError("Supervisor subprocess never became ready")
+                if proc.poll() is not None:
+                    raise AssertionError(
+                        f"Supervisor exited early (code={proc.returncode}) before ready"
+                    )
+                time.sleep(0.05)
+
+            proc.send_signal(sig)
+            exit_code = proc.wait(timeout=10)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+
+        assert exit_code == 0, f"Subprocess exited with {exit_code}"
+        assert marker.exists(), "disconnect_runner was not called"
+        return marker
+
+    def test_sigint_triggers_disconnect(self, tmp_path: Path) -> None:
+        self._run_subprocess_with_signal(signal.SIGINT, tmp_path)
+
+    def test_sigterm_triggers_disconnect(self, tmp_path: Path) -> None:
+        marker = self._run_subprocess_with_signal(signal.SIGTERM, tmp_path)
+        # Sanity: the marker captures the runner_id we passed in, confirming we hit
+        # the real disconnect path and not some other exit code path.
+        import json
+
+        payload = json.loads(marker.read_text())
+        assert payload["runner_id"] == "runner-xyz"
 
 
 class TestStandaloneMode:

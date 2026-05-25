@@ -37,6 +37,7 @@ import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.OptimizationStudioJobMessage;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -1276,6 +1277,69 @@ class OptimizationsResourceTest {
             // Verify event was posted
             ArgumentCaptor<OptimizationCreated> captor = ArgumentCaptor.forClass(OptimizationCreated.class);
             Mockito.verify(defaultEventBus).post(captor.capture());
+        }
+
+        @Test
+        @DisplayName("Studio job carries project_name when optimization has projectId (OPIK-6383)")
+        void createStudioOptimization__thenJobIncludesProjectName() {
+            Mockito.reset(defaultEventBus);
+
+            String projectName = "studio-project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE_NAME);
+
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .projectName(projectName)
+                    .projectId(null)
+                    .studioConfig(studioConfig)
+                    .build();
+
+            String queueKey = "rq:queue:" + Queue.OPTIMIZER_CLOUD.toString();
+            RQueueReactive<String> queue = redisClient.getQueue(queueKey, StringCodec.INSTANCE);
+            Integer initialSize = queue.size().block();
+            assertThat(initialSize).isNotNull();
+
+            String customOpikApiKey = "test-opik-api-key-" + UUID.randomUUID();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME, customOpikApiKey);
+
+            // Ensure project_id was indeed resolved to a matching projectName on the optimization.
+            var stored = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            await().atMost(2, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(queue.size().block()).isGreaterThan(initialSize));
+
+            var allJobIds = queue.readAll().block();
+            assertThat(allJobIds).isNotEmpty();
+
+            // RQ data format: [function, null, [args...], {kwargs}] — args[0] is our message.
+            var actualJobMessage = allJobIds.stream()
+                    .map(jobId -> (String) redisClient.getMap("rq:job:" + jobId, StringCodec.INSTANCE)
+                            .get("data").block())
+                    .filter(data -> data != null && data.contains(id.toString()))
+                    .map(data -> JsonUtils.treeToValue(
+                            JsonUtils.getJsonNodeFromString(data).get(2).get(0),
+                            OptimizationStudioJobMessage.class))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "No RQ job payload found for optimization id: " + id));
+
+            // studioConfig.opikApiKey is @JsonIgnore, so it is not present in the wire format;
+            // the top-level opikApiKey on the message is what reaches the Python worker.
+            var expected = OptimizationStudioJobMessage.builder()
+                    .optimizationId(id)
+                    .workspaceId(WORKSPACE_ID)
+                    .workspaceName(TEST_WORKSPACE_NAME)
+                    .config(studioConfig.toBuilder().opikApiKey(null).build())
+                    .opikApiKey(customOpikApiKey)
+                    .projectName(projectName)
+                    .build();
+
+            assertThat(actualJobMessage)
+                    .usingRecursiveComparison()
+                    .isEqualTo(expected);
+
+            assertThat(stored.projectId()).isEqualTo(projectId);
         }
 
         @Test

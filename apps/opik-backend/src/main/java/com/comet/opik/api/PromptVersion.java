@@ -2,6 +2,7 @@ package com.comet.opik.api;
 
 import com.comet.opik.api.validation.CommitValidation;
 import com.comet.opik.utils.ValidationUtils;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -9,7 +10,10 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
@@ -19,12 +23,13 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.PromptType.MUSTACHE;
+import static com.comet.opik.api.PromptVersionType.PROMPT_VERSION;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersion(
-        @JsonView( {
+        @JsonView({
                 Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version unique identifier, generated if absent") UUID id,
@@ -33,12 +38,19 @@ public record PromptVersion(
         @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version short unique identifier, generated if absent. it must be 8 characters long", requiredMode = Schema.RequiredMode.NOT_REQUIRED, pattern = ValidationUtils.COMMIT_PATTERN) @CommitValidation String commit,
+        @JsonView({Prompt.View.Detail.class,
+                PromptVersion.View.Public.class,
+                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "sequential version number in the format v<N>; null for masks") String versionNumber,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @NotBlank String template,
         @Json @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) JsonNode metadata,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) PromptType type,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) @Schema(description = "version type discriminator; defaults to prompt_version") PromptVersionType versionType,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) @Nullable @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
@@ -53,7 +65,7 @@ public record PromptVersion(
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
-                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy){
+                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy) {
 
     public static class View {
         public static class Detail {
@@ -65,14 +77,14 @@ public record PromptVersion(
 
     @Builder
     public record PromptVersionPage(
-            @JsonView( {
+            @JsonView({
                     PromptVersion.View.Public.class}) int page,
             @JsonView({PromptVersion.View.Public.class}) int size,
             @JsonView({PromptVersion.View.Public.class}) long total,
             @JsonView({PromptVersion.View.Public.class}) List<PromptVersion> content,
             @JsonView({PromptVersion.View.Public.class}) List<String> sortableBy)
             implements
-                Page<PromptVersion>{
+                Page<PromptVersion> {
 
         public static PromptVersion.PromptVersionPage empty(int page, List<String> sortableBy) {
             return new PromptVersion.PromptVersionPage(page, 0, 0, List.of(), sortableBy);
@@ -82,5 +94,15 @@ public record PromptVersion(
     @Override
     public PromptType type() {
         return type == null ? MUSTACHE : type;
+    }
+
+    @Override
+    public PromptVersionType versionType() {
+        return versionType == null ? PROMPT_VERSION : versionType;
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "environment cannot be set on a mask version") public boolean isEnvironmentCompatibleWithVersionType() {
+        return environment == null || versionType() != PromptVersionType.MASK;
     }
 }

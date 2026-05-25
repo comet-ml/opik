@@ -134,14 +134,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
-      label: "Claude Opus 4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
-      label: "Claude Sonnet 4",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -286,6 +278,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
+      label: "anthropic/claude-opus-4.7-fast",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
@@ -324,6 +320,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING,
       label: "arcee-ai/trinity-large-thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING_FREE,
+      label: "arcee-ai/trinity-large-thinking:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_MINI,
@@ -368,6 +368,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_VL_424B_A47B,
       label: "baidu/ernie-4.5-vl-424b-a47b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST,
+      label: "baidu/qianfan-ocr-fast",
     },
     {
       value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST_FREE,
@@ -519,6 +523,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
+      label: "deepseek/deepseek-v4-flash:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO,
       label: "deepseek/deepseek-v4-pro",
     },
@@ -609,6 +617,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS,
       label: "google/gemini-3.1-pro-preview-customtools",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH,
+      label: "google/gemini-3.5-flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
@@ -717,6 +729,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
       label: "inclusionai/ling-2.6-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
+      label: "inclusionai/ring-2.6-1t",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T_FREE,
@@ -1548,6 +1564,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/pareto-code",
     },
     {
+      value: PROVIDER_MODEL_TYPE.PERCEPTRON_PERCEPTRON_MK1,
+      label: "perceptron/perceptron-mk1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
       label: "perplexity/sonar",
     },
@@ -1840,6 +1860,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.6-plus:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_MAX,
+      label: "qwen/qwen3.7-max",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
       label: "qwen/qwq-32b",
     },
@@ -2020,6 +2044,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
+      label: "x-ai/grok-build-0.1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_CODE_FAST_1,
       label: "x-ai/grok-code-fast-1",
     },
@@ -2135,12 +2163,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.GEMINI]: [
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
-      label: "Gemini 3.1 Pro Preview",
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
+      label: "Gemini 3.5 Flash",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
-      label: "Gemini 3.1 Flash TTS Preview",
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      label: "Gemini 3.1 Pro Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
@@ -2175,6 +2203,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 2.0 Flash-Lite",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_26B_A4B_IT,
+      label: "Gemma 4 26B A4B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
+      label: "Gemma 4 31B IT",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,
       label: "Lyria 3 Clip Preview",
     },
@@ -2185,6 +2221,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+      label: "Gemini 3.5 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",

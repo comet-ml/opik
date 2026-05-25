@@ -60,6 +60,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,6 +70,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
     @Mock
     private OnlineScoringConfig onlineScoringConfig;
+    @Mock
+    private com.comet.opik.infrastructure.ServiceTogglesConfig serviceTogglesConfig;
     @Mock
     private RedissonReactiveClient redissonClient;
     @Mock
@@ -85,6 +88,10 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private ProjectService projectService;
     @Mock
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    @Mock
+    private com.comet.opik.api.resources.v1.events.tools.ToolRegistry toolRegistry;
+    @Mock
+    private com.comet.opik.domain.SpanService spanService;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -119,9 +126,15 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
         when(onlineScoringConfig.getStreams()).thenReturn(List.of(streamConfig));
         when(onlineScoringConfig.getConsumerGroupName()).thenReturn("online_scoring");
+        // Defaults for the size-based agentic-tools branch — under the threshold so the
+        // existing ScoringTests stay on the inline path. Routing-gate-specific tests
+        // override these per-case.
+        org.mockito.Mockito.lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        org.mockito.Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
 
         scorer = new OnlineScoringTraceThreadLlmAsJudgeScorer(
                 onlineScoringConfig,
+                serviceTogglesConfig,
                 redissonClient,
                 feedbackScoreService,
                 aiProxyService,
@@ -129,7 +142,9 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 traceService,
                 traceThreadService,
                 projectService,
-                automationRuleEvaluatorService);
+                automationRuleEvaluatorService,
+                toolRegistry,
+                spanService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -144,6 +159,313 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     void tearDown() {
         if (mockedFactory != null) {
             mockedFactory.close();
+        }
+    }
+
+    @Nested
+    class RoutingGateTests {
+
+        // Threads don't have an experimentId-driven branch (no test-suite-assertion equivalent),
+        // so the truth table is just toggle × tokens-vs-threshold × provider-supports-tools.
+        // Rows mirror the trace-side gate's design for symmetry.
+        @org.junit.jupiter.params.ParameterizedTest(name = "toggle={0}, tokens={1}, threshold={2}, provider={3} → expected useTools={4}")
+        @org.junit.jupiter.params.provider.CsvSource({
+                // size-based path — all three preconditions must hold
+                "true,  60000, 50000, OPEN_AI, true",
+                "true,  50000, 50000, OPEN_AI, true",
+                // below threshold → inline
+                "true,  49999, 50000, OPEN_AI, false",
+                // toggle off → inline even on huge contexts
+                "false, 60000, 50000, OPEN_AI, false",
+                // provider doesn't support tool calling → inline + warn
+                "true,  60000, 50000, OLLAMA,  false",
+                // no preconditions met
+                "false, 0,     50000, OPEN_AI, false",
+        })
+        void gateMatchesTruthTable(
+                boolean toggleEnabled, int estimatedTokens, int thresholdTokens,
+                com.comet.opik.api.LlmProvider provider, boolean expectedUseTools) {
+            String modelName = "gpt-test";
+            org.mockito.Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
+            org.mockito.Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
+                    .thenReturn(thresholdTokens);
+            org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+
+            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, modelName, "thread-x",
+                    java.util.List.of(stringContentMessage()));
+
+            org.assertj.core.api.Assertions.assertThat(useTools).isEqualTo(expectedUseTools);
+        }
+
+        @org.junit.jupiter.api.Test
+        void multimodalTemplateForcesInlineFallbackEvenWhenAllOtherPreconditionsHold() {
+            // Every other gate is satisfied (toggle on, over threshold, provider supports tools)
+            // but the template carries a non-string-content message. The agentic-tools render
+            // path can't substitute into multimodal templates, so we must downgrade to inline
+            // rather than letting renderThreadMessagesWithReplacement throw downstream.
+            String modelName = "gpt-test";
+            org.mockito.Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            org.mockito.Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
+                    .thenReturn(50_000);
+            org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
+                    .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
+
+            boolean useTools = scorer.shouldUseAgenticTools(60_000, modelName, "thread-x",
+                    java.util.List.of(multimodalContentMessage()));
+
+            org.assertj.core.api.Assertions.assertThat(useTools).isFalse();
+        }
+
+        private com.comet.opik.api.evaluators.LlmAsJudgeMessage stringContentMessage() {
+            return com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                    .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                    .content("evaluate {{context}}")
+                    .build();
+        }
+
+        private com.comet.opik.api.evaluators.LlmAsJudgeMessage multimodalContentMessage() {
+            // Non-null contentArray => isStringContent() == false (the multimodal branch
+            // hasMultimodalTemplate looks for). An empty list is enough for the predicate;
+            // we don't exercise the renderer in this test.
+            return com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                    .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                    .contentArray(java.util.List.of())
+                    .build();
+        }
+    }
+
+    @Nested
+    class ToolLoopTests {
+
+        // Real evaluator code so the message mock can return a model that scoreTrace
+        // calls accept. We mirror the trace-side ToolLoopTests pattern.
+        private com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge newMessage() {
+            var msg = org.mockito.Mockito.mock(com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge.class);
+            var code = org.mockito.Mockito.mock(
+                    com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode.class);
+            var modelParams = org.mockito.Mockito.mock(
+                    com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.class);
+            org.mockito.Mockito.lenient().when(code.model()).thenReturn(modelParams);
+            org.mockito.Mockito.lenient().when(modelParams.name()).thenReturn("gpt-test");
+            org.mockito.Mockito.lenient().when(msg.code()).thenReturn(code);
+            org.mockito.Mockito.lenient().when(msg.workspaceId()).thenReturn("ws-1");
+            org.mockito.Mockito.lenient().when(msg.userName()).thenReturn("user-1");
+            org.mockito.Mockito.lenient().when(msg.ruleId()).thenReturn(UUID.randomUUID());
+            return msg;
+        }
+
+        private static dev.langchain4j.agent.tool.ToolSpecification stubSpec(String name) {
+            return dev.langchain4j.agent.tool.ToolSpecification.builder()
+                    .name(name)
+                    .parameters(dev.langchain4j.model.chat.request.json.JsonObjectSchema.builder().build())
+                    .build();
+        }
+
+        @org.junit.jupiter.api.Test
+        void handleToolCallsReturnsImmediatelyWhenNoToolRequests() {
+            var plainResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from("done"))
+                    .build();
+            var toolRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+            var structuredRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+            var message = org.mockito.Mockito.mock(com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge.class);
+
+            var result = scorer.handleToolCalls(
+                    plainResponse, toolRequest, structuredRequest, message, java.util.Map.of()).block();
+
+            org.assertj.core.api.Assertions.assertThat(result).isSameAs(plainResponse);
+            org.mockito.Mockito.verifyNoInteractions(aiProxyService);
+            org.mockito.Mockito.verifyNoInteractions(toolRegistry);
+        }
+
+        @org.junit.jupiter.api.Test
+        void handleToolCallsAccumulatesResultsAndFinalizesWithStructuredRequestShape() {
+            var message = newMessage();
+            var toolReq = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                    .id("call-1")
+                    .name("read")
+                    .arguments("{}")
+                    .build();
+            var initialResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from(java.util.List.of(toolReq)))
+                    .build();
+            // Round-1 follow-up returns no more tool calls — loop exits.
+            var roundOneResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from("ok"))
+                    .build();
+            // Final structured wrap-up — handleToolCalls re-scores with the forcing user message.
+            var finalResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from("{\"thread_coherence\":4}"))
+                    .build();
+
+            org.mockito.Mockito.when(aiProxyService.scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(roundOneResponse, finalResponse);
+            // Tool execution returns a small JSON blob — exercises the messages.add(result) path.
+            org.mockito.Mockito.when(toolRegistry.execute(
+                    org.mockito.ArgumentMatchers.eq("read"),
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(reactor.core.publisher.Mono.just("{\"trace\":\"...\"}"));
+
+            var toolRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score the thread"))
+                    .toolSpecifications(stubSpec("read"))
+                    .build();
+            var structuredRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score the thread"))
+                    .build();
+
+            var result = scorer.handleToolCalls(
+                    initialResponse, toolRequest, structuredRequest, message, java.util.Map.of()).block();
+
+            org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
+
+            // 2 scoreTrace calls: round-1 follow-up (with tool specs) + final structured re-issue.
+            var requests = org.mockito.ArgumentCaptor.forClass(dev.langchain4j.model.chat.request.ChatRequest.class);
+            org.mockito.Mockito.verify(aiProxyService, org.mockito.Mockito.times(2)).scoreTrace(
+                    requests.capture(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any());
+
+            var sent = requests.getAllValues();
+            // Round 1: 3 messages — UserMessage + AiMessage(tool calls) + ToolExecutionResultMessage.
+            org.assertj.core.api.Assertions.assertThat(sent.get(0).messages()).hasSize(3);
+            org.assertj.core.api.Assertions.assertThat(sent.get(0).toolSpecifications())
+                    .extracting(dev.langchain4j.agent.tool.ToolSpecification::name)
+                    .containsExactly("read");
+            // Final: no tool specs + the round-1 terminal AiMessage (appended by ToolCallLoop's
+            // no-tool-calls early return) + the forcing UserMessage at the end.
+            // 5 messages: UserMessage + AiMessage(tool calls) + ToolResult + AiMessage(terminal)
+            // + UserMessage(forcing).
+            var finalSent = sent.get(1);
+            org.assertj.core.api.Assertions.assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
+            org.assertj.core.api.Assertions.assertThat(finalSent.messages()).hasSize(5);
+            org.assertj.core.api.Assertions.assertThat(finalSent.messages().get(3))
+                    .isInstanceOf(dev.langchain4j.data.message.AiMessage.class);
+            org.assertj.core.api.Assertions.assertThat(finalSent.messages().get(4))
+                    .isInstanceOf(dev.langchain4j.data.message.UserMessage.class);
+            org.assertj.core.api.Assertions.assertThat(
+                    ((dev.langchain4j.data.message.UserMessage) finalSent.messages().get(4)).singleText())
+                    .contains("Now respond with ONLY the JSON object");
+        }
+
+        @org.junit.jupiter.api.Test
+        void handleToolCallsPropagatesScoreTraceFailureMidLoop() {
+            var message = newMessage();
+            var toolReq = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                    .id("call-1")
+                    .name("read")
+                    .arguments("{}")
+                    .build();
+            var initialResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from(java.util.List.of(toolReq)))
+                    .build();
+
+            // Follow-up scoreTrace blows up (transient provider 503 after the per-LLM retry
+            // policy is exhausted). The contract: failure escapes handleToolCalls, the message
+            // returns un-ACKed, Redis Streams redelivers — same as the trace scorer's contract.
+            var providerFailure = new RuntimeException("provider 503");
+            org.mockito.Mockito.when(aiProxyService.scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenThrow(providerFailure);
+            org.mockito.Mockito.when(toolRegistry.execute(
+                    org.mockito.ArgumentMatchers.eq("read"),
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(reactor.core.publisher.Mono.just("{}"));
+
+            var toolRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .toolSpecifications(stubSpec("read"))
+                    .build();
+            var structuredRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+
+            org.assertj.core.api.Assertions
+                    .assertThatThrownBy(() -> scorer.handleToolCalls(
+                            initialResponse, toolRequest, structuredRequest, message, java.util.Map.of()).block())
+                    .isSameAs(providerFailure);
+
+            // Exactly one provider call attempted — the loop didn't swallow + continue.
+            org.mockito.Mockito.verify(aiProxyService, org.mockito.Mockito.times(1)).scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any());
+        }
+
+        @org.junit.jupiter.api.Test
+        void handleToolCallsCapsAtMaxRoundsAndStillFiresWrapUpStructuredCall() {
+            var message = newMessage();
+            var toolReq = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                    .id("call")
+                    .name("read")
+                    .arguments("{}")
+                    .build();
+            // Every response keeps emitting tool calls — the loop runs MAX_TOOL_CALL_ROUNDS=10
+            // times before bailing. After the cap, handleToolCalls still fires the wrap-up
+            // structured call. Total: 10 in-loop + 1 wrap-up = 11 scoreTrace calls.
+            var toolCallingResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from(java.util.List.of(toolReq)))
+                    .build();
+            var finalResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from("{\"thread_coherence\":3}"))
+                    .build();
+
+            org.mockito.Mockito.when(aiProxyService.scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any()))
+                    // 10 in-loop returns (rounds 1..10), then the wrap-up structured call.
+                    .thenReturn(toolCallingResponse,
+                            toolCallingResponse, toolCallingResponse, toolCallingResponse, toolCallingResponse,
+                            toolCallingResponse, toolCallingResponse, toolCallingResponse, toolCallingResponse,
+                            toolCallingResponse, finalResponse);
+            org.mockito.Mockito.when(toolRegistry.execute(
+                    org.mockito.ArgumentMatchers.eq("read"),
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(reactor.core.publisher.Mono.just("{}"));
+
+            var toolRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .toolSpecifications(stubSpec("read"))
+                    .build();
+            var structuredRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+
+            var result = scorer.handleToolCalls(
+                    toolCallingResponse, toolRequest, structuredRequest, message, java.util.Map.of()).block();
+
+            org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
+
+            // 11 total scoreTrace calls: 10 in-loop + 1 wrap-up structured. The wrap-up still
+            // fires when the cap is hit — that's the safety net that prevents the model from
+            // continuing prose ("Now let me check…") past the loop boundary.
+            var requests = org.mockito.ArgumentCaptor.forClass(dev.langchain4j.model.chat.request.ChatRequest.class);
+            org.mockito.Mockito.verify(aiProxyService, org.mockito.Mockito.times(11)).scoreTrace(
+                    requests.capture(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any());
+
+            var finalSent = requests.getAllValues().get(10);
+            org.assertj.core.api.Assertions.assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
+            var lastMessage = finalSent.messages().get(finalSent.messages().size() - 1);
+            org.assertj.core.api.Assertions.assertThat(lastMessage)
+                    .isInstanceOf(dev.langchain4j.data.message.UserMessage.class);
+            org.assertj.core.api.Assertions.assertThat(
+                    ((dev.langchain4j.data.message.UserMessage) lastMessage).singleText())
+                    .contains("Now respond with ONLY the JSON object");
         }
     }
 
@@ -208,6 +530,43 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("Relevance", BigDecimal.valueOf(4), "on-topic", project),
                     threadScore("Conciseness", new BigDecimal("3.5"), "could be tighter", project)));
+        }
+
+        @Test
+        void skipsSpanFetchWhenAgenticToolsDisabled() {
+            // Locks in the toggle gate: when isAgenticToolsEnabled=false, the scorer must NOT
+            // call spanService.getByTraceIds — that's how thread-scope evaluations preserve
+            // today's wire shape exactly (the enriched serializer omits the `spans` field on
+            // an empty list, falling back to [{role, content}, ...]).
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
+                    .name(ruleName)
+                    .code(code)
+                    .build();
+
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId))
+                    .thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(rule);
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-4o"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
+                    .thenReturn(Mono.empty());
+            // Toggle off — the scorer should not even ask the SpanService.
+            org.mockito.Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
+
+            scorer.score(message).block();
+
+            verifyNoInteractions(spanService);
         }
 
         @Test

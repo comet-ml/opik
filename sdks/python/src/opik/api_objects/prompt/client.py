@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type, TypeVar
 import json
 import dataclasses
+import logging
 
 import opik.exceptions
 from opik.rest_api import client as rest_client, PromptVersionUpdate
@@ -8,6 +9,13 @@ from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
 from opik.api_objects import opik_query_language, rest_helpers
 from . import types as prompt_types
+from . import prompt_cache
+from . import mask_context as prompt_mask_context_module
+from .base_prompt import BasePrompt
+
+LOGGER = logging.getLogger(__name__)
+
+_PromptT = TypeVar("_PromptT", bound=BasePrompt)
 
 
 @dataclasses.dataclass
@@ -101,6 +109,7 @@ class PromptClient:
                 type=type,
                 metadata=metadata,
                 project_name=project_name,
+                is_new=prompt_version is None,
                 template_structure=template_structure,
                 id=id,
                 description=description,
@@ -117,20 +126,16 @@ class PromptClient:
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         project_name: Optional[str],
+        is_new: bool = True,
         template_structure: str = "text",
         id: Optional[str] = None,
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
-        # Check if this is a new prompt (no existing versions)
-        existing_version = self._get_latest_version(name, project_name=project_name)
-
         # If it's a new prompt and container-level params are provided, use create_prompt endpoint
         # which creates both the container and first version in one call
-        if existing_version is None and (
-            id is not None or description is not None or tags is not None
-        ):
+        if is_new and (id is not None or description is not None or tags is not None):
             self._rest_client.prompts.create_prompt(
                 name=name,
                 id=id,
@@ -152,20 +157,10 @@ class PromptClient:
             # retrieve_prompt_version may not return tags, so we need to set them manually
             # from the tags we just passed to create_prompt
             if tags is not None and new_prompt_version_detail.tags is None:
-                # Pydantic objects are frozen, so we need to create a new object with tags
-                new_prompt_version_detail = prompt_version_detail.PromptVersionDetail(
-                    id=new_prompt_version_detail.id,
-                    prompt_id=new_prompt_version_detail.prompt_id,
-                    commit=new_prompt_version_detail.commit,
-                    template=new_prompt_version_detail.template,
-                    metadata=new_prompt_version_detail.metadata,
-                    type=new_prompt_version_detail.type,
-                    change_description=new_prompt_version_detail.change_description,
-                    tags=tags,
-                    variables=new_prompt_version_detail.variables,
-                    template_structure=new_prompt_version_detail.template_structure,
-                    created_at=new_prompt_version_detail.created_at,
-                    created_by=new_prompt_version_detail.created_by,
+                # Pydantic objects are frozen, so we copy to inject tags;
+                # model_copy preserves every other field automatically.
+                new_prompt_version_detail = new_prompt_version_detail.model_copy(
+                    update={"tags": tags}
                 )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version
@@ -193,23 +188,34 @@ class PromptClient:
         commit: Optional[str] = None,
         raise_if_not_template_structure: Optional[str] = None,
         project_name: Optional[str] = None,
+        version: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
-        Retrieve the prompt detail for a given prompt name and commit version.
+        Retrieve the prompt detail for a given prompt name, optionally
+        pinned to a specific ``version``.
 
         Parameters:
             name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest
+                version is retrieved.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             raise_if_not_template_structure: Optional template structure validation. If provided and doesn't match, raises PromptTemplateStructureMismatch.
             project_name: The name of the project to which the prompt belongs. If not provided, the default project is used.
 
         Returns:
             Prompt: The details of the specified prompt.
         """
+        if commit is not None and version is not None:
+            raise ValueError(
+                "Provide either `commit` or `version`, not both. "
+                "Prefer `version` — `commit` is deprecated."
+            )
         try:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
+                version_number=version,
                 project_name=project_name,
             )
 
@@ -237,6 +243,77 @@ class PromptClient:
                 raise e
             # 400, 404 - not found
         return None
+
+    def get_prompt_with_cache(
+        self,
+        name: str,
+        commit: Optional[str],
+        project_name: Optional[str],
+        template_structure: str,
+        prompt_cls: Type[_PromptT],
+        no_cache: bool = False,
+        version: Optional[str] = None,
+    ) -> Optional[_PromptT]:
+        if commit is not None and version is not None:
+            raise ValueError(
+                "Provide either `commit` or `version`, not both. "
+                "Prefer `version` — `commit` is deprecated."
+            )
+
+        def _fetch(mask_id: Optional[str] = None) -> Optional[_PromptT]:
+            if mask_id is not None:
+                prompt_version = self._rest_client.prompts.get_prompt_version_by_id(
+                    version_id=mask_id,
+                )
+            else:
+                prompt_version = self.get_prompt(
+                    name=name,
+                    commit=commit,
+                    raise_if_not_template_structure=template_structure,
+                    project_name=project_name,
+                    version=version,
+                )
+            if prompt_version is None:
+                return None
+            return prompt_cls.from_fern_prompt_version(
+                name, prompt_version, project_name=project_name
+            )
+
+        def _cached_fetch(
+            mask_id: Optional[str] = None,
+        ) -> Optional[_PromptT]:
+            if no_cache:
+                return _fetch(mask_id=mask_id)
+            return prompt_cache.get_or_fetch(
+                name=name,
+                commit=commit,
+                project_name=project_name,
+                template_structure=template_structure,
+                fetch_fn=lambda: _fetch(mask_id=mask_id),
+                mask_id=mask_id,
+                version=version,
+            )
+
+        unmasked = _cached_fetch()
+        result = unmasked
+
+        prompt_id = (
+            unmasked.__internal_api__prompt_id__ if unmasked is not None else None
+        )
+        active_mask_id = (
+            prompt_mask_context_module.get_mask_for_prompt(prompt_id)
+            if prompt_id is not None
+            else None
+        )
+        if active_mask_id is not None:
+            result = _cached_fetch(mask_id=active_mask_id)
+
+        if result is not None:
+            from opik import opik_context
+
+            opik_context.attach_prompt_to_current_trace(result)
+            opik_context.attach_prompt_to_current_span(result)
+        return result
 
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
@@ -360,8 +437,13 @@ class PromptClient:
                         prompt_id=version.prompt_id,
                         template=version.template,
                         type=version.type,
+                        version_type=version.version_type,
+                        environment=version.environment,
                         metadata=version.metadata,
                         commit=version.commit,
+                        version_number=version.version_number,
+                        change_description=version.change_description,
+                        template_structure=version.template_structure,
                         created_at=version.created_at,
                         created_by=version.created_by,
                         tags=version.tags,
@@ -438,20 +520,10 @@ class PromptClient:
                     )
                     # retrieve_prompt_version may not return tags, so we need to set them from get_prompts response
                     if tags is not None and latest_version.tags is None:
-                        # Pydantic objects are frozen, so we need to create a new object with tags
-                        latest_version = prompt_version_detail.PromptVersionDetail(
-                            id=latest_version.id,
-                            prompt_id=latest_version.prompt_id,
-                            commit=latest_version.commit,
-                            template=latest_version.template,
-                            metadata=latest_version.metadata,
-                            type=latest_version.type,
-                            change_description=latest_version.change_description,
-                            tags=tags,
-                            variables=latest_version.variables,
-                            template_structure=latest_version.template_structure,
-                            created_at=latest_version.created_at,
-                            created_by=latest_version.created_by,
+                        # Pydantic objects are frozen, so we copy to inject tags;
+                        # model_copy preserves every other field automatically.
+                        latest_version = latest_version.model_copy(
+                            update={"tags": tags}
                         )
                     results.append(
                         PromptSearchResult(
@@ -473,6 +545,53 @@ class PromptClient:
             if e.status_code != 404:
                 raise e
             return []
+
+    def __internal_api__create_mask(
+        self,
+        name: str,
+        prompt: str,
+        type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
+        metadata: Optional[Dict[str, Any]] = None,
+        template_structure: Literal["text", "chat"] = "text",
+        project_name: Optional[str] = None,
+        change_description: Optional[str] = None,
+    ) -> prompt_version_detail.PromptVersionDetail:
+        """Create a hidden mask prompt version that overrides get_prompt output when mask context is active.
+
+        Internal API — not intended for end-user use. A mask is a hidden
+        prompt version (version_type="mask") that does not appear in the prompt
+        history or version listings. When a mask context is active (via
+        ``prompt_mask_context``), ``get_prompt`` returns the mask's template
+        instead of the latest visible version.
+
+        Args:
+            name: Name of the prompt to attach the mask to. The prompt must
+                already exist.
+            prompt: The template content for the mask version.
+            type: Template type (MUSTACHE or JINJA2).
+            metadata: Optional metadata dict.
+            template_structure: "text" or "chat".
+            project_name: Optional project scope. Uses the default project if
+                not provided.
+            change_description: Optional description of why this mask was
+                created.
+
+        Returns:
+            The created PromptVersionDetail with version_type="mask".
+        """
+        new_version = prompt_version_detail.PromptVersionDetail(
+            template=prompt,
+            metadata=metadata,
+            type=type,
+            version_type="mask",
+            change_description=change_description,
+        )
+        return self._rest_client.prompts.create_prompt_version(
+            name=name,
+            version=new_version,
+            template_structure=template_structure,
+            project_name=project_name,
+        )
 
     def batch_update_prompt_version_tags(
         self,

@@ -25,6 +25,7 @@ import {
   SpanOQLConfig,
   ThreadOQLConfig,
   PromptOQLConfig,
+  PromptVersionOQLConfig,
 } from "./configs";
 import { OPERATORS_WITHOUT_VALUES, ARRAY_VALUE_OPERATORS } from "./constants";
 
@@ -87,6 +88,13 @@ export class OpikQueryLanguage {
    */
   static forPrompts(queryString?: string): OpikQueryLanguage {
     return new OpikQueryLanguage(queryString, new PromptOQLConfig());
+  }
+
+  /**
+   * Create an OpikQueryLanguage instance for prompt version filtering
+   */
+  static forPromptVersions(queryString?: string): OpikQueryLanguage {
+    return new OpikQueryLanguage(queryString, new PromptVersionOQLConfig());
   }
 
   /**

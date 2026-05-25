@@ -58,15 +58,33 @@ def _patch_adk_lite_llm() -> None:
             LOGGER.debug("Patched _model_response_to_generate_content_response")
 
 
+_OPIK_WRAPPER_ATTR = "_opik_wrapper"
+
+
 def _patch_adk_opentelemetry_tracers(
     distributed_headers: Optional[DistributedTraceHeadersDict],
 ) -> None:
-    no_op_opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(
+    # Idempotency guard: if we've already wrapped this tracer (e.g., from a prior
+    # OpikTracer.__init__ or from __setstate__ after a deep-copy of the agent),
+    # skip re-installing — just refresh the distributed_headers reference so a
+    # newly constructed OpikTracer with different headers still takes effect.
+    existing_wrapper = getattr(adk_telemetry.tracer, _OPIK_WRAPPER_ATTR, None)
+    if existing_wrapper is not None:
+        existing_wrapper._distributed_headers = distributed_headers
+        return
+
+    inner_start_as_current_span = adk_telemetry.tracer.start_as_current_span
+    inner_start_span = adk_telemetry.tracer.start_span
+
+    opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(
+        inner_start_as_current_span=inner_start_as_current_span,
+        inner_start_span=inner_start_span,
         distributed_headers=distributed_headers,
     )
 
-    adk_telemetry.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
-    adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
+    setattr(adk_telemetry.tracer, _OPIK_WRAPPER_ATTR, opik_tracer)
+    adk_telemetry.tracer.start_as_current_span = opik_tracer.start_as_current_span
+    adk_telemetry.tracer.start_span = opik_tracer.start_span
 
     # google-adk >= 1.32 dropped the module-level `tracer` symbol from
     # `google.adk.agents.base_agent` (agent invocation now goes through
@@ -75,8 +93,6 @@ def _patch_adk_opentelemetry_tracers(
     # ProxyTracer object we already patched above). On older versions
     # the attribute is still present and points to the same object.
     if hasattr(base_agent, "tracer"):
-        base_agent.tracer.start_as_current_span = (
-            no_op_opik_tracer.start_as_current_span
-        )
-        base_agent.tracer.start_span = no_op_opik_tracer.start_span
+        base_agent.tracer.start_as_current_span = opik_tracer.start_as_current_span
+        base_agent.tracer.start_span = opik_tracer.start_span
     LOGGER.debug("Patched ADK tracers")

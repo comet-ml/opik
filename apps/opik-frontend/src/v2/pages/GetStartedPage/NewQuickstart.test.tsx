@@ -13,6 +13,7 @@ let mockPollExpired = false;
 let mockFirstTraceProjectId: string | null = null;
 let mockProjectData: { id?: string } | undefined = undefined;
 let mockProjectIsPending = false;
+let mockDemoDataEnabled = true;
 // ──────────────────────────────────────────────────────────────────────────
 
 vi.mock("posthog-js/react", () => ({
@@ -145,6 +146,14 @@ vi.mock("@/contexts/PermissionsContext", () => ({
   })),
 }));
 
+vi.mock("@/contexts/feature-toggles-provider", () => ({
+  useIsFeatureEnabled: vi.fn(() => mockDemoDataEnabled),
+}));
+
+vi.mock("@/types/feature-toggles", () => ({
+  FeatureToggleKeys: { DEMO_DATA_ENABLED: "demo_data_enabled" },
+}));
+
 vi.mock("./AgentOnboarding/AgentOnboardingContext", () => ({
   AGENT_ONBOARDING_KEY: "agent-onboarding",
   MANUAL_ONBOARDING_KEY: "manual-onboarding",
@@ -187,6 +196,7 @@ describe("NewQuickstart — manual variant", () => {
     mockHasTraces = false;
     mockPollExpired = false;
     mockFirstTraceProjectId = null;
+    mockDemoDataEnabled = true;
   });
 
   it("redirects to home when onboarding was already done at mount", () => {
@@ -208,6 +218,23 @@ describe("NewQuickstart — manual variant", () => {
     fireEvent.click(screen.getByTestId("skip-btn"));
 
     expect(screen.getByTestId("demo-loading-content")).toBeInTheDocument();
+  });
+
+  it("marks onboarding done and navigates home when skip is pressed and demo data is disabled", () => {
+    mockDemoDataEnabled = false;
+    setManualDone(false);
+    render(<NewQuickstart />);
+
+    fireEvent.click(screen.getByTestId("skip-btn"));
+
+    expect(localStorageSetters[MANUAL_KEY]).toHaveBeenCalledWith(true);
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/$workspaceName/home",
+      params: { workspaceName: "test-ws" },
+    });
+    expect(
+      screen.queryByTestId("demo-loading-content"),
+    ).not.toBeInTheDocument();
   });
 
   it("returns to integrations page when DemoLoadingContent onRetry is called", () => {

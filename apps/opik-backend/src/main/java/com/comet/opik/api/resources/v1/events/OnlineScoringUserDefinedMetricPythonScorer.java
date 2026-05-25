@@ -1,15 +1,18 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -20,14 +23,15 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 @EagerSingleton
 @Slf4j
@@ -35,8 +39,11 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         extends
             OnlineScoringBaseScorer<TraceToScoreUserDefinedMetricPython> {
 
+    private static final String SPANS_ARGUMENT_KEY = "spans";
+
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
+    private final SpanService spanService;
     private final Logger userFacingLogger;
 
     @Inject
@@ -45,10 +52,12 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
         super(config, redisson, feedbackScoreService, traceService, USER_DEFINED_METRIC_PYTHON,
                 Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
+        this.spanService = spanService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
     }
@@ -73,7 +82,22 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 UserLog.TRACE_ID, trace.id().toString(),
                 UserLog.RULE_ID, message.ruleId().toString());
 
-        return Mono.fromCallable(() -> prepareData(message, mdc))
+        // Opt-in fetch: only call out to the span service when the user's metric actually
+        // declared a `spans` argument. Most trace-level Python metrics use just
+        // input/output/metadata and don't need spans — skipping the fetch for them avoids a
+        // DB query that's dwarfed only by the Python evaluator cost. Fetch reactively in the
+        // chain (no .block()) so the workersScheduler thread isn't pinned waiting on R2DBC
+        // (OPIK-6308).
+        Mono<List<Span>> spansMono = message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)
+                ? spanService.getByTraceIds(Set.of(trace.id()))
+                        .collectList()
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                .put(RequestContext.USER_NAME, message.userName()))
+                : Mono.just(List.of());
+
+        return spansMono
+                .flatMap(spans -> Mono.fromCallable(() -> prepareData(message, spans, mdc)))
                 .flatMap(data -> pythonEvaluatorService.evaluate(message.code().metric(), data))
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults)))
@@ -87,21 +111,17 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 .then();
     }
 
-    private Map<String, String> prepareData(TraceToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
+    private Map<String, Object> prepareData(TraceToScoreUserDefinedMetricPython message, List<Span> spans,
+            Map<String, String> mdc) {
         var trace = message.trace();
-        try (var logContext = wrapWithMdc(mdc)) {
-            userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
-            try {
-                var data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace);
-                userFacingLogger.info("Sending traceId '{}' to Python evaluator using the following input:\n\n{}",
-                        trace.id(), data);
-                return data;
-            } catch (Exception exception) {
-                userFacingLogger.error("Error preparing Python request for traceId '{}': \n\n{}",
-                        trace.id(), exception.getMessage());
-                throw exception;
-            }
-        }
+        return OnlineScoringEngine.logAndPrepareEvaluatorInput(
+                userFacingLogger, log, mdc, "traceId", trace.id(), message.ruleName(),
+                () -> {
+                    if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
+                        return OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
+                    }
+                    return new LinkedHashMap<>(OnlineScoringEngine.toReplacements(message.code().arguments(), trace));
+                });
     }
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Trace trace) {

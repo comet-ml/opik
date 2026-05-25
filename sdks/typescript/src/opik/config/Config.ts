@@ -15,6 +15,7 @@ export interface OpikConfig {
   requestOptions?: RequestOptions;
   batchDelayMs?: number;
   holdUntilFlush?: boolean;
+  promptCacheTtlSeconds?: number;
 }
 
 export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
@@ -23,7 +24,7 @@ export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
 
 const CONFIG_FILE_PATH_DEFAULT = path.join(os.homedir(), ".opik.config");
 
-export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "environment">> = {
+export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "environment" | "promptCacheTtlSeconds">> = {
   apiKey: "",
   apiUrl: "https://www.comet.com/opik/api",
   projectName: "Default Project",
@@ -54,6 +55,10 @@ function loadFromEnv(): Partial<OpikConfig> {
         : ["1", "true", "yes"].includes(
             String(process.env.OPIK_HOLD_UNTIL_FLUSH).toLowerCase()
           ),
+    // parseInt returns NaN for non-numeric strings; `|| 1` converts NaN→1 before Math.max enforces the minimum
+    promptCacheTtlSeconds: process.env.OPIK_PROMPT_CACHE_TTL_SECONDS
+      ? Math.max(1, parseInt(process.env.OPIK_PROMPT_CACHE_TTL_SECONDS, 10) || 1)
+      : undefined,
   });
 }
 

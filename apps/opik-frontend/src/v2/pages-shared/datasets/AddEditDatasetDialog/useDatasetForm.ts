@@ -2,25 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { useActiveProjectId } from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
-import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
 import { useToast } from "@/ui/use-toast";
-import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
+import { getCsvFilenameWithoutExtension } from "@/lib/file";
 import { packAssertions } from "@/lib/assertion-converters";
-import { Dataset, DATASET_TYPE, DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
-const JSON_MODE_FILE_SIZE_LIMIT_IN_MB = 20;
-const JSON_MODE_MAX_ITEMS = 1000;
-const CSV_MODE_FILE_SIZE_LIMIT_IN_MB = 2000;
+const FILE_SIZE_LIMIT_IN_MB = 2000;
 
 type UseDatasetFormParams = {
   dataset?: Dataset;
@@ -47,25 +42,16 @@ const useDatasetForm = ({
   onNameConflict,
   onCreateSuccess,
 }: UseDatasetFormParams) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
-  const isCsvUploadEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.CSV_UPLOAD_ENABLED,
-  );
 
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
-  const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
   const { mutate: changesMutate } = useDatasetItemChangesMutation();
 
-  const [isOverlayShown, setIsOverlayShown] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
-  const [csvData, setCsvData] = useState<Record<string, unknown>[] | undefined>(
-    undefined,
-  );
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
   const [type, setType] = useState<DATASET_TYPE>(datasetType);
@@ -98,7 +84,6 @@ const useDatasetForm = ({
   });
 
   useEffect(() => {
-    setIsOverlayShown(false);
     setConfirmOpen(false);
     setNameError(undefined);
 
@@ -106,7 +91,6 @@ const useDatasetForm = ({
       const timeout = setTimeout(() => {
         setCsvFile(undefined);
         setCsvError(undefined);
-        setCsvData(undefined);
         setType(datasetType);
         setRunsPerItem(1);
         setPassThreshold(1);
@@ -133,9 +117,7 @@ const useDatasetForm = ({
   const title = isEdit ? "Edit" : "Create new";
   const buttonText = isEdit ? "Update" : "Create new";
 
-  const fileSizeLimit = isCsvUploadEnabled
-    ? CSV_MODE_FILE_SIZE_LIMIT_IN_MB
-    : JSON_MODE_FILE_SIZE_LIMIT_IN_MB;
+  const fileSizeLimit = FILE_SIZE_LIMIT_IN_MB;
 
   const applyEvaluationCriteria = useCallback(
     (datasetId: string, onDone?: () => void) => {
@@ -191,57 +173,39 @@ const useDatasetForm = ({
 
   const uploadItems = useCallback(
     (datasetId: string, onDone: () => void) => {
-      if (isCsvUploadEnabled && csvFile) {
-        createItemsFromCsvMutate(
-          { datasetId, csvFile },
-          {
-            onSuccess: () => {
-              toast({
-                title: "CSV upload accepted",
-                description:
-                  "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
-              });
-            },
-            onError: (error: unknown) => {
-              console.error("Error uploading CSV file:", error);
-              const errorMessage =
-                (
-                  error as { response?: { data?: { errors?: string[] } } }
-                ).response?.data?.errors?.join(", ") ||
-                (error as { message?: string }).message ||
-                "Failed to upload CSV file";
-              toast({
-                title: "Error uploading CSV file",
-                description: errorMessage,
-                variant: "destructive",
-              });
-            },
-            onSettled: onDone,
-          },
-        );
-      } else if (!isCsvUploadEnabled && csvData) {
-        createItemsMutate(
-          {
-            datasetId,
-            workspaceName,
-            datasetItems: csvData.map((row) => ({
-              data: row,
-              source: DATASET_ITEM_SOURCE.manual,
-            })),
-          },
-          { onSettled: onDone },
-        );
+      if (!csvFile) {
+        onDone();
+        return;
       }
+      createItemsFromCsvMutate(
+        { datasetId, csvFile },
+        {
+          onSuccess: () => {
+            toast({
+              title: "CSV upload accepted",
+              description:
+                "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
+            });
+          },
+          onError: (error: unknown) => {
+            console.error("Error uploading CSV file:", error);
+            const errorMessage =
+              (
+                error as { response?: { data?: { errors?: string[] } } }
+              ).response?.data?.errors?.join(", ") ||
+              (error as { message?: string }).message ||
+              "Failed to upload CSV file";
+            toast({
+              title: "Error uploading CSV file",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          },
+          onSettled: onDone,
+        },
+      );
     },
-    [
-      isCsvUploadEnabled,
-      csvFile,
-      csvData,
-      createItemsFromCsvMutate,
-      createItemsMutate,
-      workspaceName,
-      toast,
-    ],
+    [csvFile, createItemsFromCsvMutate, toast],
   );
 
   const onCreateSuccessHandler = useCallback(
@@ -265,10 +229,6 @@ const useDatasetForm = ({
         ? () => onCreateSuccess(newDataset, navigateToDataset)
         : navigateToDataset;
 
-      if (hasValidCsvFile && !isCsvUploadEnabled) {
-        setIsOverlayShown(true);
-      }
-
       if (hasValidCsvFile && newDataset.id) {
         const uploadThenFinalize = () => {
           uploadItems(newDataset.id, finalize);
@@ -282,7 +242,6 @@ const useDatasetForm = ({
       applyEvaluationCriteria,
       uploadItems,
       hasValidCsvFile,
-      isCsvUploadEnabled,
       onDatasetCreated,
       onCreateSuccess,
       setOpen,
@@ -364,44 +323,26 @@ const useDatasetForm = ({
   ]);
 
   const handleFileSelect = useCallback(
-    async (file?: File) => {
+    (file?: File) => {
       setCsvError(undefined);
       setCsvFile(undefined);
-      setCsvData(undefined);
 
       if (!file) return;
 
-      if (isCsvUploadEnabled) {
-        if (file.size > fileSizeLimit * 1024 * 1024) {
-          setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
-          return;
-        }
-        if (!file.name.toLowerCase().endsWith(".csv")) {
-          setCsvError("File must be in .csv format");
-          return;
-        }
-        setCsvFile(file);
-        if (!name.trim()) {
-          setName(getCsvFilenameWithoutExtension(file.name));
-        }
-      } else {
-        const result = await validateCsvFile(
-          file,
-          fileSizeLimit,
-          JSON_MODE_MAX_ITEMS,
-        );
-        if (result.error) {
-          setCsvError(result.error);
-        } else if (result.data) {
-          setCsvFile(file);
-          setCsvData(result.data);
-          if (!name.trim()) {
-            setName(getCsvFilenameWithoutExtension(file.name));
-          }
-        }
+      if (file.size > fileSizeLimit * 1024 * 1024) {
+        setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
+        return;
+      }
+      if (!file.name.toLowerCase().endsWith(".csv")) {
+        setCsvError("File must be in .csv format");
+        return;
+      }
+      setCsvFile(file);
+      if (!name.trim()) {
+        setName(getCsvFilenameWithoutExtension(file.name));
       }
     },
-    [isCsvUploadEnabled, fileSizeLimit, name],
+    [fileSizeLimit, name],
   );
 
   return {
@@ -420,11 +361,8 @@ const useDatasetForm = ({
     csvError,
     isEdit,
     isValid,
-    isOverlayShown,
-    setIsOverlayShown,
     confirmOpen,
     setConfirmOpen,
-    isCsvUploadEnabled,
     fileSizeLimit,
     typeLabel,
     title,

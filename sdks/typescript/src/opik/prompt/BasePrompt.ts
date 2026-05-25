@@ -15,6 +15,7 @@ export interface BasePromptData {
   versionId?: string;
   name: string;
   commit?: string;
+  version?: string;
   metadata?: OpikApi.JsonNode;
   type?: PromptType;
   changeDescription?: string;
@@ -33,6 +34,7 @@ export abstract class BasePrompt {
   private _id: string | undefined;
   private _versionId: string | undefined;
   private _commit: string | undefined;
+  private _version: string | undefined;
   private _synced: boolean;
   private _changeDescription: string | undefined;
 
@@ -55,6 +57,7 @@ export abstract class BasePrompt {
   get id(): string | undefined { return this._id; }
   get versionId(): string | undefined { return this._versionId; }
   get commit(): string | undefined { return this._commit; }
+  get version(): string | undefined { return this._version; }
   /** Whether the prompt has been successfully synced with the backend. */
   get synced(): boolean { return this._synced; }
   get changeDescription(): string | undefined { return this._changeDescription; }
@@ -65,6 +68,7 @@ export abstract class BasePrompt {
     this._id = data.promptId;
     this._versionId = data.versionId;
     this._commit = data.commit;
+    this._version = data.version;
     this.type = data.type ?? "mustache";
     this._changeDescription = data.changeDescription;
     this.templateStructure = data.templateStructure ?? "text";
@@ -84,6 +88,7 @@ export abstract class BasePrompt {
     promptId?: string;
     versionId?: string;
     commit?: string;
+    version?: string;
     changeDescription?: string;
     tags?: string[];
     projectName?: string;
@@ -91,6 +96,7 @@ export abstract class BasePrompt {
     this._id = result.promptId;
     this._versionId = result.versionId;
     this._commit = result.commit;
+    this._version = result.version;
     this._changeDescription = result.changeDescription;
     if (result.tags) {
       this._tags = result.tags;
@@ -144,6 +150,7 @@ export abstract class BasePrompt {
           promptId: result.id,
           versionId: result.versionId,
           commit: result.commit,
+          version: result.version,
           changeDescription: result.changeDescription,
           tags: result.tags ? Array.from(result.tags) : undefined,
           projectName: result.projectName,
@@ -354,18 +361,27 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Helper method to retrieve a version by commit hash.
-   * Used by subclasses in their getVersion implementations.
+   * Helper method to retrieve a version by its sequential version identifier
+   * (e.g. `"v3"`) or, for backwards compatibility, by its commit hash.
    *
-   * @param commit - Commit hash (8-char short form or full)
+   * Input matching `/^v\d+$/` is dispatched to the `versionNumber` endpoint;
+   * anything else is treated as a commit hash. Commit-based fetching is
+   * deprecated — pass a `"v<N>"` identifier instead.
+   *
+   * @param version - Sequential version (`"v3"`) or commit hash (deprecated)
    * @returns Promise resolving to the API response or null if not found
    */
-  protected async retrieveVersionByCommit(
-    commit: string,
+  protected async retrieveVersion(
+    version: string,
   ): Promise<OpikApi.PromptVersionDetail | null> {
+    const isVersionNumber = /^v\d+$/.test(version);
+    const request = isVersionNumber
+      ? { name: this.name, versionNumber: version }
+      : { name: this.name, commit: version };
+
     try {
       const response = await this.opik.api.prompts.retrievePromptVersion(
-        { name: this.name, commit },
+        request,
         this.opik.api.requestOptions,
       );
       return response;
@@ -382,7 +398,7 @@ export abstract class BasePrompt {
 
       logger.error("Failed to retrieve prompt version", {
         promptName: this.name,
-        commit,
+        version,
         error,
       });
       throw error;
@@ -403,13 +419,14 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Get a specific version by commit hash.
-   * Returns a new instance of the appropriate prompt type.
+   * Get a specific version by its sequential version identifier (e.g. `"v3"`)
+   * or, for backwards compatibility, by its commit hash. Returns a new instance
+   * of the appropriate prompt type.
    *
-   * @param commit - Commit hash (8-char short form or full)
+   * @param version - Sequential version (`"v<N>"`) — preferred; or commit hash (deprecated)
    * @returns Promise resolving to prompt instance or null if not found
    */
-  abstract getVersion(commit: string): Promise<BasePrompt | null>;
+  abstract getVersion(version: string): Promise<BasePrompt | null>;
 
   /**
    * Restores a specific version by creating a new version with content from the specified version.

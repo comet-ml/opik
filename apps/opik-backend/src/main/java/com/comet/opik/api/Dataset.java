@@ -22,7 +22,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Dataset(
-        @JsonView( {
+        @JsonView({
                 Dataset.View.Public.class, Dataset.View.Write.class}) UUID id,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) @NotBlank String name,
         @JsonView({Dataset.View.Public.class,
@@ -55,7 +55,7 @@ public record Dataset(
         @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable DatasetStatus status,
         @JsonView({
-                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Summary of the latest version of this dataset") @Nullable DatasetVersionSummary latestVersion){
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Summary of the latest version of this dataset") @Nullable DatasetVersionSummary latestVersion) {
 
     public static class View {
 
@@ -68,12 +68,12 @@ public record Dataset(
 
     @Builder(toBuilder = true)
     public record DatasetPage(
-            @JsonView( {
+            @JsonView({
                     Dataset.View.Public.class}) List<Dataset> content,
             @JsonView({Dataset.View.Public.class}) int page,
             @JsonView({Dataset.View.Public.class}) int size,
             @JsonView({Dataset.View.Public.class}) long total,
-            @JsonView({Dataset.View.Public.class}) List<String> sortableBy) implements Page<Dataset>{
+            @JsonView({Dataset.View.Public.class}) List<String> sortableBy) implements Page<Dataset> {
 
         public static DatasetPage empty(int page, List<String> sortableBy) {
             return new DatasetPage(List.of(), page, 0, 0, sortableBy);

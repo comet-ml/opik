@@ -98,7 +98,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenValidRequest__shouldReturnResults() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(
                     podamFactory.manufacturePojo(PythonScoreResult.class),
                     podamFactory.manufacturePojo(PythonScoreResult.class));
@@ -129,7 +129,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenEmptyData__shouldThrowIllegalArgumentException() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var emptyData = Map.<String, String>of();
+            var emptyData = Map.<String, Object>of();
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, emptyData))
@@ -141,7 +141,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__when503Error__shouldRetryAndEventuallySucceed() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
             var pythonResponse = PythonEvaluatorResponse.builder()
                     .scores(expectedScores)
@@ -181,7 +181,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__when504Error__shouldRetryAndEventuallySucceed() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
             var pythonResponse = PythonEvaluatorResponse.builder()
                     .scores(expectedScores)
@@ -216,7 +216,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenTimeoutException__shouldRetryAndEventuallySucceed() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
             var pythonResponse = PythonEvaluatorResponse.builder()
                     .scores(expectedScores)
@@ -252,7 +252,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenMaxRetriesExceeded__shouldThrowException() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             setupHttpCallChain();
@@ -278,7 +278,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__when400Error__shouldNotRetryAndThrowImmediately() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
             var errorResponse = PythonEvaluatorErrorResponse.builder()
                     .error("Invalid Python code")
                     .build();
@@ -308,7 +308,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenNonRetryableProcessingException__shouldThrowImmediately() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             when(client.target(anyString())).thenReturn(webTarget);
@@ -450,7 +450,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenErrorResponseParsingFails__shouldFallbackToStringParsing() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             setupHttpCallChain();
@@ -482,7 +482,7 @@ class PythonEvaluatorServiceTest {
         void evaluate__whenBothErrorResponseParsingFails__shouldUseDefaultMessage() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
-            var data = Map.of("input", "test input", "output", "test output");
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
             // Setup HTTP call chain
             setupHttpCallChain();

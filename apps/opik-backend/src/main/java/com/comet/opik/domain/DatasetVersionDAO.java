@@ -199,6 +199,17 @@ public interface DatasetVersionDAO {
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
+            SELECT id
+            FROM dataset_versions
+            WHERE workspace_id = :workspace_id
+              AND dataset_id = :dataset_id
+              AND version_hash = :version_hash
+            """)
+    Optional<UUID> findVersionIdByHash(@Bind("dataset_id") UUID datasetId,
+            @Bind("version_hash") String versionHash,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
             WITH version_sequences AS (
                 SELECT
                     id,
@@ -304,6 +315,17 @@ public interface DatasetVersionDAO {
                 AND dv.workspace_id = :workspace_id
             """)
     Optional<DatasetVersion> findByTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT version_id
+            FROM dataset_version_tags
+            WHERE workspace_id = :workspace_id
+              AND dataset_id = :dataset_id
+              AND tag = :tag
+            """)
+    Optional<UUID> findVersionIdByTag(@Bind("dataset_id") UUID datasetId,
+            @Bind("tag") String tag,
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""

@@ -105,16 +105,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackScoreData.value]);
 
-  const handleChangeValue = useCallback(
-    (value: number, categoryName?: string) => {
-      onUpdateFeedbackScore({
-        categoryName,
-        name,
-        value,
-      });
-    },
-    [name, onUpdateFeedbackScore],
-  );
+  const onChangeTextAreaTriggered = useCallback(() => {
+    updateTextAreaHeight(textAreaRef.current);
+  }, []);
 
   const handleChangeReason = useCallback(
     (reason?: string) => {
@@ -128,13 +121,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     [name, value, categoryName, onUpdateFeedbackScore],
   );
 
-  const onChangeTextAreaTriggered = useCallback(() => {
-    updateTextAreaHeight(textAreaRef.current);
-  }, []);
-
   const {
     value: reasonValue,
     onChange: onReasonChange,
+    onFocus: onReasonFocus,
+    onBlur: onReasonBlur,
     onReset: onReasonReset,
     setInputValue: setReasonValue,
   } = useDebouncedValue({
@@ -143,6 +134,18 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     delay: SET_VALUE_DEBOUNCE_DELAY,
     onChange: onChangeTextAreaTriggered,
   });
+
+  const handleChangeValue = useCallback(
+    (value: number, categoryName?: string) => {
+      onUpdateFeedbackScore({
+        categoryName,
+        name,
+        value,
+        reason: reasonValue,
+      });
+    },
+    [name, reasonValue, onUpdateFeedbackScore],
+  );
 
   const deleteFeedbackScore = useCallback(() => {
     onDeleteFeedbackScore(name);
@@ -364,6 +367,8 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           placeholder="Add a reason..."
           value={reasonValue}
           onChange={onReasonChange}
+          onFocus={onReasonFocus}
+          onBlur={onReasonBlur}
           disabled={value === ""}
           className="min-h-6 resize-none overflow-hidden py-1 pt-[4px]"
           ref={(e) => {

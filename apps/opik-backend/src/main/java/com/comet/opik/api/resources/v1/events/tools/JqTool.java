@@ -6,12 +6,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.inject.Singleton;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.thisptr.jackson.jq.BuiltinFunctionLoader;
 import net.thisptr.jackson.jq.JsonQuery;
 import net.thisptr.jackson.jq.Scope;
 import net.thisptr.jackson.jq.Versions;
 import net.thisptr.jackson.jq.exception.JsonQueryException;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -97,25 +99,29 @@ public class JqTool implements ToolExecutor {
     }
 
     @Override
-    public String execute(String arguments, TraceToolContext ctx) {
-        ParsedArgs args = parseArgs(arguments);
-        if (args.error != null) {
-            // Argument validation failures are LLM-driven (the model emitted a malformed
-            // tool call); keep at debug to avoid log noise but make the bad input
-            // discoverable when chasing a specific judge run.
-            log.debug("jq tool received invalid arguments: '{}' -> '{}'", arguments, args.error);
-            return args.error;
-        }
-        log.debug("jq tool call with valid arguments: '{}' -> '{}'", arguments, args);
+    public Mono<String> execute(String arguments, @NonNull TraceToolContext ctx) {
+        // No I/O — jackson-jq evaluation is CPU-bound and runs on the current scheduler.
+        // fromCallable captures any throw as a Mono error for ToolRegistry's onErrorResume.
+        return Mono.fromCallable(() -> {
+            ParsedArgs args = parseArgs(arguments);
+            if (args.error != null) {
+                // Argument validation failures are LLM-driven (the model emitted a malformed
+                // tool call); keep at debug to avoid log noise but make the bad input
+                // discoverable when chasing a specific judge run.
+                log.debug("jq tool received invalid arguments: '{}' -> '{}'", arguments, args.error);
+                return args.error;
+            }
+            log.debug("jq tool call with valid arguments: '{}' -> '{}'", arguments, args);
 
-        EntityRef ref = new EntityRef(args.type, args.id);
-        Optional<JsonNode> cached = ctx.getCached(ref);
-        if (cached.isEmpty()) {
-            log.debug("jq tool cache miss for id={}, ref={}", args.id, ref);
-            return ToolArgs.cacheMiss(args.type, args.id);
-        }
+            EntityRef ref = new EntityRef(args.type, args.id);
+            Optional<JsonNode> cached = ctx.getCached(ref);
+            if (cached.isEmpty()) {
+                log.debug("jq tool cache miss for id={}, ref={}", args.id, ref);
+                return ToolArgs.cacheMiss(args.type, args.id);
+            }
 
-        return evaluate(cached.get(), args);
+            return evaluate(cached.get(), args);
+        });
     }
 
     private static String evaluate(JsonNode input, ParsedArgs args) {
