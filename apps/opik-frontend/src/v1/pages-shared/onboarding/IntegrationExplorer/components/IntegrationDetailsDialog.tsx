@@ -11,7 +11,6 @@ import { Separator } from "@/ui/separator";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import {
   INSTALL_OPIK_SECTION_TITLE,
-  PROJECT_NAME_PLACEHOLDER,
   SNIPPET_PROJECT_NAME,
 } from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
@@ -21,6 +20,7 @@ import { Integration } from "@/constants/integrations";
 import HelpLinks from "./HelpLinks";
 import { ExternalLink } from "lucide-react";
 import { IntegrationStep } from "./IntegrationStep";
+import AdditionalIntegrationSteps from "@/shared/OnboardingIntegrationsPage/AdditionalIntegrationSteps";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "@/v1/pages-shared/onboarding/CodeExecutor/CodeExecutor";
@@ -113,32 +113,17 @@ const IntegrationDetailsDialog: React.FunctionComponent<
               <CodeHighlighter data={selectedIntegration.installCommand} />
             </div>
           </IntegrationStep>
-          {selectedIntegration.additionalSteps ? (
-            selectedIntegration.additionalSteps.map((step, idx) => {
-              const { code: stepCode } = putConfigInCode({
-                code: step.code,
-                workspaceName,
-                apiKey,
-                shouldMaskApiKey: true,
-                projectName: SNIPPET_PROJECT_NAME,
-              });
-              return (
-                <IntegrationStep
-                  key={idx}
-                  title={step.title}
-                  description={step.description?.replaceAll(
-                    PROJECT_NAME_PLACEHOLDER,
-                    SNIPPET_PROJECT_NAME,
-                  )}
-                  className="mb-6"
-                >
-                  <div className="min-h-7">
-                    <CodeHighlighter data={stepCode} language={step.language} />
-                  </div>
-                </IntegrationStep>
-              );
-            })
-          ) : (
+          {selectedIntegration.additionalSteps && (
+            <AdditionalIntegrationSteps
+              steps={selectedIntegration.additionalSteps}
+              workspaceName={workspaceName}
+              apiKey={apiKey}
+              projectName={SNIPPET_PROJECT_NAME}
+              IntegrationStep={IntegrationStep}
+              stepClassName="mb-6"
+            />
+          )}
+          {selectedIntegration.code && (
             <IntegrationStep
               title={`2. Run the following code to get started with ${selectedIntegration.title}`}
               className="mb-6"

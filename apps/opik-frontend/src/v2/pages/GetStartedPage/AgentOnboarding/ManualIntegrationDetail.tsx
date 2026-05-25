@@ -5,12 +5,10 @@ import { IntegrationStep } from "@/v2/pages-shared/onboarding/IntegrationExplore
 import { useActiveWorkspaceName, useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
-import {
-  INSTALL_OPIK_SECTION_TITLE,
-  PROJECT_NAME_PLACEHOLDER,
-} from "@/constants/shared";
+import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
+import AdditionalIntegrationSteps from "@/shared/OnboardingIntegrationsPage/AdditionalIntegrationSteps";
 import { Separator } from "@/ui/separator";
 
 type ManualIntegrationDetailProps = {
@@ -90,32 +88,18 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
         </div>
       </IntegrationStep>
 
-      {integration.additionalSteps ? (
-        integration.additionalSteps.map((step, idx) => {
-          const { code: stepCode } = putConfigInCode({
-            code: step.code,
-            workspaceName,
-            apiKey,
-            shouldMaskApiKey: true,
-            projectName: agentName,
-          });
-          return (
-            <IntegrationStep
-              key={idx}
-              title={step.title}
-              description={step.description?.replaceAll(
-                PROJECT_NAME_PLACEHOLDER,
-                agentName,
-              )}
-              className="mb-2 border-0 p-0"
-            >
-              <div className="min-h-7 overflow-hidden rounded-md border">
-                <CodeHighlighter data={stepCode} language={step.language} />
-              </div>
-            </IntegrationStep>
-          );
-        })
-      ) : (
+      {integration.additionalSteps && (
+        <AdditionalIntegrationSteps
+          steps={integration.additionalSteps}
+          workspaceName={workspaceName}
+          apiKey={apiKey}
+          projectName={agentName}
+          IntegrationStep={IntegrationStep}
+          stepClassName="mb-2 border-0 p-0"
+          codeWrapperClassName="min-h-7 overflow-hidden rounded-md border"
+        />
+      )}
+      {integration.code && (
         <IntegrationStep
           title={`2. Run the following code to get started with ${integration.title}`}
           className="mb-2 border-0 p-0"
