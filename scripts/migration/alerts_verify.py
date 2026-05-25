@@ -22,7 +22,7 @@ Migration logic mirrored from Java (AlertProjectMigrationService):
 Run AFTER the AlertProjectMigrationJob has finished.
 
 Usage:
-    DB_HOST=... DB_PORT=3306 DB_NAME=opik DB_USER=... DB_PASSWORD=... \
+    DB_HOST=<your-host> DB_PORT=3306 DB_NAME=<your-db> DB_USER=<your-user> DB_PASSWORD=<your-password> \
         python verify.py alert_migration_snapshot_<timestamp>.json
 
 Exit codes:  0 = all checks passed,  1 = at least one failure
@@ -47,12 +47,16 @@ DEFAULT_PROJECT_NAME = "Default Project"
 # DB connection
 # ---------------------------------------------------------------------------
 def connect():
+    missing = [v for v in ("DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD") if not os.environ.get(v)]
+    if missing:
+        print(f"ERROR: Missing required environment variables: {', '.join(missing)}")
+        sys.exit(1)
     return pymysql.connect(
-        host=os.environ.get("DB_HOST", "mysql-host"),
+        host=os.environ["DB_HOST"],
         port=int(os.environ.get("DB_PORT", "3306")),
-        database=os.environ.get("DB_NAME", "db_name"),
-        user=os.environ.get("DB_USER", "user"),
-        password=os.environ.get("DB_PASSWORD", "password"),
+        database=os.environ["DB_NAME"],
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
         cursorclass=pymysql.cursors.DictCursor,
         charset="utf8mb4",
     )
@@ -346,7 +350,7 @@ def main():
     with open(args.snapshot) as f:
         snapshot = json.load(f)
 
-    captured_at = snapshot["captured_at"]
+    captured_at = snapshot.get("db_captured_at") or snapshot["captured_at"]
     alerts = snapshot["alerts"]
     total = snapshot["total_orphan_alerts"]
 

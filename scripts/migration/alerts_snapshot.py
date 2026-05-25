@@ -10,7 +10,8 @@ Run BEFORE the AlertProjectMigrationJob processes anything.
 
 Usage:
     pip install pymysql
-    DB_HOST=... DB_PORT=3306 DB_NAME=opik DB_USER=... DB_PASSWORD=... python snapshot.py
+    DB_HOST=<your-host> DB_PORT=3306 DB_NAME=<your-db> DB_USER=<your-user> DB_PASSWORD=<your-password> \
+        python snapshot.py
     python snapshot.py --output my_snapshot.json   # custom output path
 """
 
@@ -29,12 +30,16 @@ except ImportError:
 
 
 def connect():
+    missing = [v for v in ("DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD") if not os.environ.get(v)]
+    if missing:
+        print(f"ERROR: Missing required environment variables: {', '.join(missing)}")
+        sys.exit(1)
     return pymysql.connect(
-        host=os.environ.get("DB_HOST", "mysql-host"),
+        host=os.environ["DB_HOST"],
         port=int(os.environ.get("DB_PORT", "3306")),
-        database=os.environ.get("DB_NAME", "db_name"),
-        user=os.environ.get("DB_USER", "user"),
-        password=os.environ.get("DB_PASSWORD", "password"),
+        database=os.environ["DB_NAME"],
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
         cursorclass=pymysql.cursors.DictCursor,
         charset="utf8mb4",
     )
@@ -136,6 +141,9 @@ def main():
 
     try:
         with conn.cursor() as cursor:
+            cursor.execute("SELECT NOW(6) AS db_time")
+            db_captured_at = serialize(cursor.fetchone()["db_time"])
+
             if excluded_workspace_ids:
                 print(f"Excluding {len(excluded_workspace_ids)} workspace(s) "
                       f"(MIGRATION_EXCLUDED_WORKSPACE_IDS)")
@@ -171,6 +179,7 @@ def main():
 
         snapshot = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
+            "db_captured_at": db_captured_at,
             "total_orphan_alerts": len(alert_records),
             "workspaces_affected": len(workspace_counts),
             "workspace_summary": {ws: cnt for ws, cnt in sorted(workspace_counts.items())},
