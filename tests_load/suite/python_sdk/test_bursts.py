@@ -12,12 +12,14 @@ from ._helpers import Metrics
 
 
 def test_burst_single_loop(metrics: Metrics, load_scale: float) -> None:
-    """Worst-case burst: tight loop, zero think-time, single thread.
+    """Fast-paced burst from a single thread.
 
-    Calls a ``@opik.track``-decorated handler 50k times back-to-back
-    with no sleep between submits. This is the deliberate worst case —
-    it puts maximum pressure on the SDK's in-process queue and batch
-    flusher before any HTTP work catches up.
+    Calls a ``@opik.track``-decorated handler 50k times in a tight loop
+    with only the minimal randomised think-time (0.5–2 ms) shared by the
+    rest of the suite — enough to keep the runner's docker-compose Opik
+    stack from being DoS-ed when multiple heavy scenarios run in
+    parallel under xdist, but still tight enough that the SDK's
+    in-process queue and batch flusher are kept busy throughout.
 
     Volume: 50k traces, ~200 B input each.
 
@@ -41,6 +43,7 @@ def test_burst_single_loop(metrics: Metrics, load_scale: float) -> None:
     with metrics.timer("logging"):
         for _ in range(trace_count):
             handle_request(prompt=_helpers.random_text(trace_input_bytes))
+            _helpers.think_time()
 
     with metrics.timer("flush"):
         opik.flush_tracker()
