@@ -419,8 +419,8 @@ public class AlertProjectMigrationService implements Managed {
                     } catch (Exception e) {
                         // Fallback: legacy data stored a plain UUID string instead of a JSON-encoded array
                         try {
-                            return Stream.of(UUID.fromString(projectIdsStr.trim()));
-                        } catch (IllegalArgumentException ignored) {
+                            return Stream.of(UUID.fromString(projectIdsStr.strip()));
+                        } catch (Exception ignored) {
                             log.warn("Skipping malformed '{}' value for trigger '{}', treating as workspace-wide",
                                     AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY, trigger.id(), e);
                             return Stream.empty();
