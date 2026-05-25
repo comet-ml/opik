@@ -924,9 +924,6 @@ reportGeneration:
   # Deployed: points to the Comet API (e.g. http://comet-api/opik/ollie/generate-report)
   #   which resolves workspace credentials and proxies to Ollie.
   url: ${REPORT_GENERATION_URL:-http://localhost:9080/reports/generate}
-  # Default: (empty)
-  # Description: Shared token for authenticating report generation requests between services
-  internalToken: ${REPORT_GENERATION_INTERNAL_TOKEN:-}
 
 
 # Attachments configuration

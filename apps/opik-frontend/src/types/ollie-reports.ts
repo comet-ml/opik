@@ -4,11 +4,18 @@ export enum ReportStatus {
   FAILED = "failed",
 }
 
+export interface RecommendedAction {
+  name: string;
+  description: string;
+  prompt: string;
+}
+
 export interface OllieReport {
   id: string;
   project_id: string;
   session_id?: string;
   content?: string;
+  recommended_actions?: RecommendedAction[];
   status: ReportStatus;
   created_at: string;
   last_updated_at: string;
