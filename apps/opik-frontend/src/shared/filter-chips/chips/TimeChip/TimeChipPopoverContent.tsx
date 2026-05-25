@@ -102,17 +102,22 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
     switch (nextMode) {
       case "exactly":
         if (isoA) onApply({ mode: "exactly", at: isoA });
+        else onClear();
         break;
       case "before":
         if (isoA) onApply({ mode: "before", before: isoA });
+        else onClear();
         break;
       case "after":
         if (isoA) onApply({ mode: "after", after: isoA });
+        else onClear();
         break;
       case "between": {
         const isoB = slotToIso(b);
         if (isoA && isoB && !isRangeInverted(a, b)) {
           onApply({ mode: "between", start: isoA, end: isoB });
+        } else if (!isoA && !isoB) {
+          onClear();
         }
         break;
       }

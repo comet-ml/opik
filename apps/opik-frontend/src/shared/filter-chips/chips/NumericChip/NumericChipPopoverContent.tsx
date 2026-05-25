@@ -12,6 +12,7 @@ import {
   NumericFormat,
   resolveNumericFormat,
 } from "@/shared/filter-chips/chips/NumericChip/NumericChip.format";
+import { toNumber } from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
 
 interface NumericChipPopoverContentProps {
   definition: NumericChipDefinition;
@@ -31,13 +32,6 @@ const SINGLE_LABEL: Record<Exclude<NumericChipMode, "between">, string> = {
   exactly: "Value",
   atLeast: "Minimum value",
   atMost: "Maximum value",
-};
-
-const parseNumber = (raw: string): number | null => {
-  const s = raw.trim();
-  if (s === "") return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
 };
 
 const initialFromDraft = (value: NumericChipValue | undefined): string => {
@@ -69,8 +63,8 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
     to?: string;
   }) => {
     const m = next.mode ?? mode;
-    const f = parseNumber(next.from ?? fromDraft);
-    const t = parseNumber(next.to ?? toDraft);
+    const f = toNumber(next.from ?? fromDraft);
+    const t = toNumber(next.to ?? toDraft);
     switch (m) {
       case "exactly":
         if (f !== null) onApply({ mode: "exactly", exact: f });
@@ -132,8 +126,8 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
     apply({ [side]: padded });
   };
 
-  const fromNum = parseNumber(fromDraft);
-  const toNum = parseNumber(toDraft);
+  const fromNum = toNumber(fromDraft);
+  const toNum = toNumber(toDraft);
   const betweenError =
     mode === "between" && fromNum !== null && toNum !== null && fromNum > toNum;
 

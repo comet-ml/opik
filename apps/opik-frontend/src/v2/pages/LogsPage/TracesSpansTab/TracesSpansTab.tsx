@@ -388,7 +388,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.duration,
     format: "duration",
   },
-  //TODO lala "Time to first token" chip deferred. The traces.ttft / spans.ttft column and NUMBER filter wiring exist (OPIK-4347, OPIK-4348), but no shipped SDK integration writes to that column today — ADK populates metadata.time_to_first_token instead (OPIK-3900, landed before the column). SDK population is tracked under epic OPIK-4067 (OPIK-4343 in review, OPIK-4344/4345/4346 still To Do). Re-enable once SDK rollout fills the column, or aim the chip at metadata.time_to_first_token via query-builder.
   {
     id: "total_estimated_cost",
     field: "total_estimated_cost",

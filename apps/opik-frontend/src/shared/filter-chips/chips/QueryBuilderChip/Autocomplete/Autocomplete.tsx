@@ -5,16 +5,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Popover } from "@/ui/popover";
+import { Command as CommandPrimitive } from "cmdk";
+import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
+import { Command, CommandItem, CommandList } from "@/ui/command";
+import { cn } from "@/lib/utils";
 import { ChipOptionsResult } from "@/shared/filter-chips/types";
-import { filterItems } from "./helpers";
-import { AutocompleteAnchor } from "./AutocompleteAnchor";
-import { AutocompleteContent } from "./AutocompleteContent";
-import {
-  AutocompleteContext,
-  AutocompleteContextValue,
-  AutocompleteInputProps,
-} from "./AutocompleteContext";
+import { filterItems, highlightMatch } from "./helpers";
 
 interface AutocompleteProps {
   options: ChipOptionsResult;
@@ -25,10 +21,10 @@ interface AutocompleteProps {
   commitOnBlur?: boolean;
   onEscape?: () => void;
   autoFocus?: boolean;
-  children: React.ReactNode;
+  children: React.ReactElement;
 }
 
-const AutocompleteRoot: React.FC<AutocompleteProps> = ({
+const Autocomplete: React.FC<AutocompleteProps> = ({
   options,
   itemNoun,
   value,
@@ -73,73 +69,92 @@ const AutocompleteRoot: React.FC<AutocompleteProps> = ({
       setDraft(item);
       commit(item);
       onPick?.(item);
+      inputRef.current?.blur();
     },
     [commit, onPick],
   );
 
-  const inputProps = useMemo<AutocompleteInputProps>(
-    () => ({
-      ref: inputRef,
-      value: draft,
-      onChange: (event) => setDraft(event.target.value),
-      onFocus: () => setFocused(true),
-      onBlur: () => {
-        setFocused(false);
-        if (commitOnBlur) commit(draft);
-      },
-      onKeyDown: (event) => {
-        if (event.key === "Enter" && draft.trim() !== "") {
-          event.preventDefault();
-          commit(draft);
-          onPick?.(draft);
-          inputRef.current?.blur();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          if (value !== undefined) setDraft(value);
-          if (onEscape) onEscape();
-          inputRef.current?.blur();
-        }
-      },
-    }),
-    [draft, commit, commitOnBlur, onEscape, onPick, value],
-  );
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (value !== undefined) setDraft(value);
+      if (onEscape) onEscape();
+      inputRef.current?.blur();
+    }
+  };
 
-  const contextValue = useMemo<AutocompleteContextValue>(
-    () => ({
-      draft,
-      filtered,
-      isLoading,
-      hasQuery,
-      showResults,
-      showNoMatch,
-      itemNoun,
-      inputRef,
-      inputProps,
-      pick,
-    }),
-    [
-      draft,
-      filtered,
-      isLoading,
-      hasQuery,
-      showResults,
-      showNoMatch,
-      itemNoun,
-      inputProps,
-      pick,
-    ],
+  const itemClass = cn(
+    "comet-body-s rounded-[4px] px-2 py-1.5",
+    "data-[selected=true]:bg-primary-foreground",
   );
 
   return (
-    <AutocompleteContext.Provider value={contextValue}>
-      <Popover open={popoverOpen}>{children}</Popover>
-    </AutocompleteContext.Provider>
+    <Popover open={popoverOpen}>
+      <Command shouldFilter={false}>
+        <PopoverAnchor asChild>
+          <CommandPrimitive.Input
+            asChild
+            ref={inputRef}
+            value={draft}
+            onValueChange={setDraft}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false);
+              if (commitOnBlur) commit(draft);
+            }}
+            onKeyDown={handleKeyDown}
+          >
+            {children}
+          </CommandPrimitive.Input>
+        </PopoverAnchor>
+        {!popoverOpen && <CommandList aria-hidden="true" className="hidden" />}
+        <PopoverContent
+          asChild
+          align="start"
+          sideOffset={4}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => {
+            if (event.target === inputRef.current) event.preventDefault();
+          }}
+        >
+          <CommandList className="w-[--radix-popover-trigger-width] min-w-[320px] max-w-[800px] rounded-md border border-border bg-background p-1 shadow-md">
+            {isLoading && (
+              <div className="comet-body-s p-2 text-light-slate">Loading…</div>
+            )}
+            {showResults &&
+              filtered.map((item) => (
+                <CommandItem
+                  key={item}
+                  value={item}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onSelect={() => pick(item)}
+                  className={cn(itemClass, "text-foreground")}
+                >
+                  <span className="block break-all">
+                    {highlightMatch(item, draft)}
+                  </span>
+                </CommandItem>
+              ))}
+            {showNoMatch && (
+              <CommandItem
+                value={draft}
+                onMouseDown={(event) => event.preventDefault()}
+                onSelect={() => {
+                  commit(draft);
+                  inputRef.current?.blur();
+                }}
+                className={cn(itemClass, "text-light-slate")}
+              >
+                <span>
+                  No match in recent {itemNoun} — press Enter to search all
+                </span>
+              </CommandItem>
+            )}
+          </CommandList>
+        </PopoverContent>
+      </Command>
+    </Popover>
   );
 };
-
-const Autocomplete = Object.assign(AutocompleteRoot, {
-  Anchor: AutocompleteAnchor,
-  Content: AutocompleteContent,
-});
 
 export default Autocomplete;

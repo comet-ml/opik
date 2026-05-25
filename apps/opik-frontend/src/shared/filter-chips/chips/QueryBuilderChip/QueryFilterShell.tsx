@@ -68,10 +68,7 @@ export function QueryFilterShell<TRow>({
             autoFocus
             onEscape={hasRows ? () => setSearchOpen(false) : undefined}
           >
-            <Autocomplete.Anchor>
-              <Input dimension="sm" placeholder={searchPlaceholder} />
-            </Autocomplete.Anchor>
-            <Autocomplete.Content />
+            <Input dimension="sm" placeholder={searchPlaceholder} />
           </Autocomplete>
           {hasRows && (
             <button
