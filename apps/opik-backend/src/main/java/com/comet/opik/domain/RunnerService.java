@@ -30,6 +30,7 @@ import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -642,13 +643,20 @@ class RunnerServiceImpl implements RunnerService {
             // reaper passes (during the dead-runner grace period) don't re-emit.
             String typeStr = runnerMap.get(FIELD_TYPE);
             String userName = runnerMap.get(FIELD_USER_NAME);
-            analyticsService.trackEvent("opik_runner_disconnected", Map.of(
+            Map<String, String> props = new HashMap<>(Map.of(
                     "runner_id", runnerId.toString(),
                     "workspace_id", workspaceId,
-                    "user_name", userName != null ? userName : "",
-                    "runner_type", typeStr != null ? typeStr : "",
                     "reason", "reaped",
                     "date", disconnectedAt));
+            if (userName != null) {
+                props.put("user_name", userName);
+            }
+            if (typeStr != null) {
+                props.put("runner_type", typeStr);
+            }
+            // Reaper runs outside request scope (Quartz), so pass identity explicitly to
+            // avoid the installation-anonymous-ID fallback in AnalyticsService.
+            analyticsService.trackEvent("opik_runner_disconnected", props, userName);
         }
 
         Instant disconnected = Instant.parse(disconnectedAt);

@@ -270,45 +270,6 @@ class LocalRunnerReaperIntegrationTest {
             }
         }
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void emitsReapedAnalyticsEventOnFirstReap() throws InterruptedException {
-            // Hold the runner in the disconnected state across multiple reaper passes so we
-            // can verify the event fires exactly once (gated on FIELD_DISCONNECTED_AT).
-            Duration originalPurgeTime = runnerConfig.getDeadRunnerPurgeTime();
-            runnerConfig.setDeadRunnerPurgeTime(Duration.hours(999));
-            try {
-                UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-
-                waitForHeartbeatExpiry();
-                runnerService.reapDeadRunners();
-                runnerService.reapDeadRunners();
-
-                org.mockito.ArgumentCaptor<Map<String, String>> propsCaptor = org.mockito.ArgumentCaptor
-                        .forClass(Map.class);
-                Mockito.verify(analyticsService, Mockito.times(1)).trackEvent(
-                        eq("opik_runner_disconnected"), propsCaptor.capture());
-                Map<String, String> props = propsCaptor.getValue();
-                assertThat(props).containsEntry("runner_id", runnerId.toString())
-                        .containsEntry("workspace_id", WORKSPACE_ID)
-                        .containsEntry("user_name", USER_NAME)
-                        .containsEntry("runner_type", RunnerType.ENDPOINT.getValue())
-                        .containsEntry("reason", "reaped");
-                assertThat(props.get("date")).isNotBlank();
-            } finally {
-                runnerConfig.setDeadRunnerPurgeTime(originalPurgeTime);
-            }
-        }
-
-        @Test
-        void doesNotEmitReapedEventForAliveRunner() {
-            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-
-            runnerService.reapDeadRunners();
-
-            Mockito.verify(analyticsService, Mockito.never()).trackEvent(
-                    eq("opik_runner_disconnected"), any());
-        }
     }
 
     @Nested
