@@ -28,8 +28,7 @@ async function sweepOrphans(apiKey: string | null): Promise<void> {
   const backend = makeBackendClient(apiKey);
   const cutoff = Date.now() - ORPHAN_MAX_AGE_MS;
 
-  // Sweep datasets first so they don't outlive the project they reference
-  // (dataset rows do not cascade-delete with their parent project).
+  /** Sweep datasets before projects — datasets don't cascade-delete with their parent project. */
   try {
     const staleDatasets = await backend.listDatasetsWithPrefix('cuj-');
     let sweptCount = 0;

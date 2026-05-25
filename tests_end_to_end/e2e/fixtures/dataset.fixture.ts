@@ -48,9 +48,7 @@ export const test = baseTest.extend<DatasetFixtures>({
       contentType: 'application/json',
     });
     await use(ref);
-    // Datasets do NOT cascade with project deletion — they outlive their
-    // parent project (the project_id becomes a dangling reference). Delete
-    // explicitly before the project fixture tears down.
+    /** Datasets don't cascade with project deletion — explicit delete required. */
     if (!shouldLeaveArtifacts(testInfo)) {
       try {
         await backendClient.deleteDataset(created.id);
