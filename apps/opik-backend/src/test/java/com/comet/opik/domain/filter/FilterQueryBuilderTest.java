@@ -35,7 +35,7 @@ class FilterQueryBuilderTest {
     }
 
     @Test
-    void toAnalyticsDbFilters__whenTraceErrorInfoContains__thenSearchesErrorInfoJson() {
+    void toAnalyticsDbFilters__whenTraceErrorInfoContains__thenSearchesKnownErrorInfoFields() {
         var filter = TraceFilter.builder()
                 .field(TraceField.ERROR_INFO)
                 .operator(Operator.CONTAINS)
@@ -45,11 +45,15 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.TRACE);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("ilike(error_info, CONCAT('%', :filter0 ,'%'))"));
+                .contains("simpleJSONExtractString(error_info, 'exception_type')")
+                .contains("simpleJSONExtractString(error_info, 'message')")
+                .contains("simpleJSONExtractString(error_info, 'traceback')")
+                .contains("ilike(trimBoth(concat(")
+                .doesNotContain("ilike(error_info"));
     }
 
     @Test
-    void toAnalyticsDbFilters__whenSpanErrorInfoDoesNotContain__thenSearchesNonEmptyErrorInfoJson() {
+    void toAnalyticsDbFilters__whenSpanErrorInfoDoesNotContain__thenSearchesNonEmptyKnownErrorInfoFields() {
         var filter = SpanFilter.builder()
                 .field(SpanField.ERROR_INFO)
                 .operator(Operator.NOT_CONTAINS)
@@ -59,8 +63,12 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("notEmpty(error_info)")
-                .contains("notILike(error_info, CONCAT('%', :filter0 ,'%'))"));
+                .contains("notEmpty(trimBoth(concat(")
+                .contains("simpleJSONExtractString(error_info, 'exception_type')")
+                .contains("simpleJSONExtractString(error_info, 'message')")
+                .contains("simpleJSONExtractString(error_info, 'traceback')")
+                .contains("notILike(trimBoth(concat(")
+                .doesNotContain("notILike(error_info"));
     }
 
     @Test
@@ -206,7 +214,7 @@ class FilterQueryBuilderTest {
     }
 
     @Test
-    void toAnalyticsDbFilters__whenErrorInfoKeyIsUnsupported__thenSearchesProvidedKey() {
+    void toAnalyticsDbFilters__whenErrorInfoKeyIsUnsupported__thenDoesNotMatchUnsupportedField() {
         var filter = SpanFilter.builder()
                 .field(SpanField.ERROR_INFO)
                 .key("unknown")
@@ -219,14 +227,14 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("ilike(simpleJSONExtractString(error_info, :filterKey0), CONCAT('%', :filter0 ,'%'))"));
+                .contains("ilike('', CONCAT('%', :filter0 ,'%'))"));
 
         assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.SPAN))
-                .containsEntry("filterKey0", "unknown");
+                .doesNotContainKey("filterKey0");
     }
 
     @Test
-    void toAnalyticsDbFilters__whenErrorInfoKeyContainsQuote__thenBindsProvidedKey() {
+    void toAnalyticsDbFilters__whenErrorInfoKeyContainsQuote__thenDoesNotInlineProvidedKey() {
         var filter = SpanFilter.builder()
                 .field(SpanField.ERROR_INFO)
                 .key("bad'key")
@@ -237,10 +245,11 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("ilike(simpleJSONExtractString(error_info, :filterKey0), CONCAT('%', :filter0 ,'%'))"));
+                .contains("ilike('', CONCAT('%', :filter0 ,'%'))")
+                .doesNotContain("bad'key"));
 
         assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.SPAN))
-                .containsEntry("filterKey0", "bad'key");
+                .doesNotContainKey("filterKey0");
     }
 
     private static Stream<Arguments> errorInfoLiteralTextFilters() {

@@ -99,6 +99,11 @@ public class FilterQueryBuilder {
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
     private static final String ERROR_INFO_FIELD_DB_TEMPLATE = "simpleJSONExtractString(error_info, :filterKey%d)";
+    private static final String ERROR_INFO_TEXT_DB = "trimBoth(concat(%s, ' ', %s, ' ', %s))".formatted(
+            errorInfoFieldDb(ErrorInfoFilterKeys.EXCEPTION_TYPE),
+            errorInfoFieldDb(ErrorInfoFilterKeys.MESSAGE),
+            errorInfoFieldDb(ErrorInfoFilterKeys.TRACEBACK));
+    private static final String EMPTY_STRING_DB = "''";
     private static final String ERROR_TYPE_DB = "simpleJSONExtractString(error_info, 'exception_type')";
     private static final String STATUS_DB = "status";
     public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
@@ -964,8 +969,14 @@ public class FilterQueryBuilder {
     }
 
     private static String getAnalyticsDbField(Filter filter, FilterStrategy filterStrategy, int i) {
-        if (filter.field().getType() == FieldType.ERROR_CONTAINER && StringUtils.isNotBlank(filter.key())) {
-            return ERROR_INFO_FIELD_DB_TEMPLATE.formatted(i);
+        if (filter.field().getType() == FieldType.ERROR_CONTAINER) {
+            if (StringUtils.isBlank(filter.key())) {
+                return ERROR_INFO_TEXT_DB;
+            }
+
+            return ErrorInfoFilterKeys.supportedJsonKey(filter.key())
+                    .map(ignored -> ERROR_INFO_FIELD_DB_TEMPLATE.formatted(i))
+                    .orElse(EMPTY_STRING_DB);
         }
 
         return getAnalyticsDbField(filter.field(), filterStrategy, i);
@@ -1094,8 +1105,7 @@ public class FilterQueryBuilder {
                     }
                 }
 
-                if (StringUtils.isNotBlank(filter.key())
-                        && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
+                if (shouldBindFilterKey(filter)) {
                     var key = getKey(filter);
                     statement = statement.bind("filterKey%d".formatted(i), key);
                 }
@@ -1170,8 +1180,7 @@ public class FilterQueryBuilder {
             }
 
             // Handle filter keys for DICTIONARY fields
-            if (StringUtils.isNotBlank(filter.key())
-                    && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
+            if (shouldBindFilterKey(filter)) {
                 var key = getKey(filter);
                 stateSQLMapping.put("filterKey%d".formatted(i), key);
             }
@@ -1218,6 +1227,20 @@ public class FilterQueryBuilder {
         }
 
         return "%s.%s".formatted(JSONPATH_ROOT, filter.key());
+    }
+
+    private static boolean shouldBindFilterKey(Filter filter) {
+        if (StringUtils.isBlank(filter.key())
+                || !KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
+            return false;
+        }
+
+        return filter.field().getType() != FieldType.ERROR_CONTAINER
+                || ErrorInfoFilterKeys.supportedJsonKey(filter.key()).isPresent();
+    }
+
+    private static String errorInfoFieldDb(String field) {
+        return "simpleJSONExtractString(error_info, '%s')".formatted(field);
     }
 
     /**

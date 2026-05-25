@@ -33,32 +33,42 @@ vi.mock("@/shared/SelectBox/SelectBox", () => ({
 
 describe("ErrorInfoFieldSelect", () => {
   it("selects a field and clears back to all fields", () => {
+    // Arrange
     const onValueChange = vi.fn();
-
     render(
       <ErrorInfoFieldSelect value="message" onValueChange={onValueChange} />,
     );
 
+    // Assert
     expect(screen.getByTestId("filter-error-info-field")).toHaveTextContent(
       "message",
     );
 
+    // Act
     fireEvent.click(screen.getByRole("button", { name: "Traceback" }));
+
+    // Assert
     expect(onValueChange).toHaveBeenCalledWith("traceback");
 
+    // Act
     fireEvent.click(screen.getByRole("button", { name: "All fields" }));
+
+    // Assert
     expect(onValueChange).toHaveBeenCalledWith("");
   });
 
   it("forwards the caller test id", () => {
+    // Arrange
+    const onValueChange = vi.fn();
     render(
       <ErrorInfoFieldSelect
         value="message"
-        onValueChange={vi.fn()}
+        onValueChange={onValueChange}
         data-testid="custom-error-info-field"
       />,
     );
 
+    // Assert
     expect(screen.getByTestId("custom-error-info-field")).toHaveTextContent(
       "message",
     );

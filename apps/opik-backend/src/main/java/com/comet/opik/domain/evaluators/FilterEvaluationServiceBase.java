@@ -150,7 +150,10 @@ public abstract class FilterEvaluationServiceBase<E> {
         if (!hasNonEmptyErrorInfo(errorInfo)) {
             return null;
         }
-        return extractStringFromJson(errorInfo);
+        return StringUtils.trimToEmpty("%s %s %s".formatted(
+                StringUtils.defaultString(errorInfo.exceptionType()),
+                StringUtils.defaultString(errorInfo.message()),
+                StringUtils.defaultString(errorInfo.traceback())));
     }
 
     protected Object extractErrorInfoValue(ErrorInfo errorInfo, String key) {
@@ -180,7 +183,7 @@ public abstract class FilterEvaluationServiceBase<E> {
             case ErrorInfoFilterKeys.MESSAGE -> errorInfo.message();
             case ErrorInfoFilterKeys.TRACEBACK -> errorInfo.traceback();
             default -> {
-                log.warn(
+                log.debug(
                         "Unknown ErrorInfo field key. Supported keys: %s. Provided: '{}'"
                                 .formatted(ErrorInfoFilterKeys.SUPPORTED_KEYS),
                         key);

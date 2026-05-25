@@ -1330,7 +1330,7 @@ class SpanFilterEvaluationServiceTest {
         }
 
         @Test
-        void matchesFilterWithErrorInfoContainsSearchesSerializedJson() {
+        void matchesFilterWithErrorInfoContainsDoesNotSearchFieldNames() {
             // Given
             var errorInfo = ErrorInfo.builder()
                     .exceptionType("asyncio.exceptions.CancelledError")
@@ -1350,7 +1350,7 @@ class SpanFilterEvaluationServiceTest {
             var result = spanFilterEvaluationService.matchesFilter(filter, span);
 
             // Then
-            assertThat(result).isTrue();
+            assertThat(result).isFalse();
         }
 
         @Test
