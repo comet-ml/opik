@@ -65,6 +65,19 @@ The intent of this split:
 
 [High-level description of what needs to be implemented. Phrased so QA can derive test cases. Must describe the same thing the ticket title promises — title and WHAT are two views of the same scope. Avoid implementation specifics here — those belong in the HOW comment.]
 
+### Functional Requirements (optional)
+
+[Include when the WHAT has more than a couple of distinct behaviors worth enumerating, or when the acceptance criteria alone won't carry the full picture for a reader. Skip for simple tickets where the WHAT prose already says everything.]
+
+- [What the system should DO]
+- [Another behavior]
+
+### Non-Functional Requirements (optional)
+
+[Include when the ticket has performance, security, scalability, accessibility, or compatibility constraints that don't naturally fit in acceptance criteria. Skip when there are none worth calling out.]
+
+- [Performance / security / scalability / accessibility / compatibility constraint]
+
 ### Acceptance Criteria
 
 - [ ] [Criterion 1 — observable behavior or outcome]
