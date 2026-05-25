@@ -31,7 +31,7 @@ jobs:
                   echo "$OUTPUT"
                   URL=$(echo "$OUTPUT" | grep -oP 'Published docs to \K.*(?= \()')
                   echo "Preview URL: $URL"
-                  echo "URL=$URL" >> $GITHUB_OUTPUT
+                  echo "URL=$URL" >> "$GITHUB_OUTPUT"
                   echo "🌿 Preview your docs: $URL" > preview_url.txt
 
             - name: Check for broken links
@@ -61,18 +61,22 @@ jobs:
                 ' linkinator_results.json)
                 
                 if [ -n "$BROKEN_LINKS" ]; then
-                  echo "**The following broken links were found:**" >> preview_url.txt
-                  echo "" >> preview_url.txt
-                  echo "$BROKEN_LINKS" >> preview_url.txt
+                  {
+                    echo "**The following broken links were found:**"
+                    echo ""
+                    echo "$BROKEN_LINKS"
+                  } >> preview_url.txt
                 else
                   echo "No broken links found" >> preview_url.txt
                 fi
-                
+
                 rm -f linkinator_results.json
 
-                echo "" >> preview_url.txt
-                echo "---" >> preview_url.txt
-                echo "📌 Results for commit ${{ github.sha }}" >> preview_url.txt
+                {
+                  echo ""
+                  echo "---"
+                  echo "📌 Results for commit ${{ github.sha }}"
+                } >> preview_url.txt
 
             - name: Comment URL in PR
               uses: thollander/actions-comment-pull-request@v3

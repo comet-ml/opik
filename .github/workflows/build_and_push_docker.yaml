@@ -68,13 +68,15 @@ jobs:
             BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"platform":"arm64"}]')
           fi
           
-          echo "build_matrix<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$BUILD_MATRIX" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          
-          echo "merge_matrix<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MERGE_MATRIX" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "build_matrix<<EOF"
+            echo "$BUILD_MATRIX"
+            echo "EOF"
+
+            echo "merge_matrix<<EOF"
+            echo "$MERGE_MATRIX"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     needs: generate-matrix

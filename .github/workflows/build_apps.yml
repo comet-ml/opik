@@ -97,15 +97,15 @@ jobs:
                 VERSION="${BASE_VERSION}-${fixedBranchName}-${{ github.run_number }}"
               fi
             fi
-            echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
-            echo "Version is ${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "version=${VERSION}" | tee -a "$GITHUB_OUTPUT"
+            echo "Version is ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
             if [ "${{inputs.ref}}" != "" ]; then
-              echo "build_from=${{inputs.ref}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{inputs.ref}}" | tee -a "$GITHUB_OUTPUT"
             elif [[ "${{inputs.version}}" == "" ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{github.ref_name}}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{inputs.version}}" | tee -a "$GITHUB_OUTPUT"
             fi
             
   build-backend:
