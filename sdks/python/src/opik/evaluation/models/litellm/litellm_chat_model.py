@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 import opik.semantic_version as semantic_version
 import opik.config as opik_config
 
-from .. import base_model
+from .. import base_model, model_name_helper
 from . import warning_filters, response_parser, util
 from opik import exceptions
 
@@ -129,17 +129,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 provider,
             )
 
-    def _is_anthropic_model_name(self) -> bool:
-        """Whether the configured model resolves to Anthropic.
-
-        We can't use `models_factory._is_anthropic_model` here without
-        creating an import cycle, so the check is duplicated locally.
-        Matches the factory's predicate (`anthropic/` prefix or bare
-        `claude` name) so the two stay in sync.
-        """
-        name = self.model_name
-        return name.startswith("anthropic/") or name.startswith("claude")
-
     def _check_model_name(self) -> None:
         import litellm
 
@@ -251,7 +240,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         `self._completion_kwargs` and the other in per-call kwargs.
         """
         resolved = {**effective_kwargs}
-        if "reasoning_effort" in resolved and self._is_anthropic_model_name():
+        if "reasoning_effort" in resolved and model_name_helper.is_anthropic_model(
+            self.model_name
+        ):
             temperature = resolved.get("temperature")
             if temperature is not None and temperature != 1:
                 resolved.pop("reasoning_effort")

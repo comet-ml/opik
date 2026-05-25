@@ -255,7 +255,7 @@ def test_litellm_chat_model_drops_reasoning_effort_for_bare_claude_when_temperat
     monkeypatch,
 ):
     # Same drop must trigger for the bare `claude-...` form too,
-    # matching `models_factory._is_anthropic_model`'s predicate.
+    # matching `model_name_helper.is_anthropic_model`'s predicate.
     stub = _install_litellm_stub(
         monkeypatch,
         supported_params=["temperature", "response_format", "reasoning_effort"],
