@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import FilterManagerPopover, {
   chipHasAppliedValue,
 } from "@/shared/filter-chips/FilterManagerPopover/FilterManagerPopover";
+import ChipShell from "@/shared/filter-chips/chips/BaseChip/ChipShell";
 import SingleSelectChip from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip";
 import PseudoSearchChip from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip";
 import BooleanChip from "@/shared/filter-chips/chips/BooleanChip/BooleanChip";
@@ -157,21 +158,10 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
         onUnpinChip={onUnpinChip}
         onRequestOpenChip={onOpenChipIdChange}
         trigger={
-          <button
-            type="button"
-            aria-expanded={managerOpen}
-            className={cn(
-              "flex h-6 shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap rounded-[20px] border border-solid border-border bg-soft-background px-2 py-0.5 outline-none transition-colors",
-              "comet-body-xs-accented text-muted-slate",
-              "hover:border-secondary hover:bg-primary-100 hover:text-primary-hover",
-              managerOpen &&
-                "border-secondary bg-primary-100 text-primary-active",
-              "focus-visible:ring-2 focus-visible:ring-primary-active/40",
-            )}
-          >
+          <ChipShell isOpen={managerOpen}>
             <Plus className="size-3 shrink-0" />
             <span>Add filter</span>
-          </button>
+          </ChipShell>
         }
       />
 

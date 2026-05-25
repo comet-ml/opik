@@ -9,14 +9,12 @@ import {
   FromFiltersResult,
 } from "@/shared/filter-chips/lib/sanitizeFilters.types";
 
-const trimValue = (raw: Filter["value"]): string => String(raw ?? "").trim();
+const trimValue = (raw: Filter["value"] | undefined | null): string =>
+  String(raw ?? "").trim();
 
 export const isPseudoSearchApplied = (
   value: PseudoSearchChipValue | undefined,
-): boolean => {
-  if (!value) return false;
-  return typeof value.value === "string" && value.value.trim() !== "";
-};
+): boolean => trimValue(value?.value) !== "";
 
 export const pseudoSearchToFilters = (
   value: PseudoSearchChipValue | undefined,
@@ -24,7 +22,7 @@ export const pseudoSearchToFilters = (
 ): Filter[] => {
   if (!isPseudoSearchApplied(value) || !value) return [];
 
-  const trimmed = value.value.trim();
+  const trimmed = trimValue(value.value);
   return [
     {
       id: definition.id,
@@ -78,7 +76,7 @@ export const formatPseudoSearchSummary = (
   definition: PseudoSearchChipDefinition,
 ): string | null => {
   if (!isPseudoSearchApplied(value) || !value) return null;
-  const trimmed = value.value.trim();
+  const trimmed = trimValue(value.value);
   if (definition.searchMode === "equals" && trimmed.length > 3) {
     return `...${trimmed.slice(-3)}`;
   }

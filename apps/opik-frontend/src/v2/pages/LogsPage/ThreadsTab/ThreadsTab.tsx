@@ -100,8 +100,6 @@ const getRowId = (d: Thread) => d.id;
 
 const REFETCH_INTERVAL = 30000;
 
-//TODO lala verify all external and internal link that can use filters to prefiter some data on the logs pages
-
 const SHARED_COLUMNS: ColumnData<Thread>[] = [
   {
     id: "first_message",

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
 import {
@@ -17,12 +17,6 @@ interface PseudoSearchChipPopoverContentProps {
 const PseudoSearchChipPopoverContent: React.FC<
   PseudoSearchChipPopoverContentProps
 > = ({ definition, value, onApply, onClear, onCommit }) => {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
   const inputLabel = definition.inputLabel ?? `Search by ${definition.label}`;
 
   const handleChange = (
@@ -50,7 +44,7 @@ const PseudoSearchChipPopoverContent: React.FC<
           {inputLabel}
         </label>
         <DebounceInput
-          ref={inputRef}
+          autoFocus
           dimension="sm"
           value={value?.value ?? ""}
           onValueChange={handleChange}
