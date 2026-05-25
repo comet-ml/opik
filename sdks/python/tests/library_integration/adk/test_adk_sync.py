@@ -1480,6 +1480,14 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
     semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
     reason="Test only applies to ADK versions > 1.3.0",
 )
+# Even with `instruction="Always transfer the user's message to the Translator
+# sub-agent. Do not translate yourself."`, gemini-2.5-flash occasionally
+# decides to answer directly without invoking the sub-agent, which collapses
+# the expected ``Translator`` span out of the trace and fails the deep-assert.
+# This is genuine LLM non-determinism rather than an SDK issue — we accept
+# up to two reruns so the test only goes red when the SDK is genuinely
+# broken, not when the model has a bad day.
+@pytest.mark.flaky(reruns=2, reruns_delay=5)
 def test_adk__transfer_to_agent__tracked_and_span_created(
     fake_backend,
 ):
