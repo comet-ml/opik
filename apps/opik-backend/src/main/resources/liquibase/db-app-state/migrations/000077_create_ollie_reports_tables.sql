@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset miguelg:000069_create_ollie_reports_tables
+--changeset miguelg:000077_create_ollie_reports_tables
 --comment: Create tables for Ollie daily reports and report preferences
 
 CREATE TABLE IF NOT EXISTS ollie_reports (
@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS ollie_reports (
     project_id CHAR(36) NOT NULL,
     session_id CHAR(36) NULL,
     content MEDIUMTEXT NULL,
+    recommended_actions JSON NULL,
     status ENUM('pending', 'completed', 'failed') NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),

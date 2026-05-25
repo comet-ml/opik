@@ -1,6 +1,13 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useParams } from "@tanstack/react-router";
-import { AlertTriangle, Loader2, Play, Pause, Settings2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Lightbulb,
+  Loader2,
+  Play,
+  Pause,
+  Settings2,
+} from "lucide-react";
 import briefingBulbIcon from "@/icons/briefing-bulb.svg";
 import briefingBubbleIcon from "@/icons/briefing-bubble.svg";
 import { formatRelativeDateTime, formatUtcTimeAsLocal } from "@/lib/date";
@@ -19,7 +26,11 @@ import useReports from "@/api/projects/useReports";
 import useReportPreference from "@/api/projects/useReportPreference";
 import useGenerateReportMutation from "@/api/projects/useGenerateReportMutation";
 import useUpdateReportPreferenceMutation from "@/api/projects/useUpdateReportPreferenceMutation";
-import { OllieReport, ReportStatus } from "@/types/ollie-reports";
+import {
+  OllieReport,
+  RecommendedAction,
+  ReportStatus,
+} from "@/types/ollie-reports";
 import ReportPanel from "./ReportPanel";
 
 function LoadingSkeleton() {
@@ -194,9 +205,16 @@ function ReportRow({
   report: OllieReport;
   onSelect: (report: OllieReport) => void;
 }) {
+  const actionCount = report.recommended_actions?.length ?? 0;
   return (
     <BriefingRow onClick={() => onSelect(report)}>
       <span>{formatRelativeDateTime(report.created_at)}</span>
+      {actionCount > 0 && (
+        <span className="flex items-center gap-1 text-muted-slate">
+          <Lightbulb className="size-3" />
+          {actionCount} {actionCount === 1 ? "action" : "actions"}
+        </span>
+      )}
     </BriefingRow>
   );
 }
@@ -355,7 +373,6 @@ export default function DailyBriefingSection() {
   const [selectedReport, setSelectedReport] = useState<OllieReport | null>(
     null,
   );
-
   const { data: preference, isPending: isPreferencePending } =
     useReportPreference({ projectId });
   const isEnabled = preference?.enabled ?? false;
@@ -421,6 +438,11 @@ export default function DailyBriefingSection() {
 
   const handleSelectReport = (report: OllieReport) => {
     setSelectedReport(report);
+  };
+
+  const handleStartConversation = (action: RecommendedAction) => {
+    setSelectedReport(null);
+    window.opikBridge?.startConversation(action.prompt);
   };
 
   const isLoading = isPreferencePending || (isEnabled && isReportsPending);
@@ -489,12 +511,14 @@ export default function DailyBriefingSection() {
           ))}
 
           {!showMore && completedReports.length > 3 && (
-            <button
-              className="text-sm font-medium underline"
+            <Button
+              variant="ghost"
+              size="2xs"
+              className="mt-1 h-auto self-start p-0 text-muted-slate"
               onClick={() => setShowMore(true)}
             >
               Show more
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -519,6 +543,7 @@ export default function DailyBriefingSection() {
       <ReportPanel
         report={selectedReport}
         onClose={() => setSelectedReport(null)}
+        onStartConversation={handleStartConversation}
       />
     </section>
   );
