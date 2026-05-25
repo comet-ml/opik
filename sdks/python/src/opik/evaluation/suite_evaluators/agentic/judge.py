@@ -90,19 +90,22 @@ class AgenticLLMJudge:
         # so capable models receive a richer first-turn view and need
         # fewer drill-in `read` calls.
         budget = strategy_selector.compute_budget_tokens(self._model.model_name)
-        _, overview = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=ctx.trace,
             spans=ctx.spans,
             parent_by_child=ctx.parent_by_child,
             budget_tokens=budget,
         )
-        # Derived from the rendered overview rather than from the chosen
-        # ladder tier: the sizer may pick a finite tier whose per-field
-        # limit no real field actually exceeds, which would otherwise
-        # mark the overview as "truncated" when it's intact. The "no
-        # `read` after truncated overview" warning depends on this
-        # distinction being honest.
-        overview_truncated = span_tree_serializer.overview_has_truncations(overview)
+        overview = sized.overview
+        # Flag comes from `_truncate_text` itself — the truncators set it
+        # only when they actually trim a field. Inferring from the chosen
+        # ladder tier would over-report (a finite tier whose limit no
+        # field exceeds yields an intact overview); scanning the rendered
+        # output for the suffix template would under-defend (user content
+        # can legitimately quote that text). The "no `read` after
+        # truncated overview" warning depends on this being honest in
+        # both directions.
+        overview_truncated = sized.has_truncations
         user_prompt = prompt.AGENTIC_JUDGE_USER_TEMPLATE.format(
             assertions=schema.format_assertions(),
             input=_format_value(ctx.trace.input),

@@ -48,55 +48,55 @@ def _span(span_id, payload):
 class TestPickOverviewIoCharLimit:
     def test_small_trace_large_budget__picks_top_of_ladder(self):
         """Tiny trace, generous budget → return the no-truncation tier."""
-        limit, overview = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(),
             spans=[_span("s1", {"x": "y"})],
             parent_by_child={"s1": None},
             budget_tokens=1_000_000,
             ladder=None,
         )
-        assert limit == span_tree_serializer.NO_OVERVIEW_TRUNCATION
-        assert limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[0]
+        assert sized.limit == span_tree_serializer.NO_OVERVIEW_TRUNCATION
+        assert sized.limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[0]
         # Returned overview matches what a direct render at that limit
         # would produce — the sizer's render is reused.
         expected = span_tree_serializer.serialize_overview(
             _trace(),
             [_span("s1", {"x": "y"})],
             {"s1": None},
-            io_char_limit=limit,
+            io_char_limit=sized.limit,
         )
-        assert overview == expected
+        assert sized.overview == expected.overview
 
     def test_large_field_fits_budget__no_truncation_tier_used(self):
         """A single big field + tiny rest, with a budget large enough to
         absorb it, should pick the no-truncation tier and produce an
         un-truncated overview."""
         big = "x" * 150_000
-        limit, overview = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(),
             spans=[_span("s1", {"data": big})],
             parent_by_child={"s1": None},
             budget_tokens=1_000_000,
             ladder=None,
         )
-        assert limit == span_tree_serializer.NO_OVERVIEW_TRUNCATION
-        span_input = overview["spans"][0]["input"]
+        assert sized.limit == span_tree_serializer.NO_OVERVIEW_TRUNCATION
+        span_input = sized.overview["spans"][0]["input"]
         assert "[TRUNCATED" not in span_input
 
     def test_huge_trace_tiny_budget__falls_back_to_floor(self):
         """Trace exceeds every ladder entry → caller gets the floor."""
         big = "x" * 200_000
-        limit, overview = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(input_payload={"prompt": big}),
             spans=[_span("s1", {"data": big})],
             parent_by_child={"s1": None},
             budget_tokens=100,
             ladder=None,
         )
-        assert limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[-1]
+        assert sized.limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[-1]
         # Floor overview is still returned (no extra render needed by
         # the caller).
-        assert "[TRUNCATED" in overview["trace"]["input"]
+        assert "[TRUNCATED" in sized.overview["trace"]["input"]
 
     def test_picks_largest_entry_that_fits(self):
         """Budget midway through the ladder → first fitting entry wins."""
@@ -105,7 +105,7 @@ class TestPickOverviewIoCharLimit:
         # not the (larger) first.
         target = span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[1]
         big = "x" * (target * 4)  # enough to make even target trip its limit
-        overview_at_target = span_tree_serializer.serialize_overview(
+        at_target = span_tree_serializer.serialize_overview(
             _trace(input_payload={"prompt": big}),
             [_span("s1", {"data": big})],
             {"s1": None},
@@ -114,23 +114,23 @@ class TestPickOverviewIoCharLimit:
         # Budget = exactly the size of the target-rendered overview. The
         # ladder entry above `target` produces a strictly larger render,
         # so the sizer should land on `target`.
-        budget = tokens.estimate_tokens(overview_at_target)
-        chosen, _ = span_tree_serializer.pick_overview_io_char_limit(
+        budget = tokens.estimate_tokens(at_target.overview)
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(input_payload={"prompt": big}),
             spans=[_span("s1", {"data": big})],
             parent_by_child={"s1": None},
             budget_tokens=budget,
             ladder=None,
         )
-        assert chosen == target
+        assert sized.limit == target
 
     def test_zero_budget__returns_floor(self):
-        limit, overview = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(), spans=[], parent_by_child={}, budget_tokens=0, ladder=None
         )
-        assert limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[-1]
+        assert sized.limit == span_tree_serializer.OVERVIEW_IO_LIMIT_LADDER[-1]
         # Overview still produced for the zero-budget shortcut.
-        assert overview["trace"]["id"] == "t-1"
+        assert sized.overview["trace"]["id"] == "t-1"
 
     def test_empty_ladder__raises(self):
         with pytest.raises(ValueError):
@@ -144,14 +144,14 @@ class TestPickOverviewIoCharLimit:
 
     def test_custom_ladder_is_honored(self):
         # Tiny budget, custom ladder; floor entry should still come back.
-        chosen, _ = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(),
             spans=[],
             parent_by_child={},
             budget_tokens=1,
             ladder=(50_000, 100),
         )
-        assert chosen == 100
+        assert sized.limit == 100
 
     def test_monkeypatched_module_ladder_is_honored(self, monkeypatch):
         """Regression: function defaults are evaluated at definition
@@ -169,78 +169,78 @@ class TestPickOverviewIoCharLimit:
         )
 
         big = "x" * 5_000
-        chosen, overview = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(input_payload={"prompt": big}),
             spans=[],
             parent_by_child={},
             budget_tokens=1_000_000,  # would normally pick NO_OVERVIEW_TRUNCATION
             ladder=None,
         )
-        assert chosen == span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
-        assert "[TRUNCATED" in overview["trace"]["input"]
+        assert sized.limit == span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
+        assert "[TRUNCATED" in sized.overview["trace"]["input"]
 
 
 class TestOverviewHasTruncations:
-    """The detector underpins the agentic loop's
-    "verdict-without-`read`-after-truncation" warning. Direct evidence
-    from the rendered overview beats inferring truncation from the
-    sizer's chosen tier — see the docstring on `overview_has_truncations`.
+    """The truncation flag underpins the agentic loop's
+    "verdict-without-`read`-after-truncation" warning. The flag is
+    sourced directly from `_truncate_text`, so it stays correct even
+    when user content quotes the truncation suffix verbatim — and it
+    correctly reads False when no field actually exceeded its limit,
+    regardless of which ladder tier the sizer happened to pick.
     """
 
-    def test_no_long_fields__returns_false(self):
-        overview = span_tree_serializer.serialize_overview(
+    def test_no_long_fields__has_truncations_is_false(self):
+        result = span_tree_serializer.serialize_overview(
             _trace(),
             [_span("s1", {"x": "y"})],
             {"s1": None},
             io_char_limit=span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT,
         )
-        assert span_tree_serializer.overview_has_truncations(overview) is False
+        assert result.has_truncations is False
 
-    def test_long_field_truncated__returns_true(self):
+    def test_long_field_truncated__has_truncations_is_true(self):
         big = "x" * 5_000
-        overview = span_tree_serializer.serialize_overview(
+        result = span_tree_serializer.serialize_overview(
             _trace(input_payload={"prompt": big}),
             spans=[],
             parent_by_child={},
             io_char_limit=span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT,
         )
-        assert span_tree_serializer.overview_has_truncations(overview) is True
+        assert result.has_truncations is True
 
-    def test_truncation_in_span_field__returns_true(self):
-        # Sanity: the detector walks into spans too, not just the trace.
+    def test_truncation_in_span_field__has_truncations_is_true(self):
+        # Sanity: span-level truncation flows up too, not just trace.
         big = "x" * 5_000
-        overview = span_tree_serializer.serialize_overview(
+        result = span_tree_serializer.serialize_overview(
             _trace(),
             [_span("s1", {"data": big})],
             {"s1": None},
             io_char_limit=span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT,
         )
-        assert span_tree_serializer.overview_has_truncations(overview) is True
+        assert result.has_truncations is True
 
-    def test_no_truncation_tier_with_huge_fields__returns_false(self):
+    def test_no_truncation_tier_with_huge_fields__has_truncations_is_false(self):
         # At the no-truncation tier nothing is truncated, regardless of
-        # field size — confirms we're not accidentally keying off field
-        # length rather than the marker.
+        # field size.
         big = "x" * 50_000
-        overview = span_tree_serializer.serialize_overview(
+        result = span_tree_serializer.serialize_overview(
             _trace(input_payload={"prompt": big}),
             spans=[],
             parent_by_child={},
             io_char_limit=span_tree_serializer.NO_OVERVIEW_TRUNCATION,
         )
-        assert span_tree_serializer.overview_has_truncations(overview) is False
+        assert result.has_truncations is False
 
-    def test_floor_tier_chosen_but_no_field_long_enough__returns_false(self):
+    def test_floor_tier_chosen_but_no_field_long_enough__has_truncations_is_false(self):
         """Regression: a sizer that picks the floor tier (e.g. because
         a test monkeypatched the ladder) does NOT imply truncation
         happened. If every actual field is under the floor's per-field
-        limit, no marker is emitted and the detector must return False.
-        Previously this case was misclassified as 'truncated overview'
-        because the flag was inferred from
-        `chosen_limit != NO_OVERVIEW_TRUNCATION`.
+        limit, the flag must read False. Previously this case was
+        misclassified as 'truncated overview' because the flag was
+        inferred from `chosen_limit != NO_OVERVIEW_TRUNCATION`.
         """
         # All fields well under the 500-char floor.
-        limit, overview = span_tree_serializer.pick_overview_io_char_limit(
+        sized = span_tree_serializer.pick_overview_io_char_limit(
             trace=_trace(input_payload={"q": "tiny"}),
             spans=[_span("s1", {"k": "also tiny"})],
             parent_by_child={"s1": None},
@@ -249,8 +249,23 @@ class TestOverviewHasTruncations:
         )
         # Sizer's chosen tier is finite (the floor), but no field was
         # actually long enough to trip truncation.
-        assert limit == span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
-        assert span_tree_serializer.overview_has_truncations(overview) is False
+        assert sized.limit == span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
+        assert sized.has_truncations is False
+
+    def test_user_content_quotes_truncation_suffix__has_truncations_is_false(self):
+        """Regression: previously, any string containing the substring
+        '[TRUNCATED ' was flagged as truncated. A user span input that
+        legitimately quotes that text — without any field exceeding its
+        limit — must not trip the flag.
+        """
+        quoted = "log line: [TRUNCATED 42 chars — example from docs]"
+        result = span_tree_serializer.serialize_overview(
+            _trace(input_payload={"q": quoted}),
+            [_span("s1", {"k": quoted})],
+            {"s1": None},
+            io_char_limit=span_tree_serializer.NO_OVERVIEW_TRUNCATION,
+        )
+        assert result.has_truncations is False
 
 
 class TestSerializeOverviewIoLimitParam:
@@ -262,8 +277,8 @@ class TestSerializeOverviewIoLimitParam:
             parent_by_child={},
         )
         # Default applies → truncation marker appears, original length lost.
-        assert "[TRUNCATED" in result["trace"]["input"]
-        assert len(result["trace"]["input"]) < len(big)
+        assert "[TRUNCATED" in result.overview["trace"]["input"]
+        assert len(result.overview["trace"]["input"]) < len(big)
 
     def test_explicit_large_limit__no_truncation(self):
         big = "x" * 5_000
@@ -273,7 +288,7 @@ class TestSerializeOverviewIoLimitParam:
             parent_by_child={},
             io_char_limit=50_000,
         )
-        assert "[TRUNCATED" not in result["trace"]["input"]
+        assert "[TRUNCATED" not in result.overview["trace"]["input"]
 
 
 class TestComputeBudgetTokens:

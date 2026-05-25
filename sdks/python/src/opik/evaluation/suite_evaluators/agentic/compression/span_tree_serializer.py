@@ -10,7 +10,7 @@ Python's dataclass shape forces it.
 import datetime
 import json
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 from opik.message_processing.emulation import models
 
@@ -72,12 +72,31 @@ TRUNCATED_SUFFIX_TEMPLATE = (
     "to see full]"
 )
 
-# Unique substring that appears in any value emitted by `_truncate_text`
-# when actual truncation happened. Used by `overview_has_truncations`
-# to detect whether the rendered overview contains hidden content the
-# judge would need `read` to recover. Keeping it as a module constant
-# means the detector stays in lockstep with the template.
-_TRUNCATED_MARKER = "[TRUNCATED "
+
+class _TruncatedValue(NamedTuple):
+    """A field value paired with whether `_truncate_text` had to trim it."""
+
+    value: Any
+    truncated: bool
+
+
+class OverviewResult(NamedTuple):
+    """Output of `serialize_overview`: the rendered overview plus an
+    authoritative flag for whether any field was truncated.
+    """
+
+    overview: Dict[str, Any]
+    has_truncations: bool
+
+
+class SizedOverview(NamedTuple):
+    """Output of `pick_overview_io_char_limit`: chosen ladder entry, the
+    overview rendered at that limit, and whether truncation happened.
+    """
+
+    limit: int
+    overview: Dict[str, Any]
+    has_truncations: bool
 
 
 def _truncate_text(
@@ -85,17 +104,17 @@ def _truncate_text(
     entity_type: str,
     entity_id: str,
     limit: int = OVERVIEW_IO_FLOOR_CHAR_LIMIT,
-) -> Any:
+) -> _TruncatedValue:
     """Truncate strings or string-rendered dict/list to `limit` chars.
 
     Returned as-is when None / non-text / under limit. Larger values are
     rendered to JSON, head-trimmed, and suffixed with an actionable
     `read(...)` hint anchored at the specific entity that owns this
-    field. The hint syntax matches the `read` tool's argument shape so
+    field. The hint syntax matches the `read` tool's argument shape, so
     the judge can paste it directly.
     """
     if value is None:
-        return None
+        return _TruncatedValue(None, False)
     if isinstance(value, str):
         text = value
     else:
@@ -104,11 +123,12 @@ def _truncate_text(
         except (TypeError, ValueError):
             text = str(value)
     if len(text) <= limit:
-        return text
+        return _TruncatedValue(text, False)
     dropped = len(text) - limit
-    return text[:limit] + TRUNCATED_SUFFIX_TEMPLATE.format(
+    suffix = TRUNCATED_SUFFIX_TEMPLATE.format(
         n=f"{dropped:,}", entity_type=entity_type, entity_id=entity_id
     )
+    return _TruncatedValue(text[:limit] + suffix, True)
 
 
 def _duration_ms(
@@ -123,9 +143,15 @@ def _serialize_span_node(
     span: models.SpanModel,
     parent_id: Optional[str],
     io_char_limit: int,
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], bool]:
     has_error = span.error_info is not None
-    return {
+    input_field = _truncate_text(
+        span.input, entity_type="span", entity_id=span.id, limit=io_char_limit
+    )
+    output_field = _truncate_text(
+        span.output, entity_type="span", entity_id=span.id, limit=io_char_limit
+    )
+    node = {
         "id": span.id,
         "name": span.name,
         "type": span.type,
@@ -133,15 +159,12 @@ def _serialize_span_node(
         "start_time": span.start_time.isoformat(),
         "duration_ms": _duration_ms(span.start_time, span.end_time),
         "has_error": has_error,
-        "input": _truncate_text(
-            span.input, entity_type="span", entity_id=span.id, limit=io_char_limit
-        ),
-        "output": _truncate_text(
-            span.output, entity_type="span", entity_id=span.id, limit=io_char_limit
-        ),
+        "input": input_field.value,
+        "output": output_field.value,
         "model": span.model,
         "provider": span.provider,
     }
+    return node, input_field.truncated or output_field.truncated
 
 
 def serialize_overview(
@@ -149,10 +172,16 @@ def serialize_overview(
     spans: List[models.SpanModel],
     parent_by_child: Dict[str, Optional[str]],
     io_char_limit: int = OVERVIEW_IO_FLOOR_CHAR_LIMIT,
-) -> Dict[str, Any]:
+) -> OverviewResult:
     """Render a flat overview of the trace + its spans.
 
-    Output shape:
+    Returns `OverviewResult(overview, has_truncations)`. The flag is an
+    authoritative signal that some field was trimmed — derived from the
+    truncators themselves rather than from scanning the rendered output
+    — so it stays correct even when user content quotes the truncation
+    suffix template verbatim.
+
+    Output shape of `overview`:
         {
           "trace": {id, name, duration_ms, has_error, span_count, error_count,
                     input(truncated), output(truncated)},
@@ -170,14 +199,29 @@ def serialize_overview(
     prefer `pick_overview_io_char_limit` to choose a larger limit when
     it fits.
     """
-    flat_nodes = [
+    span_results = [
         _serialize_span_node(span, parent_by_child.get(span.id), io_char_limit)
         for span in spans
     ]
+    flat_nodes = [node for node, _ in span_results]
+    any_span_truncated = any(truncated for _, truncated in span_results)
     flat_nodes.sort(key=lambda n: n["start_time"])
     error_count = sum(1 for n in flat_nodes if n["has_error"])
 
-    return {
+    trace_input = _truncate_text(
+        trace.input,
+        entity_type="trace",
+        entity_id=trace.id,
+        limit=io_char_limit,
+    )
+    trace_output = _truncate_text(
+        trace.output,
+        entity_type="trace",
+        entity_id=trace.id,
+        limit=io_char_limit,
+    )
+
+    overview = {
         "trace": {
             "id": trace.id,
             "name": trace.name,
@@ -185,50 +229,15 @@ def serialize_overview(
             "has_error": trace.error_info is not None,
             "span_count": len(flat_nodes),
             "error_count": error_count,
-            "input": _truncate_text(
-                trace.input,
-                entity_type="trace",
-                entity_id=trace.id,
-                limit=io_char_limit,
-            ),
-            "output": _truncate_text(
-                trace.output,
-                entity_type="trace",
-                entity_id=trace.id,
-                limit=io_char_limit,
-            ),
+            "input": trace_input.value,
+            "output": trace_output.value,
         },
         "spans": flat_nodes,
     }
-
-
-def overview_has_truncations(overview: Dict[str, Any]) -> bool:
-    """Return True iff at least one field in the rendered overview was
-    actually truncated by `_truncate_text`.
-
-    Direct evidence beats inference from the chosen tier. A small trace
-    rendered at the floor tier may still have every field comfortably
-    under the per-field limit — in that case the overview is complete
-    even though the sizer didn't pick the no-truncation tier. The
-    agentic loop's "judge produced a verdict without ever calling
-    `read`" warning depends on this distinction to avoid false
-    positives.
-    """
-    return _payload_contains_marker(overview, _TRUNCATED_MARKER)
-
-
-def _payload_contains_marker(payload: Any, marker: str) -> bool:
-    """Walk a JSON-shaped payload and check whether `marker` appears in
-    any string value. Bounded by the cached overview's own size cap, so
-    cheap relative to a single LLM round-trip.
-    """
-    if isinstance(payload, str):
-        return marker in payload
-    if isinstance(payload, dict):
-        return any(_payload_contains_marker(v, marker) for v in payload.values())
-    if isinstance(payload, list):
-        return any(_payload_contains_marker(item, marker) for item in payload)
-    return False
+    has_truncations = (
+        any_span_truncated or trace_input.truncated or trace_output.truncated
+    )
+    return OverviewResult(overview, has_truncations)
 
 
 def pick_overview_io_char_limit(
@@ -238,12 +247,13 @@ def pick_overview_io_char_limit(
     parent_by_child: Dict[str, Optional[str]],
     budget_tokens: int,
     ladder: Optional[Tuple[int, ...]] = None,
-) -> Tuple[int, Dict[str, Any]]:
+) -> SizedOverview:
     """Pick the largest ladder entry whose rendered overview fits the budget.
 
-    Returns `(chosen_limit, rendered_overview)` — the overview is built
-    during the sizing walk, so returning it spares the caller a second
-    render at the same limit.
+    Returns `SizedOverview(limit, overview, has_truncations)` — the
+    overview is built during the sizing walk, so returning it spares
+    the caller a second render at the same limit, and the truncation
+    flag is propagated from the underlying `serialize_overview` call.
 
     Walks `ladder` largest → smallest, rendering once per candidate and
     measuring against the cheap `tokens.estimate_tokens` proxy. Falls
@@ -265,19 +275,24 @@ def pick_overview_io_char_limit(
         raise ValueError("ladder must not be empty")
     if budget_tokens <= 0:
         floor = ladder[-1]
-        return floor, serialize_overview(
-            trace, spans, parent_by_child, io_char_limit=floor
+        result = serialize_overview(trace, spans, parent_by_child, io_char_limit=floor)
+        return SizedOverview(
+            floor, overview=result.overview, has_truncations=result.has_truncations
         )
 
-    last_overview: Optional[Dict[str, Any]] = None
+    last_result: Optional[OverviewResult] = None
     for limit in ladder:
-        overview = serialize_overview(
-            trace, spans, parent_by_child, io_char_limit=limit
-        )
-        if tokens.estimate_tokens(overview) <= budget_tokens:
-            return limit, overview
-        last_overview = overview
-    # Nothing fit. `last_overview` is the render at the floor (ladder's
+        result = serialize_overview(trace, spans, parent_by_child, io_char_limit=limit)
+        if tokens.estimate_tokens(result.overview) <= budget_tokens:
+            return SizedOverview(
+                limit, overview=result.overview, has_truncations=result.has_truncations
+            )
+        last_result = result
+    # Nothing fit. `last_result` is the render at the floor (ladder's
     # smallest entry); reuse it to avoid a redundant render.
-    assert last_overview is not None  # ladder was non-empty per the guard above
-    return ladder[-1], last_overview
+    assert last_result is not None  # ladder was non-empty per the guard above
+    return SizedOverview(
+        ladder[-1],
+        overview=last_result.overview,
+        has_truncations=last_result.has_truncations,
+    )

@@ -41,7 +41,7 @@ class TestSerializeOverview:
         root = _span("root")
         child = _span("child", start_offset_s=1)
 
-        result = span_tree_serializer.serialize_overview(
+        result, _ = span_tree_serializer.serialize_overview(
             _trace(),
             spans=[root, child],
             parent_by_child={"root": None, "child": "root"},
@@ -62,7 +62,7 @@ class TestSerializeOverview:
             error_info={"exception_type": "X", "message": "m", "traceback": "tb"},
         )
 
-        result = span_tree_serializer.serialize_overview(
+        result, _ = span_tree_serializer.serialize_overview(
             _trace(),
             spans=[ok, err],
             parent_by_child={"ok": None, "err": "ok"},
@@ -79,7 +79,7 @@ class TestSerializeOverview:
         child = _span("child", start_offset_s=1)
         assert root.spans == []  # flat, as returned by spans_for_trace
 
-        result = span_tree_serializer.serialize_overview(
+        result, _ = span_tree_serializer.serialize_overview(
             _trace(),
             spans=[root, child],
             parent_by_child={"root": None, "child": "root"},
@@ -95,7 +95,7 @@ class TestSerializeOverview:
         long_input = "x" * 800
         trace = _trace(input=long_input)
 
-        result = span_tree_serializer.serialize_overview(
+        result, _ = span_tree_serializer.serialize_overview(
             trace,
             spans=[],
             parent_by_child={},
@@ -116,7 +116,7 @@ class TestSerializeOverview:
         span = _span("s-1")
         span.input = long_input
 
-        result = span_tree_serializer.serialize_overview(
+        result, _ = span_tree_serializer.serialize_overview(
             _trace(),
             spans=[span],
             parent_by_child={span.id: None},
@@ -128,7 +128,7 @@ class TestSerializeOverview:
 
     def test_serialize_overview__under_cap__no_truncation_or_hint(self):
         # Sanity: short values must round-trip unchanged with no suffix.
-        result = span_tree_serializer.serialize_overview(
+        result, _ = span_tree_serializer.serialize_overview(
             _trace(input="short"),
             spans=[],
             parent_by_child={},
