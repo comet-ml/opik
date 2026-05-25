@@ -35,6 +35,11 @@ on:
         required: false
         description: If this is an adhoc build (will skip comet variant)
         default: false
+      build_arm64:
+        type: boolean
+        required: false
+        description: Build multiarch images
+        default: true
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
@@ -63,8 +68,9 @@ jobs:
             MERGE_MATRIX=$(echo "$MERGE_MATRIX" | jq '.exclude += [{"image_type":"comet"}]')
           fi
           
-          # Exclude arm64 if not a release build or if guardrails backend
-          if [[ "${{ inputs.is_release }}" != "true" ]] || [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
+          # Exclude arm64 when the caller opts out, or for guardrails backend
+          # (no arm64 image available for it).
+          if [[ "${{ inputs.build_arm64 }}" != "true" ]] || [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
             BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"platform":"arm64"}]')
           fi
           
@@ -272,12 +278,10 @@ jobs:
         run: |
           echo "### Docker images pushed: ${{ steps.set_vars.outputs.image_name }}" >> "$GITHUB_STEP_SUMMARY"
           echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
+          if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]] || [[ "${{ inputs.build_arm64 }}" != "true" ]]; then
             echo "Built for platforms: linux/amd64" >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "${{ inputs.is_release }}" == "true" ]]; then
-            echo "Built for platforms: linux/amd64, linux/arm64" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Built for platforms: linux/amd64" >> "$GITHUB_STEP_SUMMARY"
+            echo "Built for platforms: linux/amd64, linux/arm64" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik%2F${{ steps.set_vars.outputs.image_name }})" >> "$GITHUB_STEP_SUMMARY"
 
