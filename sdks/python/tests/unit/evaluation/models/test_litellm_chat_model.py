@@ -113,6 +113,49 @@ def test_models_factory_default_model_from_env(monkeypatch):
     assert default_instance.model_name == "gpt-4o-mini"
 
 
+class TestCoerceTemperatureToFloat:
+    """The helper underpins every "is temperature 1?" check on the
+    LiteLLM path (GPT-5 filter, Anthropic reasoning_effort conflict).
+    Pin its semantics directly so the indirect tests above don't
+    over-couple to incidental call-site behavior.
+    """
+
+    def test_returns_float_for_int(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(1) == 1.0
+
+    def test_returns_float_for_float(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(0.5) == 0.5
+
+    def test_returns_float_for_numeric_string(self):
+        from opik.evaluation.models.litellm import util
+
+        # The bug the reviewer flagged: `temperature="1"` would compare
+        # unequal to `1` and trigger an unwanted drop. Pinning the
+        # coercion path directly here so regressions surface fast.
+        assert util.coerce_temperature_to_float("1") == 1.0
+        assert util.coerce_temperature_to_float("1.0") == 1.0
+        assert util.coerce_temperature_to_float(" 0.7 ") == 0.7
+
+    def test_returns_none_for_non_numeric_string(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float("not-a-number") is None
+
+    def test_returns_none_for_none(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(None) is None
+
+    def test_returns_none_for_arbitrary_object(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(object()) is None
+
+
 def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     stub = _install_litellm_stub(monkeypatch)
 
@@ -299,6 +342,80 @@ def test_litellm_chat_model_drops_reasoning_effort_when_temperature_is_per_call_
     model.generate_string("hello", temperature=0)
     _, _, kwargs = stub._calls[-1]
     assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_when_temperature_is_string_one(
+    monkeypatch,
+):
+    """`temperature` can arrive as a string ("1", "1.0") and LiteLLM
+    coerces it before the API call. The conflict-resolution pass must
+    coerce the same way before comparing, otherwise it'd drop
+    `reasoning_effort` on a caller who legitimately opted into
+    thinking via a stringy temperature.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    for stringy_one in ("1", "1.0", " 1 "):
+        model = litellm_chat_model.LiteLLMChatModel(
+            model_name="anthropic/claude-haiku-4-5",
+            reasoning_effort="low",
+            temperature=stringy_one,
+        )
+        model.generate_string("hello")
+        _, _, kwargs = stub._calls[-1]
+        assert kwargs.get("reasoning_effort") == "low", (
+            f"temperature={stringy_one!r} should coerce to 1.0 and "
+            f"preserve reasoning_effort; got kwargs={kwargs}"
+        )
+
+
+def test_litellm_chat_model_drops_reasoning_effort_when_temperature_is_string_non_one(
+    monkeypatch,
+):
+    # Counterpart: stringy non-1 values must still trigger the drop.
+    # Otherwise stringy callers would bypass conflict detection
+    # entirely.
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+        temperature="0.5",
+    )
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_when_temperature_is_non_numeric(
+    monkeypatch,
+):
+    """Coercion failure ("unknown" type) is treated as "don't drop" —
+    a non-numeric temperature is the provider's problem to surface,
+    and we shouldn't compound the error by also silently dropping
+    `reasoning_effort`.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+        temperature="not-a-number",
+    )
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    # `reasoning_effort` stays — the provider will surface the bad
+    # temperature shape on its own.
+    assert kwargs.get("reasoning_effort") == "low"
 
 
 def test_litellm_chat_model_drops_reasoning_effort_when_reasoning_effort_is_per_call_only(

@@ -243,16 +243,31 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         if "reasoning_effort" in resolved and model_name_helper.is_anthropic_model(
             self.model_name
         ):
-            temperature = resolved.get("temperature")
-            if temperature is not None and temperature != 1:
-                resolved.pop("reasoning_effort")
-                LOGGER.debug(
-                    "Dropping reasoning_effort for Anthropic model %s: an "
-                    "explicit non-1 temperature in the merged call kwargs "
-                    "conflicts with the thinking mode LiteLLM would enable. "
-                    "Pass temperature=1 (or omit it) to keep reasoning_effort.",
-                    self.model_name,
-                )
+            raw_temperature = resolved.get("temperature")
+            if raw_temperature is not None:
+                # Match LiteLLM's own coercion semantics — `temperature`
+                # is accepted as int / float / numeric string. Without
+                # coercion, the string form `"1"` would compare unequal
+                # to the int `1` and we'd drop `reasoning_effort` on a
+                # caller who *did* opt into thinking. A coercion
+                # failure (non-numeric value) is treated as "unknown"
+                # and we leave `reasoning_effort` alone — the provider
+                # will surface the real type error.
+                numeric_temperature = util.coerce_temperature_to_float(raw_temperature)
+                if (
+                    numeric_temperature is not None
+                    and abs(numeric_temperature - 1.0) > 1e-6
+                ):
+                    resolved.pop("reasoning_effort")
+                    LOGGER.debug(
+                        "Dropping reasoning_effort for Anthropic model %s: "
+                        "explicit temperature=%s (non-1) in the merged call "
+                        "kwargs conflicts with the thinking mode LiteLLM "
+                        "would enable. Pass temperature=1 (or omit it) to "
+                        "keep reasoning_effort.",
+                        self.model_name,
+                        raw_temperature,
+                    )
         return resolved
 
     def _warn_about_unsupported_param(self, param: str, value: Any) -> None:
