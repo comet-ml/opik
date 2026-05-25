@@ -161,6 +161,7 @@ def test_run_tests__trace_tree_source_is_experiment(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="metrics_calculation",
+                tags=["__opik_eval_internal__"],
                 type="general",
                 input=ANY_BUT_NONE,
                 output=ANY_BUT_NONE,
@@ -235,6 +236,7 @@ def test_internal_run__with_optimization_id__trace_source_optimization(
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="metrics_calculation",
+                tags=["__opik_eval_internal__"],
                 type="general",
                 input=ANY_BUT_NONE,
                 output=ANY_BUT_NONE,

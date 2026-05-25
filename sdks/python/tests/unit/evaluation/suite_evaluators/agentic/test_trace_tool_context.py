@@ -3,6 +3,7 @@ import datetime
 from opik.message_processing.emulation import models
 
 from opik.evaluation.suite_evaluators.agentic.context import (
+    INTERNAL_SPAN_TAG,
     TraceToolContext,
     build_trace_tool_context,
 )
@@ -106,12 +107,12 @@ class TestBuildTraceToolContext:
         # Parent links are pulled from the emulator alongside the spans.
         assert ctx.parent_by_child == {"s-1": None, "s-2": None}
 
-    def test_build__filters_metrics_calculation_and_its_subtree(self):
-        """`metrics_calculation` is opik's eval-engine plumbing — it
-        echoes the assertion config back into the trace, which leaks
-        the assertion text and confuses the judge. The agentic context
-        must drop it (and its descendants — child scorer spans, model
-        wrappers, etc.) before the judge sees the trace.
+    def test_build__filters_internal_tagged_subtree(self):
+        """Spans tagged `INTERNAL_SPAN_TAG` are opik's eval-engine
+        plumbing — they echo assertion config back into the trace, which
+        leaks assertion text and confuses the judge. The agentic context
+        must drop the tagged span and its descendants (child scorer
+        spans, model wrappers, etc.) before the judge sees the trace.
         """
         trace = _trace()
         # User-agent spans we want to keep.
@@ -129,14 +130,18 @@ class TestBuildTraceToolContext:
             name="process_step",
             type="general",
         )
-        # Eval-engine spans we want filtered.
+        # Eval-engine span — name is incidental; what matters is the tag.
         metrics_root = models.SpanModel(
             id="metrics",
             start_time=_now() + datetime.timedelta(milliseconds=2),
             source="sdk",
             name="metrics_calculation",
             type="general",
+            tags=[INTERNAL_SPAN_TAG],
         )
+        # Untagged descendant of the eval-engine span. Subtree-sweep
+        # should drop it too — child scorers, model wrappers etc. are
+        # internal regardless of their own tags.
         metrics_child = models.SpanModel(
             id="metrics-child",
             start_time=_now() + datetime.timedelta(milliseconds=3),
@@ -165,3 +170,28 @@ class TestBuildTraceToolContext:
         # Parent map also pruned of internal-span entries.
         assert "metrics" not in ctx.parent_by_child
         assert "metrics-child" not in ctx.parent_by_child
+
+    def test_build__user_span_named_metrics_calculation_is_kept(self):
+        """Regression: previously the filter matched by `span.name`, so
+        a legitimate user span named `metrics_calculation` (e.g. via
+        `@opik.track(name="metrics_calculation")`) would be silently
+        dropped from the judge's view. The marker-based filter must
+        retain it — only spans the eval engine itself tags as internal
+        are removed.
+        """
+        trace = _trace()
+        user_span = models.SpanModel(
+            id="user-mc",
+            start_time=_now(),
+            source="sdk",
+            name="metrics_calculation",  # collides with the old name filter
+            type="general",
+            tags=None,
+        )
+        emulator = _seeding.make_emulator()
+        _seeding.seed_trace(emulator, trace)
+        _seeding.seed_span(emulator, user_span, trace_id=trace.id)
+
+        ctx = build_trace_tool_context(trace.id, emulator)
+        assert ctx is not None
+        assert {s.id for s in ctx.spans} == {"user-mc"}
