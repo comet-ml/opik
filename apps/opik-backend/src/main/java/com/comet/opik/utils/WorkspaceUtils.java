@@ -1,5 +1,7 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.Project;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
@@ -14,7 +16,11 @@ public class WorkspaceUtils {
     }
 
     public static String getProjectName(String projectName) {
-        return StringUtils.isEmpty(projectName) ? DEFAULT_PROJECT : projectName;
+        return StringUtils.isBlank(projectName) ? DEFAULT_PROJECT : projectName.strip();
+    }
+
+    public static String stripProjectName(@NonNull Project project) {
+        return project.name().strip();
     }
 
 }
