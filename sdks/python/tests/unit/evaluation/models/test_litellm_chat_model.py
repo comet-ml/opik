@@ -165,7 +165,6 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
         temperature=0.5,
     )
 
-    assert "temperature" not in model._completion_kwargs
     assert any(
         "temperature" in record.message and "Dropping" in record.message
         for record in caplog.records
@@ -174,6 +173,9 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     caplog.clear()
     model.generate_string("hello")
 
+    # Assert against the actual outbound call, not on the private
+    # `_completion_kwargs` constructor state — the contract callers
+    # care about is "what gets sent to litellm.completion".
     assert stub._calls, "Expected completion to be invoked"
     _, _, kwargs = stub._calls[-1]
     assert "temperature" not in kwargs
@@ -231,16 +233,14 @@ def test_litellm_chat_model_drops_seed_when_provider_does_not_support(
         temperature=0.0,
     )
 
-    # Constructor strips the unsupported param so it never reaches
-    # litellm.completion.
-    assert "seed" not in model._completion_kwargs
-    assert "temperature" in model._completion_kwargs
-
     model.generate_string("hello")
 
+    # Public observable: the outbound litellm.completion call. `seed`
+    # must be filtered out; `temperature` must survive.
     assert stub._calls, "Expected completion to be invoked"
     _, _, kwargs = stub._calls[-1]
     assert "seed" not in kwargs
+    assert kwargs.get("temperature") == 0.0
 
 
 def test_litellm_chat_model_drops_reasoning_effort_for_anthropic_when_temperature_conflicts(
@@ -279,19 +279,17 @@ def test_litellm_chat_model_drops_reasoning_effort_for_anthropic_when_temperatur
         temperature=0.0,
     )
 
-    # Conflict resolution runs on the merged effective kwargs at call
-    # time, not at construction. `_completion_kwargs` keeps the raw
-    # values so the constructor + per-call merge can be diagnosed as
-    # one source of truth — see `_resolve_provider_conflicts`.
-    assert model._completion_kwargs.get("reasoning_effort") == "low"
-    assert model._completion_kwargs.get("temperature") == 0.0
-
     model.generate_string("hello")
+
     _, _, kwargs = stub._calls[-1]
-    # The actual call to `litellm.completion` is what matters — the
+    # The actual call to `litellm.completion` is what matters: the
     # conflict-resolution pass must strip `reasoning_effort` from the
     # outbound request even though it was set at construction time.
+    # `temperature` is preserved because it's the half of the conflict
+    # that survives, and the provider needs it to know the request is
+    # in deterministic mode.
     assert "reasoning_effort" not in kwargs
+    assert kwargs.get("temperature") == 0.0
 
 
 def test_litellm_chat_model_drops_reasoning_effort_for_bare_claude_when_temperature_conflicts(
@@ -461,12 +459,13 @@ def test_litellm_chat_model_keeps_reasoning_effort_for_anthropic_when_temperatur
         reasoning_effort="medium",
         temperature=1,
     )
-    assert model._completion_kwargs.get("reasoning_effort") == "medium"
-    assert model._completion_kwargs.get("temperature") == 1
 
     model.generate_string("hello")
     _, _, kwargs = stub._calls[-1]
+    # Both must reach the outbound call — that's the opt-in shape for
+    # Anthropic extended thinking.
     assert kwargs.get("reasoning_effort") == "medium"
+    assert kwargs.get("temperature") == 1
 
 
 def test_litellm_chat_model_keeps_reasoning_effort_for_anthropic_when_temperature_omitted(
@@ -485,12 +484,14 @@ def test_litellm_chat_model_keeps_reasoning_effort_for_anthropic_when_temperatur
         model_name="anthropic/claude-haiku-4-5",
         reasoning_effort="low",
     )
-    assert model._completion_kwargs.get("reasoning_effort") == "low"
-    assert "temperature" not in model._completion_kwargs
 
     model.generate_string("hello")
     _, _, kwargs = stub._calls[-1]
+    # `reasoning_effort` must reach the outbound call; `temperature`
+    # was never set, so it must not appear either (Anthropic defaults
+    # to 1 server-side).
     assert kwargs.get("reasoning_effort") == "low"
+    assert "temperature" not in kwargs
 
 
 def test_litellm_chat_model_keeps_reasoning_effort_for_openai(monkeypatch):
@@ -508,7 +509,6 @@ def test_litellm_chat_model_keeps_reasoning_effort_for_openai(monkeypatch):
         model_name="gpt-5-mini",
         reasoning_effort="low",
     )
-    assert model._completion_kwargs.get("reasoning_effort") == "low"
 
     model.generate_string("hello")
     _, _, kwargs = stub._calls[-1]
@@ -530,7 +530,6 @@ def test_litellm_chat_model_keeps_seed_when_provider_supports_it(monkeypatch):
         model_name="gpt-4o-mini",
         seed=42,
     )
-    assert model._completion_kwargs.get("seed") == 42
 
     model.generate_string("hello")
     _, _, kwargs = stub._calls[-1]
@@ -551,15 +550,12 @@ def test_litellm_chat_model_drops_top_logprobs_for_dashscope(
         top_logprobs=10,
     )
 
-    # top_logprobs should not be kept in static completion kwargs
-    assert "top_logprobs" not in model._completion_kwargs
-
     model.generate_string("hello")
 
+    # top_logprobs should not be forwarded to the provider (public
+    # observable — what `litellm.completion` actually receives).
     assert stub._calls, "Expected completion to be invoked"
     _, _, kwargs = stub._calls[-1]
-
-    # top_logprobs should not be forwarded to the provider
     assert "top_logprobs" not in kwargs
 
 
