@@ -11,11 +11,14 @@ import {
 import get from "lodash/get";
 import isObject from "lodash/isObject";
 
+import { ExternalLink } from "lucide-react";
+import { Button } from "@/ui/button";
 import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
@@ -518,7 +521,31 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
-        noData={<DataTableNoData title={noDataText}></DataTableNoData>}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <div className="flex flex-col items-center gap-3 pt-2">
+                <p className="comet-body-xs max-w-md text-center text-light-slate">
+                  Reference this prompt by name in your evaluation script and
+                  run an experiment from the Opik SDK to see results here.
+                </p>
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={buildDocsUrl(
+                      "/evaluation/overview",
+                      "#running-an-evaluation",
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View docs
+                    <ExternalLink className="ml-1.5 size-3.5" />
+                  </a>
+                </Button>
+              </div>
+            )}
+          </DataTableNoData>
+        }
         TableBody={DataTableVirtualBody}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader

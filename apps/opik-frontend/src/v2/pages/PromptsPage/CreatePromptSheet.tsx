@@ -19,6 +19,7 @@ import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
+import { isMessageEmpty } from "@/v2/pages-shared/agent-configuration/useAgentConfigurationSave";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
@@ -60,19 +61,13 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
     usePromptCreateMutation();
 
   const isValid = useMemo(() => {
-    if (!name.length) return false;
+    if (!name.trim().length) return false;
     if (isChatPrompt) {
-      return messages.length > 0 && (!showChatRaw || isChatRawValid);
+      const hasNonEmptyMessage = messages.some((m) => !isMessageEmpty(m));
+      return hasNonEmptyMessage && (!showChatRaw || isChatRawValid);
     }
-    return template.length > 0;
-  }, [
-    name,
-    isChatPrompt,
-    messages.length,
-    showChatRaw,
-    isChatRawValid,
-    template,
-  ]);
+    return template.trim().length > 0;
+  }, [name, isChatPrompt, messages, showChatRaw, isChatRawValid, template]);
 
   const handleCopyPrompt = useCallback(async () => {
     if (!template) return;

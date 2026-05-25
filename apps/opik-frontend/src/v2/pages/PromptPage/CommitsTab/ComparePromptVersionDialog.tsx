@@ -2,11 +2,19 @@ import React, { useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
 import isEqual from "fast-deep-equal";
-import { Clock, User } from "lucide-react";
+import { ChevronDown, Clock, User } from "lucide-react";
 
+import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
-import { normalizeChatTemplate } from "@/lib/chatTemplate";
+import PromptDiff from "@/shared/CodeDiff/PromptDiff";
+import { normalizeChatTemplate, parseChatTemplate } from "@/lib/chatTemplate";
 import { PromptVersion } from "@/types/prompts";
 import { cn } from "@/lib/utils";
 import { formatDate, getTimeFromNow } from "@/lib/date";
@@ -16,6 +24,67 @@ import VersionTagList from "@/v2/pages-shared/version-history/VersionTagList";
 import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 
 type VersionWithMaybeAuthor = PromptVersion & { created_by?: string };
+type DiffSide = "base" | "diff";
+type ViewMode = "messages" | "raw";
+
+const TWO_COLUMN_GRID =
+  "grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none";
+
+const stringifyMetadata = (m: unknown): string => {
+  if (m === undefined || m === null) return "";
+  if (typeof m === "object" && Object.keys(m as object).length === 0) return "";
+  try {
+    return JSON.stringify(m, null, 2);
+  } catch {
+    return String(m);
+  }
+};
+
+const MetadataColumn: React.FC<{
+  baseText: string;
+  diffText: string;
+  side: DiffSide;
+}> = ({ baseText, diffText, side }) => {
+  const text = side === "base" ? baseText : diffText;
+  return (
+    <div className="overflow-hidden rounded-md border bg-background">
+      <div className="max-h-[320px] overflow-y-auto p-2">
+        <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-2">
+          {text ? (
+            <TextDiff
+              content1={baseText}
+              content2={diffText}
+              mode="words"
+              side={side}
+            />
+          ) : (
+            <span className="comet-body-xs text-light-slate">No metadata</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MEDIA_KINDS = ["image", "video", "audio"] as const;
+type MediaKind = (typeof MEDIA_KINDS)[number];
+
+const MediaRow: React.FC<{
+  kind: MediaKind;
+  baseItems: string[];
+  diffItems: string[];
+}> = ({ kind, baseItems, diffItems }) => (
+  <div className="grid grid-cols-2 gap-4">
+    {[baseItems, diffItems].map((items, idx) => (
+      <div
+        key={idx}
+        className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4"
+      >
+        <MediaTagsList type={kind} items={items} editable={false} preview />
+      </div>
+    ))}
+  </div>
+);
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -40,22 +109,20 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   const [diffVersion, setDiffVersion] = useState<PromptVersion | undefined>(
     first(versions),
   );
+  const [viewMode, setViewMode] = useState<ViewMode>("messages");
 
   const baseText = useMemo(
     () => normalizeChatTemplate(baseVersion?.template || ""),
     [baseVersion?.template],
   );
+  const diffText = useMemo(
+    () => normalizeChatTemplate(diffVersion?.template || ""),
+    [diffVersion?.template],
+  );
 
-  const stringifyMetadata = (m: unknown): string => {
-    if (m === undefined || m === null) return "";
-    if (typeof m === "object" && Object.keys(m as object).length === 0)
-      return "";
-    try {
-      return JSON.stringify(m, null, 2);
-    } catch {
-      return String(m);
-    }
-  };
+  const baseChat = useMemo(() => parseChatTemplate(baseText), [baseText]);
+  const diffChat = useMemo(() => parseChatTemplate(diffText), [diffText]);
+  const isChatDiff = baseChat !== null && diffChat !== null;
 
   const baseMetadataText = useMemo(
     () => stringifyMetadata(baseVersion?.metadata),
@@ -66,41 +133,28 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     [diffVersion?.metadata],
   );
 
-  const {
-    images: baseImages,
-    videos: baseVideos,
-    audios: baseAudios,
-  } = useMemo(() => {
-    const content = parsePromptVersionContent(baseVersion);
-    return parseLLMMessageContent(content);
-  }, [baseVersion]);
-
-  const diffText = useMemo(
-    () => normalizeChatTemplate(diffVersion?.template || ""),
-    [diffVersion?.template],
+  const baseMedia = useMemo(
+    () => parseLLMMessageContent(parsePromptVersionContent(baseVersion)),
+    [baseVersion],
   );
-
-  const {
-    images: diffImages,
-    videos: diffVideos,
-    audios: diffAudios,
-  } = useMemo(() => {
-    const content = parsePromptVersionContent(diffVersion);
-    return parseLLMMessageContent(content);
-  }, [diffVersion]);
-
-  const imagesHaveChanges = useMemo(
-    () => !isEqual(baseImages, diffImages),
-    [baseImages, diffImages],
+  const diffMedia = useMemo(
+    () => parseLLMMessageContent(parsePromptVersionContent(diffVersion)),
+    [diffVersion],
   );
-  const videosHaveChanges = useMemo(
-    () => !isEqual(baseVideos, diffVideos),
-    [baseVideos, diffVideos],
+  const mediaChanges = useMemo(
+    () =>
+      MEDIA_KINDS.map((kind) => ({
+        kind,
+        base: baseMedia[`${kind}s` as const],
+        diff: diffMedia[`${kind}s` as const],
+        changed: !isEqual(
+          baseMedia[`${kind}s` as const],
+          diffMedia[`${kind}s` as const],
+        ),
+      })),
+    [baseMedia, diffMedia],
   );
-  const audiosHaveChanges = useMemo(
-    () => !isEqual(baseAudios, diffAudios),
-    [baseAudios, diffAudios],
-  );
+  const anyMediaChanged = mediaChanges.some((m) => m.changed);
 
   const versionLabelByCommit = useMemo(() => {
     const sortedDesc = [...versions].sort((a, b) =>
@@ -112,17 +166,20 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     return map;
   }, [versions]);
 
-  const versionOptions = useMemo(() => {
-    return [...versions]
-      .sort((v1, v2) => v1.created_at.localeCompare(v2.created_at))
-      .map((v) => ({
-        label: versionLabelByCommit.get(v.commit) ?? v.commit,
-        value: v.commit,
-        description: formatDate(v.created_at),
-        tags: v.tags || [],
-      }));
-  }, [versions, versionLabelByCommit]);
+  const versionOptions = useMemo(
+    () =>
+      [...versions]
+        .sort((v1, v2) => v1.created_at.localeCompare(v2.created_at))
+        .map((v) => ({
+          label: versionLabelByCommit.get(v.commit) ?? v.commit,
+          value: v.commit,
+          description: formatDate(v.created_at),
+          tags: v.tags || [],
+        })),
+    [versions, versionLabelByCommit],
+  );
 
+  // Reset selection and view mode each time the sheet reopens.
   useEffect(() => {
     if (!open) return;
     const requestedBase = initialBaseVersionId
@@ -139,22 +196,18 @@ const ComparePromptVersionDialog: React.FunctionComponent<
       requestedDiff ??
         versions.find((v) => v.commit === last(versionOptions)?.value),
     );
+    setViewMode(isChatDiff ? "messages" : "raw");
   }, [
     open,
     versionOptions,
     versions,
     initialBaseVersionId,
     initialDiffVersionId,
+    isChatDiff,
   ]);
 
-  const renderVersionColumn = (
-    version: PromptVersion | undefined,
-    c1: string,
-    c2: string,
-    side: "base" | "diff",
-  ) => {
+  const renderTemplateColumn = (version: PromptVersion | undefined, side: DiffSide) => {
     if (!version) return null;
-
     const label = versionLabelByCommit.get(version.commit) ?? version.commit;
     const author = (version as VersionWithMaybeAuthor).created_by;
 
@@ -183,12 +236,17 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         </div>
         <div
           className={cn(
-            "overflow-y-auto bg-background p-3",
-            imagesHaveChanges ? "max-h-[520px]" : "max-h-[620px]",
+            "overflow-y-auto bg-background p-2",
+            anyMediaChanged ? "max-h-[520px]" : "max-h-[620px]",
           )}
         >
-          <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-3">
-            <TextDiff content1={c1} content2={c2} mode="words" side={side} />
+          <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-2">
+            <TextDiff
+              content1={baseText}
+              content2={diffText}
+              mode="words"
+              side={side}
+            />
           </div>
         </div>
       </div>
@@ -215,115 +273,80 @@ const ComparePromptVersionDialog: React.FunctionComponent<
       >
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <div className="flex flex-col gap-4 pb-2">
-            <div className="grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none">
-              {renderVersionColumn(baseVersion, baseText, diffText, "base")}
-              {renderVersionColumn(diffVersion, baseText, diffText, "diff")}
-            </div>
+            {isChatDiff && (
+              <div className="flex items-center justify-end">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="2xs"
+                      className="comet-body-xs gap-1 px-2 text-muted-slate"
+                    >
+                      {viewMode === "messages" ? "Messages" : "Raw"}
+                      <ChevronDown className="size-3 text-light-slate" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      size="sm"
+                      selected={viewMode === "messages"}
+                      onClick={() => setViewMode("messages")}
+                    >
+                      Messages
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      size="sm"
+                      selected={viewMode === "raw"}
+                      onClick={() => setViewMode("raw")}
+                    >
+                      Raw
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+
+            {isChatDiff && viewMode === "messages" ? (
+              <div className="overflow-hidden rounded-md border bg-background p-4">
+                <PromptDiff baseline={baseChat} current={diffChat} />
+              </div>
+            ) : (
+              <div className={TWO_COLUMN_GRID}>
+                {renderTemplateColumn(baseVersion, "base")}
+                {renderTemplateColumn(diffVersion, "diff")}
+              </div>
+            )}
+
             <div>
               <div className="comet-body-s-accented mb-2 text-foreground">
                 Metadata
               </div>
-              <div className="grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none">
-                <div className="overflow-hidden rounded-md border bg-background">
-                  <div className="max-h-[320px] overflow-y-auto p-3">
-                    <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-3">
-                      {baseMetadataText ? (
-                        <TextDiff
-                          content1={baseMetadataText}
-                          content2={diffMetadataText}
-                          mode="words"
-                          side="base"
-                        />
-                      ) : (
-                        <span className="comet-body-xs text-light-slate">
-                          No metadata
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="overflow-hidden rounded-md border bg-background">
-                  <div className="max-h-[320px] overflow-y-auto p-3">
-                    <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-3">
-                      {diffMetadataText ? (
-                        <TextDiff
-                          content1={baseMetadataText}
-                          content2={diffMetadataText}
-                          mode="words"
-                          side="diff"
-                        />
-                      ) : (
-                        <span className="comet-body-xs text-light-slate">
-                          No metadata
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              <div className={TWO_COLUMN_GRID}>
+                <MetadataColumn
+                  baseText={baseMetadataText}
+                  diffText={diffMetadataText}
+                  side="base"
+                />
+                <MetadataColumn
+                  baseText={baseMetadataText}
+                  diffText={diffMetadataText}
+                  side="diff"
+                />
               </div>
             </div>
-            {(imagesHaveChanges || videosHaveChanges || audiosHaveChanges) && (
+
+            {anyMediaChanged && (
               <>
-                {imagesHaveChanges && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                      <MediaTagsList
-                        type="image"
-                        items={baseImages}
-                        editable={false}
-                        preview={true}
-                      />
-                    </div>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                      <MediaTagsList
-                        type="image"
-                        items={diffImages}
-                        editable={false}
-                        preview={true}
-                      />
-                    </div>
-                  </div>
-                )}
-                {videosHaveChanges && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                      <MediaTagsList
-                        type="video"
-                        items={baseVideos}
-                        editable={false}
-                        preview={true}
-                      />
-                    </div>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                      <MediaTagsList
-                        type="video"
-                        items={diffVideos}
-                        editable={false}
-                        preview={true}
-                      />
-                    </div>
-                  </div>
-                )}
-                {audiosHaveChanges && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                      <MediaTagsList
-                        type="audio"
-                        items={baseAudios}
-                        editable={false}
-                        preview={true}
-                      />
-                    </div>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
-                      <MediaTagsList
-                        type="audio"
-                        items={diffAudios}
-                        editable={false}
-                        preview={true}
-                      />
-                    </div>
-                  </div>
-                )}
+                {mediaChanges
+                  .filter((m) => m.changed)
+                  .map((m) => (
+                    <MediaRow
+                      key={m.kind}
+                      kind={m.kind}
+                      baseItems={m.base}
+                      diffItems={m.diff}
+                    />
+                  ))}
               </>
             )}
           </div>

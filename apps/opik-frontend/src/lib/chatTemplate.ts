@@ -18,6 +18,19 @@ const isChatTemplateShape = (value: unknown): value is ChatTemplateMessage[] =>
 export const serializeChatTemplate = (messages: ChatTemplateMessage[]): string =>
   JSON.stringify(projectMessages(messages));
 
+// Returns the parsed message array when `raw` is a valid chat template,
+// otherwise null. Caller can use the truthy check as a chat detection.
+export const parseChatTemplate = (
+  raw: string,
+): ChatTemplateMessage[] | null => {
+  try {
+    const parsed = JSON.parse(raw);
+    return isChatTemplateShape(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 // Re-serializes a chat template into a stable pretty-printed form so two
 // equivalent payloads stored with different whitespace diff as identical and
 // render readably. Falls back to the raw input when it doesn't look like a
