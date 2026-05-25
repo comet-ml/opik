@@ -24,7 +24,7 @@ import googleAdkLogoUrl from "/images/integrations/google-adk.png";
 import guardrailsaiLogoUrl from "/images/integrations/guardrailsai.png";
 import ollamaLogoUrl from "/images/integrations/ollama.png";
 import ollamaWhiteLogoUrl from "/images/integrations/ollama-white.png";
-import openclawLogoUrl from "/images/integrations/openclaw.png";
+import openclawLogoUrl from "/images/integrations/openclaw.svg";
 import openrouterLogoUrl from "/images/integrations/openrouter.png";
 import openrouterWhiteLogoUrl from "/images/integrations/openrouter-white.png";
 import predibaseLogoUrl from "/images/integrations/predibase.png";
