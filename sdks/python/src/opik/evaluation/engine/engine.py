@@ -12,6 +12,7 @@ from opik.api_objects.experiment import experiment
 from opik.api_objects.dataset import execution_policy as dataset_execution_policy
 from opik.evaluation import rest_operations, test_case, test_result
 from opik.evaluation.suite_evaluators.agentic import context as agentic_context
+from opik.evaluation.suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
 from opik.message_processing.processors import message_processors_chain
@@ -93,6 +94,7 @@ class EvaluationEngine:
 
     @opik.track(  # type: ignore[attr-defined,has-type]
         name="metrics_calculation",
+        tags=[INTERNAL_SPAN_TAG],
         ignore_arguments=[
             "regular_metrics",
             "scoring_key_mapping",
@@ -157,6 +159,7 @@ class EvaluationEngine:
 
     @opik.track(  # type: ignore[attr-defined,has-type]
         name="task_span_metrics_calculation",
+        tags=[INTERNAL_SPAN_TAG],
         ignore_arguments=["test_case_", "task_span_evaluator"],
     )
     def _compute_scores_for_test_case_with_task_span(

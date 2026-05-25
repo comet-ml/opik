@@ -146,27 +146,35 @@ class TraceToolContext:
         return None
 
 
-# Span names produced by opik's own evaluation plumbing rather than by
-# the user's agent. The judge has no business seeing these:
+# Namespaced sentinel tag that the eval engine attaches (via
+# `@opik.track(tags=[INTERNAL_SPAN_TAG])`) to every span it emits as part
+# of its own scoring/metrics plumbing. The agentic judge has no business
+# seeing those spans:
 #
-# - `metrics_calculation` is emitted by `EvaluationEngine.run_and_score`
-#   to wrap each test case's scoring phase. Its `input` carries the full
-#   `TestCase` envelope including the entire `LLMJudgeConfig` (model,
-#   messages, schema, assertion descriptions). For an LLM-judge
-#   evaluation, that means **the assertion text — including any
-#   literal tokens the assertion mentions — gets echoed back into the
-#   trace the judge is asked to evaluate.** Concretely: an assertion of
-#   the form "the agent processed a payload containing 'MARKER-xyz'"
-#   makes `MARKER-xyz` appear in `metrics_calculation.input` alongside
-#   its legitimate location in the agent's span. The judge then can't
-#   tell whether it observed real agent activity or just the assertion
-#   echoing itself, and burns tool calls disambiguating. Filtering this
-#   span out removes the leak at the source.
+# - `metrics_calculation` (and its `task_span_` sibling) is emitted by
+#   `EvaluationEngine` to wrap each test case's scoring phase. Its
+#   `input` carries the full `TestCase` envelope including the entire
+#   `LLMJudgeConfig` (model, messages, schema, assertion descriptions).
+#   For an LLM-judge evaluation, that means **the assertion text —
+#   including any literal tokens the assertion mentions — gets echoed
+#   back into the trace the judge is asked to evaluate.** Concretely:
+#   an assertion of the form "the agent processed a payload containing
+#   'MARKER-xyz'" makes `MARKER-xyz` appear in the scoring span's
+#   `input` alongside its legitimate location in the agent's span. The
+#   judge then can't tell whether it observed real agent activity or
+#   just the assertion echoing itself, and burns tool calls
+#   disambiguating. Filtering the tagged subtree removes the leak at
+#   the source.
 #
-# Descendants of these spans are eval-engine internals too (other
-# scorers, model wrappers, downstream metric calls), so the full
+# Why a namespaced tag instead of a name-based filter: span names are
+# user-settable (`@opik.track(name=...)`), so matching on
+# `name == "metrics_calculation"` silently drops legitimate user spans
+# that happen to use that name. The `__opik_eval_internal__` tag is set
+# only by the engine, so the filter targets eval-engine plumbing
+# exactly. Descendants of tagged spans are eval-engine internals too
+# (other scorers, model wrappers, downstream metric calls), so the full
 # subtree gets dropped — see `_filter_internal_spans`.
-_INTERNAL_SPAN_NAMES = frozenset({"metrics_calculation"})
+INTERNAL_SPAN_TAG = "__opik_eval_internal__"
 
 
 def _filter_internal_spans(
@@ -175,19 +183,21 @@ def _filter_internal_spans(
 ) -> Tuple[List[models.SpanModel], Dict[str, Optional[str]]]:
     """Drop opik-internal spans (and their descendants) from the agentic view.
 
-    Seeds the "internal" set from `_INTERNAL_SPAN_NAMES` (matched by
-    span name), then sweeps the parent map until closure so any span
-    whose ancestor chain reaches an internal root is also dropped. The
-    whole subtree under `metrics_calculation` is eval-engine plumbing
-    (other scorers, model wrappers) and shouldn't be visible to the
-    judge either.
+    Seeds the "internal" set from spans whose `tags` contain
+    `INTERNAL_SPAN_TAG`, then sweeps the parent map until closure so any
+    span whose ancestor chain reaches a tagged root is also dropped. The
+    whole subtree under an eval-engine scoring span is plumbing (other
+    scorers, model wrappers) and shouldn't be visible to the judge
+    either.
 
     Returns a fresh `(spans, parent_by_child)` pair so callers don't
     mutate the emulator's caches. No-ops (returns the originals
-    unchanged) when no internal-named spans are present, which is the
-    common case for non-suite agentic-judge invocations.
+    unchanged) when no tagged spans are present, which is the common
+    case for non-suite agentic-judge invocations.
     """
-    internal_ids: set = {span.id for span in spans if span.name in _INTERNAL_SPAN_NAMES}
+    internal_ids: set = {
+        span.id for span in spans if span.tags and INTERNAL_SPAN_TAG in span.tags
+    }
     if not internal_ids:
         return spans, parent_by_child
 
