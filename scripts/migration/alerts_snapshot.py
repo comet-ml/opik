@@ -41,14 +41,28 @@ def connect():
 
 
 
-def fetch_orphan_alerts(cursor):
-    cursor.execute("""
-        SELECT id, name, enabled, workspace_id, webhook_id,
-               created_by, last_updated_by, created_at, last_updated_at
-        FROM alerts
-        WHERE project_id IS NULL
-        ORDER BY workspace_id, id
-    """)
+def fetch_orphan_alerts(cursor, excluded_workspace_ids=None):
+    if excluded_workspace_ids:
+        placeholders = ", ".join(["%s"] * len(excluded_workspace_ids))
+        cursor.execute(
+            f"""
+            SELECT id, name, enabled, workspace_id, webhook_id,
+                   created_by, last_updated_by, created_at, last_updated_at
+            FROM alerts
+            WHERE project_id IS NULL
+              AND workspace_id NOT IN ({placeholders})
+            ORDER BY workspace_id, id
+            """,
+            excluded_workspace_ids,
+        )
+    else:
+        cursor.execute("""
+            SELECT id, name, enabled, workspace_id, webhook_id,
+                   created_by, last_updated_by, created_at, last_updated_at
+            FROM alerts
+            WHERE project_id IS NULL
+            ORDER BY workspace_id, id
+        """)
     return cursor.fetchall()
 
 
@@ -114,13 +128,19 @@ def main():
         f"alert_migration_snapshot_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
     )
 
+    excluded_raw = os.environ.get("MIGRATION_EXCLUDED_WORKSPACE_IDS", "")
+    excluded_workspace_ids = [w.strip() for w in excluded_raw.split(",") if w.strip()]
+
     print("Connecting to database...")
     conn = connect()
 
     try:
         with conn.cursor() as cursor:
+            if excluded_workspace_ids:
+                print(f"Excluding {len(excluded_workspace_ids)} workspace(s) "
+                      f"(MIGRATION_EXCLUDED_WORKSPACE_IDS)")
             print("Fetching orphan alerts (project_id IS NULL)...")
-            alerts = fetch_orphan_alerts(cursor)
+            alerts = fetch_orphan_alerts(cursor, excluded_workspace_ids)
             print(f"  Found {len(alerts)} orphan alert(s)")
 
             workspace_counts = {}

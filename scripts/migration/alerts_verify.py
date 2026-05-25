@@ -112,8 +112,16 @@ def fetch_new_alert_with_project(cursor, workspace_id, name, project_id, origina
     return row["id"] if row else None
 
 
-def count_orphan_alerts(cursor):
-    cursor.execute("SELECT COUNT(*) AS cnt FROM alerts WHERE project_id IS NULL")
+def count_orphan_alerts(cursor, excluded_workspace_ids=None):
+    if excluded_workspace_ids:
+        placeholders = ", ".join(["%s"] * len(excluded_workspace_ids))
+        cursor.execute(
+            f"SELECT COUNT(*) AS cnt FROM alerts "
+            f"WHERE project_id IS NULL AND workspace_id NOT IN ({placeholders})",
+            excluded_workspace_ids,
+        )
+    else:
+        cursor.execute("SELECT COUNT(*) AS cnt FROM alerts WHERE project_id IS NULL")
     return cursor.fetchone()["cnt"]
 
 
@@ -351,6 +359,9 @@ def main():
         print("\nSnapshot contains 0 orphan alerts — nothing to verify.")
         sys.exit(0)
 
+    excluded_raw = os.environ.get("MIGRATION_EXCLUDED_WORKSPACE_IDS", "")
+    excluded_workspace_ids = [w.strip() for w in excluded_raw.split(",") if w.strip()]
+
     print("\nConnecting to database...")
     conn = connect()
     results = Results()
@@ -359,7 +370,10 @@ def main():
     try:
         with conn.cursor() as cursor:
             print("\n[Global]")
-            orphan_count = count_orphan_alerts(cursor)
+            if excluded_workspace_ids:
+                print(f"  Excluding {len(excluded_workspace_ids)} workspace(s) "
+                      f"from orphan count (MIGRATION_EXCLUDED_WORKSPACE_IDS)")
+            orphan_count = count_orphan_alerts(cursor, excluded_workspace_ids)
             if orphan_count == 0:
                 results.ok("No alerts with project_id IS NULL remain in the database")
             else:
