@@ -51,7 +51,7 @@ import dspyCode from "@/integrations/integration-scripts/DSPy.py?raw";
 import { integrationLogsMap } from "@/integrations/integration-logs";
 
 import ollamaCode from "@/integrations/integration-scripts/Ollama.py?raw";
-import openclawCode from "@/integrations/integration-scripts/OpenClaw.py?raw";
+import openclawCode from "@/integrations/integration-scripts/OpenClaw.sh?raw";
 import crewaiCode from "@/integrations/integration-scripts/CrewAI.py?raw";
 import adkCode from "@/integrations/integration-scripts/ADK.py?raw";
 import openrouterCode from "@/integrations/integration-scripts/OpenRouter.py?raw";
@@ -65,6 +65,7 @@ import predibaseCode from "@/integrations/integration-scripts/Predibase.py?raw";
 // import pydanticaiCode from "@/integration-scripts/PydanticAI.py?raw";
 // import smolagentsCode from "@/integration-scripts/Smolagents.py?raw";
 import { buildDocsUrl } from "@/lib/utils";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 // import strandsAgentsCode from "@/integration-scripts/StrandsAgents.py?raw";
 // import vercelAiCode from "@/integration-scripts/VercelAI.py?raw";
 // import watsonxCode from "@/integration-scripts/WatsonX.py?raw";
@@ -82,6 +83,7 @@ export type Integration = {
   installCommand: string;
   installTitle?: string;
   installDescription?: string;
+  codeLanguage?: SUPPORTED_LANGUAGE;
   docsLink: string;
   executionUrl?: string;
   executionLogs?: string[];
@@ -152,6 +154,7 @@ export const INTEGRATIONS: Integration[] = [
     installTitle: "1. Install the OpenClaw plugin",
     installDescription:
       "Run this in your OpenClaw Gateway environment to install the Opik plugin.",
+    codeLanguage: SUPPORTED_LANGUAGE.bash,
     docsLink: buildDocsUrl("/integrations/openclaw"),
   },
   {

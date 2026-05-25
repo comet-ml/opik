@@ -130,6 +130,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
                 data={codeWithConfig}
                 copyData={codeWithConfigToCopy}
                 highlightedLines={lines}
+                language={selectedIntegration.codeLanguage}
               />
             )}
           </IntegrationStep>
