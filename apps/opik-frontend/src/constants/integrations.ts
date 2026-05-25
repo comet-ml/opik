@@ -80,6 +80,8 @@ export type Integration = {
   code: string;
   tag?: string;
   installCommand: string;
+  installTitle?: string;
+  installDescription?: string;
   docsLink: string;
   executionUrl?: string;
   executionLogs?: string[];
@@ -147,6 +149,9 @@ export const INTEGRATIONS: Integration[] = [
     icon: openclawLogoUrl,
     code: openclawCode,
     installCommand: "openclaw plugins install clawhub:@opik/opik-openclaw",
+    installTitle: "1. Install the OpenClaw plugin",
+    installDescription:
+      "Run this in your OpenClaw Gateway environment to install the Opik plugin.",
     docsLink: buildDocsUrl("/integrations/openclaw"),
   },
   {
