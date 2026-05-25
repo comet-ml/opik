@@ -58,8 +58,20 @@ jobs:
           ASSIGN_USER_LOGIN="${{ steps.get_assignee_user.outputs.assigned_user }}"
 
           echo "Attempting to assign PR #$PR_NUMBER to $ASSIGN_USER_LOGIN"
-          # Note: If the user is already assigned, this command will succeed without error.
-          gh pr edit "$PR_NUMBER" --add-assignee "$ASSIGN_USER_LOGIN" --repo "${{ github.repository }}" || {
+          # Notes:
+          # - If the user is already assigned, `gh pr edit` succeeds without error.
+          # - External-collaborator PRs may fail outright (token lacks write on that user) — we
+          #   log and continue rather than failing the workflow.
+          # - GitHub can also silently ignore assignees without push access while still exiting 0,
+          #   so we re-read the PR's assignees after the edit and confirm the user actually landed
+          #   before logging success.
+          if gh pr edit "$PR_NUMBER" --add-assignee "$ASSIGN_USER_LOGIN" --repo "${{ github.repository }}"; then
+            CURRENT_ASSIGNEES="$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json assignees --jq '.assignees[].login' 2>/dev/null || true)"
+            if grep -Fxq "$ASSIGN_USER_LOGIN" <<<"$CURRENT_ASSIGNEES"; then
+              echo "Successfully assigned PR #$PR_NUMBER to $ASSIGN_USER_LOGIN"
+            else
+              echo "⚠ gh pr edit returned success but $ASSIGN_USER_LOGIN is not in the assignees list (likely silently ignored by GitHub — no push access)"
+            fi
+          else
             echo "❌ Failed to assign PR #$PR_NUMBER to $ASSIGN_USER_LOGIN, likely an external collaborator"
-          }
-          echo "Successfully assigned PR #$PR_NUMBER to $ASSIGN_USER_LOGIN"
+          fi

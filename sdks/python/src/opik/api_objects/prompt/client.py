@@ -157,20 +157,10 @@ class PromptClient:
             # retrieve_prompt_version may not return tags, so we need to set them manually
             # from the tags we just passed to create_prompt
             if tags is not None and new_prompt_version_detail.tags is None:
-                # Pydantic objects are frozen, so we need to create a new object with tags
-                new_prompt_version_detail = prompt_version_detail.PromptVersionDetail(
-                    id=new_prompt_version_detail.id,
-                    prompt_id=new_prompt_version_detail.prompt_id,
-                    commit=new_prompt_version_detail.commit,
-                    template=new_prompt_version_detail.template,
-                    metadata=new_prompt_version_detail.metadata,
-                    type=new_prompt_version_detail.type,
-                    change_description=new_prompt_version_detail.change_description,
-                    tags=tags,
-                    variables=new_prompt_version_detail.variables,
-                    template_structure=new_prompt_version_detail.template_structure,
-                    created_at=new_prompt_version_detail.created_at,
-                    created_by=new_prompt_version_detail.created_by,
+                # Pydantic objects are frozen, so we copy to inject tags;
+                # model_copy preserves every other field automatically.
+                new_prompt_version_detail = new_prompt_version_detail.model_copy(
+                    update={"tags": tags}
                 )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version
@@ -447,8 +437,13 @@ class PromptClient:
                         prompt_id=version.prompt_id,
                         template=version.template,
                         type=version.type,
+                        version_type=version.version_type,
+                        environment=version.environment,
                         metadata=version.metadata,
                         commit=version.commit,
+                        version_number=version.version_number,
+                        change_description=version.change_description,
+                        template_structure=version.template_structure,
                         created_at=version.created_at,
                         created_by=version.created_by,
                         tags=version.tags,
@@ -525,20 +520,10 @@ class PromptClient:
                     )
                     # retrieve_prompt_version may not return tags, so we need to set them from get_prompts response
                     if tags is not None and latest_version.tags is None:
-                        # Pydantic objects are frozen, so we need to create a new object with tags
-                        latest_version = prompt_version_detail.PromptVersionDetail(
-                            id=latest_version.id,
-                            prompt_id=latest_version.prompt_id,
-                            commit=latest_version.commit,
-                            template=latest_version.template,
-                            metadata=latest_version.metadata,
-                            type=latest_version.type,
-                            change_description=latest_version.change_description,
-                            tags=tags,
-                            variables=latest_version.variables,
-                            template_structure=latest_version.template_structure,
-                            created_at=latest_version.created_at,
-                            created_by=latest_version.created_by,
+                        # Pydantic objects are frozen, so we copy to inject tags;
+                        # model_copy preserves every other field automatically.
+                        latest_version = latest_version.model_copy(
+                            update={"tags": tags}
                         )
                     results.append(
                         PromptSearchResult(

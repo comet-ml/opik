@@ -23,7 +23,7 @@ interface AlertTriggerConfigDAO {
 
     @SqlBatch("INSERT INTO alert_trigger_configs (id, alert_trigger_id, config_type, config_value, group_index, created_by, last_updated_by, created_at) "
             +
-            "VALUES (:bean.id, :alertTriggerId, :bean.type, :bean.configValue, :bean.groupIndex, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))")
+            "VALUES (:bean.id, :bean.alertTriggerId, :bean.type, :bean.configValue, :bean.groupIndex, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))")
     void saveBatch(@BindMethods("bean") List<AlertTriggerConfig> alertTriggerConfigs);
 
     class AlertTriggerConfigTypeArgumentFactory extends AbstractArgumentFactory<AlertTriggerConfigType> {

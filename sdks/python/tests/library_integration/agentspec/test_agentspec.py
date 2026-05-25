@@ -99,7 +99,25 @@ def test_opik_span_processor_tool_and_llm_spans_are_forwarded_to_opik(
         name="AgentSpec workflow",
         project_name=project_name,
         start_time=ANY_BUT_NONE,
-        end_time=None,
+        end_time=ANY_BUT_NONE,
+        input=ANY_DICT.containing(
+            {
+                "request_id": "llm-request",
+                "prompt": [
+                    {
+                        "id": None,
+                        "content": "my prompt",
+                        "role": "system",
+                        "sender": "me",
+                    }
+                ],
+            }
+        ),
+        output={
+            "response": "sunny",
+            "tool_calls": [],
+            "completion_id": None,
+        },
         last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
@@ -111,7 +129,7 @@ def test_opik_span_processor_tool_and_llm_spans_are_forwarded_to_opik(
                 output=None,
                 metadata=ANY_DICT.containing({"events": []}),
                 start_time=ANY_BUT_NONE,
-                end_time=None,
+                end_time=ANY_BUT_NONE,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -122,7 +140,7 @@ def test_opik_span_processor_tool_and_llm_spans_are_forwarded_to_opik(
                         output={"temperature": "18C"},
                         metadata=ANY_DICT.containing({"events": ANY_LIST}),
                         start_time=ANY_BUT_NONE,
-                        end_time=None,
+                        end_time=ANY_BUT_NONE,
                         spans=[],
                     ),
                     SpanModel(
@@ -158,7 +176,7 @@ def test_opik_span_processor_tool_and_llm_spans_are_forwarded_to_opik(
                         ),
                         metadata=ANY_DICT.containing({"events": ANY_LIST}),
                         start_time=ANY_BUT_NONE,
-                        end_time=None,
+                        end_time=ANY_BUT_NONE,
                         spans=[],
                     ),
                 ],
@@ -214,7 +232,7 @@ def test_agentspec_instrumentor_context_manager_records_spans_and_cleans_up(
         name="Trace",
         project_name=project_name,
         start_time=ANY_BUT_NONE,
-        end_time=None,
+        end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
@@ -226,7 +244,7 @@ def test_agentspec_instrumentor_context_manager_records_spans_and_cleans_up(
                 output=None,
                 metadata=ANY_DICT.containing({"events": []}),
                 start_time=ANY_BUT_NONE,
-                end_time=None,
+                end_time=ANY_BUT_NONE,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -237,7 +255,7 @@ def test_agentspec_instrumentor_context_manager_records_spans_and_cleans_up(
                         output={"time": "09:30"},
                         metadata=ANY_DICT.containing({"events": ANY_LIST}),
                         start_time=ANY_BUT_NONE,
-                        end_time=None,
+                        end_time=ANY_BUT_NONE,
                         spans=[],
                     )
                 ],
@@ -300,6 +318,24 @@ def test_opik_span_processor_llm_response_is_preserved_when_span_ends_with_error
         project_name=project_name,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        input=ANY_DICT.containing(
+            {
+                "request_id": "llm-request",
+                "prompt": [
+                    {
+                        "id": None,
+                        "content": "my prompt",
+                        "role": "system",
+                        "sender": "me",
+                    }
+                ],
+            }
+        ),
+        output={
+            "response": "sunny",
+            "tool_calls": [],
+            "completion_id": None,
+        },
         last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
