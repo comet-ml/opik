@@ -274,11 +274,11 @@ def _emit_telemetry(
 
     opik.opik_context.update_current_span(
         metadata={
-            "agentic_loop_rounds": telemetry.rounds,
-            "agentic_loop_tool_calls": telemetry.tool_calls_by_name,
-            "agentic_loop_duplicate_calls": telemetry.duplicate_calls,
-            "agentic_loop_overview_truncated": overview_truncated,
-            "agentic_loop_read_engaged": read_engaged,
+            "_agentic_loop_rounds": telemetry.rounds,
+            "_agentic_loop_tool_calls": telemetry.tool_calls_by_name,
+            "_agentic_loop_duplicate_calls": telemetry.duplicate_calls,
+            "_agentic_loop_overview_truncated": overview_truncated,
+            "_agentic_loop_read_engaged": read_engaged,
         }
     )
 
