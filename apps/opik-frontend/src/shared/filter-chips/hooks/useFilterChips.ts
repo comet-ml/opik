@@ -81,18 +81,17 @@ const useFilterChips = ({
   const [managerOpen, setManagerOpen] = useState(false);
   const [openChipId, setOpenChipId] = useState<string | null>(null);
 
-  const chipsPinned = useMemo<ChipDefinition[]>(
-    () =>
-      pinnedIds
-        .map((id) => definitions.find((d) => d.id === id))
-        .filter((d): d is ChipDefinition => Boolean(d)),
-    [pinnedIds, definitions],
-  );
+  const chipsPinned = useMemo<ChipDefinition[]>(() => {
+    const explicit = new Set(pinnedIds);
+    const applied = new Set(Object.keys(values));
+    return definitions.filter((d) => explicit.has(d.id) || applied.has(d.id));
+  }, [pinnedIds, values, definitions]);
 
-  const chipsUnpinned = useMemo<ChipDefinition[]>(
-    () => definitions.filter((d) => !pinnedIds.includes(d.id)),
-    [definitions, pinnedIds],
-  );
+  const chipsUnpinned = useMemo<ChipDefinition[]>(() => {
+    const explicit = new Set(pinnedIds);
+    const applied = new Set(Object.keys(values));
+    return definitions.filter((d) => !explicit.has(d.id) && !applied.has(d.id));
+  }, [pinnedIds, values, definitions]);
 
   const filters = useMemo(
     () => chipsToFilters(definitions, values),

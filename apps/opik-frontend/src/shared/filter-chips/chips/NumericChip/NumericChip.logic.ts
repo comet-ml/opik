@@ -26,8 +26,11 @@ const SUPPORTED_OPERATORS: ReadonlySet<FilterOperator> = new Set([
   "<=",
 ]);
 
-const toNumber = (raw: Filter["value"]): number | null => {
-  const n = typeof raw === "number" ? raw : Number(raw);
+export const toNumber = (raw: Filter["value"]): number | null => {
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  const s = raw.trim();
+  if (s === "") return null;
+  const n = Number(s);
   return Number.isFinite(n) ? n : null;
 };
 

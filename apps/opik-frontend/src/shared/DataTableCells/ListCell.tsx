@@ -42,7 +42,7 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
 
   const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
   const isSmall = rowHeight === ROW_HEIGHT.small;
-  const tagSize = isSmall ? "sm" : ("md" as const);
+  const tagSize: "sm" | "md" = isSmall ? "sm" : "md";
 
   const isEmpty = !Array.isArray(items) || items.length === 0;
   const sortedList = useMemo(
@@ -104,30 +104,28 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
             ))}
           </ChildrenWidthMeasurer>
           {displayedItems.map((item) => {
-            const tag = (
-              <ColoredTag
-                label={item}
-                variant="lavender"
-                className="block min-w-0 max-w-full"
-                size={tagSize}
-              />
-            );
+            const tagProps = {
+              label: item,
+              tooltip: getItemTooltip?.(item),
+              variant: "lavender" as const,
+              className: "block min-w-0 max-w-full",
+              size: tagSize,
+            };
             if (!onItemClick) {
-              return <div key={item}>{tag}</div>;
+              return <ColoredTag key={item} {...tagProps} />;
             }
             return (
-              <TooltipWrapper key={item} content={getItemTooltip?.(item)}>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onItemClick(item);
-                  }}
-                  className="min-w-0 max-w-full cursor-pointer"
-                >
-                  {tag}
-                </button>
-              </TooltipWrapper>
+              <button
+                key={item}
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onItemClick(item);
+                }}
+                className="min-w-0 max-w-full cursor-pointer"
+              >
+                <ColoredTag {...tagProps} />
+              </button>
             );
           })}
           {showOverflowIndicator && (

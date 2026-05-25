@@ -36,17 +36,14 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
     autoFocus={autoFocus}
     commitOnBlur
   >
-    <Autocomplete.Anchor>
-      <input
-        type="text"
-        placeholder={placeholder}
-        className={cn(
-          cellInput,
-          grow && "flex-1",
-          hasError && "border-destructive focus:border-destructive",
-        )}
-      />
-    </Autocomplete.Anchor>
-    <Autocomplete.Content />
+    <input
+      type="text"
+      placeholder={placeholder}
+      className={cn(
+        cellInput,
+        grow && "flex-1",
+        hasError && "border-destructive focus:border-destructive",
+      )}
+    />
   </Autocomplete>
 );
