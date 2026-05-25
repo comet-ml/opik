@@ -25,10 +25,13 @@ def test_stream_dataset_items__colliding_id_key__uses_real_id_and_warns():
 
     mock_rest_client = Mock()
 
-    with patch(
-        "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
-        side_effect=[[rest_item], []],
-    ), patch.object(rest_operations.LOGGER, "warning") as mock_warn:
+    with (
+        patch(
+            "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
+            side_effect=[[rest_item], []],
+        ),
+        patch.object(rest_operations.LOGGER, "warning") as mock_warn,
+    ):
         items = list(
             rest_operations.stream_dataset_items(
                 rest_client=mock_rest_client,
@@ -52,10 +55,13 @@ def test_stream_dataset_items__colliding_id_key__warning_emitted_only_once():
 
     mock_rest_client = Mock()
 
-    with patch(
-        "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
-        side_effect=[items_data, []],
-    ), patch.object(rest_operations.LOGGER, "warning") as mock_warn:
+    with (
+        patch(
+            "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
+            side_effect=[items_data, []],
+        ),
+        patch.object(rest_operations.LOGGER, "warning") as mock_warn,
+    ):
         result = list(
             rest_operations.stream_dataset_items(
                 rest_client=mock_rest_client,
