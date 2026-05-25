@@ -98,8 +98,14 @@ const IntegrationDetailsDialog: React.FunctionComponent<
           </div>
 
           <IntegrationStep
-            title={`${INSTALL_OPIK_SECTION_TITLE}.`}
-            description="Install Opik from the command line using pip."
+            title={
+              selectedIntegration.installTitle ??
+              `${INSTALL_OPIK_SECTION_TITLE}.`
+            }
+            description={
+              selectedIntegration.installDescription ??
+              "Install Opik from the command line using pip."
+            }
             className="mb-6"
           >
             <div className="min-h-7">
@@ -125,6 +131,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
                 data={codeWithConfig}
                 copyData={codeWithConfigToCopy}
                 highlightedLines={lines}
+                language={selectedIntegration.codeLanguage}
               />
             )}
           </IntegrationStep>
