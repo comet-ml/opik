@@ -13,3 +13,19 @@ class ProjectCreate(BaseModel):
 class ProjectResponse(BaseModel):
     id: str
     name: str
+
+
+class TraceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    name: str
+    input: str
+    output: str
+    workspace: str | None = None
+
+
+class TraceResponse(BaseModel):
+    id: str
+    name: str
+    project_id: str
