@@ -19,6 +19,12 @@ export interface DatasetItemRef {
   data: Record<string, unknown>;
 }
 
+export interface ExperimentRefDetail {
+  id: string;
+  name: string;
+  datasetId: string | null;
+}
+
 export function makeBackendClient(apiKey: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
@@ -97,6 +103,39 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(item.id),
         data: (item.data ?? {}) as Record<string, unknown>,
       }));
+    },
+
+    async findExperimentByName(name: string): Promise<ExperimentRefDetail | null> {
+      const page = await opik.api.experiments.findExperiments({ name, size: 50 });
+      const content = page.content ?? [];
+      const match = content.find((e) => e.name === name);
+      if (!match) return null;
+      return {
+        id: String(match.id),
+        name: match.name as string,
+        datasetId: match.datasetId ? String(match.datasetId) : null,
+      };
+    },
+
+    async listExperimentsWithPrefix(prefix: string): Promise<ExperimentRefDetail[]> {
+      const page = await opik.api.experiments.findExperiments({ name: prefix, size: 500 });
+      const content = page.content ?? [];
+      return content
+        .filter((e) => typeof e.name === 'string' && (e.name as string).startsWith(prefix))
+        .map((e) => ({
+          id: String(e.id),
+          name: e.name as string,
+          datasetId: e.datasetId ? String(e.datasetId) : null,
+        }));
+    },
+
+    async deleteExperiment(id: string): Promise<void> {
+      try {
+        await opik.api.experiments.deleteExperimentsById({ ids: [id] });
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
     },
   };
 }
