@@ -235,13 +235,15 @@ def verify_attachments(
 ) -> int:
     """Polls the attachments REST endpoint until `expected_count` are listed.
 
-    The endpoint's ``path`` query parameter is a URL-safe base64-encoded
-    base URL the backend uses to build download links — we pass the
-    SDK's configured base URL so the round-trip succeeds.
+    The endpoint's ``path`` query parameter is a base64-encoded base URL
+    the backend uses to build download links — we pass the SDK's
+    configured base URL so the round-trip succeeds. Uses the standard
+    ``b64encode`` alphabet (not ``urlsafe_b64encode``) to match the
+    contract used by ``attachment/client.py`` and ``tests/e2e/verifiers.py``.
     """
     project = client.rest_client.projects.retrieve_project(name=project_name)
     base_url: str = str(client.config.url_override).rstrip("/")
-    encoded_base_url: str = base64.urlsafe_b64encode(
+    encoded_base_url: str = base64.b64encode(
         base_url.encode("utf-8")
     ).decode("ascii")
     deadline: float = time.time() + timeout_seconds
