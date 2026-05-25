@@ -175,11 +175,14 @@ def test_test_suite__assertion_fails__item_fails(
         return {"input": item["input"], "output": "2 + 2 equals 4."}
 
     # opik.run_tests must handle flushing
+    # Pin to gpt-4o-mini: the SDK default `gpt-5-nano` sometimes produces
+    # inconsistent structured output on the failing-run assertion
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
+        model="gpt-4o-mini",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
