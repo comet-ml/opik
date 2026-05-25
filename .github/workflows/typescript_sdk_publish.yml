@@ -80,13 +80,14 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## TypeScript SDK Build" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Version:** ${{ steps.build_publish.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Event:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Is Release:** ${{ env.IS_RELEASE }}" >> "$GITHUB_STEP_SUMMARY"
+          exec >> "$GITHUB_STEP_SUMMARY"
+          echo "## TypeScript SDK Build"
+          echo ""
+          echo "**Version:** ${{ steps.build_publish.outputs.version }}"
+          echo "**Event:** ${{ github.event_name }}"
+          echo "**Is Release:** ${{ env.IS_RELEASE }}"
           if [ "${{ env.IS_RELEASE }}" = "true" ]; then
-            echo "**Published:** ✅ Published to NPM" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Published:** ✅ Published to NPM"
           else
-            echo " ⏭️ Build only " >> "$GITHUB_STEP_SUMMARY"
+            echo " ⏭️ Build only "
           fi
