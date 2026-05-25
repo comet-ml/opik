@@ -20,6 +20,7 @@ import { Integration } from "@/constants/integrations";
 import HelpLinks from "./HelpLinks";
 import { ExternalLink } from "lucide-react";
 import { IntegrationStep } from "./IntegrationStep";
+import AdditionalIntegrationSteps from "@/shared/OnboardingIntegrationsPage/AdditionalIntegrationSteps";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "@/v1/pages-shared/onboarding/CodeExecutor/CodeExecutor";
@@ -98,36 +99,55 @@ const IntegrationDetailsDialog: React.FunctionComponent<
           </div>
 
           <IntegrationStep
-            title={`${INSTALL_OPIK_SECTION_TITLE}.`}
-            description="Install Opik from the command line using pip."
+            title={
+              selectedIntegration.installTitle ??
+              `${INSTALL_OPIK_SECTION_TITLE}.`
+            }
+            description={
+              selectedIntegration.installDescription ??
+              "Install Opik from the command line using pip."
+            }
             className="mb-6"
           >
             <div className="min-h-7">
               <CodeHighlighter data={selectedIntegration.installCommand} />
             </div>
           </IntegrationStep>
-          <IntegrationStep
-            title={`2. Run the following code to get started with ${selectedIntegration.title}`}
-            className="mb-6"
-          >
-            {shouldShowCodeExecutor ? (
-              <CodeExecutor
-                executionUrl={selectedIntegration.executionUrl!}
-                executionLogs={selectedIntegration.executionLogs!}
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                apiKey={apiKey}
-                workspaceName={workspaceName}
-                highlightedLines={lines}
-              />
-            ) : (
-              <CodeHighlighter
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                highlightedLines={lines}
-              />
-            )}
-          </IntegrationStep>
+          {selectedIntegration.additionalSteps && (
+            <AdditionalIntegrationSteps
+              steps={selectedIntegration.additionalSteps}
+              workspaceName={workspaceName}
+              apiKey={apiKey}
+              projectName={SNIPPET_PROJECT_NAME}
+              IntegrationStep={IntegrationStep}
+              stepClassName="mb-6"
+            />
+          )}
+          {selectedIntegration.code && (
+            <IntegrationStep
+              title={`2. Run the following code to get started with ${selectedIntegration.title}`}
+              className="mb-6"
+            >
+              {shouldShowCodeExecutor ? (
+                <CodeExecutor
+                  executionUrl={selectedIntegration.executionUrl!}
+                  executionLogs={selectedIntegration.executionLogs!}
+                  data={codeWithConfig}
+                  copyData={codeWithConfigToCopy}
+                  apiKey={apiKey}
+                  workspaceName={workspaceName}
+                  highlightedLines={lines}
+                />
+              ) : (
+                <CodeHighlighter
+                  data={codeWithConfig}
+                  copyData={codeWithConfigToCopy}
+                  highlightedLines={lines}
+                  language={selectedIntegration.codeLanguage}
+                />
+              )}
+            </IntegrationStep>
+          )}
 
           <Separator className="my-6" />
 
