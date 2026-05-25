@@ -69,7 +69,6 @@ jobs:
           fi
           
           # Exclude arm64 when the caller opts out, or for guardrails backend
-          # (no arm64 image available for it).
           if [[ "${{ inputs.build_arm64 }}" != "true" ]] || [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
             BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"platform":"arm64"}]')
           fi
