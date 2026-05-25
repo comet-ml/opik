@@ -5,6 +5,7 @@ import omit from "lodash/omit";
 import { isObjectThread } from "@/lib/traces";
 import { CommentItem, CommentItems } from "@/types/comment";
 import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
+import { formatDate } from "@/lib/date";
 
 export const generateSMEURL = (workspace: string, id: string): string => {
   const basePath = import.meta.env.VITE_BASE_URL || "/";
@@ -171,6 +172,18 @@ export const getItemState = (
     return ITEM_STATE.SCORED;
   }
   return ITEM_STATE.DEFAULT;
+};
+
+export const formatThreadDateRange = (
+  startTime?: string,
+  endTime?: string,
+): string | undefined => {
+  const start = startTime
+    ? formatDate(startTime, { format: "MMM D, h:mm A" })
+    : "";
+  const end = endTime ? formatDate(endTime, { format: "h:mm A" }) : "";
+  if (start && end) return `${start} → ${end}`;
+  return start || undefined;
 };
 
 export const formatFeedbackScoresForExport = (

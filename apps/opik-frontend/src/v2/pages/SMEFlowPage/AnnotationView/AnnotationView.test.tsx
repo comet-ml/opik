@@ -22,7 +22,10 @@ vi.mock("./TraceDataViewer", () => ({
 }));
 
 vi.mock("./ThreadDataViewer", () => ({
-  default: () => <div data-testid="thread-data-viewer" />,
+  default: {
+    Header: () => <div data-testid="thread-header" />,
+    Content: () => <div data-testid="thread-content" />,
+  },
 }));
 
 vi.mock("./CommentAndScoreViewer", () => ({
@@ -135,7 +138,7 @@ describe("AnnotationView", () => {
       },
     });
     render(<AnnotationView header={<div>Header</div>} />, { wrapper });
-    expect(screen.getByTestId("thread-data-viewer")).toBeInTheDocument();
+    expect(screen.getByTestId("thread-content")).toBeInTheDocument();
   });
 
   it("should show trace viewer when scope is trace", () => {
