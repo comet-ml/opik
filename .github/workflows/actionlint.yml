@@ -2,6 +2,9 @@ name: '🐙 Lint Workflows'
 
 on:
   pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
 
 permissions:
   contents: read
