@@ -49,6 +49,17 @@ class AnthropicChatModel(base_model.OpikBaseModel):
                     self._completion_kwargs["tool_choice"]
                 )
             )
+        # The same shape mismatch can come in at construction time
+        # (`AnthropicChatModel(tools=[...])` or via the factory). The
+        # per-call path normalizes `filtered_extra["tools"]` in
+        # `_build_call_kwargs`, but `self._completion_kwargs["tools"]`
+        # gets merged in alongside it without that translation —
+        # without normalizing here, OpenAI-shape specs passed at init
+        # would still reach the Anthropic SDK unchanged.
+        if "tools" in self._completion_kwargs:
+            self._completion_kwargs["tools"] = message_adapter.normalize_tools(
+                self._completion_kwargs["tools"]
+            )
 
         config = opik_config.OpikConfig()
         enable_tracking = track and config.enable_litellm_models_monitoring
@@ -78,6 +89,19 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         )
         return message["content"]
 
+    def _effective_tool_names(self, call_kwargs: Dict[str, Any]) -> List[str]:
+        """Names of every tool registered for this call.
+
+        Mirrors the precedence of `_build_call_kwargs` (`{**self._completion_kwargs, **filtered_extra}`):
+        per-call `tools` override constructor-time `tools` rather than
+        merge. Returned names go to the response parser, so a real tool
+        call (`read` / `scan` / `search`) doesn't get misclassified as
+        the structured-output finalizer when both arrive as `tool_use`
+        blocks. Used by both the sync and async paths.
+        """
+        effective_tools = call_kwargs.get("tools", self._completion_kwargs.get("tools"))
+        return message_adapter.extract_tool_names(effective_tools)
+
     def generate_chat_completion(
         self,
         messages: List[base_model.ConversationDict],
@@ -87,11 +111,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         if response_format is not None:
             kwargs["response_format"] = response_format
 
-        # Extract names before normalize_tools rewrites the `tools` list
-        # — the names come back to the response parser so a real tool
-        # call doesn't get misclassified as the structured-output
-        # finalizer (both arrive as `tool_use` blocks).
-        registered_tool_names = message_adapter.extract_tool_names(kwargs.get("tools"))
+        registered_tool_names = self._effective_tool_names(kwargs)
 
         with base_model.get_provider_response(
             model_provider=self,
@@ -150,7 +170,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         if response_format is not None:
             kwargs["response_format"] = response_format
 
-        registered_tool_names = message_adapter.extract_tool_names(kwargs.get("tools"))
+        registered_tool_names = self._effective_tool_names(kwargs)
 
         async with base_model.aget_provider_response(
             model_provider=self,

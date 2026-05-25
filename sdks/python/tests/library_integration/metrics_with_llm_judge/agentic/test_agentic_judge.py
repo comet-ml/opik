@@ -80,7 +80,7 @@ def _make_recording_agentic_judge(
     via the same `models_factory.get` that `LLMJudge._init_model`
     uses, so the model wiring matches the rest of the suite.
     """
-    base_registry = agentic_judge._default_registry()
+    base_registry = agentic_judge.default_tool_registry()
     recorder = RecordingToolRegistry(base_registry)
     model = models_factory.get(model_name, track=False, seed=42, temperature=0.0)
     judge = agentic_judge.AgenticLLMJudge(

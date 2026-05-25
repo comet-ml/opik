@@ -28,24 +28,36 @@ _SUPPORTED_PARAMS: frozenset[str] = frozenset(
 )
 
 
-def _parse_tool_call_arguments(arguments: Any) -> Any:
+def _parse_tool_call_arguments(arguments: Any) -> Dict[str, Any]:
     """Decode an OpenAI tool call's `arguments` field into a dict.
 
-    OpenAI emits arguments as a JSON-encoded string; Anthropic's
-    `tool_use` block expects an already-parsed object in the `input`
-    field. We fall back to the empty dict on malformed JSON rather
-    than raising — the Anthropic SDK will surface its own validation
-    error if the schema doesn't match, which is more actionable than
-    "your tool arguments aren't JSON".
+    OpenAI emits `arguments` as a JSON-encoded string; Anthropic's
+    `tool_use.input` is specified as a JSON object — top-level
+    arrays, scalars, or nulls are rejected by the API. This helper
+    only returns dicts:
+
+    - Dict in → dict out.
+    - JSON-encoded dict string → decoded dict.
+    - Anything else (top-level list/scalar/null, malformed JSON,
+      non-string non-dict values) → empty dict.
+
+    We fall back to `{}` rather than raising. The Anthropic SDK will
+    surface a schema-mismatch error against the tool's `input_schema`
+    if the call actually needed structured arguments, which is more
+    actionable than "your tool arguments aren't an object." Forwarding
+    a list/scalar here, on the other hand, would short-circuit the
+    SDK's validation with an opaque 400.
     """
-    if isinstance(arguments, (dict, list)):
+    if isinstance(arguments, dict):
         return arguments
-    if not isinstance(arguments, str):
-        return {}
-    try:
-        return json.loads(arguments)
-    except (TypeError, ValueError):
-        return {}
+    if isinstance(arguments, str):
+        try:
+            decoded = json.loads(arguments)
+        except (TypeError, ValueError):
+            return {}
+        if isinstance(decoded, dict):
+            return decoded
+    return {}
 
 
 def normalize_messages(

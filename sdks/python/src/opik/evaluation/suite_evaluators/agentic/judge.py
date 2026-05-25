@@ -67,7 +67,7 @@ class AgenticLLMJudge:
     ) -> None:
         self._assertions = list(assertions)
         self._model = model
-        self._registry = registry or _default_registry()
+        self._registry = registry or default_tool_registry()
 
     def score(self, ctx: context.TraceToolContext) -> List[score_result.ScoreResult]:
         try:
@@ -125,7 +125,7 @@ class AgenticLLMJudge:
         return schema.parse(content)
 
 
-def _default_registry() -> tool_registry.ToolRegistry:
+def default_tool_registry() -> tool_registry.ToolRegistry:
     return tool_registry.ToolRegistry(
         tools=[
             read.ReadTool(),

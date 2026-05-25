@@ -454,6 +454,59 @@ class TestMessageAdapter:
             }
         ]
 
+    def test_normalize_messages_coerces_non_object_arguments_to_empty_dict(self):
+        """Anthropic's `tool_use.input` is specified as a JSON object.
+        OpenAI's `arguments` is *almost* always a stringified dict, but
+        a malformed model output (top-level array, scalar, null, or
+        non-JSON text) could leak a non-dict value through. The
+        translator must coerce those to `{}` so we hit the SDK's own
+        schema validation instead of a generic 400 from the API.
+        """
+        # Top-level JSON list → empty dict.
+        messages = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps([1, 2, 3]),
+                        },
+                    }
+                ],
+            }
+        ]
+        normalized = message_adapter.normalize_messages(messages)
+        assert normalized[0]["content"][0]["input"] == {}
+
+        # Top-level scalar → empty dict.
+        messages[0]["tool_calls"][0]["function"]["arguments"] = json.dumps(42)
+        assert (
+            message_adapter.normalize_messages(messages)[0]["content"][0]["input"] == {}
+        )
+
+        # Null → empty dict.
+        messages[0]["tool_calls"][0]["function"]["arguments"] = "null"
+        assert (
+            message_adapter.normalize_messages(messages)[0]["content"][0]["input"] == {}
+        )
+
+        # Non-JSON text → empty dict.
+        messages[0]["tool_calls"][0]["function"]["arguments"] = "not json"
+        assert (
+            message_adapter.normalize_messages(messages)[0]["content"][0]["input"] == {}
+        )
+
+        # Already-a-list (not a string) → empty dict too — we only
+        # forward dict-shaped values.
+        messages[0]["tool_calls"][0]["function"]["arguments"] = [1, 2]
+        assert (
+            message_adapter.normalize_messages(messages)[0]["content"][0]["input"] == {}
+        )
+
     def test_normalize_messages_full_round_trip(self):
         # End-to-end: a typical agentic-loop history with one
         # round-trip should land in valid Anthropic shape.
@@ -586,6 +639,126 @@ class TestAnthropicChatModelProviderResponse:
         call_kwargs = mock_client.messages.create.call_args.kwargs
         assert call_kwargs["model"] == "claude-sonnet-4-20250514"
 
+    def test_constructor_tools_feed_response_parser_disambiguation(self, monkeypatch):
+        """Regression: when `tools` is supplied only at construction time
+        (the agentic loop's default path through the factory), the
+        response parser still needs the registered names to tell a real
+        `read` tool call from the structured-output finalizer. Looking
+        only at the per-call `kwargs` (as the original code did) would
+        miss constructor-time tools and leave the parser blind.
+        """
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        mock_client.messages.parse = MagicMock(
+            return_value=SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        id="call_42",
+                        name="read",
+                        input={"type": "trace", "id": "t-1"},
+                    )
+                ]
+            )
+        )
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514",
+            track=False,
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "description": "Fetch a trace.",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                },
+            ],
+        )
+
+        # Per-call `tools` omitted on purpose — the constructor-time
+        # list must still reach the parser.
+        message = model.generate_chat_completion(
+            messages=[{"role": "user", "content": "go"}],
+            response_format=SampleFormat,
+        )
+
+        # If the parser got the registered names, the `read` tool_use
+        # block stays as a tool_call. Without them, it would have been
+        # promoted to `content` and the test would see `tool_calls`
+        # missing.
+        assert message["tool_calls"] == [
+            {
+                "id": "call_42",
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "arguments": json.dumps({"type": "trace", "id": "t-1"}),
+                },
+            }
+        ]
+
+    def test_per_call_tools_override_constructor_tools_for_parser(self, monkeypatch):
+        """Per-call `tools` replace constructor-time `tools` in
+        `_build_call_kwargs` (last-write-wins merge). The names the
+        parser sees must follow the same precedence — otherwise a
+        caller who narrows tools per-call could still get a tool_use
+        block misclassified because the parser was keyed on the wider
+        constructor set, or vice versa.
+        """
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        # Response uses the per-call tool name (`scan`), not the
+        # constructor name (`read`) — proves the per-call list wins.
+        mock_client.messages.create = MagicMock(
+            return_value=SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        id="call_99",
+                        name="scan",
+                        input={"path": "$.trace"},
+                    )
+                ]
+            )
+        )
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514",
+            track=False,
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "description": "Fetch a trace.",
+                        "parameters": {"type": "object"},
+                    },
+                },
+            ],
+        )
+
+        message = model.generate_chat_completion(
+            messages=[{"role": "user", "content": "go"}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "scan",
+                        "description": "Evaluate a jq path.",
+                        "parameters": {"type": "object"},
+                    },
+                },
+            ],
+        )
+
+        # `scan` (the per-call tool) is in the registered set the
+        # parser saw, so the response's `scan` tool_use stays as a
+        # tool call. If the precedence was wrong, the parser would have
+        # seen only `read` and promoted `scan` to content.
+        assert message.get("tool_calls", [])[0]["function"]["name"] == "scan"
+
 
 class TestParamFiltering:
     def test_filters_unsupported_constructor_kwargs(self, monkeypatch):
@@ -605,6 +778,57 @@ class TestParamFiltering:
         assert "logprobs" not in model._completion_kwargs
         assert "top_logprobs" not in model._completion_kwargs
         assert "frequency_penalty" not in model._completion_kwargs
+
+    def test_normalizes_constructor_tools_into_anthropic_shape(self, monkeypatch):
+        """Regression: OpenAI-shape `tools` passed at construction time
+        (e.g. via `AnthropicChatModel(tools=[...])` or the factory)
+        must be normalized before they're merged into per-call kwargs.
+        Without this, the per-call normalization in `_build_call_kwargs`
+        only catches `tools` arriving as call-time kwargs, and the
+        constructor-time list reaches the Anthropic SDK unchanged.
+        """
+        _install_anthropic_stub(monkeypatch)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514",
+            track=False,
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "description": "Fetch a trace.",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                },
+            ],
+        )
+
+        # Constructor-stored tools must be the Anthropic shape.
+        assert model._completion_kwargs["tools"] == [
+            {
+                "type": "custom",
+                "name": "read",
+                "description": "Fetch a trace.",
+                "input_schema": {"type": "object", "properties": {}},
+            }
+        ]
+
+    def test_normalizes_constructor_tool_choice_into_anthropic_shape(self, monkeypatch):
+        # Companion to the `tools` test: this is the existing
+        # constructor-side normalization for `tool_choice`. Pinning it
+        # here so future refactors that reshuffle the __init__ order
+        # don't silently regress the pairing.
+        _install_anthropic_stub(monkeypatch)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514",
+            track=False,
+            tool_choice="auto",
+        )
+        assert model._completion_kwargs["tool_choice"] == {"type": "auto"}
 
     def test_filters_unsupported_per_call_kwargs(self, monkeypatch):
         _, mock_client, _ = _install_anthropic_stub(monkeypatch)
