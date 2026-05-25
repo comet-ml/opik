@@ -131,8 +131,8 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      # default to multi-arch (true) when caller/trigger omits the input (push events have no inputs context); only an explicit `false` opts out
-      build_arm64: ${{ inputs.build_arm64 != false }}
+      # push events have no `inputs` context, so force multi-arch there; otherwise honor the input (workflow_dispatch / workflow_call use the declared default: true)
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-sandbox-executor-python:
     if: ${{ !inputs.is_adhoc }}
@@ -148,7 +148,7 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      build_arm64: ${{ inputs.build_arm64 != false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-python-backend:
     if: always() && needs.set-version.result == 'success'
@@ -165,7 +165,7 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      build_arm64: ${{ inputs.build_arm64 != false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   # build-guardrails-backend:
   #   if: inputs.build_guardrails != false 
@@ -194,7 +194,7 @@ jobs:
       comet_build_args: ${{ !inputs.is_adhoc && 'BUILD_MODE=comet' || '' }}
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      build_arm64: ${{ inputs.build_arm64 != false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   create-git-tag:
     if: |
