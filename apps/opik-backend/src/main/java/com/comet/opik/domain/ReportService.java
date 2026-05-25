@@ -4,6 +4,7 @@ import com.comet.opik.api.OllieReport.OllieReportPage;
 import com.comet.opik.api.OllieReport.ReportStatus;
 import com.comet.opik.api.ReportPreference;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -62,12 +63,14 @@ public class ReportService {
     }
 
     public Mono<Void> updateReport(@NonNull UUID projectId, @NonNull UUID reportId,
-            @NonNull ReportStatus status, String content, String sessionId) {
+            @NonNull ReportStatus status, String content, String sessionId,
+            JsonNode recommendedActions) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
             int updated = handle.attach(OllieReportDAO.class)
-                    .update(reportId, workspaceId, projectId, content, sessionId, status.getValue());
+                    .update(reportId, workspaceId, projectId, content, sessionId, recommendedActions,
+                            status.getValue());
             if (updated == 0) {
                 throw new NotFoundException("Report not found or already processed: " + reportId);
             }
@@ -121,7 +124,7 @@ public class ReportService {
         try {
             transactionTemplate.inTransaction(WRITE, handle -> {
                 handle.attach(OllieReportDAO.class)
-                        .update(reportId, workspaceId, projectId, null, null, ReportStatus.FAILED.getValue());
+                        .update(reportId, workspaceId, projectId, null, null, null, ReportStatus.FAILED.getValue());
                 return null;
             });
             log.info("Marked report '{}' as failed", reportId);

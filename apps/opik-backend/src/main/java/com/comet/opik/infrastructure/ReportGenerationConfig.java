@@ -8,7 +8,4 @@ public class ReportGenerationConfig {
 
     @JsonProperty
     private String url = "";
-
-    @JsonProperty
-    private String internalToken = "";
 }
