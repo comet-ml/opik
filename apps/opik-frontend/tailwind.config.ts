@@ -55,6 +55,7 @@ module.exports = {
           foreground: "hsl(var(--primary-foreground))",
           hover: "hsl(var(--primary-hover))",
           active: "hsl(var(--primary-active))",
+          50: "hsl(var(--primary-50))",
           100: "hsl(var(--primary-100))",
         },
         secondary: {

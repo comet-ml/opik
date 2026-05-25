@@ -15,6 +15,11 @@ const LIST_CELL_CONFIG = { itemGap: 4 };
 
 const TAG_ROW_HEIGHT_MD = 28; // h-6(24) + gap-1(4)
 
+interface ListCellCustomMeta {
+  onItemClick?: (item: string) => void;
+  getItemTooltip?: (item: string) => string;
+}
+
 const CELL_PADDING: Record<ROW_HEIGHT, number> = {
   [ROW_HEIGHT.small]: 8,
   [ROW_HEIGHT.medium]: 16,
@@ -29,6 +34,11 @@ function getVisibleRowCount(rowHeight: ROW_HEIGHT): number {
 
 const ListCell = (context: CellContext<unknown, unknown>) => {
   const items = context.getValue() as string[];
+  const customMeta = (
+    context.column.columnDef.meta as { custom?: ListCellCustomMeta } | undefined
+  )?.custom;
+  const onItemClick = customMeta?.onItemClick;
+  const getItemTooltip = customMeta?.getItemTooltip;
 
   const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
   const isSmall = rowHeight === ROW_HEIGHT.small;
@@ -93,15 +103,33 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
               </div>
             ))}
           </ChildrenWidthMeasurer>
-          {displayedItems.map((item) => (
-            <ColoredTag
-              key={item}
-              label={item}
-              variant="lavender"
-              className="block min-w-0 max-w-full"
-              size={tagSize}
-            />
-          ))}
+          {displayedItems.map((item) => {
+            const tag = (
+              <ColoredTag
+                label={item}
+                variant="lavender"
+                className="block min-w-0 max-w-full"
+                size={tagSize}
+              />
+            );
+            if (!onItemClick) {
+              return <div key={item}>{tag}</div>;
+            }
+            return (
+              <TooltipWrapper key={item} content={getItemTooltip?.(item)}>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onItemClick(item);
+                  }}
+                  className="min-w-0 max-w-full cursor-pointer"
+                >
+                  {tag}
+                </button>
+              </TooltipWrapper>
+            );
+          })}
           {showOverflowIndicator && (
             <TooltipWrapper
               content={
