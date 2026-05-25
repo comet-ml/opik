@@ -1,5 +1,12 @@
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
+  createTrace(args: {
+    project_name: string;
+    name: string;
+    input: string;
+    output: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -31,9 +38,15 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
     try {
+      const headers: Record<string, string> = {};
+      if (body !== undefined) headers['content-type'] = 'application/json';
+      // Read OPIK_API_KEY at request time so the minted key from globalSetup
+      // is picked up after the bridge has already spawned.
+      const apiKey = process.env.OPIK_API_KEY;
+      if (apiKey) headers['X-Opik-Api-Key'] = apiKey;
       const res = await fetch(`${bridgeUrl}${path}`, {
         method,
-        headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
       });
@@ -65,6 +78,9 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
   return {
     async createProject({ name, workspace }) {
       return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+    },
+    async createTrace(args) {
+      return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
     },
   };
 }

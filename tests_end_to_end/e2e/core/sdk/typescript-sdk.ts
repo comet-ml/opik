@@ -4,13 +4,14 @@ import type { EnvConfig } from '../../config/env.config';
 export type TypescriptSdk = Opik;
 
 export function makeTypescriptSdk(env: EnvConfig): TypescriptSdk {
-  if (!env.apiKey) {
+  // OSS deployments don't require an API key; cloud/self-hosted do.
+  if (env.deployment !== 'oss' && !env.apiKey) {
     throw new Error(
-      'makeTypescriptSdk requires env.apiKey — set OPIK_API_KEY (or run a deployment that populates it)',
+      'makeTypescriptSdk requires env.apiKey for non-oss deployments — set OPIK_API_KEY or provide OPIK_TEST_USER_EMAIL+OPIK_TEST_USER_PASSWORD for globalSetup to mint one',
     );
   }
   return new Opik({
-    apiKey: env.apiKey,
+    apiKey: env.apiKey ?? undefined,
     workspaceName: env.workspace,
     apiUrl: env.apiBaseUrl,
   });
