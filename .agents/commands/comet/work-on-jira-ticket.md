@@ -56,9 +56,10 @@ This workflow will:
 ### 3. Build Jira Context
 
 - **Key, Title, Type, Status, Priority, Assignee, Labels**
-- **Description**: verbatim if short, otherwise concise summary + key quotes.
+- **Description**: verbatim if short, otherwise concise summary + key quotes. The description contains the **WHY** (motivation) and **WHAT** (high-level scope + acceptance criteria); implementation details ("HOW") live in a separate comment — see below.
 - **If no description**: Note this and suggest adding context for better implementation planning.
 - **Comments**: newest → oldest, `[author @ date] summary` with important snippets.
+- **HOW comment**: scan comments for the most recent one whose body matches `^#\s*HOW\b` (case-insensitive). If found, surface it as the **implementation suggestion** — clearly framed as a note from when the ticket was filed, not a plan of record. The current code state is authoritative; the HOW is one input. If no HOW comment exists, proceed without one — many tickets won't have one, and that's fine (older tickets predate the convention; some tickets have nothing worth adding beyond the WHAT).
 - **Epic/Story context**: Include parent issue information if available.
 
 ---
@@ -80,6 +81,7 @@ This workflow will:
 
 - **Bugfix**: repro steps, root cause hypothesis, affected files, fix approach, risks, tests, verification.
 - **Feature**: user story recap, acceptance criteria, implementation plan, tests, rollout notes.
+- **HOW comment, if one exists**: weave its suggestions into the plan **after** independently reading the current code state. If the HOW conflicts with what the code looks like today, trust the code and note the divergence in your plan. The HOW is a hint from when the ticket was filed, not a contract.
 - **Always reference shared + domain guidance in the right place**:
   - **Global policy**: `.agents/rules/*` (git workflow, security, code style, routing)
   - **Backend guidance**: `.agents/skills/opik-backend/*`
