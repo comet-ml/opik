@@ -2,6 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.filter.ErrorInfoFilterKeys;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
@@ -19,7 +20,6 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -175,21 +175,18 @@ public abstract class FilterEvaluationServiceBase<E> {
         if (errorInfo == null || key == null) {
             return null;
         }
-        return switch (normalizeErrorInfoKey(key)) {
-            case "exceptiontype", "exception_type" -> errorInfo.exceptionType();
-            case "message" -> errorInfo.message();
-            case "traceback" -> errorInfo.traceback();
+        return switch (ErrorInfoFilterKeys.supportedJsonKey(key).orElse("")) {
+            case ErrorInfoFilterKeys.EXCEPTION_TYPE -> errorInfo.exceptionType();
+            case ErrorInfoFilterKeys.MESSAGE -> errorInfo.message();
+            case ErrorInfoFilterKeys.TRACEBACK -> errorInfo.traceback();
             default -> {
                 log.warn(
-                        "Unknown ErrorInfo field key. Supported keys: exceptionType, message, traceback. Provided: '{}'",
+                        "Unknown ErrorInfo field key. Supported keys: %s. Provided: '{}'"
+                                .formatted(ErrorInfoFilterKeys.SUPPORTED_KEYS),
                         key);
                 yield null;
             }
         };
-    }
-
-    private String normalizeErrorInfoKey(String key) {
-        return StringUtils.trimToEmpty(key).toLowerCase(Locale.ROOT);
     }
 
     /**

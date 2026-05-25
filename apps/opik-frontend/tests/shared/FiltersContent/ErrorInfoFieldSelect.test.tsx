@@ -9,13 +9,15 @@ vi.mock("@/shared/SelectBox/SelectBox", () => ({
     value,
     options,
     onChange,
+    testId,
   }: {
     value: string;
     options: DropdownOption<string>[];
     onChange: (value: string) => void;
+    testId?: string;
   }) => (
     <div>
-      <span data-testid="selected-value">{value}</span>
+      <span data-testid={testId ?? "selected-value"}>{value}</span>
       {options.map((option) => (
         <button
           key={option.value}
@@ -37,12 +39,28 @@ describe("ErrorInfoFieldSelect", () => {
       <ErrorInfoFieldSelect value="message" onValueChange={onValueChange} />,
     );
 
-    expect(screen.getByTestId("selected-value")).toHaveTextContent("message");
+    expect(screen.getByTestId("filter-error-info-field")).toHaveTextContent(
+      "message",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Traceback" }));
     expect(onValueChange).toHaveBeenCalledWith("traceback");
 
     fireEvent.click(screen.getByRole("button", { name: "All fields" }));
     expect(onValueChange).toHaveBeenCalledWith("");
+  });
+
+  it("forwards the caller test id", () => {
+    render(
+      <ErrorInfoFieldSelect
+        value="message"
+        onValueChange={vi.fn()}
+        data-testid="custom-error-info-field"
+      />,
+    );
+
+    expect(screen.getByTestId("custom-error-info-field")).toHaveTextContent(
+      "message",
+    );
   });
 });

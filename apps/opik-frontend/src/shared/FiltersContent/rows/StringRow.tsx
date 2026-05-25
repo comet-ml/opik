@@ -41,13 +41,12 @@ export const StringRow: React.FunctionComponent<StringRowProps> = ({
         {KeySelectorComponent ? (
           <div className="flex gap-2">
             <KeySelectorComponent
+              {...(config?.keySelectorComponentProps ?? {})}
               className="w-full min-w-32 max-w-40"
-              placeholder="field"
               value={filter.key ?? ""}
               onValueChange={(key) => onChange({ ...filter, key })}
               disabled={filter.operator === ""}
               data-testid="filter-string-key-input"
-              {...(config?.keySelectorComponentProps ?? {})}
             />
             <div className="min-w-40">{operatorSelector}</div>
           </div>

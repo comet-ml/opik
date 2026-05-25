@@ -18,6 +18,7 @@ type ErrorInfoFieldSelectProps = {
   className?: string;
   placeholder?: string;
   disabled?: boolean;
+  "data-testid"?: string;
 };
 
 const ErrorInfoFieldSelect: React.FC<ErrorInfoFieldSelectProps> = ({
@@ -26,6 +27,7 @@ const ErrorInfoFieldSelect: React.FC<ErrorInfoFieldSelectProps> = ({
   className,
   placeholder = "All fields",
   disabled,
+  "data-testid": dataTestId = "filter-error-info-field",
 }) => {
   return (
     <SelectBox
@@ -34,7 +36,7 @@ const ErrorInfoFieldSelect: React.FC<ErrorInfoFieldSelectProps> = ({
       options={ERROR_INFO_FIELD_OPTIONS}
       placeholder={placeholder}
       disabled={disabled}
-      testId="filter-error-info-field"
+      testId={dataTestId}
       onChange={(newValue) =>
         onValueChange(newValue === ALL_ERROR_INFO_FIELDS ? "" : newValue)
       }

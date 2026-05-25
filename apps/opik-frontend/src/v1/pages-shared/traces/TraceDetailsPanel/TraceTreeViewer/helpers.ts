@@ -17,6 +17,7 @@ import includes from "lodash/includes";
 import { JSONPath } from "jsonpath-plus";
 
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
+import { normalizeErrorInfoFieldKey } from "@/lib/errorInfo";
 import { Filter, FilterOperator, Filters } from "@/types/filters";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
@@ -212,22 +213,7 @@ const getFieldValue = (
 };
 
 const getFieldKey = (fieldId: string, key?: string): string | undefined => {
-  if (fieldId !== "error_info" || !key) return key;
-
-  const normalizedKey = trim(key);
-  if (!normalizedKey) return undefined;
-
-  switch (normalizedKey.toLowerCase()) {
-    case "exceptiontype":
-    case "exception_type":
-      return "exception_type";
-    case "message":
-      return "message";
-    case "traceback":
-      return "traceback";
-    default:
-      return normalizedKey;
-  }
+  return fieldId === "error_info" ? normalizeErrorInfoFieldKey(key) : key;
 };
 
 const isValueEmpty = (value: unknown): boolean => {

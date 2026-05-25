@@ -75,8 +75,10 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("notEmpty(simpleJSONExtractString(error_info, 'traceback'))")
-                .contains("notILike(simpleJSONExtractString(error_info, 'traceback'), CONCAT('%', :filter0 ,'%'))"));
+                .contains("notEmpty(simpleJSONExtractString(error_info, :filterKey0))")
+                .contains("notILike(simpleJSONExtractString(error_info, :filterKey0), CONCAT('%', :filter0 ,'%'))"));
+        assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.SPAN))
+                .containsEntry("filterKey0", "traceback");
     }
 
     @Test
@@ -91,7 +93,9 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("empty(simpleJSONExtractString(error_info, 'traceback'))"));
+                .contains("empty(simpleJSONExtractString(error_info, :filterKey0))"));
+        assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.SPAN))
+                .containsEntry("filterKey0", "traceback");
     }
 
     @Test
@@ -106,7 +110,9 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("notEmpty(simpleJSONExtractString(error_info, 'traceback'))"));
+                .contains("notEmpty(simpleJSONExtractString(error_info, :filterKey0))"));
+        assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.SPAN))
+                .containsEntry("filterKey0", "traceback");
     }
 
     @Test
@@ -121,7 +127,9 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.TRACE);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("ilike(simpleJSONExtractString(error_info, 'message'), CONCAT('%', :filter0 ,'%'))"));
+                .contains("ilike(simpleJSONExtractString(error_info, :filterKey0), CONCAT('%', :filter0 ,'%'))"));
+        assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.TRACE))
+                .containsEntry("filterKey0", "message");
     }
 
     @Test
@@ -136,7 +144,9 @@ class FilterQueryBuilderTest {
         var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.TRACE);
 
         assertThat(sql).hasValueSatisfying(value -> assertThat(value)
-                .contains("ilike(simpleJSONExtractString(error_info, 'exception_type'), CONCAT('%', :filter0 ,'%'))"));
+                .contains("ilike(simpleJSONExtractString(error_info, :filterKey0), CONCAT('%', :filter0 ,'%'))"));
+        assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.TRACE))
+                .containsEntry("filterKey0", "exception_type");
     }
 
     @Test
@@ -196,7 +206,7 @@ class FilterQueryBuilderTest {
     }
 
     @Test
-    void validateFilter__whenErrorInfoKeyIsUnsupported__thenRejectsFilter() {
+    void toAnalyticsDbFilters__whenErrorInfoKeyIsUnsupported__thenSearchesProvidedKey() {
         var filter = SpanFilter.builder()
                 .field(SpanField.ERROR_INFO)
                 .key("unknown")
@@ -204,9 +214,33 @@ class FilterQueryBuilderTest {
                 .value("CancelledError")
                 .build();
 
-        assertThatThrownBy(() -> filtersFactory.validateFilter(List.of(filter)))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Invalid value");
+        assertThatCode(() -> filtersFactory.validateFilter(List.of(filter))).doesNotThrowAnyException();
+
+        var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
+
+        assertThat(sql).hasValueSatisfying(value -> assertThat(value)
+                .contains("ilike(simpleJSONExtractString(error_info, :filterKey0), CONCAT('%', :filter0 ,'%'))"));
+
+        assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.SPAN))
+                .containsEntry("filterKey0", "unknown");
+    }
+
+    @Test
+    void toAnalyticsDbFilters__whenErrorInfoKeyContainsQuote__thenBindsProvidedKey() {
+        var filter = SpanFilter.builder()
+                .field(SpanField.ERROR_INFO)
+                .key("bad'key")
+                .operator(Operator.CONTAINS)
+                .value("CancelledError")
+                .build();
+
+        var sql = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), FilterStrategy.SPAN);
+
+        assertThat(sql).hasValueSatisfying(value -> assertThat(value)
+                .contains("ilike(simpleJSONExtractString(error_info, :filterKey0), CONCAT('%', :filter0 ,'%'))"));
+
+        assertThat(filterQueryBuilder.toStateSQLMapping(List.of(filter), FilterStrategy.SPAN))
+                .containsEntry("filterKey0", "bad'key");
     }
 
     private static Stream<Arguments> errorInfoLiteralTextFilters() {

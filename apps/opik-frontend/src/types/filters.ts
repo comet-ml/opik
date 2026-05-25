@@ -42,7 +42,9 @@ export type FilterRowConfig = {
   };
   keyComponentProps?: unknown;
   keySelectorComponent?: React.ComponentType<FilterKeySelectorComponentProps>;
-  keySelectorComponentProps?: Partial<FilterKeySelectorComponentProps>;
+  keySelectorComponentProps?: Partial<
+    Pick<FilterKeySelectorComponentProps, "placeholder">
+  >;
   defaultOperator?: FilterOperator;
   operators?: DropdownOption<FilterOperator>[];
   validateFilter?: (filter: Filter) => string | undefined;

@@ -91,11 +91,10 @@ public class FiltersFactory {
                     .put(FieldType.ERROR_CONTAINER, filter -> {
                         if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
                             // don't validate value in case it's not needed
-                            return FilterQueryBuilder.isSupportedErrorInfoKey(filter.key());
+                            return true;
                         }
 
-                        return StringUtils.isNotBlank(filter.value())
-                                && FilterQueryBuilder.isSupportedErrorInfoKey(filter.key());
+                        return StringUtils.isNotBlank(filter.value());
                     })
                     .put(FieldType.DICTIONARY, filter -> {
                         if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
