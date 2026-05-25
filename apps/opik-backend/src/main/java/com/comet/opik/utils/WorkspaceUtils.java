@@ -14,7 +14,7 @@ public class WorkspaceUtils {
     }
 
     public static String getProjectName(String projectName) {
-        return StringUtils.isEmpty(projectName) ? DEFAULT_PROJECT : projectName;
+        return StringUtils.isBlank(projectName) ? DEFAULT_PROJECT : projectName.strip();
     }
 
 }
