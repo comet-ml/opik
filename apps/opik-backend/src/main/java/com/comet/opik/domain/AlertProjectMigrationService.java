@@ -417,9 +417,14 @@ public class AlertProjectMigrationService implements Managed {
                     try {
                         return JsonUtils.<Set<UUID>>readCollectionValue(projectIdsStr, Set.class, UUID.class).stream();
                     } catch (Exception e) {
-                        log.warn("Skipping malformed '{}' value for trigger '{}', treating as workspace-wide",
-                                AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY, trigger.id(), e);
-                        return Stream.empty();
+                        // Fallback: legacy data stored a plain UUID string instead of a JSON-encoded array
+                        try {
+                            return Stream.of(UUID.fromString(projectIdsStr.trim()));
+                        } catch (IllegalArgumentException ignored) {
+                            log.warn("Skipping malformed '{}' value for trigger '{}', treating as workspace-wide",
+                                    AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY, trigger.id(), e);
+                            return Stream.empty();
+                        }
                     }
                 })
                 .collect(Collectors.toUnmodifiableSet());
