@@ -1,30 +1,25 @@
 import atexit
 
-import opik
-from fastapi import APIRouter, HTTPException
-from opik.rest_api.core.api_error import ApiError
+from fastapi import APIRouter, Header, HTTPException
 
+from ..opik_factory import make_opik_client
 from ..schemas import ProjectCreate, ProjectResponse
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.post("", response_model=ProjectResponse, status_code=201)
-def create_project(body: ProjectCreate) -> ProjectResponse:
+def create_project(
+    body: ProjectCreate,
+    x_opik_api_key: str | None = Header(default=None),
+) -> ProjectResponse:
     # _rest_client because opik.Opik() doesn't yet expose a public
-    # create_project(); switch when the SDK adds one.
-    client = opik.Opik(workspace=body.workspace) if body.workspace else opik.Opik()
-    # Opik.__init__ spawns a streamer thread and registers an atexit handler.
-    # We never enqueue messages here, so close the streamer and drop the
-    # handler immediately rather than leaking one of each per request.
+    # create_project(); switch when the SDK adds one. ApiError raised by
+    # the SDK is translated to HTTP by the app-wide exception handler.
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
-        try:
-            client._rest_client.projects.create_project(name=body.name)
-            page = client._rest_client.projects.find_projects(name=body.name, page=1, size=1)
-        except ApiError as e:
-            # Preserve the backend's status code and detail body so callers
-            # see e.g. 409 "Project already exists" instead of an opaque 500.
-            raise HTTPException(status_code=e.status_code, detail=e.body) from e
+        client._rest_client.projects.create_project(name=body.name)
+        page = client._rest_client.projects.find_projects(name=body.name, page=1, size=1)
     finally:
         client.end(flush=False)
         atexit.unregister(client.end)
