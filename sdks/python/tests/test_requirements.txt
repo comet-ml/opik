@@ -3,7 +3,6 @@ pytest
 pytest-asyncio
 pytest-cov
 pytest-env
-pytest-rerunfailures  # for @pytest.mark.flaky on LLM-driven library integration tests
 pytest-xdist
 deepdiff
 orderly_set==5.3.2  # Pinned version for stability
