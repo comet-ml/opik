@@ -93,38 +93,17 @@ else
 fi
 
 # Workflows / composite actions: validate with actionlint when available.
-# Composite actions (`.github/actions/*/action.yml`) cannot be linted directly —
-# they're validated transitively when a workflow that uses them is linted. For
-# each staged composite action, find workflows that reference it and lint those.
-staged_workflows=$(staged_files | grep -E '^\.github/workflows/.+\.(yml|yaml)$' || true)
-staged_actions=$(staged_files | grep -E '^\.github/actions/.+\.(yml|yaml)$' || true)
+staged_workflows=$(staged_files | grep -E '^\.github/(workflows|actions)/.+\.(yml|yaml)$' || true)
 
-if [ -z "$staged_workflows" ] && [ -z "$staged_actions" ]; then
+if [ -z "$staged_workflows" ]; then
   echo "No workflow or composite-action files changed. Skipping actionlint."
 elif ! command -v actionlint >/dev/null 2>&1; then
   echo "Workflow/composite-action files changed but actionlint is not installed. Skipping local validation."
   echo "Install: brew install actionlint  (or see https://github.com/rhysd/actionlint#installation)"
 else
-  files_to_lint="$staged_workflows"
-  if [ -n "$staged_actions" ]; then
-    callers=""
-    for action_file in $staged_actions; do
-      action_dir=$(dirname "$action_file")
-      found=$(grep -lE "uses:\s*\.?/?${action_dir}/?(\s|$)" .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true)
-      callers="${callers}${found}
-"
-    done
-    files_to_lint=$(printf '%s\n%s\n' "$files_to_lint" "$callers" | sed '/^$/d' | sort -u)
-  fi
-
-  if [ -z "$files_to_lint" ]; then
-    echo "Composite action(s) staged but no workflow references them. Skipping actionlint."
-  else
-    echo "Workflow/composite-action files have been changed. Running actionlint..."
-    # Match CI: suppress info-level shellcheck noise (SC2086 backlog tracked in OPIK-6323).
-    if ! printf '%s\n' "$files_to_lint" | SHELLCHECK_OPTS="--severity=warning" xargs actionlint --; then
-      echo "actionlint found issues. Please fix them before committing."
-      exit 1
-    fi
+  echo "Workflow/composite-action files have been changed. Running actionlint against all workflows..."
+  if ! actionlint; then
+    echo "actionlint found issues. Please fix them before committing."
+    exit 1
   fi
 fi
