@@ -179,33 +179,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 "Model %s does not support reasoning_effort, dropping.",
                 self.model_name,
             )
-        # LiteLLM translates OpenAI-shape `reasoning_effort` into the
-        # Anthropic-specific `thinking` parameter; with thinking
-        # enabled, Anthropic requires `temperature == 1`. Callers that
-        # set a deterministic `temperature` (the agentic judge loop
-        # pins it to 0, and most reproducibility-sensitive callers do
-        # the same) would otherwise hit a 400 from the provider.
-        #
-        # Drop policy: only when there's an actual conflict, so callers
-        # who explicitly opt into both (`temperature=1` *and*
-        # `reasoning_effort=...`) keep extended thinking. Without
-        # either of those signals — e.g. omitting `temperature` so it
-        # defaults provider-side to 1 — thinking mode stays enabled.
-        # `get_supported_openai_params` reports `reasoning_effort` as
-        # supported for Anthropic (LiteLLM *does* honor it by mapping
-        # to thinking), so the generic `supported_params` filter above
-        # doesn't catch this.
-        if "reasoning_effort" in filtered_params and self._is_anthropic_model_name():
-            temperature = filtered_params.get("temperature")
-            if temperature is not None and temperature != 1:
-                filtered_params.pop("reasoning_effort")
-                LOGGER.debug(
-                    "Dropping reasoning_effort for Anthropic model %s: an "
-                    "explicit non-1 temperature conflicts with the thinking "
-                    "mode LiteLLM would enable. Pass temperature=1 (or omit "
-                    "it) to keep reasoning_effort.",
-                    self.model_name,
-                )
         # `seed` is an OpenAI-shape determinism knob; Anthropic (and a
         # few other providers) reject it outright via
         # `UnsupportedParamsError` rather than ignoring it. The native
@@ -248,6 +221,48 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         )
 
         return filtered_params
+
+    def _resolve_provider_conflicts(
+        self, effective_kwargs: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Drop params that are individually valid but conflict once merged.
+
+        Some conflicts can only be diagnosed by looking at the full
+        effective request (constructor defaults *plus* per-call
+        overrides), because the two sources can each supply one half
+        of the conflict.
+
+        Currently handled:
+
+        - Anthropic + `reasoning_effort` + explicit non-1 `temperature`:
+          LiteLLM translates OpenAI-shape `reasoning_effort` into the
+          Anthropic-specific `thinking` parameter; with thinking
+          enabled, Anthropic requires `temperature == 1`. Callers that
+          set a deterministic temperature (the agentic judge loop pins
+          it to 0, and most reproducibility-sensitive callers do the
+          same) would otherwise hit a 400 from the provider. Drop
+          `reasoning_effort` only when the conflict is real, so callers
+          who explicitly opt into both (`temperature=1` *and*
+          `reasoning_effort=...`) keep extended thinking.
+
+        Runs on the merged dict — the per-source
+        `_remove_unnecessary_not_supported_params` can't catch the
+        cross-source case where one half of the conflict lives in
+        `self._completion_kwargs` and the other in per-call kwargs.
+        """
+        resolved = {**effective_kwargs}
+        if "reasoning_effort" in resolved and self._is_anthropic_model_name():
+            temperature = resolved.get("temperature")
+            if temperature is not None and temperature != 1:
+                resolved.pop("reasoning_effort")
+                LOGGER.debug(
+                    "Dropping reasoning_effort for Anthropic model %s: an "
+                    "explicit non-1 temperature in the merged call kwargs "
+                    "conflicts with the thinking mode LiteLLM would enable. "
+                    "Pass temperature=1 (or omit it) to keep reasoning_effort.",
+                    self.model_name,
+                )
+        return resolved
 
     def _warn_about_unsupported_param(self, param: str, value: Any) -> None:
         if param in {"logprobs", "top_logprobs"}:
@@ -357,6 +372,10 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         # we need to pop messages first, and after we will check the rest params
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+        # Conflicts that can only be diagnosed on the merged dict
+        # (constructor + per-call sources) run here — see the method's
+        # docstring for the Anthropic reasoning_effort/temperature case.
+        all_kwargs = self._resolve_provider_conflicts(all_kwargs)
 
         retrying = tenacity.Retrying(
             reraise=True,
@@ -444,6 +463,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+        # See sync `generate_provider_response` for why the merged
+        # dict needs its own conflict-resolution pass.
+        all_kwargs = self._resolve_provider_conflicts(all_kwargs)
 
         retrying = tenacity.AsyncRetrying(
             reraise=True,

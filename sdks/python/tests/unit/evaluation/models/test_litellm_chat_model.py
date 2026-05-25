@@ -236,13 +236,18 @@ def test_litellm_chat_model_drops_reasoning_effort_for_anthropic_when_temperatur
         temperature=0.0,
     )
 
-    # Constructor-time strip — `reasoning_effort` never reaches
-    # `litellm.completion`.
-    assert "reasoning_effort" not in model._completion_kwargs
+    # Conflict resolution runs on the merged effective kwargs at call
+    # time, not at construction. `_completion_kwargs` keeps the raw
+    # values so the constructor + per-call merge can be diagnosed as
+    # one source of truth — see `_resolve_provider_conflicts`.
+    assert model._completion_kwargs.get("reasoning_effort") == "low"
     assert model._completion_kwargs.get("temperature") == 0.0
 
     model.generate_string("hello")
     _, _, kwargs = stub._calls[-1]
+    # The actual call to `litellm.completion` is what matters — the
+    # conflict-resolution pass must strip `reasoning_effort` from the
+    # outbound request even though it was set at construction time.
     assert "reasoning_effort" not in kwargs
 
 
@@ -261,9 +266,62 @@ def test_litellm_chat_model_drops_reasoning_effort_for_bare_claude_when_temperat
         reasoning_effort="low",
         temperature=0.5,
     )
-    assert "reasoning_effort" not in model._completion_kwargs
 
     model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_drops_reasoning_effort_when_temperature_is_per_call_only(
+    monkeypatch,
+):
+    """Cross-source conflict — `reasoning_effort` from constructor,
+    `temperature=0` from the per-call kwargs (the agentic judge loop's
+    pattern). The conflict-resolution pass must run on the merged
+    effective dict so it catches conflicts whose two halves come from
+    different sources. The per-source `_remove_unnecessary_not_supported_params`
+    by itself couldn't see this — at constructor time it never saw the
+    per-call temperature, and at call time it never sees the
+    constructor-time reasoning_effort.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "response_format", "reasoning_effort"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+    )
+
+    # Per-call temperature=0 (the agentic judge loop's hardcoded pin)
+    # is the half of the conflict that lives outside `_completion_kwargs`.
+    model.generate_string("hello", temperature=0)
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_drops_reasoning_effort_when_reasoning_effort_is_per_call_only(
+    monkeypatch,
+):
+    """Mirror of the previous test — the other cross-source ordering:
+    `temperature` from the constructor, `reasoning_effort` arriving
+    per-call. Without the merged-dict check this would slip past:
+    constructor `_remove_unnecessary_not_supported_params` saw only
+    `temperature`, per-call `_remove_unnecessary_not_supported_params`
+    saw only `reasoning_effort`, neither was the conflict pair.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "response_format", "reasoning_effort"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        temperature=0,
+    )
+
+    model.generate_string("hello", reasoning_effort="low")
     _, _, kwargs = stub._calls[-1]
     assert "reasoning_effort" not in kwargs
 
