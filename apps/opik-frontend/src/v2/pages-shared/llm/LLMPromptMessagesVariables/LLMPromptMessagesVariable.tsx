@@ -1,8 +1,7 @@
 import React from "react";
 import { DropdownOption } from "@/types/shared";
-import TracesOrSpansPathsAutocomplete, {
-  TRACE_AUTOCOMPLETE_ROOT_KEY,
-} from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
+import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
+import { TRACE_AUTOCOMPLETE_ROOT_KEY } from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/usePathsOptions";
 import { Tag } from "@/ui/tag";
 import { FormErrorSkeleton } from "@/ui/form";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
