@@ -1,0 +1,62 @@
+## Sequential Prompt Version Numbers
+
+Prompt versions now carry a readable sequential number — `v1`, `v2`, `v3`, ... — assigned automatically each time a new version is saved. You can pin your code to a specific numbered version instead of tracking opaque commit hashes, and the number is visible everywhere the version appears in the UI.
+
+**What's new:**
+
+- **Readable version labels** — every new prompt version gets an auto-assigned `version_number` (e.g., `v3`); the field is read-only and scoped per prompt so numbers stay contiguous
+- **SDK: fetch by version number** — pass `version="v3"` to `client.get_prompt()` / `client.get_chat_prompt()` (Python and TypeScript) to pin to a specific release; `commit` still works and is kept for backwards compatibility
+- **OQL filtering** — filter prompt version lists by `version_number` using `=`, `!=`, `starts_with`, `ends_with`, and `contains` operators in both Python and TypeScript SDKs
+- **Lookup endpoint** — `GET /v1/private/prompts/{promptId}/versions/by-number/{versionNumber}` returns a version directly by its sequential label
+
+```python
+# Pin to an exact release by its human-readable version number
+prompt = client.get_prompt("my-system-prompt", version="v3")
+
+# Filter all versions newer than v5 using OQL
+from opik import OpikQueryLanguage
+oql = OpikQueryLanguage.for_prompt_versions()
+versions = client.get_prompt_versions(
+    prompt_name="my-system-prompt",
+    filter_string=oql.build({"version_number": ("ends_with", "5")}),
+)
+```
+
+## LLM-as-Judge Can Now See Trace Spans
+
+LLM-as-judge rules at the **trace level** can now reference `{{spans}}` to receive the full list of spans for that trace — including tool calls, retrieval steps, and intermediate model outputs — as a JSON array substituted directly into the prompt. This makes it possible to score fine-grained behaviors (e.g., "was the right tool called?", "did the agent retry unnecessarily?") without switching to a Python metric.
+
+At the **thread level**, `{{context}}` is now enriched with each turn's child spans attached to the assistant entry, so a thread-scoped judge can see the complete conversation alongside the agent's reasoning trace.
+
+**What's new:**
+
+- **`{{spans}}` variable** — add a variable named `spans` in a trace-scoped LLM-as-judge rule; Opik fetches the trace's spans and substitutes the JSON list at evaluation time
+- **Auto-fill in the UI** — typing `{{spans}}` in the rule prompt automatically maps the variable to the sentinel; no manual wiring needed
+- **Enriched thread context** — when the agentic-tools toggle is on, `{{context}}` on thread rules includes each assistant turn's `spans` field (sorted by start time), enabling judges to reason about tool-use patterns across a full conversation
+
+```
+# Example LLM-as-judge prompt for a trace rule
+Did the agent call the right retrieval tool?
+
+Conversation:
+{{input}} → {{output}}
+
+Spans (tool calls and sub-steps):
+{{spans}}
+```
+
+## Bug Fixes & Improvements
+
+- **AND/OR grouping for alert conditions** — alert rules now support grouped conditions: conditions within a group are joined with AND, groups are joined with OR. Existing single-condition alerts continue to render exactly as before; each legacy condition becomes its own group automatically.
+- **Prompt masks (Python & TypeScript SDKs)** — `prompt_mask_context(masks)` / `promptMaskContext(masks)` lets you run a function with specific prompt IDs redirected to a different version ID, non-destructively. The agent code calls `get_prompt()` as usual and receives the masked version without any permanent change to the prompt library. Intended for A/B testing and optimizer sweep scenarios.
+- **Experiments: dataset version shown inline** — the dataset version is now displayed as a pill inline with the item source in the experiments table and detail header. The standalone "Test suite version" column has been removed; the same information is now visible in context.
+- **Dataset items: conflicting key names no longer cause errors** — iterating a dataset whose items contain a key matching a `DatasetItem` field name (e.g., `id`, as in HotpotQA) previously raised `TypeError: multiple values for keyword argument`. The SDK now strips conflicting keys and emits a one-time warning so iteration completes successfully.
+- **Harbor integration: supports harbor `<0.8` and `>=0.8`** — `track_harbor()` now patches whichever method name the installed version of harbor exposes (`_setup_environment` or `_setup_agent_environment`), so tracing works regardless of which version is installed.
+- **Python SDK: `version_number` preserved after `create_prompt` with tags** — creating a prompt with tags returned a `Prompt` object whose `.version` attribute was `None` even though the backend assigned `v1`; the rebuild now propagates `version_number` correctly.
+- **New Playground models** — Gemini 3.5 Flash and `qwen/qwen3.7-max` are now available in the model picker.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.37...2.0.47)
+
+_Releases_: `2.0.42`, `2.0.43`, `2.0.44`, `2.0.45`, `2.0.46`, `2.0.47`
