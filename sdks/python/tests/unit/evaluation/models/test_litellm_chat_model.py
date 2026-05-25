@@ -200,6 +200,146 @@ def test_litellm_chat_model_drops_seed_when_provider_does_not_support(
     assert "seed" not in kwargs
 
 
+def test_litellm_chat_model_drops_reasoning_effort_for_anthropic_when_temperature_conflicts(
+    monkeypatch, caplog
+):
+    """LiteLLM translates OpenAI-shape `reasoning_effort` into the
+    Anthropic-specific `thinking` parameter; with thinking enabled,
+    Anthropic requires `temperature == 1`. Callers that set a
+    deterministic `temperature` (the agentic loop's default, plus
+    most reproducibility-sensitive callers) hit a 400 from the
+    provider. The drop only fires when the conflict is real — i.e.
+    when temperature is explicitly set to a non-1 value — so callers
+    who opt into both keep extended thinking. See the
+    `_keeps_reasoning_effort_when_temperature_is_one` counterpart.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        # LiteLLM reports `reasoning_effort` as supported for
+        # Anthropic — that's exactly why the generic
+        # supported_params filter doesn't catch it.
+        supported_params=[
+            "temperature",
+            "response_format",
+            "reasoning_effort",
+            "tools",
+            "tool_choice",
+        ],
+    )
+
+    caplog.set_level(
+        logging.DEBUG, logger="opik.evaluation.models.litellm.litellm_chat_model"
+    )
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+        temperature=0.0,
+    )
+
+    # Constructor-time strip — `reasoning_effort` never reaches
+    # `litellm.completion`.
+    assert "reasoning_effort" not in model._completion_kwargs
+    assert model._completion_kwargs.get("temperature") == 0.0
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_drops_reasoning_effort_for_bare_claude_when_temperature_conflicts(
+    monkeypatch,
+):
+    # Same drop must trigger for the bare `claude-...` form too,
+    # matching `models_factory._is_anthropic_model`'s predicate.
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "response_format", "reasoning_effort"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="claude-sonnet-4-6",
+        reasoning_effort="low",
+        temperature=0.5,
+    )
+    assert "reasoning_effort" not in model._completion_kwargs
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_for_anthropic_when_temperature_is_one(
+    monkeypatch,
+):
+    """Opt-in path for Anthropic extended thinking: explicit
+    `temperature=1` plus `reasoning_effort=...` keeps both. The
+    `thinking` mode LiteLLM enables under the hood is compatible with
+    `temperature=1`, so the drop must not fire.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="medium",
+        temperature=1,
+    )
+    assert model._completion_kwargs.get("reasoning_effort") == "medium"
+    assert model._completion_kwargs.get("temperature") == 1
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("reasoning_effort") == "medium"
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_for_anthropic_when_temperature_omitted(
+    monkeypatch,
+):
+    """When `temperature` isn't set explicitly, Anthropic defaults to
+    1 server-side, which doesn't conflict with thinking mode. The
+    drop must not fire under that signal-absent state.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+    )
+    assert model._completion_kwargs.get("reasoning_effort") == "low"
+    assert "temperature" not in model._completion_kwargs
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("reasoning_effort") == "low"
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_for_openai(monkeypatch):
+    """Counterpart to the Anthropic drop tests: for OpenAI (and any
+    other provider whose litellm support doesn't translate
+    `reasoning_effort` into a conflicting param), the value must
+    round-trip so determinism + reasoning callers keep working.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="gpt-5-mini",
+        reasoning_effort="low",
+    )
+    assert model._completion_kwargs.get("reasoning_effort") == "low"
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("reasoning_effort") == "low"
+
+
 def test_litellm_chat_model_keeps_seed_when_provider_supports_it(monkeypatch):
     """Counterpart to the drop test: when `seed` IS in the provider's
     supported set (e.g. OpenAI), it must round-trip through to the

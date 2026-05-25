@@ -129,6 +129,17 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 provider,
             )
 
+    def _is_anthropic_model_name(self) -> bool:
+        """Whether the configured model resolves to Anthropic.
+
+        We can't use `models_factory._is_anthropic_model` here without
+        creating an import cycle, so the check is duplicated locally.
+        Matches the factory's predicate (`anthropic/` prefix or bare
+        `claude` name) so the two stay in sync.
+        """
+        name = self.model_name
+        return name.startswith("anthropic/") or name.startswith("claude")
+
     def _check_model_name(self) -> None:
         import litellm
 
@@ -168,6 +179,33 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 "Model %s does not support reasoning_effort, dropping.",
                 self.model_name,
             )
+        # LiteLLM translates OpenAI-shape `reasoning_effort` into the
+        # Anthropic-specific `thinking` parameter; with thinking
+        # enabled, Anthropic requires `temperature == 1`. Callers that
+        # set a deterministic `temperature` (the agentic judge loop
+        # pins it to 0, and most reproducibility-sensitive callers do
+        # the same) would otherwise hit a 400 from the provider.
+        #
+        # Drop policy: only when there's an actual conflict, so callers
+        # who explicitly opt into both (`temperature=1` *and*
+        # `reasoning_effort=...`) keep extended thinking. Without
+        # either of those signals — e.g. omitting `temperature` so it
+        # defaults provider-side to 1 — thinking mode stays enabled.
+        # `get_supported_openai_params` reports `reasoning_effort` as
+        # supported for Anthropic (LiteLLM *does* honor it by mapping
+        # to thinking), so the generic `supported_params` filter above
+        # doesn't catch this.
+        if "reasoning_effort" in filtered_params and self._is_anthropic_model_name():
+            temperature = filtered_params.get("temperature")
+            if temperature is not None and temperature != 1:
+                filtered_params.pop("reasoning_effort")
+                LOGGER.debug(
+                    "Dropping reasoning_effort for Anthropic model %s: an "
+                    "explicit non-1 temperature conflicts with the thinking "
+                    "mode LiteLLM would enable. Pass temperature=1 (or omit "
+                    "it) to keep reasoning_effort.",
+                    self.model_name,
+                )
         # `seed` is an OpenAI-shape determinism knob; Anthropic (and a
         # few other providers) reject it outright via
         # `UnsupportedParamsError` rather than ignoring it. The native

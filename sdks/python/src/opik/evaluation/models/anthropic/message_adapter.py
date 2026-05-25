@@ -10,7 +10,28 @@ import pydantic
 
 LOGGER = logging.getLogger(__name__)
 
-# Parameters accepted by anthropic.messages.create()
+# Parameters accepted by anthropic.messages.create().
+#
+# Notable omission — `reasoning_effort` (OpenAI-shape extended-thinking
+# knob). It's deliberately not listed, so `filter_unsupported_params`
+# drops it silently. The LiteLLM path translates `reasoning_effort` →
+# `thinking={"type": "enabled", "budget_tokens": N}` (and applies a
+# conditional drop when an explicit non-1 `temperature` would conflict —
+# see `LiteLLMChatModel._remove_unnecessary_not_supported_params`). The
+# native path here intentionally does NOT mirror that translation: the
+# effort→budget mapping is LiteLLM's convention, not Anthropic's, so
+# encoding it here would tie us to LiteLLM's choices.
+#
+# Practical consequence — for users who want extended thinking on the
+# native adapter, pass `thinking={...}` directly (you'd also need to
+# add it to this set so it isn't filtered) instead of relying on
+# `reasoning_effort`. Same-model, swap-adapters behavior therefore
+# diverges when the caller sets `reasoning_effort` with a non-
+# conflicting temperature: native drops it, LiteLLM keeps it. See the
+# discussion on the `temperature=0` rationale in
+# `suite_evaluators/agentic/loop.py` for why this hasn't surfaced via
+# the agentic judge (the loop pins `temperature=0`, which forces both
+# paths into the drop branch and hides the asymmetry).
 _SUPPORTED_PARAMS: frozenset[str] = frozenset(
     {
         "model",
