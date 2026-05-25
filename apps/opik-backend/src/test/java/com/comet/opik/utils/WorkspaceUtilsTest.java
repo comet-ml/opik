@@ -10,7 +10,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class WorkspaceUtilsTest {
 
@@ -49,8 +49,8 @@ class WorkspaceUtilsTest {
     }
 
     @Test
-    void stripProjectName__whenProjectIsNull__throwsNpe() {
-        assertThrows(NullPointerException.class, () -> WorkspaceUtils.stripProjectName(null));
+    void stripProjectName__whenProjectIsNull__returnsNull() {
+        assertNull(WorkspaceUtils.stripProjectName(null));
     }
 
 }
