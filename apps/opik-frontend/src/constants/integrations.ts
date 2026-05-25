@@ -24,6 +24,7 @@ import googleAdkLogoUrl from "/images/integrations/google-adk.png";
 import guardrailsaiLogoUrl from "/images/integrations/guardrailsai.png";
 import ollamaLogoUrl from "/images/integrations/ollama.png";
 import ollamaWhiteLogoUrl from "/images/integrations/ollama-white.png";
+import openclawLogoUrl from "/images/integrations/openclaw.png";
 import openrouterLogoUrl from "/images/integrations/openrouter.png";
 import openrouterWhiteLogoUrl from "/images/integrations/openrouter-white.png";
 import predibaseLogoUrl from "/images/integrations/predibase.png";
@@ -50,6 +51,7 @@ import dspyCode from "@/integrations/integration-scripts/DSPy.py?raw";
 import { integrationLogsMap } from "@/integrations/integration-logs";
 
 import ollamaCode from "@/integrations/integration-scripts/Ollama.py?raw";
+import openclawCode from "@/integrations/integration-scripts/OpenClaw.py?raw";
 import crewaiCode from "@/integrations/integration-scripts/CrewAI.py?raw";
 import adkCode from "@/integrations/integration-scripts/ADK.py?raw";
 import openrouterCode from "@/integrations/integration-scripts/OpenRouter.py?raw";
@@ -137,6 +139,16 @@ export const INTEGRATIONS: Integration[] = [
     executionLogs: integrationLogsMap.Anthropic,
   },
 
+  {
+    id: "openclaw",
+    title: "OpenClaw",
+    description: "Frameworks & tools",
+    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+    icon: openclawLogoUrl,
+    code: openclawCode,
+    installCommand: "openclaw plugins install clawhub:@opik/opik-openclaw",
+    docsLink: buildDocsUrl("/integrations/openclaw"),
+  },
   {
     id: "bedrock",
     title: "Bedrock",
