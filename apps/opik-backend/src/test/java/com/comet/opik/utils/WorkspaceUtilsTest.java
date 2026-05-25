@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.Project;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -27,6 +28,22 @@ class WorkspaceUtilsTest {
     @MethodSource
     void getProjectName(String input, String expected) {
         assertEquals(expected, WorkspaceUtils.getProjectName(input));
+    }
+
+    public static Stream<Arguments> stripProjectName() {
+        return Stream.of(
+                Arguments.of("My Project", "My Project"),
+                Arguments.of("My Project ", "My Project"),
+                Arguments.of("  My Project", "My Project"),
+                Arguments.of("  My Project  ", "My Project"),
+                Arguments.of("\tMy Project\n", "My Project"));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void stripProjectName(String storedName, String expected) {
+        Project project = Project.builder().name(storedName).build();
+        assertEquals(expected, WorkspaceUtils.stripProjectName(project));
     }
 
 }
