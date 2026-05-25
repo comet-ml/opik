@@ -171,6 +171,7 @@ const TraceContent: React.FC = () => {
         setSpanId={setSpanId}
         open={Boolean(traceId)}
         onClose={handleClose}
+        hideAnnotateActions
       />
     </>
   );

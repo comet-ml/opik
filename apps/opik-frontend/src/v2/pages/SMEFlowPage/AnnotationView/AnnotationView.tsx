@@ -71,9 +71,17 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
           <ItemsSidebar />
           <div className="flex flex-1 flex-row overflow-hidden">
             <div className="flex flex-[2] flex-col overflow-hidden border-r border-border">
-              <TraceDataViewer.Header />
+              {isThread ? (
+                <ThreadDataViewer.Header />
+              ) : (
+                <TraceDataViewer.Header />
+              )}
               <div className="flex-1 overflow-y-auto p-3">
-                {isThread ? <ThreadDataViewer /> : <TraceDataViewer.Content />}
+                {isThread ? (
+                  <ThreadDataViewer.Content />
+                ) : (
+                  <TraceDataViewer.Content />
+                )}
               </div>
             </div>
             <div className="flex flex-[1] flex-col overflow-hidden">
