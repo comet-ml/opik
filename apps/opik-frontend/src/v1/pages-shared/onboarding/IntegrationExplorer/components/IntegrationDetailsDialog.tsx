@@ -11,6 +11,7 @@ import { Separator } from "@/ui/separator";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import {
   INSTALL_OPIK_SECTION_TITLE,
+  PROJECT_NAME_PLACEHOLDER,
   SNIPPET_PROJECT_NAME,
 } from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
@@ -112,29 +113,56 @@ const IntegrationDetailsDialog: React.FunctionComponent<
               <CodeHighlighter data={selectedIntegration.installCommand} />
             </div>
           </IntegrationStep>
-          <IntegrationStep
-            title={`2. Run the following code to get started with ${selectedIntegration.title}`}
-            className="mb-6"
-          >
-            {shouldShowCodeExecutor ? (
-              <CodeExecutor
-                executionUrl={selectedIntegration.executionUrl!}
-                executionLogs={selectedIntegration.executionLogs!}
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                apiKey={apiKey}
-                workspaceName={workspaceName}
-                highlightedLines={lines}
-              />
-            ) : (
-              <CodeHighlighter
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                highlightedLines={lines}
-                language={selectedIntegration.codeLanguage}
-              />
-            )}
-          </IntegrationStep>
+          {selectedIntegration.additionalSteps ? (
+            selectedIntegration.additionalSteps.map((step, idx) => {
+              const { code: stepCode } = putConfigInCode({
+                code: step.code,
+                workspaceName,
+                apiKey,
+                shouldMaskApiKey: true,
+                projectName: SNIPPET_PROJECT_NAME,
+              });
+              return (
+                <IntegrationStep
+                  key={idx}
+                  title={step.title}
+                  description={step.description?.replaceAll(
+                    PROJECT_NAME_PLACEHOLDER,
+                    SNIPPET_PROJECT_NAME,
+                  )}
+                  className="mb-6"
+                >
+                  <div className="min-h-7">
+                    <CodeHighlighter data={stepCode} language={step.language} />
+                  </div>
+                </IntegrationStep>
+              );
+            })
+          ) : (
+            <IntegrationStep
+              title={`2. Run the following code to get started with ${selectedIntegration.title}`}
+              className="mb-6"
+            >
+              {shouldShowCodeExecutor ? (
+                <CodeExecutor
+                  executionUrl={selectedIntegration.executionUrl!}
+                  executionLogs={selectedIntegration.executionLogs!}
+                  data={codeWithConfig}
+                  copyData={codeWithConfigToCopy}
+                  apiKey={apiKey}
+                  workspaceName={workspaceName}
+                  highlightedLines={lines}
+                />
+              ) : (
+                <CodeHighlighter
+                  data={codeWithConfig}
+                  copyData={codeWithConfigToCopy}
+                  highlightedLines={lines}
+                  language={selectedIntegration.codeLanguage}
+                />
+              )}
+            </IntegrationStep>
+          )}
 
           <Separator className="my-6" />
 
