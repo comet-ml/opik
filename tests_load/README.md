@@ -76,7 +76,11 @@ pytest suite/python_sdk                                 # serial
 pytest suite/python_sdk -n auto --dist=worksteal        # parallel via pytest-xdist
 ```
 
-The scheduled workflow runs with `-n auto --dist=worksteal`. Each
+The scheduled workflow runs with `-n 2 --dist=worksteal` — `-n auto`
+(4 workers on ubuntu-latest) was reliably OOM-killing the highest-
+volume ingestion-rate scenarios when they coincided with other heavy
+tests against the same docker-compose Opik stack on the 7 GB runner.
+Each
 scenario uses a unique project name so worker isolation holds; the
 shared backend will see meaningful concurrent load, which is itself
 useful coverage.
