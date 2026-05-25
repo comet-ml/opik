@@ -227,6 +227,25 @@ export const extractIdFromLocation = (location: string) =>
 export const formatNumericData = (value: number, precision = 2) =>
   String(round(value, precision));
 
+export const padDecimalsString = (
+  raw: string,
+  decimals: number,
+  integerOnly = false,
+): string => {
+  if (raw === "") return raw;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return integerOnly ? String(Math.trunc(n)) : n.toFixed(Math.max(0, decimals));
+};
+
+export const truncateMiddle = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  const keep = maxLength - 1;
+  const left = Math.ceil(keep / 2);
+  const right = Math.floor(keep / 2);
+  return `${text.slice(0, left)}…${text.slice(-right)}`;
+};
+
 export const formatNumberInK = (value: number, precision = 1): string => {
   const ranges = [
     { threshold: 1000000000, suffix: "B", divider: 1000000000 },
