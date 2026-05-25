@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { FileTerminal, Plus, XCircle } from "lucide-react";
+import { FileTerminal, Plus } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import { cn } from "@/lib/utils";
@@ -9,9 +9,13 @@ import { Separator } from "@/ui/separator";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import SelectBoxClearWrapper from "@/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
-import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import usePromptById from "@/api/prompts/usePromptById";
+import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useDeepMemo from "@/hooks/useDeepMemo";
+import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
+import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
 
 const DEFAULT_LOADED_PROMPTS = 1000;
 const MAX_LOADED_PROMPTS = 10000;
@@ -30,6 +34,7 @@ interface PromptsSelectBoxProps {
   disabled?: boolean;
   hasUnsavedChanges?: boolean;
   promptName?: string;
+  loadedVersionId?: string;
   compact?: boolean;
 }
 
@@ -46,6 +51,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   disabled = false,
   hasUnsavedChanges = false,
   promptName,
+  loadedVersionId,
   compact = false,
 }) => {
   const [open, setOpen] = useState(false);
@@ -142,56 +148,27 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
 
   if (compact) {
     if (value) {
-      const displayName =
-        promptName ??
-        promptsOptions.find((o) => o.value === value)?.label ??
-        "Loaded prompt";
+      const promptFromList = prompts.find((p) => p.id === value);
+      const displayName = promptName ?? promptFromList?.name ?? "Loaded prompt";
 
       return (
-        <div className="flex min-w-0 items-center px-1">
-          <TooltipWrapper
-            content={hasUnsavedChanges ? "Unsaved changes" : displayName}
-          >
-            <div className="flex min-w-0 items-center gap-1">
-              <FileTerminal className="size-3.5 shrink-0 text-library-loaded" />
-              <span className="comet-body-xs-accented truncate text-light-slate">
-                {displayName}
-              </span>
-              {hasUnsavedChanges && (
-                <span className="mb-auto size-1 shrink-0 rounded-full bg-warning" />
-              )}
-            </div>
-          </TooltipWrapper>
-          {onClear && (
-            <TooltipWrapper content="Detach loaded prompt">
-              <Button
-                variant="minimal"
-                size="icon-xs"
-                className="shrink-0"
-                onClick={onClear}
-              >
-                <XCircle />
-              </Button>
-            </TooltipWrapper>
-          )}
-        </div>
+        <CompactLoadedPrompt
+          promptId={value}
+          displayName={displayName}
+          prompt={promptFromList}
+          versionId={loadedVersionId}
+          hasUnsavedChanges={hasUnsavedChanges}
+          onClear={onClear}
+        />
       );
     }
 
     return (
-      <LoadableSelectBox
-        options={promptsOptions}
-        searchPlaceholder={searchPlaceholder}
-        onChange={onValueChange}
-        open={open}
+      <PromptLibraryMenu
+        projectId={projectId}
+        filterByTemplateStructure={filterByTemplateStructure}
+        onSelect={({ promptId }) => onValueChange(promptId)}
         onOpenChange={onOpenChangeHandler}
-        onLoadMore={
-          promptsTotal > DEFAULT_LOADED_PROMPTS && !isLoadedMore
-            ? loadMoreHandler
-            : undefined
-        }
-        isLoading={isLoadingPrompts}
-        optionsCount={DEFAULT_LOADED_PROMPTS}
         trigger={
           <div>
             <TooltipWrapper content="Load prompt">
@@ -201,9 +178,6 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
             </TooltipWrapper>
           </div>
         }
-        actionPanel={actionPanel}
-        minWidth={540}
-        disabled={disabled}
       />
     );
   }
@@ -249,6 +223,46 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         disabled={disabled}
       />
     </SelectBoxClearWrapper>
+  );
+};
+
+type CompactLoadedPromptProps = {
+  promptId: string;
+  displayName: string;
+  prompt?: Prompt;
+  versionId?: string;
+  hasUnsavedChanges?: boolean;
+  onClear?: () => void;
+};
+
+const CompactLoadedPrompt: React.FC<CompactLoadedPromptProps> = ({
+  promptId,
+  displayName,
+  prompt,
+  versionId,
+  hasUnsavedChanges,
+  onClear,
+}) => {
+  const { data: fetched } = usePromptById(
+    { promptId },
+    { enabled: !!promptId && !prompt },
+  );
+  const data = prompt ?? fetched;
+  const versionLabel = usePromptVersionLabel(
+    promptId,
+    versionId,
+    data?.version_count,
+  );
+
+  return (
+    <LoadedPromptDisplay
+      name={displayName}
+      templateStructure={data?.template_structure}
+      versionLabel={versionLabel}
+      versionTags={data?.latest_version?.tags}
+      hasUnsavedChanges={hasUnsavedChanges}
+      onClear={onClear}
+    />
   );
 };
 

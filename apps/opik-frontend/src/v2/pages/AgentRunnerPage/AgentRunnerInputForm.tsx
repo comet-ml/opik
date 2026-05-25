@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
 import { Switch } from "@/ui/switch";
-import { Label } from "@/ui/label";
 
 type ParamPresence = "required" | "optional";
 
@@ -59,7 +59,7 @@ const coerceValue = (value: string, type: string): unknown => {
 
 type AgentRunnerInputFormProps = {
   fields: AgentParam[];
-  onSubmit: (inputs: Record<string, unknown>, maskId?: string) => void;
+  onSubmit: (inputs: Record<string, unknown>) => void;
   isRunning: boolean;
   onValidityChange?: (hasAllRequired: boolean) => void;
 };
@@ -109,6 +109,16 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
     mode: "onChange",
   });
 
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCollapsed = (name: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
   useEffect(() => {
     onValidityChange?.(isValid);
   }, [isValid, onValidityChange]);
@@ -132,57 +142,82 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
           <p className="comet-body-s">No input fields defined by this agent.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {fields.map((field) => {
             const normalized = normalizeType(field.type);
+            const isOpen = !collapsed.has(field.name);
             return (
-              <div key={field.name} className="flex flex-col gap-1.5">
-                <Label className="comet-body-xs-accented">
-                  {field.name}
-                  <span className="ml-1 font-normal text-light-slate">
+              <div
+                key={field.name}
+                className="overflow-hidden rounded-md border border-border bg-soft-background"
+              >
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => toggleCollapsed(field.name)}
+                    className="flex shrink-0 items-center text-light-slate hover:text-foreground"
+                  >
+                    {isOpen ? (
+                      <ChevronDown className="size-4" />
+                    ) : (
+                      <ChevronRight className="size-4" />
+                    )}
+                  </button>
+                  <span className="comet-body-xs text-muted-slate">
+                    {field.name}
+                  </span>
+                  <span className="text-[10px] text-light-slate opacity-60">
+                    |
+                  </span>
+                  <span className="comet-body-xs font-mono text-light-slate">
                     {field.type}
                   </span>
                   {!isFieldRequired(field) && (
-                    <span className="ml-1 font-normal text-muted-slate">
+                    <span className="comet-body-xs text-muted-slate">
                       (optional)
                     </span>
                   )}
-                </Label>
+                </div>
 
-                {normalized === "boolean" ? (
-                  <Switch
-                    checked={watch(field.name) === "true"}
-                    onCheckedChange={(checked) =>
-                      setValue(field.name, String(checked))
-                    }
-                    disabled={isRunning}
-                  />
-                ) : normalized === "object" ? (
-                  <Textarea
-                    {...register(field.name)}
-                    placeholder={`Enter ${field.name}...`}
-                    rows={4}
-                    disabled={isRunning}
-                  />
-                ) : (
-                  <Input
-                    {...register(field.name)}
-                    placeholder={`Enter ${field.name}...`}
-                    inputMode={
-                      normalized === "numeric-int"
-                        ? "numeric"
-                        : normalized === "numeric-float"
-                          ? "decimal"
-                          : "text"
-                    }
-                    disabled={isRunning}
-                  />
-                )}
+                {isOpen && (
+                  <div className="flex flex-col gap-1 px-3 pb-3">
+                    {normalized === "boolean" ? (
+                      <Switch
+                        checked={watch(field.name) === "true"}
+                        onCheckedChange={(checked) =>
+                          setValue(field.name, String(checked))
+                        }
+                        disabled={isRunning}
+                      />
+                    ) : normalized === "object" ? (
+                      <Textarea
+                        {...register(field.name)}
+                        placeholder={`Enter ${field.name}...`}
+                        rows={4}
+                        disabled={isRunning}
+                      />
+                    ) : (
+                      <Input
+                        {...register(field.name)}
+                        placeholder={`Enter ${field.name}...`}
+                        inputMode={
+                          normalized === "numeric-int"
+                            ? "numeric"
+                            : normalized === "numeric-float"
+                              ? "decimal"
+                              : "text"
+                        }
+                        disabled={isRunning}
+                      />
+                    )}
 
-                {errors[field.name] && (
-                  <span className="comet-body-xs text-destructive">
-                    {errors[field.name]?.message as string}
-                  </span>
+                    {errors[field.name] && (
+                      <span className="comet-body-xs text-destructive">
+                        {errors[field.name]?.message as string}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             );

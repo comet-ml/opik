@@ -2,12 +2,12 @@ import React from "react";
 import { Code, FlaskConical, LucideIcon, Rocket } from "lucide-react";
 import capitalize from "lodash/capitalize";
 
-import { AgentConfigurationBasicStage } from "@/utils/agent-configurations";
+import { VersionStage } from "@/utils/version-stages";
 
-type BasicStageTagSize = "xs" | "sm";
+type StageTagSize = "xs" | "sm";
 
-type BasicStageTagProps = {
-  size?: BasicStageTagSize;
+type StageTagProps = {
+  size?: StageTagSize;
   value: string;
 };
 
@@ -18,37 +18,34 @@ type StageConfig = {
 };
 
 const STAGE_CONFIGS: Record<string, StageConfig> = {
-  [AgentConfigurationBasicStage.DEV]: {
+  [VersionStage.DEV]: {
     icon: Code,
     bg: "bg-[var(--stage-dev-bg)]",
     text: "text-[var(--stage-dev-text)]",
   },
-  [AgentConfigurationBasicStage.STAGING]: {
+  [VersionStage.STAGING]: {
     icon: FlaskConical,
     bg: "bg-[var(--stage-staging-bg)]",
     text: "text-[var(--stage-staging-text)]",
   },
-  [AgentConfigurationBasicStage.PROD]: {
+  [VersionStage.PROD]: {
     icon: Rocket,
     bg: "bg-[var(--tag-lime-bg)]",
     text: "text-[var(--tag-lime-text)]",
   },
 };
 
-const SIZE_CLASSES: Record<BasicStageTagSize, string> = {
+const SIZE_CLASSES: Record<StageTagSize, string> = {
   xs: "comet-body-xs-accented h-4 gap-1 rounded px-1 leading-4",
   sm: "comet-body-s-accented h-6 gap-1.5 rounded-md px-1.5 leading-6",
 };
 
-const ICON_SIZE: Record<BasicStageTagSize, string> = {
+const ICON_SIZE: Record<StageTagSize, string> = {
   xs: "size-3",
   sm: "size-3.5",
 };
 
-const BasicStageTag: React.FC<BasicStageTagProps> = ({
-  size = "sm",
-  value,
-}) => {
+const StageTag: React.FC<StageTagProps> = ({ size = "sm", value }) => {
   const config = STAGE_CONFIGS[value];
   if (!config) return null;
 
@@ -64,4 +61,4 @@ const BasicStageTag: React.FC<BasicStageTagProps> = ({
   );
 };
 
-export default BasicStageTag;
+export default StageTag;
