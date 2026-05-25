@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,6 +26,7 @@ public record OllieReport(
         @JsonView(View.Public.class) @NonNull UUID projectId,
         @JsonView(View.Public.class) String sessionId,
         @JsonView(View.Public.class) String content,
+        @JsonView(View.Public.class) JsonNode recommendedActions,
         @JsonView(View.Public.class) @NonNull ReportStatus status,
         @JsonView(View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView(View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt) {
@@ -69,7 +71,8 @@ public record OllieReport(
     public record ReportCompleteRequest(
             @JsonView(View.Write.class) String content,
             @JsonView(View.Write.class) @NotNull ReportStatus status,
-            @JsonView(View.Write.class) String sessionId) {
+            @JsonView(View.Write.class) String sessionId,
+            @JsonView(View.Write.class) JsonNode recommendedActions) {
     }
 
     public static class View {

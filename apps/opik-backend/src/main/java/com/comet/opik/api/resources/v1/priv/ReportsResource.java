@@ -77,7 +77,8 @@ public class ReportsResource {
             @PathParam("reportId") UUID reportId,
             @Valid ReportCompleteRequest request) {
 
-        reportService.updateReport(projectId, reportId, request.status(), request.content(), request.sessionId())
+        reportService.updateReport(projectId, reportId, request.status(), request.content(),
+                request.sessionId(), request.recommendedActions())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
