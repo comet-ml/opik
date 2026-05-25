@@ -6,6 +6,8 @@ import { EditorState, Extension } from "@codemirror/state";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { yamlLanguage } from "@codemirror/lang-yaml";
 import { pythonLanguage } from "@codemirror/lang-python";
+import { StreamLanguage } from "@codemirror/language";
+import { shell } from "@codemirror/legacy-modes/mode/shell";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useCodemirrorLineHighlight } from "@/hooks/useCodemirrorLineHighlight";
 import CopyButton from "@/shared/CopyButton/CopyButton";
@@ -14,17 +16,15 @@ import useRunCodeSnippet from "./useRunCodeSnippet";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { FINAL_LOG_TEMPLATE } from "@/integrations/integration-logs";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 
-export enum SUPPORTED_LANGUAGE {
-  json = "json",
-  yaml = "yaml",
-  python = "python",
-}
+export { SUPPORTED_LANGUAGE };
 
 const PLUGINS_MAP: Record<SUPPORTED_LANGUAGE, Extension> = {
   [SUPPORTED_LANGUAGE.json]: jsonLanguage,
   [SUPPORTED_LANGUAGE.yaml]: yamlLanguage,
   [SUPPORTED_LANGUAGE.python]: pythonLanguage,
+  [SUPPORTED_LANGUAGE.bash]: StreamLanguage.define(shell),
 };
 
 type CodeExecutorProps = {
