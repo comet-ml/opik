@@ -162,6 +162,66 @@ def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
     assert not caplog.records
 
 
+def test_litellm_chat_model_drops_seed_when_provider_does_not_support(
+    monkeypatch, caplog
+):
+    """`seed` is an OpenAI-shape param; Anthropic (and a handful of
+    other providers) reject it with `UnsupportedParamsError` rather
+    than ignoring it. The native `AnthropicChatModel` silently filters
+    it; this test pins the same behavior on the LiteLLM path so callers
+    that pass `seed` (e.g. the agentic judge integration tests for
+    reproducibility) don't blow up when the underlying provider is
+    Anthropic.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        # Mirror Anthropic's litellm-reported support: no `seed`.
+        supported_params=["temperature", "response_format", "tools", "tool_choice"],
+    )
+
+    caplog.set_level(
+        logging.DEBUG, logger="opik.evaluation.models.litellm.litellm_chat_model"
+    )
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        seed=42,
+        temperature=0.0,
+    )
+
+    # Constructor strips the unsupported param so it never reaches
+    # litellm.completion.
+    assert "seed" not in model._completion_kwargs
+    assert "temperature" in model._completion_kwargs
+
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert "seed" not in kwargs
+
+
+def test_litellm_chat_model_keeps_seed_when_provider_supports_it(monkeypatch):
+    """Counterpart to the drop test: when `seed` IS in the provider's
+    supported set (e.g. OpenAI), it must round-trip through to the
+    completion call so determinism still works on providers that
+    honor it.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "seed", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="gpt-4o-mini",
+        seed=42,
+    )
+    assert model._completion_kwargs.get("seed") == 42
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("seed") == 42
+
+
 def test_litellm_chat_model_drops_top_logprobs_for_dashscope(
     monkeypatch,
 ):

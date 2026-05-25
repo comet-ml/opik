@@ -114,6 +114,54 @@ class TestResponseParser:
         with pytest.raises(exceptions.BaseLLMError):
             response_parser.parse_assistant_message(response)
 
+    def test_keeps_registered_tool_use_as_tool_call(self):
+        """Regression: with `output_format` set, Anthropic emits the
+        structured-output finalizer as a `tool_use` block too. Without
+        disambiguation we'd misclassify a *real* registered-tool call
+        (e.g. `read`) as the finalizer and promote its arguments to
+        `content`, leaving the agentic loop with nothing to execute.
+        Passing `registered_tool_names` lets the parser tell them apart.
+        """
+        response = SimpleNamespace(
+            content=[
+                SimpleNamespace(
+                    type="tool_use",
+                    id="call_42",
+                    name="read",
+                    input={"type": "trace", "id": "t-1"},
+                ),
+            ]
+        )
+        message = response_parser.parse_assistant_message(
+            response, registered_tool_names=["read", "scan", "search"]
+        )
+        assert message["role"] == "assistant"
+        assert "content" not in message
+        assert message["tool_calls"] == [
+            {
+                "id": "call_42",
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "arguments": json.dumps({"type": "trace", "id": "t-1"}),
+                },
+            }
+        ]
+
+    def test_promotes_unknown_tool_use_when_tools_registered(self):
+        """Counterpart to the previous test: when the single tool_use's
+        name is NOT in the registered set, treat it as the structured-
+        output finalizer (Anthropic's name for it varies by SDK version,
+        but it's always not one of the user's tools).
+        """
+        data = {"score": 10, "reason": "good"}
+        message = response_parser.parse_assistant_message(
+            _make_tool_use_response(data),
+            registered_tool_names=["read", "scan", "search"],
+        )
+        assert "tool_calls" not in message
+        assert json.loads(message["content"]) == data
+
 
 class TestMessageAdapter:
     def test_extracts_system_messages(self):
@@ -177,6 +225,266 @@ class TestMessageAdapter:
         message_adapter.filter_unsupported_params({"logprobs": True}, warned)
         message_adapter.filter_unsupported_params({"logprobs": True}, warned)
         assert warned == {"logprobs"}
+
+    def test_normalize_tool_choice_translates_openai_strings(self):
+        # OpenAI-style string forms map to Anthropic's object form.
+        assert message_adapter.normalize_tool_choice("auto") == {"type": "auto"}
+        assert message_adapter.normalize_tool_choice("none") == {"type": "none"}
+        # "required" → "any" (Anthropic's name for "force *some* tool").
+        assert message_adapter.normalize_tool_choice("required") == {"type": "any"}
+
+    def test_normalize_tool_choice_translates_openai_function_object(self):
+        # OpenAI "force this specific function" → Anthropic "force this tool".
+        translated = message_adapter.normalize_tool_choice(
+            {"type": "function", "function": {"name": "read"}}
+        )
+        assert translated == {"type": "tool", "name": "read"}
+
+    def test_normalize_tool_choice_passes_through_anthropic_native_shape(self):
+        # Already-correct Anthropic forms shouldn't be touched.
+        assert message_adapter.normalize_tool_choice({"type": "auto"}) == {
+            "type": "auto"
+        }
+        assert message_adapter.normalize_tool_choice(
+            {"type": "tool", "name": "read"}
+        ) == {"type": "tool", "name": "read"}
+
+    def test_normalize_tool_choice_passes_through_unknown_values(self):
+        # Unrecognized strings or shapes pass through unchanged so the
+        # Anthropic SDK can surface the error rather than us silently
+        # dropping the field.
+        assert message_adapter.normalize_tool_choice("bogus") == "bogus"
+        assert message_adapter.normalize_tool_choice(
+            {"type": "function"}  # missing function.name
+        ) == {"type": "function"}
+
+    def test_normalize_tools_translates_openai_function_specs(self):
+        openai_spec = {
+            "type": "function",
+            "function": {
+                "name": "read",
+                "description": "Fetch a trace by id.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}},
+                    "required": ["id"],
+                },
+            },
+        }
+        translated = message_adapter.normalize_tools([openai_spec])
+        assert translated == [
+            {
+                "type": "custom",
+                "name": "read",
+                "description": "Fetch a trace by id.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}},
+                    "required": ["id"],
+                },
+            }
+        ]
+
+    def test_normalize_tools_passes_through_native_anthropic_specs(self):
+        # Hand-rolled Anthropic-native specs (no `type=function` wrapper)
+        # must not be rewritten — we have no information to safely map
+        # them, and rewriting would corrupt a working spec.
+        native = {
+            "type": "custom",
+            "name": "scan",
+            "description": "Evaluate a jq path.",
+            "input_schema": {"type": "object"},
+        }
+        assert message_adapter.normalize_tools([native]) == [native]
+
+    def test_normalize_tools_passes_through_malformed_specs(self):
+        # No function.name → unrecognizable; pass through so the SDK
+        # surfaces the error rather than us masking it.
+        malformed = {"type": "function", "function": {"description": "x"}}
+        assert message_adapter.normalize_tools([malformed]) == [malformed]
+
+    def test_normalize_tools_passes_through_non_list_input(self):
+        # `None` (or any non-list sentinel) should not blow up — just
+        # return it so the SDK's own validation handles it.
+        assert message_adapter.normalize_tools(None) is None
+
+    def test_extract_tool_names_handles_openai_shape(self):
+        tools = [
+            {"type": "function", "function": {"name": "read"}},
+            {"type": "function", "function": {"name": "scan"}},
+        ]
+        assert message_adapter.extract_tool_names(tools) == ["read", "scan"]
+
+    def test_extract_tool_names_handles_anthropic_native_shape(self):
+        # After `normalize_tools` runs, names live at the top level.
+        # `extract_tool_names` must handle both shapes so it stays
+        # usable on either side of normalization.
+        tools = [
+            {"type": "custom", "name": "read"},
+            {"type": "custom", "name": "search"},
+        ]
+        assert message_adapter.extract_tool_names(tools) == ["read", "search"]
+
+    def test_extract_tool_names_skips_malformed_entries(self):
+        tools = [
+            {"type": "function"},  # missing function dict
+            {"type": "function", "function": {"description": "x"}},  # no name
+            {"type": "custom", "name": "read"},  # well-formed
+            "not a dict",  # ignored
+        ]
+        assert message_adapter.extract_tool_names(tools) == ["read"]
+
+    def test_extract_tool_names_returns_empty_for_non_list(self):
+        assert message_adapter.extract_tool_names(None) == []
+        assert message_adapter.extract_tool_names("nope") == []
+
+    def test_normalize_messages_passes_through_plain_history(self):
+        # User + plain assistant text → no shape change beyond the
+        # `tool_calls=None` cleanup that pop'd through the loop.
+        messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        assert message_adapter.normalize_messages(messages) == messages
+
+    def test_normalize_messages_converts_assistant_tool_calls_to_blocks(self):
+        # Assistant message with one tool_call → assistant message
+        # whose content is a list of blocks (no leading text block
+        # when `content` is empty/None).
+        messages = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps({"type": "trace", "id": "t-1"}),
+                        },
+                    }
+                ],
+            }
+        ]
+        assert message_adapter.normalize_messages(messages) == [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_1",
+                        "name": "read",
+                        "input": {"type": "trace", "id": "t-1"},
+                    }
+                ],
+            }
+        ]
+
+    def test_normalize_messages_keeps_leading_text_block(self):
+        # Assistant emits text alongside the tool_use — both blocks
+        # must appear, text first.
+        messages = [
+            {
+                "role": "assistant",
+                "content": "let me check",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            }
+        ]
+        normalized = message_adapter.normalize_messages(messages)
+        assert normalized[0]["content"] == [
+            {"type": "text", "text": "let me check"},
+            {"type": "tool_use", "id": "call_1", "name": "read", "input": {}},
+        ]
+
+    def test_normalize_messages_translates_tool_role_to_user_tool_result(self):
+        messages = [
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{'data': 'value'}",
+            }
+        ]
+        assert message_adapter.normalize_messages(messages) == [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_1",
+                        "content": "{'data': 'value'}",
+                    }
+                ],
+            }
+        ]
+
+    def test_normalize_messages_coalesces_consecutive_tool_messages(self):
+        # Two tool replies in a row must end up as a single user
+        # message with two tool_result blocks — Anthropic rejects
+        # split tool_result responses when the prior assistant turn
+        # emitted multiple tool_use blocks.
+        messages = [
+            {"role": "tool", "tool_call_id": "call_1", "content": "result-1"},
+            {"role": "tool", "tool_call_id": "call_2", "content": "result-2"},
+        ]
+        assert message_adapter.normalize_messages(messages) == [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_1",
+                        "content": "result-1",
+                    },
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_2",
+                        "content": "result-2",
+                    },
+                ],
+            }
+        ]
+
+    def test_normalize_messages_full_round_trip(self):
+        # End-to-end: a typical agentic-loop history with one
+        # round-trip should land in valid Anthropic shape.
+        messages = [
+            {"role": "user", "content": "find the marker"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps({"type": "trace", "id": "t-1"}),
+                        },
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "MARKER-XYZ-987"},
+        ]
+        normalized = message_adapter.normalize_messages(messages)
+        # User → unchanged.
+        assert normalized[0] == {"role": "user", "content": "find the marker"}
+        # Assistant → tool_use content block.
+        assert normalized[1]["role"] == "assistant"
+        assert normalized[1]["content"][0]["type"] == "tool_use"
+        # Tool result → user message with tool_result block.
+        assert normalized[2]["role"] == "user"
+        assert normalized[2]["content"][0]["type"] == "tool_result"
+        assert normalized[2]["content"][0]["tool_use_id"] == "call_1"
 
 
 class TestAnthropicChatModelGenerateString:

@@ -43,6 +43,12 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         self._completion_kwargs = message_adapter.filter_unsupported_params(
             completion_kwargs, self._unsupported_warned
         )
+        if "tool_choice" in self._completion_kwargs:
+            self._completion_kwargs["tool_choice"] = (
+                message_adapter.normalize_tool_choice(
+                    self._completion_kwargs["tool_choice"]
+                )
+            )
 
         config = opik_config.OpikConfig()
         enable_tracking = track and config.enable_litellm_models_monitoring
@@ -81,12 +87,20 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         if response_format is not None:
             kwargs["response_format"] = response_format
 
+        # Extract names before normalize_tools rewrites the `tools` list
+        # — the names come back to the response parser so a real tool
+        # call doesn't get misclassified as the structured-output
+        # finalizer (both arrive as `tool_use` blocks).
+        registered_tool_names = message_adapter.extract_tool_names(kwargs.get("tools"))
+
         with base_model.get_provider_response(
             model_provider=self,
             messages=cast(List[Dict[str, Any]], list(messages)),
             **kwargs,
         ) as response:
-            return response_parser.parse_assistant_message(response)
+            return response_parser.parse_assistant_message(
+                response, registered_tool_names=registered_tool_names
+            )
 
     def generate_provider_response(
         self,
@@ -136,12 +150,16 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         if response_format is not None:
             kwargs["response_format"] = response_format
 
+        registered_tool_names = message_adapter.extract_tool_names(kwargs.get("tools"))
+
         async with base_model.aget_provider_response(
             model_provider=self,
             messages=cast(List[Dict[str, Any]], list(messages)),
             **kwargs,
         ) as response:
-            return response_parser.parse_assistant_message(response)
+            return response_parser.parse_assistant_message(
+                response, registered_tool_names=registered_tool_names
+            )
 
     async def agenerate_provider_response(
         self,
@@ -185,10 +203,31 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         system_text, non_system_messages = message_adapter.extract_system_messages(
             messages
         )
+        # Translate OpenAI-shape `role: "tool"` follow-ups and
+        # assistant `tool_calls` into Anthropic's content-block form
+        # before they hit the API — see `normalize_messages` for the
+        # full mapping.
+        non_system_messages = message_adapter.normalize_messages(non_system_messages)
 
         filtered_extra = message_adapter.filter_unsupported_params(
             extra_kwargs, self._unsupported_warned
         )
+        # OpenAI-style `tool_choice` ("auto" / "none" / "required" /
+        # `{"type": "function", ...}`) needs to be translated to the
+        # Anthropic object form — the agentic loop emits the OpenAI
+        # shape because that's the cross-provider convention.
+        if "tool_choice" in filtered_extra:
+            filtered_extra["tool_choice"] = message_adapter.normalize_tool_choice(
+                filtered_extra["tool_choice"]
+            )
+        # Same provider mismatch on `tools`: OpenAI wraps each spec in
+        # `{type: "function", function: {...}}`; Anthropic's newer
+        # schema requires `{type: "custom", name, description,
+        # input_schema}` and rejects the `function` discriminator.
+        if "tools" in filtered_extra:
+            filtered_extra["tools"] = message_adapter.normalize_tools(
+                filtered_extra["tools"]
+            )
 
         call_kwargs: Dict[str, Any] = {
             **self._completion_kwargs,

@@ -168,6 +168,20 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 "Model %s does not support reasoning_effort, dropping.",
                 self.model_name,
             )
+        # `seed` is an OpenAI-shape determinism knob; Anthropic (and a
+        # few other providers) reject it outright via
+        # `UnsupportedParamsError` rather than ignoring it. The native
+        # `AnthropicChatModel` silently filters it through
+        # `filter_unsupported_params`; matching that behavior here
+        # keeps LiteLLM-routed Anthropic models from blowing up on
+        # callers (e.g. the agentic judge) that pass `seed` for
+        # reproducibility on providers that do support it.
+        if "seed" in params and "seed" not in self.supported_params:
+            filtered_params.pop("seed")
+            LOGGER.debug(
+                "Model %s does not support seed, dropping.",
+                self.model_name,
+            )
         # NOTE: Filtering based on `supported_params` has been disabled temporarily
         # because LiteLLM does not surface provider-specific connection fields via
         # `get_supported_openai_params`. Dropping those kwargs breaks Azure/Groq
