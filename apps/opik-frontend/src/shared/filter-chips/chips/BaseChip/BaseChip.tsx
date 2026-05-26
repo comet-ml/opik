@@ -9,10 +9,14 @@ export interface BaseChipProps
   valueSummary?: string | null;
   valueSummaryFull?: string | null;
   isOpen?: boolean;
+  onClear?: () => void;
 }
 
-const BaseChip = forwardRef<HTMLButtonElement, BaseChipProps>(
-  ({ label, valueSummary, valueSummaryFull, isOpen = false, ...rest }, ref) => {
+const BaseChip = forwardRef<HTMLElement, BaseChipProps>(
+  (
+    { label, valueSummary, valueSummaryFull, isOpen = false, onClear, ...rest },
+    ref,
+  ) => {
     const isApplied = Boolean(valueSummary);
     const ChevronIcon = isOpen ? ChevronUp : ChevronDown;
     const tooltip = isApplied
@@ -24,6 +28,7 @@ const BaseChip = forwardRef<HTMLButtonElement, BaseChipProps>(
         ref={ref}
         applied={isApplied}
         isOpen={isOpen}
+        onClear={onClear}
         aria-expanded={isOpen}
         {...rest}
       >

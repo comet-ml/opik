@@ -29,6 +29,7 @@ const PseudoSearchChip: React.FC<PseudoSearchChipProps> = ({
     valueSummary={formatPseudoSearchSummary(value, definition)}
     open={open}
     onOpenChange={onOpenChange}
+    onClear={onClear}
   >
     <PseudoSearchChipPopoverContent
       definition={definition}

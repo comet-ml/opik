@@ -1,5 +1,4 @@
 import React from "react";
-import { CircleX } from "lucide-react";
 import ChipShell from "@/shared/filter-chips/chips/BaseChip/ChipShell";
 import {
   BooleanChipDefinition,
@@ -26,10 +25,10 @@ const BooleanChip: React.FC<BooleanChipProps> = ({
     <ChipShell
       applied={applied}
       aria-pressed={applied}
-      onClick={() => (applied ? onClear() : onApply({ applied: true }))}
+      onClear={onClear}
+      onClick={applied ? undefined : () => onApply({ applied: true })}
     >
       <span className="truncate">{definition.label}</span>
-      {applied && <CircleX className="size-3 shrink-0" />}
     </ChipShell>
   );
 };

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatTimeSummary,
   isTimeApplied,
+  parseDateInput,
   parseTimeInput,
   timeToFilters,
 } from "./TimeChip.logic";
@@ -84,9 +85,9 @@ describe("formatTimeSummary", () => {
     expect(formatTimeSummary(undefined)).toBeNull();
   });
 
-  it("formats exactly mode as YYYY/MM/DD h:mm A", () => {
+  it("formats exactly mode with '=' prefix", () => {
     expect(formatTimeSummary({ mode: "exactly", at: ISO_1 })).toMatch(
-      /^\d{4}\/\d{2}\/\d{2} \d{1,2}:\d{2} (AM|PM)$/,
+      /^= \d{4}\/\d{2}\/\d{2} \d{1,2}:\d{2} (AM|PM)$/,
     );
   });
 
@@ -96,15 +97,15 @@ describe("formatTimeSummary", () => {
       start: ISO_1,
       end: ISO_2,
     });
-    expect(result).toMatch(/^\d{4}\/\d{2}\/\d{2} - \d{4}\/\d{2}\/\d{2}$/);
+    expect(result).toMatch(/^\d{4}\/\d{2}\/\d{2} – \d{4}\/\d{2}\/\d{2}$/);
   });
 
-  it("formats before/after without operator prefix", () => {
+  it("formats before/after with '<' / '>' prefixes", () => {
     expect(formatTimeSummary({ mode: "before", before: ISO_1 })).toMatch(
-      /^\d{4}\/\d{2}\/\d{2} \d{1,2}:\d{2} (AM|PM)$/,
+      /^< \d{4}\/\d{2}\/\d{2} \d{1,2}:\d{2} (AM|PM)$/,
     );
     expect(formatTimeSummary({ mode: "after", after: ISO_1 })).toMatch(
-      /^\d{4}\/\d{2}\/\d{2} \d{1,2}:\d{2} (AM|PM)$/,
+      /^> \d{4}\/\d{2}\/\d{2} \d{1,2}:\d{2} (AM|PM)$/,
     );
   });
 });
@@ -141,5 +142,54 @@ describe("parseTimeInput", () => {
     expect(parseTimeInput("7:89")).toBeNull();
     expect(parseTimeInput("foo")).toBeNull();
     expect(parseTimeInput("13pm")).toBeNull();
+  });
+});
+
+describe("parseDateInput", () => {
+  const expectYMD = (
+    d: Date | null,
+    year: number,
+    monthIndex: number,
+    day: number,
+  ) => {
+    expect(d).toBeInstanceOf(Date);
+    expect(d?.getFullYear()).toBe(year);
+    expect(d?.getMonth()).toBe(monthIndex);
+    expect(d?.getDate()).toBe(day);
+  };
+
+  it("returns null for empty or whitespace input", () => {
+    expect(parseDateInput("")).toBeNull();
+    expect(parseDateInput("   ")).toBeNull();
+  });
+
+  it("accepts the canonical YYYY/MM/DD", () => {
+    expectYMD(parseDateInput("2026/05/26"), 2026, 4, 26);
+  });
+
+  it("accepts dash and dot separators", () => {
+    expectYMD(parseDateInput("2026-05-26"), 2026, 4, 26);
+    expectYMD(parseDateInput("2026.05.26"), 2026, 4, 26);
+  });
+
+  it("accepts compact YYYYMMDD", () => {
+    expectYMD(parseDateInput("20260526"), 2026, 4, 26);
+  });
+
+  it("accepts non-zero-padded month and day", () => {
+    expectYMD(parseDateInput("2026/5/26"), 2026, 4, 26);
+    expectYMD(parseDateInput("2026-5-7"), 2026, 4, 7);
+    expectYMD(parseDateInput("2026.5.7"), 2026, 4, 7);
+  });
+
+  it("rejects garbage and ambiguous month-first formats", () => {
+    expect(parseDateInput("garbage")).toBeNull();
+    expect(parseDateInput("5/26/2026")).toBeNull();
+    expect(parseDateInput("26/05/2026")).toBeNull();
+  });
+
+  it("rejects out-of-range month and day", () => {
+    expect(parseDateInput("2026/13/26")).toBeNull();
+    expect(parseDateInput("2026/05/32")).toBeNull();
   });
 });

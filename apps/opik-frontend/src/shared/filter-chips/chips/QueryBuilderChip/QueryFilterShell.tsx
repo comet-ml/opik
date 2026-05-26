@@ -83,10 +83,10 @@ export function QueryFilterShell<TRow>({
         </div>
       ) : (
         <Button
-          variant="minimal"
+          variant="ghost"
           size="2xs"
           onClick={() => setSearchOpen(true)}
-          className="self-start px-0"
+          className="self-start px-0 text-foreground hover:text-primary"
         >
           <Plus className="mr-1 size-3" />
           {addLabel}
@@ -97,8 +97,14 @@ export function QueryFilterShell<TRow>({
         <div className="flex flex-col">
           <div className="border-t border-border" />
           <div className="flex items-center pt-2">
-            <Button variant="minimal" size="2xs" onClick={onClearAll}>
-              Clear all{appliedCount > 0 ? ` (${appliedCount})` : ""}
+            <Button
+              variant="ghost"
+              size="2xs"
+              onClick={onClearAll}
+              disabled={appliedCount === 0}
+              className="px-0 text-foreground hover:text-primary"
+            >
+              Clear{appliedCount > 0 ? ` (${appliedCount})` : ""}
             </Button>
           </div>
         </div>

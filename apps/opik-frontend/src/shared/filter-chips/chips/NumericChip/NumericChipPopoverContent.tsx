@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import { FormErrorSkeleton } from "@/ui/form";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
 import { cn, padDecimalsString } from "@/lib/utils";
@@ -12,6 +13,10 @@ import {
   NumericFormat,
   resolveNumericFormat,
 } from "@/shared/filter-chips/chips/NumericChip/NumericChip.format";
+import {
+  NUMERIC_DEFAULT_MODE,
+  isNumericApplied,
+} from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
 import { toNumber, trimValue } from "@/shared/filter-chips/lib/helpers";
 
 interface NumericChipPopoverContentProps {
@@ -50,7 +55,9 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
   onApply,
   onClear,
 }) => {
-  const [mode, setMode] = useState<NumericChipMode>(value?.mode ?? "exactly");
+  const [mode, setMode] = useState<NumericChipMode>(
+    value?.mode ?? NUMERIC_DEFAULT_MODE,
+  );
   const [fromDraft, setFromDraft] = useState<string>(() =>
     initialFromDraft(value),
   );
@@ -112,7 +119,7 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
   };
 
   const handleClear = () => {
-    setMode("exactly");
+    setMode(NUMERIC_DEFAULT_MODE);
     setFromDraft("");
     setToDraft("");
     onClear();
@@ -179,9 +186,9 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
             />
           </div>
           {betweenError && (
-            <p className="comet-body-xs px-0.5 text-destructive">
+            <FormErrorSkeleton className="comet-body-xs">
               From value must be less than or equal to To value
-            </p>
+            </FormErrorSkeleton>
           )}
         </div>
       ) : (
@@ -194,7 +201,10 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
         />
       )}
 
-      <PopoverClearFooter onClear={handleClear} />
+      <PopoverClearFooter
+        onClear={handleClear}
+        disabled={!isNumericApplied(value)}
+      />
     </div>
   );
 };
@@ -243,7 +253,7 @@ const NumericInputField: React.FC<NumericInputFieldProps> = ({
           "text-right",
           format.prefix && "pl-7",
           format.suffix && "pr-7",
-          hasError && "border-destructive focus-visible:ring-destructive",
+          hasError && "border-destructive",
         )}
       />
     </div>

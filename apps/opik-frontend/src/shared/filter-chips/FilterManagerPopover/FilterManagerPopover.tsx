@@ -1,8 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import { Pin, PinOff } from "lucide-react";
 import groupBy from "lodash/groupBy";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
+import { Separator } from "@/ui/separator";
 import { cn } from "@/lib/utils";
+import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { isSingleSelectApplied } from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip.logic";
 import { isPseudoSearchApplied } from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip.logic";
@@ -67,147 +75,138 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
   onUnpinChip,
   onRequestOpenChip,
 }) => {
+  const [searchText, setSearchText] = useState("");
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) setSearchText("");
+    onOpenChange(next);
+  };
+
   const handleSelectUnpinned = (def: ChipDefinition) => {
-    onOpenChange(false);
     if (def.kind === "boolean") {
       onApplyValue(def.id, { applied: true });
       return;
     }
     onPinChip(def.id);
-    onRequestOpenChip(def.id);
+    // Defer until the DropdownMenu has closed so its focus-return doesn't
+    // race with the chip's popover trying to open.
+    requestAnimationFrame(() => onRequestOpenChip(def.id));
   };
 
+  const query = searchText.trim().toLowerCase();
+  const matches = (def: ChipDefinition) =>
+    query === "" || def.label.toLowerCase().includes(query);
+
+  const visiblePinned = chipsPinned.filter(matches);
+  const visibleUnpinned = chipsUnpinned.filter(matches);
+  const hasResults = visiblePinned.length > 0 || visibleUnpinned.length > 0;
+
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent
         align="start"
         sideOffset={4}
         collisionPadding={16}
         onCloseAutoFocus={(e) => e.preventDefault()}
-        className="max-h-[var(--radix-popover-content-available-height)] w-[242px] overflow-y-auto rounded-md border border-border bg-background p-1 shadow-sm"
+        className="flex max-h-[var(--radix-dropdown-menu-content-available-height)] w-[242px] flex-col p-1 shadow-sm"
       >
-        {chipsPinned.length > 0 && (
-          <>
-            <SectionHeader>Pinned</SectionHeader>
-            <ul className="flex flex-col">
-              {chipsPinned.map((def) => {
+        <div className="shrink-0" onKeyDown={(e) => e.stopPropagation()}>
+          <SearchInput
+            searchText={searchText}
+            setSearchText={setSearchText}
+            placeholder="Search"
+            size="sm"
+            variant="ghost"
+          />
+          <Separator className="my-1" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {visiblePinned.length > 0 && (
+            <>
+              <DropdownMenuLabel className="text-light-slate">
+                Pinned filters
+              </DropdownMenuLabel>
+              {visiblePinned.map((def) => {
                 const isActive = chipHasAppliedValue(def, values[def.id]);
+                const tooltip = isActive ? "Unpin and clear filter" : "Unpin";
                 return (
-                  <PinnedRow
-                    key={def.id}
-                    label={def.label}
-                    isActive={isActive}
-                    onUnpin={() => onUnpinChip(def.id)}
-                  />
+                  <TooltipWrapper key={def.id} content={tooltip}>
+                    <DropdownMenuItem
+                      size="sm"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        onUnpinChip(def.id);
+                      }}
+                      aria-label={tooltip}
+                      className="group flex justify-between gap-2 px-4 text-foreground"
+                    >
+                      <span className="truncate text-foreground">
+                        {def.label}
+                        {isActive && " (active)"}
+                      </span>
+                      <span className="flex size-4 shrink-0 items-center justify-center text-light-slate">
+                        <Pin className="size-4 group-hover:hidden" />
+                        <PinOff className="hidden size-4 group-hover:block" />
+                      </span>
+                    </DropdownMenuItem>
+                  </TooltipWrapper>
                 );
               })}
-            </ul>
-            {chipsUnpinned.length > 0 && (
-              <div className="flex w-full items-center justify-center py-1">
-                <div className="h-px w-[226px] bg-border" />
-              </div>
-            )}
-          </>
-        )}
+              {visibleUnpinned.length > 0 && (
+                <div className="px-1">
+                  <Separator className="my-1" />
+                </div>
+              )}
+            </>
+          )}
 
-        {chipsUnpinned.length > 0 && (
-          <>
-            <SectionHeader>All filters</SectionHeader>
-            {groupUnpinnedChips(chipsUnpinned).map((group, idx) => (
-              <React.Fragment key={group.name ?? `__none_${idx}`}>
-                {group.name && <SubgroupHeader>{group.name}</SubgroupHeader>}
-                <ul className="flex flex-col">
+          {visibleUnpinned.length > 0 && (
+            <>
+              <DropdownMenuLabel className="text-light-slate">
+                Available filters
+              </DropdownMenuLabel>
+              {groupUnpinnedChips(visibleUnpinned).map((group, idx) => (
+                <React.Fragment key={group.name ?? `__none_${idx}`}>
+                  {group.name && (
+                    <DropdownMenuLabel
+                      className={cn(
+                        "comet-body-xs-accented text-light-slate",
+                        "min-h-10 py-2.5",
+                      )}
+                    >
+                      {group.name}
+                    </DropdownMenuLabel>
+                  )}
                   {group.chips.map((def) => (
-                    <UnpinnedRow
+                    <DropdownMenuItem
                       key={def.id}
-                      label={def.label}
+                      size="sm"
                       onSelect={() => handleSelectUnpinned(def)}
-                    />
+                      className="px-4 text-foreground"
+                    >
+                      {def.label}
+                    </DropdownMenuItem>
                   ))}
-                </ul>
-              </React.Fragment>
-            ))}
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+                </React.Fragment>
+              ))}
+            </>
+          )}
+
+          {!hasResults && (
+            <div className="comet-body-s flex h-32 w-full items-center justify-center text-muted-slate">
+              No search results
+            </div>
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
-
-const SectionHeader: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => (
-  <div className="comet-body-s-accented flex h-10 min-w-[200px] items-center px-4 text-light-slate">
-    {children}
-  </div>
-);
-
-const SubgroupHeader: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => (
-  <div className="comet-body-xs-accented flex h-10 min-w-[200px] items-center px-4 text-light-slate">
-    {children}
-  </div>
-);
 
 const groupUnpinnedChips = (chips: ChipDefinition[]) =>
   Object.entries(groupBy(chips, (def) => def.group ?? "")).map(
     ([name, items]) => ({ name, chips: items }),
   );
-
-interface PinnedRowProps {
-  label: string;
-  isActive: boolean;
-  onUnpin: () => void;
-}
-
-const PinnedRow: React.FC<PinnedRowProps> = ({ label, isActive, onUnpin }) => {
-  const tooltip = isActive ? "Unpin and clear filter" : "Unpin";
-  return (
-    <li>
-      <TooltipWrapper content={tooltip}>
-        <button
-          type="button"
-          aria-label={tooltip}
-          onClick={onUnpin}
-          className={cn(
-            "group flex h-10 w-full min-w-[200px] items-center justify-between gap-2 rounded-[4px] px-4 text-left outline-none",
-            "hover:bg-primary-foreground focus-visible:bg-primary-foreground",
-          )}
-        >
-          <span className="truncate text-sm text-foreground">
-            {label}
-            {isActive && " (active)"}
-          </span>
-          <span className="flex size-4 shrink-0 items-center justify-center text-light-slate">
-            <Pin className="size-4 group-hover:hidden" />
-            <PinOff className="hidden size-4 group-hover:block" />
-          </span>
-        </button>
-      </TooltipWrapper>
-    </li>
-  );
-};
-
-interface UnpinnedRowProps {
-  label: string;
-  onSelect: () => void;
-}
-
-const UnpinnedRow: React.FC<UnpinnedRowProps> = ({ label, onSelect }) => (
-  <li>
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "flex h-10 w-full min-w-[200px] items-center gap-2 rounded-[4px] px-4 text-left outline-none",
-        "hover:bg-primary-foreground focus-visible:bg-primary-foreground",
-      )}
-    >
-      <span className="truncate text-sm text-foreground">{label}</span>
-    </button>
-  </li>
-);
 
 export default FilterManagerPopover;

@@ -190,6 +190,32 @@ describe("useFilterChips", () => {
         "type",
       ]);
     });
+
+    it("preserves pin order regardless of definition order", () => {
+      const { result } = setup({ pinned: ["duration", "with_errors"] });
+      expect(result.current.chipsPinned.map((d) => d.id)).toEqual([
+        "duration",
+        "with_errors",
+      ]);
+    });
+
+    it("appends applied-but-not-pinned chips after explicit pins", () => {
+      const { result } = setup({
+        raw: [
+          f({
+            field: "type",
+            operator: "=",
+            value: "llm",
+            type: COLUMN_TYPE.category,
+          }),
+        ],
+        pinned: ["with_errors"],
+      });
+      expect(result.current.chipsPinned.map((d) => d.id)).toEqual([
+        "with_errors",
+        "type",
+      ]);
+    });
   });
 
   describe("applyValue", () => {
