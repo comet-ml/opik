@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for the v2-client entry points on {@link FilterQueryBuilder}:
@@ -186,9 +187,9 @@ class FilterQueryBuilderV2ClientTest {
 
             FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
-            // The injected single quote must be doubled (ClickHouse '' escape). The resulting
-            // literal stays inside a single-element array — no SQL escape.
-            assertThat(params).containsEntry("filter0", "['x'';DROP TABLE users;--']");
+            // ClickHouseUtil escapes ' as \' (C-style). The resulting literal stays inside a
+            // single-element array — no SQL escape.
+            assertThat(params).containsEntry("filter0", "['x\\';DROP TABLE users;--']");
         }
 
         @Test
@@ -203,8 +204,26 @@ class FilterQueryBuilderV2ClientTest {
 
             FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
-            // Backslash is doubled, quote is doubled — the whole payload stays a single element.
-            assertThat(params).containsEntry("filter0", "['x\\\\'';DROP;--']");
+            // Backslash → \\, quote → \' — the whole payload stays a single element.
+            assertThat(params).containsEntry("filter0", "['x\\\\\\';DROP;--']");
+        }
+
+        @Test
+        @DisplayName("formatStringArrayLiteral: Collection<String> overload renders empty array as []")
+        void formatStringArrayLiteral__empty__rendersEmptyArray() {
+            assertThat(FilterQueryBuilder.formatStringArrayLiteral(List.of())).isEqualTo("[]");
+        }
+
+        @Test
+        @DisplayName("formatStringArrayLiteral: null element is rejected with a clear message")
+        void formatStringArrayLiteral__nullElement__throwsNpe() {
+            var values = new java.util.ArrayList<String>();
+            values.add("ok");
+            values.add(null);
+
+            assertThatThrownBy(() -> FilterQueryBuilder.formatStringArrayLiteral(values))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("must not be null");
         }
 
         @Test

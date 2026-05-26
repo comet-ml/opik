@@ -3314,17 +3314,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(edit.data());
             // Array(String) params must be ClickHouse array literals — the v2 client serialises
             // Map values via String.valueOf and would otherwise emit Java's unquoted [a, b] form.
-            params.put("data_keys",
-                    FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.keySet().toArray(new String[0])));
-            params.put("data_values",
-                    FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.values().toArray(new String[0])));
+            params.put("data_keys", FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.keySet()));
+            params.put("data_values", FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.values()));
         }
         if (edit.description() != null) {
             params.put("description", edit.description());
         }
         if (edit.tags() != null) {
-            params.put("tags",
-                    FilterQueryBuilder.formatStringArrayLiteral(edit.tags().toArray(new String[0])));
+            params.put("tags", FilterQueryBuilder.formatStringArrayLiteral(edit.tags()));
         }
         if (edit.evaluators() != null) {
             params.put("evaluators", serializeEvaluators(edit.evaluators()));

@@ -25,13 +25,16 @@ import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
+import ru.yandex.clickhouse.ClickHouseUtil;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -1065,7 +1068,7 @@ public class FilterQueryBuilder {
             @NonNull FilterStrategy filterStrategy) {
         bindUsing((name, value) -> {
             if (value instanceof String[] arr) {
-                params.put(name, formatStringArrayLiteral(arr));
+                params.put(name, formatStringArrayLiteral(Arrays.asList(arr)));
             } else {
                 params.put(name, value);
             }
@@ -1170,24 +1173,26 @@ public class FilterQueryBuilder {
     }
 
     /**
-     * Renders an array of strings as a ClickHouse array literal, e.g. {@code ['a','b']}.
+     * Renders a collection of strings as a ClickHouse array literal, e.g. {@code ['a','b']}.
      * Use when binding an {@code Array(String)} parameter to the v2 ClickHouse client, which
      * serialises Map values via {@code String.valueOf} and would otherwise emit an unquoted
      * Java array {@code [a, b]} that the server rejects.
      *
-     * <p>SQL-injection hardening: ClickHouse string literals accept BOTH {@code ''} and
-     * {@code \'} as escape sequences for a single quote, plus C-style backslash escapes for
-     * other characters. So a value containing {@code \'} would otherwise close the string and
-     * inject arbitrary SQL. To make all input opaque to the parser we escape backslashes first
-     * (doubling them) and then single quotes (also doubling). Order matters: escaping the
-     * quote first would introduce {@code ''} pairs that then get backslash-mangled.
+     * <p>Per-element escaping delegates to {@link ClickHouseUtil#escape(String)}, the upstream
+     * ClickHouse JDBC helper that handles the full C-style escape set the server accepts
+     * (backslash, single-quote, backtick, newline, tab, etc.). This closes injection vectors
+     * like {@code x';DROP TABLE...} and {@code x\';...} by emitting {@code \'} and {@code \\}.
+     *
+     * @throws NullPointerException if {@code values} is null or contains a null element
      */
-    public static String formatStringArrayLiteral(String[] values) {
+    public static String formatStringArrayLiteral(@NonNull Collection<String> values) {
         StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < values.length; i++) {
-            if (i > 0) sb.append(',');
-            String escaped = values[i].replace("\\", "\\\\").replace("'", "''");
-            sb.append('\'').append(escaped).append('\'');
+        boolean first = true;
+        for (String v : values) {
+            Objects.requireNonNull(v, "ClickHouse Array(String) literal element must not be null");
+            if (!first) sb.append(',');
+            first = false;
+            sb.append('\'').append(ClickHouseUtil.escape(v)).append('\'');
         }
         return sb.append(']').toString();
     }
