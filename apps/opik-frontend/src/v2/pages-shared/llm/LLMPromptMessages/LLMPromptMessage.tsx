@@ -236,6 +236,8 @@ const LLMPromptMessage = forwardRef<
       <>
         <Card
           key={id}
+          data-testid="playground-message-row"
+          data-role={role}
           style={style}
           ref={setNodeRef}
           onClick={() => {
