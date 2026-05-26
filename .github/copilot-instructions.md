@@ -63,7 +63,7 @@ git commit -m "[OPIK-1234] Add project custom metrics UI dashboard"
 ## 2. Backend (Java) Review Guidelines
 
 ### Technology Stack
-- **Language**: Java 21
+- **Language**: Java 25
 - **Framework**: Dropwizard 4.0.14
 - **Database**: MySQL 9.3.0, ClickHouse 0.9.0
 - **Build Tool**: Maven with Spotless 2.46.0
