@@ -8,7 +8,9 @@ OPIK_URL = os.getenv("OPIK_URL_OVERRIDE")
 # Gateway base URL for LLM calls — points at the Opik backend's
 # OpenAI-compatible completions endpoint so that all provider/key
 # resolution happens in the Java backend (same path as the playground).
-OPIK_GATEWAY_BASE_URL = f"{OPIK_URL}/v1/private" if OPIK_URL else None
+# rstrip("/") guards against deployments that set OPIK_URL_OVERRIDE with a
+# trailing slash, which would otherwise produce a double-slash URL.
+OPIK_GATEWAY_BASE_URL = f"{OPIK_URL.rstrip('/')}/v1/private" if OPIK_URL else None
 
 # Metric Defaults
 DEFAULT_REFERENCE_KEY = "answer"
