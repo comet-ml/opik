@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import MetricCard from "./MetricCard";
+import MetricCard, { DeltaUnit } from "./MetricCard";
 import useProjectKpiCards, {
   KpiEntityType,
   KpiMetric,
@@ -41,7 +41,7 @@ type MetricCardDef = {
   label: string;
   formatter: (value: number) => string;
   trend: PercentageTrendType;
-  hideDelta?: boolean;
+  deltaUnit?: DeltaUnit;
 };
 
 const METRIC_CARDS: MetricCardDef[] = [
@@ -56,9 +56,10 @@ const METRIC_CARDS: MetricCardDef[] = [
     type: "errors",
     icon: AlertTriangle,
     label: "Error rate",
-    formatter: (v: number) => `${(v < 1 ? v.toFixed(2) : v.toFixed(1))}%`,
+    formatter: (v: number) =>
+      `${parseFloat((v < 1 ? v.toFixed(2) : v.toFixed(1)))}%`,
     trend: "inverted",
-    hideDelta: true,
+    deltaUnit: "pp",
   },
   {
     type: "avg_duration",
@@ -340,8 +341,8 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
               icon={card.icon}
               label={label}
               value={showData ? card.formatter(currentValue) : "N/A"}
-              currentRaw={showData ? currentValue : undefined}
-              previousRaw={showData ? previousValue : undefined}
+              currentRaw={showData ? (metric?.current_value ?? null) : undefined}
+              previousRaw={showData ? (metric?.previous_value ?? null) : undefined}
               trend={card.trend}
               selected={showData && selectedMetric === card.type}
               onClick={() => handleSelectMetric(card.type)}
@@ -349,7 +350,8 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
                 isFirst && "rounded-tl-md",
                 isLast && "rounded-tr-md",
               )}
-              hideDelta={cardMode !== "full" || !!card.hideDelta}
+              hideDelta={cardMode !== "full"}
+              deltaUnit={card.deltaUnit}
               hideLabel={cardMode === "no-label" || cardMode === "icon-only"}
               hideValue={cardMode === "icon-only"}
               testId={`metrics-card-${card.type}`}
