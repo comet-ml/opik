@@ -51,6 +51,7 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
+      ref: refs/tags/${{needs.set-version.outputs.version}}
 
   release-sdk:
     needs:
