@@ -63,19 +63,6 @@ public interface WorkspacesService {
     List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
-     * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
-     * are stamped with the system user — this is the dataset migration job's call site, never a
-     * direct user action.
-     *
-     * @return {@code true} when this caller flipped the flag; {@code false} when it was already set
-     */
-    boolean markDatasetProjectMigrationSkipped(String workspaceId, String reason);
-
-    List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
-
-    List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
-
-    /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
      * table. Runs the blocking JDBI lookup on a bounded-elastic worker; defaults to {@code true}
      * when no row exists yet, and on any error so a degraded state DB doesn't break the stats
@@ -126,7 +113,7 @@ class WorkspacesServiceImpl implements WorkspacesService {
      * <p>A duplicate-key on the INSERT does <b>not</b> mean another writer flipped
      * {@code first_trace_reported_at} — it just means the row exists. It might have been inserted
      * by an unrelated writer (version determination, migration job) that didn't touch the column.
-     * Retrying the UPDATE-if-null disambiguates: if the column is still NULL we flip it.</p>
+     * Retrying the UPDATE-if-null disambiguate: if the column is still NULL we flip it.</p>
      */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
@@ -207,45 +194,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public List<String> findPromptProjectMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).findPromptProjectMigrationSkippedWorkspaceIds());
-    }
-
-    /**
-     * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
-     * to the {@code dataset_project_migration_skipped_at} flag. Idempotent: returns {@code false}
-     * when this caller loses the race or the workspace was already trapped.
-     */
-    @Override
-    public boolean markDatasetProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            if (dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
-                return true;
-            }
-            try {
-                dao.insertDatasetProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
-                return true;
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason,
-                            SYSTEM_USER) > 0;
-                }
-                throw exception;
-            }
-        });
-    }
-
-    @Override
-    public List<String> findDatasetProjectMigrationSkippedWorkspaceIds() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).findDatasetProjectMigrationSkippedWorkspaceIds());
-    }
-
-    @Override
-    public List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countDatasetProjectMigrationSkippedByReason());
     }
 
     @Override
