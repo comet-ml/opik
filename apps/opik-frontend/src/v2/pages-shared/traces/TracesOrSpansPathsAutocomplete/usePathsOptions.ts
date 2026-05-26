@@ -31,7 +31,7 @@ export const usePathsOptions = (
     includeIntermediateNodes = false,
     datasetColumnNames,
   } = args;
-  const isProjectId = Boolean(projectId);
+  const hasProjectId = Boolean(projectId);
 
   const { data, isPending } = useTracesOrSpansList(
     {
@@ -42,7 +42,7 @@ export const usePathsOptions = (
       truncate: true,
       stripAttachments: true,
     },
-    { enabled: isProjectId },
+    { enabled: hasProjectId },
   );
 
   const { data: dataNonTruncated, isPending: isPendingNonTruncated } =
@@ -55,7 +55,7 @@ export const usePathsOptions = (
         truncate: false,
         stripAttachments: true,
       },
-      { enabled: isProjectId },
+      { enabled: hasProjectId },
     );
 
   const items = useMemo(() => {
@@ -103,7 +103,7 @@ export const usePathsOptions = (
     datasetColumnNames,
   ]);
 
-  const effectiveLoading = isProjectId && (isPending || isPendingNonTruncated);
+  const effectiveLoading = hasProjectId && (isPending || isPendingNonTruncated);
 
   return useMemo(
     () => ({ items, isLoading: effectiveLoading }),
