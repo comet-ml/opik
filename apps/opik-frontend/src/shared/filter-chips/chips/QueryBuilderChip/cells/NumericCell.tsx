@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { cn } from "@/lib/utils";
 import { cellInput } from "./cellBase";
 
@@ -26,13 +27,15 @@ export const NumericCell: React.FC<NumericCellProps> = ({
     if (autoFocus) ref.current?.focus();
   }, [autoFocus]);
   return (
-    <input
+    <DebounceInput
       ref={ref}
       type="number"
       step="any"
+      variant="unstyled"
+      dimension="none"
       value={value}
       placeholder={placeholder}
-      onChange={(event) => onChange(event.target.value)}
+      onValueChange={(next) => onChange(String(next ?? ""))}
       onBlur={onBlur}
       className={cn(cellInput, grow && "flex-1", className)}
     />
