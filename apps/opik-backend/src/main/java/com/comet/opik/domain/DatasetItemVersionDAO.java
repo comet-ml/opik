@@ -97,13 +97,18 @@ public interface DatasetItemVersionDAO {
      * If excludeFilters is null or empty, all items are copied.
      *
      * @param datasetId the dataset ID
+     * @param sourceDatasetId the source dataset to copy rows from (typically equals targetDatasetId;
+     *                        OPIK-6696 allows them to differ when the caller wants to read carry-forward
+     *                        rows from a stable upstream dataset to avoid multi-replica read-after-write)
      * @param sourceVersionId the source version to copy from
+     * @param targetDatasetId the destination dataset (inserted rows carry this dataset_id, not source's)
      * @param targetVersionId the new version ID to copy to
      * @param excludeFilters optional filters to exclude items (null or empty = copy all)
      * @param uuids pre-generated UUIDv7 pool for the new item IDs (should be at least 2x expected item count)
      * @return the number of items copied
      */
-    Mono<Long> copyVersionItems(UUID datasetId, UUID sourceVersionId, UUID targetVersionId,
+    Mono<Long> copyVersionItems(UUID sourceDatasetId, UUID sourceVersionId,
+            UUID targetDatasetId, UUID targetVersionId,
             List<DatasetItemFilter> excludeFilters, List<UUID> uuids);
 
     /**
@@ -112,19 +117,34 @@ public interface DatasetItemVersionDAO {
      * Unchanged items will be copied with UUIDs from unchangedUuids.
      *
      * @param datasetId         Dataset ID
-     * @param baseVersionId     Base version ID to copy unchanged items from
+     * @param datasetId         Dataset whose versions are being mutated (destination)
      * @param newVersionId      New version ID to create
      * @param addedItems        Items to add (with id already set)
      * @param editedItems       Items to edit (with id already set)
      * @param deletedIds        Stable dataset_item_ids to delete
      * @param unchangedUuids    UUIDs to assign to unchanged items (pre-generated in correct order)
+     * @param additionalExcludeIds  Extra stable IDs to exclude from the copy (callers that ran a separate
+     *                              edit/insert step pass those IDs here)
+     * @param copyFromDatasetId Dataset to read carry-forward rows from. OPIK-6696: when this differs
+     *                          from {@code datasetId}, the COPY reads from a (typically stable) source
+     *                          version instead of the destination's just-minted prior version,
+     *                          avoiding the multi-replica read-after-write window.
+     * @param copyFromVersionId Version within {@code copyFromDatasetId} to read carry-forward rows from
      * @return Number of items in the new version
      */
-    Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
+    Mono<Long> applyDelta(UUID datasetId, UUID newVersionId,
             List<DatasetItem> addedItems, List<DatasetItem> editedItems, Set<UUID> deletedIds,
-            List<UUID> unchangedUuids, Set<UUID> additionalExcludeIds);
+            List<UUID> unchangedUuids, Set<UUID> additionalExcludeIds,
+            UUID copyFromDatasetId, UUID copyFromVersionId);
 
-    Mono<Long> editItemsViaSelectInsert(UUID datasetId, UUID baseVersionId, UUID newVersionId,
+    /**
+     * Edit items via INSERT...SELECT. Reads each item's base row from
+     * {@code (sourceDatasetId, sourceVersionId)} and inserts the edited row into
+     * {@code (targetDatasetId, newVersionId)}. OPIK-6696: source coords may point at a stable
+     * upstream version to avoid the destination's read-after-write window.
+     */
+    Mono<Long> editItemsViaSelectInsert(UUID sourceDatasetId, UUID sourceVersionId,
+            UUID targetDatasetId, UUID newVersionId,
             List<DatasetItemEdit> editedItems, List<UUID> newRowIds);
 
     /**
@@ -1830,7 +1850,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             SELECT
                 :newId as id,
                 src.dataset_item_id,
-                src.dataset_id,
+                -- OPIK-6696: target dataset_id, not source's (cross-dataset edit-via-SELECT-INSERT)
+                :targetDatasetId as dataset_id,
                 :newVersionId as dataset_version_id,
                 <if(data)> mapFromArrays(:data_keys, :data_values) <else> src.data <endif> as data,
                 <if(description)> :description <else> src.description <endif> as description,
@@ -1854,8 +1875,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT *
                 FROM dataset_item_versions
                 WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
+                AND dataset_id = :sourceDatasetId
+                AND dataset_version_id = :sourceVersionId
                 AND dataset_item_id = :datasetItemId
                 ORDER by (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1
@@ -1912,7 +1933,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                    arrayElement(:uuids, src.rn),
                    toString(generateUUIDv7())) AS id,
                 src.dataset_item_id,
-                src.dataset_id,
+                -- OPIK-6696: target dataset_id, not source's. When copy_from_dataset_id differs from
+                -- the destination, the read source is a different dataset (e.g. migrate replay reads
+                -- from the source workspace's dataset and writes into the destination workspace's
+                -- dataset). The inserted rows must carry the destination dataset_id.
+                :targetDatasetId as dataset_id,
                 :targetVersionId as dataset_version_id,
                 src.data,
                 src.description,
@@ -3010,12 +3035,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> copyVersionItems(@NonNull UUID datasetId, @NonNull UUID sourceVersionId,
-            @NonNull UUID targetVersionId, List<DatasetItemFilter> excludeFilters, @NonNull List<UUID> uuids) {
+    public Mono<Long> copyVersionItems(@NonNull UUID sourceDatasetId, @NonNull UUID sourceVersionId,
+            @NonNull UUID targetDatasetId, @NonNull UUID targetVersionId,
+            List<DatasetItemFilter> excludeFilters, @NonNull List<UUID> uuids) {
 
-        log.info(
-                "Copying items from version '{}' to version '{}' for dataset '{}', excludeFilters='{}', uuidPoolSize='{}'",
-                sourceVersionId, targetVersionId, datasetId,
+        log.debug(
+                "Copying items from (dataset '{}', version '{}') to (dataset '{}', version '{}'), excludeFilters='{}', uuidPoolSize='{}'",
+                sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId,
                 excludeFilters != null ? excludeFilters.size() : 0, uuids.size());
 
         return Mono.deferContextual(ctx -> {
@@ -3040,8 +3066,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             return asyncTemplate.nonTransaction(connection -> {
                 var statement = connection.createStatement(query)
-                        .bind("datasetId", datasetId.toString())
+                        .bind("datasetId", sourceDatasetId.toString())
                         .bind("sourceVersionId", sourceVersionId.toString())
+                        .bind("targetDatasetId", targetDatasetId.toString())
                         .bind("targetVersionId", targetVersionId.toString())
                         .bind("uuids", uuidStrings)
                         .bind("workspace_id", workspaceId)
@@ -3057,9 +3084,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 return Flux.from(statement.execute())
                         .flatMap(Result::getRowsUpdated)
                         .reduce(0L, Long::sum)
-                        .doOnSuccess(copiedCount -> log.info(
-                                "Copied '{}' items from version '{}' to version '{}' for dataset '{}'",
-                                copiedCount, sourceVersionId, targetVersionId, datasetId))
+                        .doOnSuccess(copiedCount -> log.debug(
+                                "Copied '{}' items from (dataset '{}', version '{}') to (dataset '{}', version '{}')",
+                                copiedCount, sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId))
                         .doFinally(signalType -> endSegment(segment));
             });
         });
@@ -3067,15 +3094,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
-            @NonNull UUID newVersionId, @NonNull List<DatasetItem> addedItems,
-            @NonNull List<DatasetItem> editedItems, @NonNull Set<UUID> deletedIds,
-            @NonNull List<UUID> unchangedUuids, @NonNull Set<UUID> additionalExcludeIds) {
+    public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
+            @NonNull List<DatasetItem> addedItems, @NonNull List<DatasetItem> editedItems,
+            @NonNull Set<UUID> deletedIds, @NonNull List<UUID> unchangedUuids,
+            @NonNull Set<UUID> additionalExcludeIds,
+            @NonNull UUID copyFromDatasetId, @NonNull UUID copyFromVersionId) {
 
-        log.info("Applying delta for dataset '{}': baseVersion='{}', newVersion='{}', " +
-                "added='{}', edited='{}', deleted='{}', additionalExclude='{}'",
-                datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(),
-                deletedIds.size(), additionalExcludeIds.size());
+        log.info(
+                "Applying delta for dataset '{}': newVersion='{}', copyFromDataset='{}', copyFromVersion='{}', "
+                        + "added='{}', edited='{}', deleted='{}', additionalExclude='{}'",
+                datasetId, newVersionId, copyFromDatasetId, copyFromVersionId, addedItems.size(),
+                editedItems.size(), deletedIds.size(), additionalExcludeIds.size());
 
         // Collect all stable item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
@@ -3097,8 +3126,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             // Step 2: Insert edited items (will sort after added due to middle UUIDs)
             Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
 
-            // Step 3: Copy unchanged items (will sort last due to earliest/smallest UUIDs)
-            Mono<Long> copyUnchanged = copyUnchangedItems(datasetId, baseVersionId, newVersionId,
+            // Step 3: Copy unchanged items (will sort last due to earliest/smallest UUIDs).
+            // OPIK-6696: reads from caller-supplied source coordinates instead of destination prior version.
+            // Source coords = (copyFromDatasetId, copyFromVersionId); target coords = (datasetId, newVersionId).
+            Mono<Long> copyUnchanged = copyUnchangedItems(
+                    copyFromDatasetId, copyFromVersionId,
+                    datasetId, newVersionId,
                     excludedIds, unchangedUuids, workspaceId, userName);
 
             // Execute all operations and sum the results
@@ -3112,9 +3145,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> editItemsViaSelectInsert(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
-            @NonNull UUID newVersionId, @NonNull List<DatasetItemEdit> editedItems,
-            @NonNull List<UUID> newRowIds) {
+    public Mono<Long> editItemsViaSelectInsert(@NonNull UUID sourceDatasetId, @NonNull UUID sourceVersionId,
+            @NonNull UUID targetDatasetId, @NonNull UUID newVersionId,
+            @NonNull List<DatasetItemEdit> editedItems, @NonNull List<UUID> newRowIds) {
 
         if (editedItems.isEmpty()) {
             return Mono.just(0L);
@@ -3156,8 +3189,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                     var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
-                            .bind("datasetId", datasetId.toString())
-                            .bind("baseVersionId", baseVersionId.toString())
+                            .bind("sourceDatasetId", sourceDatasetId.toString())
+                            .bind("sourceVersionId", sourceVersionId.toString())
+                            .bind("targetDatasetId", targetDatasetId.toString())
                             .bind("newVersionId", newVersionId.toString())
                             .bind("datasetItemId", edit.id().toString())
                             .bind("newId", newRowId.toString())
@@ -3189,19 +3223,28 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .flatMap(Result::getRowsUpdated)
                         .reduce(0L, Long::sum)
                         .map(results -> itemCount)
-                        .doOnSuccess(count -> log.info("Edited '{}' items via SELECT INSERT for dataset '{}'",
-                                count, datasetId))
+                        .doOnSuccess(count -> log.info(
+                                "Edited '{}' items via SELECT INSERT from (dataset '{}', version '{}') into (dataset '{}', version '{}')",
+                                count, sourceDatasetId, sourceVersionId, targetDatasetId, newVersionId))
                         .doFinally(signalType -> endSegment(segment));
             });
         });
     }
 
-    private Mono<Long> copyUnchangedItems(UUID datasetId, UUID baseVersionId, UUID newVersionId,
+    /**
+     * OPIK-6696. Copies unchanged rows from a (sourceDatasetId, sourceVersionId) version into a
+     * destination (targetDatasetId, newVersionId) version. The SQL projects {@code :targetDatasetId}
+     * for the inserted rows' dataset_id so that cross-dataset copies (migrate replay reading from a
+     * source dataset and writing into a destination dataset) land in the correct dataset. When
+     * source == destination this is the legacy behavior.
+     */
+    private Mono<Long> copyUnchangedItems(UUID sourceDatasetId, UUID sourceVersionId,
+            UUID targetDatasetId, UUID newVersionId,
             Set<UUID> excludedIds, List<UUID> uuids, String workspaceId, String userName) {
 
         if (excludedIds.isEmpty()) {
             // Simple copy - no exclusions needed
-            return copyVersionItems(datasetId, baseVersionId, newVersionId, null, uuids)
+            return copyVersionItems(sourceDatasetId, sourceVersionId, targetDatasetId, newVersionId, null, uuids)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName));
@@ -3224,8 +3267,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             String query = template.render();
 
             var statement = connection.createStatement(query)
-                    .bind("datasetId", datasetId.toString())
-                    .bind("sourceVersionId", baseVersionId.toString())
+                    .bind("datasetId", sourceDatasetId.toString())
+                    .bind("sourceVersionId", sourceVersionId.toString())
+                    .bind("targetDatasetId", targetDatasetId.toString())
                     .bind("targetVersionId", newVersionId.toString())
                     .bind("excludedIds", excludedIdStrings)
                     .bind("uuids", uuidStrings)
