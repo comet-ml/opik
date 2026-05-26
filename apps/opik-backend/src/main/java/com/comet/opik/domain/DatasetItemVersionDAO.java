@@ -1916,8 +1916,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                if(src.rn \\<= length({uuids:Array(String)}),
-                   arrayElement({uuids:Array(String)}, src.rn),
+                if(src.rn \\<= length(<uuids_literal>),
+                   arrayElement(<uuids_literal>, src.rn),
                    toString(generateUUIDv7())) AS id,
                 src.dataset_item_id,
                 src.dataset_id,
@@ -1954,7 +1954,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND NOT (<exclude_filters>)
                     <endif>
                     <if(exclude_ids)>
-                    AND dataset_item_id NOT IN {excludedIds:Array(String)}
+                    AND dataset_item_id NOT IN <excluded_ids_literal>
                     <endif>
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY dataset_item_id
@@ -3122,8 +3122,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             boolean hasExcludeFilters = CollectionUtils.isNotEmpty(excludeFilters);
 
             ST template = TemplateUtils.newST(COPY_VERSION_ITEMS);
+            // Inline the UUID arrays directly in the SQL body via StringTemplate. They can be
+            // large (thousands of UUIDs at ~38 bytes each) and would otherwise be URL-encoded
+            // as HTTP query params — the v2 client puts param values on the request line, which
+            // has an ~8KB length limit. The SQL itself is sent in the request body and has no
+            // such limit. Safe because UUID.toString() is [0-9a-f-] only — no injection vector.
+            template.add("uuids_literal", formatUuidArrayParam(uuids));
             if (hasExcludedIds) {
                 template.add("exclude_ids", true);
+                template.add("excluded_ids_literal", formatUuidArrayParam(excludedIds));
             }
             if (hasExcludeFilters) {
                 FilterQueryBuilder.toAnalyticsDbFiltersV2Client(excludeFilters, FilterStrategy.DATASET_ITEM)
@@ -3137,10 +3144,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             params.put("targetVersionId", targetVersionId.toString());
             params.put("workspace_id", workspaceId);
             params.put("user_name", userName);
-            params.put("uuids", formatUuidArrayParam(uuids));
-            if (hasExcludedIds) {
-                params.put("excludedIds", formatUuidArrayParam(excludedIds));
-            }
             if (hasExcludeFilters) {
                 FilterQueryBuilder.bindV2Client(params, excludeFilters, FilterStrategy.DATASET_ITEM);
             }
@@ -3151,10 +3154,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             "copy_version_items:%s:%s:%s".formatted(workspaceId, datasetId, targetVersionId));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
-            // Mono.fromFuture avoids parking a thread on the in-flight query; the inner
-            // subscribeOn keeps the blocking QueryResponse.close() off the v2 client's IO
-            // threads. The outer subscribeOn (below) covers the SQL/params build and the
-            // clickHouseClient.query() invocation itself.
             return Mono.fromFuture(() -> clickHouseClient.query(sql, params, settings))
                     .flatMap(response -> Mono.fromCallable(() -> {
                         try (response) {
@@ -3165,7 +3164,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         }
                     }).subscribeOn(Schedulers.boundedElastic()))
                     .doFinally(signalType -> endSegment(segment));
-        }).subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     /**
@@ -3262,9 +3261,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private Mono<Long> executeEditItemsViaSelectInsert(UUID datasetId, UUID baseVersionId, UUID newVersionId,
             List<DatasetItemEdit> editedItems, List<UUID> newRowIds) {
 
-        // Outer subscribeOn pins the SQL template render, params build, and the
-        // clickHouseClient.query() invocation onto boundedElastic — never on a reactive
-        // event loop thread. The future await itself is non-blocking (no worker parked).
         return makeMonoContextAware((userName, workspaceId) -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "edit_items_via_select_insert");
             return Flux.range(0, editedItems.size())
@@ -3275,7 +3271,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             "Edited '{}' items via SELECT INSERT for dataset '{}' (actual rows written: {})",
                             editedItems.size(), datasetId, actualSum))
                     .doFinally(signalType -> endSegment(segment));
-        }).subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     private Mono<Long> executeEditOneItem(DatasetItemEdit edit, UUID newRowId,
