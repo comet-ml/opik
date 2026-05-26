@@ -1452,6 +1452,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
             UUID copyDatasetId = changes.copyFromDatasetId() != null ? changes.copyFromDatasetId() : datasetId;
             UUID copyVersionId = changes.copyFromVersionId() != null ? changes.copyFromVersionId() : baseVersionId;
 
+            // Validate caller-supplied copy-from coords resolve to a real (workspace-scoped) version
+            // on the named dataset. Without this, a bogus or cross-workspace pair would silently
+            // produce a new version with zero carry-forwards instead of returning an error.
+            if (changes.copyFromDatasetId() != null) {
+                DatasetVersion sourceVersion = versionService.getVersionById(workspaceId, copyDatasetId, copyVersionId);
+                if (!sourceVersion.datasetId().equals(copyDatasetId)) {
+                    return Mono.error(new NotFoundException(
+                            "Version '%s' does not belong to dataset '%s'".formatted(copyVersionId, copyDatasetId)));
+                }
+            }
+
             // OPIK-6390: size the unchanged-UUID pool from a live ClickHouse count instead of the
             // MySQL items_total, which can drift below the actual row count and silently truncate
             // the copy. Excludes the same ids the subsequent applyDelta excludes from the COPY.
@@ -1845,6 +1856,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // replicated, free of the multi-replica read-after-write window.
         UUID copyDatasetId = copyFromDatasetId != null ? copyFromDatasetId : datasetId;
         UUID copyVersionId = copyFromVersionId != null ? copyFromVersionId : baseVersionId;
+
+        // Validate caller-supplied copy-from coords resolve to a real (workspace-scoped) version
+        // on the named dataset. Without this, a bogus or cross-workspace pair would silently produce
+        // a new version with all incoming items classified as adds (the classification SELECT would
+        // return empty) and no carry-forwards (the COPY would also return empty).
+        if (copyFromDatasetId != null) {
+            DatasetVersion sourceVersion = versionService.getVersionById(workspaceId, copyDatasetId, copyVersionId);
+            if (!sourceVersion.datasetId().equals(copyDatasetId)) {
+                return Mono.error(new NotFoundException(
+                        "Version '%s' does not belong to dataset '%s'".formatted(copyVersionId, copyDatasetId)));
+            }
+        }
 
         log.info(
                 "Creating version with delta for dataset '{}', baseVersion '{}', itemCount '{}', copyFromDatasetId '{}', copyFromVersionId '{}'",

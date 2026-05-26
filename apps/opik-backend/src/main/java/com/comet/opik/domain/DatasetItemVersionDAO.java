@@ -3039,7 +3039,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             @NonNull UUID targetDatasetId, @NonNull UUID targetVersionId,
             List<DatasetItemFilter> excludeFilters, @NonNull List<UUID> uuids) {
 
-        log.info(
+        log.debug(
                 "Copying items from (dataset '{}', version '{}') to (dataset '{}', version '{}'), excludeFilters='{}', uuidPoolSize='{}'",
                 sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId,
                 excludeFilters != null ? excludeFilters.size() : 0, uuids.size());
@@ -3084,7 +3084,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 return Flux.from(statement.execute())
                         .flatMap(Result::getRowsUpdated)
                         .reduce(0L, Long::sum)
-                        .doOnSuccess(copiedCount -> log.info(
+                        .doOnSuccess(copiedCount -> log.debug(
                                 "Copied '{}' items from (dataset '{}', version '{}') to (dataset '{}', version '{}')",
                                 copiedCount, sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId))
                         .doFinally(signalType -> endSegment(segment));

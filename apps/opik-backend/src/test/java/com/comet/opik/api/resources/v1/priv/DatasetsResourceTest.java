@@ -11064,6 +11064,47 @@ class DatasetsResourceTest {
                     .doesNotContain(destSeed.id())
                     .hasSize(4);
         }
+
+        @Test
+        @DisplayName("createOrUpdateDatasetItems: when copy_from points at a non-existent version, returns 404 instead of silently writing an empty version")
+        void createOrUpdate__copyFromMissingVersion__returns404() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Seed v1 so the codepath reaches createVersionWithDelta (not createFirstVersion).
+            var seedItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(seedItem))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var deltaItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var bogusVersionId = UUID.randomUUID();
+
+            try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .put(jakarta.ws.rs.client.Entity.json(
+                            DatasetItemBatch.builder()
+                                    .datasetName(dataset.name())
+                                    .items(List.of(deltaItem))
+                                    .batchGroupId(UUID.randomUUID())
+                                    .copyFromDatasetId(datasetId)
+                                    .copyFromVersionId(bogusVersionId)
+                                    .build()))) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
     }
 
 }
