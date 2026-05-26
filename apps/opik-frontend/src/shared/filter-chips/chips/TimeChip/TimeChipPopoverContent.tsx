@@ -1,23 +1,25 @@
 import React, { useState } from "react";
 import dayjs from "dayjs";
-import { Calendar as CalendarIcon, ChevronsUpDown, Clock } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
-import { Calendar } from "@/ui/calendar";
-import { Input } from "@/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
-import { cn } from "@/lib/utils";
-import type { Period } from "@/ui/time-picker-utils";
+import { FormErrorSkeleton } from "@/ui/form";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
 import { TimeChipMode, TimeChipValue } from "@/shared/filter-chips/types";
 import {
   DATE_FORMAT,
+  TIME_DEFAULT_MODE,
   combineDateAndTime,
   formatTimeNumeric,
   getPeriod,
-  parseDateInput,
-  parseTimeInput,
-  shiftHourForPeriod,
+  isTimeApplied,
 } from "@/shared/filter-chips/chips/TimeChip/TimeChip.logic";
+import {
+  EMPTY_SLOT,
+  type SimpleTime,
+  type Slot,
+  type SlotPatch,
+} from "@/shared/filter-chips/chips/TimeChip/TimeChipPopover.shared";
+import TimeChipDateInput from "@/shared/filter-chips/chips/TimeChip/TimeChipDateInput";
+import TimeChipTimeInput from "@/shared/filter-chips/chips/TimeChip/TimeChipTimeInput";
 
 interface TimeChipPopoverContentProps {
   value: TimeChipValue | undefined;
@@ -32,104 +34,130 @@ const MODES: { mode: TimeChipMode; label: string }[] = [
   { mode: "after", label: "After" },
 ];
 
-interface Slot {
-  date: Date | null;
-  dateText: string;
-  time: { hour: number; minute: number } | null;
-  timeText: string;
-  period: Period;
-  timeInvalid: boolean;
-}
+const START_OF_DAY: SimpleTime = { hour: 0, minute: 0 };
+const END_OF_DAY: SimpleTime = { hour: 23, minute: 59 };
 
-const today = (): Date => dayjs().startOf("day").toDate();
-
-const emptySlot = (
-  initial: { date?: Date; time?: { hour: number; minute: number } } = {},
-): Slot => {
-  const date = initial.date ?? today();
-  const time = initial.time ?? { hour: 0, minute: 0 };
-  return {
-    date,
-    dateText: dayjs(date).format(DATE_FORMAT),
-    time,
-    timeText: formatTimeNumeric(time.hour, time.minute),
-    period: getPeriod(time.hour),
-    timeInvalid: false,
-  };
+// "before May 5" excludes May 5; "after May 5" excludes May 5;
+// "between A–B" covers A through B inclusive.
+const calendarDefaultTime = (
+  mode: TimeChipMode,
+  position: "A" | "B",
+): SimpleTime => {
+  if (mode === "after") return END_OF_DAY;
+  if (mode === "between" && position === "B") return END_OF_DAY;
+  return START_OF_DAY;
 };
 
 const slotFromIso = (iso: string | undefined): Slot => {
-  if (!iso) return emptySlot();
+  if (!iso) return EMPTY_SLOT;
   const d = dayjs(iso);
-  if (!d.isValid()) return emptySlot();
-  return emptySlot({
+  if (!d.isValid()) return EMPTY_SLOT;
+  return {
     date: d.startOf("day").toDate(),
+    dateText: d.format(DATE_FORMAT),
+    dateTouched: false,
     time: { hour: d.hour(), minute: d.minute() },
-  });
+    timeText: formatTimeNumeric(d.hour(), d.minute()),
+    timeTouched: false,
+    period: getPeriod(d.hour()),
+  };
 };
 
-const slotToIso = (slot: Slot): string | null =>
-  combineDateAndTime(slot.date, slot.time);
+const buildValue = (
+  mode: TimeChipMode,
+  isoA: string | null,
+  isoB: string | null,
+): TimeChipValue | null => {
+  if (!isoA) return null;
+  switch (mode) {
+    case "exactly":
+      return { mode, at: isoA };
+    case "before":
+      return { mode, before: isoA };
+    case "after":
+      return { mode, after: isoA };
+    case "between":
+      if (!isoB || dayjs(isoB).isBefore(dayjs(isoA))) return null;
+      return { mode, start: isoA, end: isoB };
+  }
+};
 
 const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
   value,
   onApply,
   onClear,
 }) => {
-  const [mode, setMode] = useState<TimeChipMode>(value?.mode ?? "exactly");
+  const [mode, setMode] = useState<TimeChipMode>(
+    value?.mode ?? TIME_DEFAULT_MODE,
+  );
 
   const [slotA, setSlotA] = useState<Slot>(() => {
     if (value?.mode === "exactly") return slotFromIso(value.at);
     if (value?.mode === "between") return slotFromIso(value.start);
     if (value?.mode === "before") return slotFromIso(value.before);
     if (value?.mode === "after") return slotFromIso(value.after);
-    return emptySlot();
+    return EMPTY_SLOT;
   });
-  const [slotB, setSlotB] = useState<Slot>(() => {
-    if (value?.mode === "between") return slotFromIso(value.end);
-    return emptySlot();
-  });
-
-  const isRangeInverted = (a: Slot, b: Slot): boolean => {
-    const isoA = slotToIso(a);
-    const isoB = slotToIso(b);
-    if (!isoA || !isoB) return false;
-    return dayjs(isoB).isBefore(dayjs(isoA));
-  };
+  const [slotB, setSlotB] = useState<Slot>(() =>
+    value?.mode === "between" ? slotFromIso(value.end) : EMPTY_SLOT,
+  );
 
   const applyFromSlots = (nextMode: TimeChipMode, a: Slot, b: Slot): void => {
-    const isoA = slotToIso(a);
-    switch (nextMode) {
-      case "exactly":
-        if (isoA) onApply({ mode: "exactly", at: isoA });
-        else onClear();
-        break;
-      case "before":
-        if (isoA) onApply({ mode: "before", before: isoA });
-        else onClear();
-        break;
-      case "after":
-        if (isoA) onApply({ mode: "after", after: isoA });
-        else onClear();
-        break;
-      case "between": {
-        const isoB = slotToIso(b);
-        if (isoA && isoB && !isRangeInverted(a, b)) {
-          onApply({ mode: "between", start: isoA, end: isoB });
-        } else if (!isoA && !isoB) {
-          onClear();
-        }
-        break;
-      }
-    }
+    const next = buildValue(
+      nextMode,
+      combineDateAndTime(a.date, a.time),
+      combineDateAndTime(b.date, b.time),
+    );
+    if (next) onApply(next);
+    else onClear();
   };
 
-  const rangeInvalid = mode === "between" && isRangeInverted(slotA, slotB);
+  const isRangeInverted = (() => {
+    if (mode !== "between") return false;
+    const isoA = combineDateAndTime(slotA.date, slotA.time);
+    const isoB = combineDateAndTime(slotB.date, slotB.time);
+    return Boolean(isoA && isoB && dayjs(isoB).isBefore(dayjs(isoA)));
+  })();
+
+  const semanticChanged = (a: Slot, b: Slot): boolean =>
+    a.date !== b.date || a.time !== b.time;
+
+  const patchSlotA = (patch: SlotPatch) => {
+    const next = { ...slotA, ...patch };
+    setSlotA(next);
+    if (semanticChanged(slotA, next)) applyFromSlots(mode, next, slotB);
+  };
+
+  const patchSlotB = (patch: SlotPatch) => {
+    const next = { ...slotB, ...patch };
+    setSlotB(next);
+    if (semanticChanged(slotB, next)) applyFromSlots(mode, slotA, next);
+  };
 
   const handleModeChange = (nextMode: TimeChipMode) => {
     setMode(nextMode);
     applyFromSlots(nextMode, slotA, slotB);
   };
+
+  const handleClear = () => {
+    setMode(TIME_DEFAULT_MODE);
+    setSlotA(EMPTY_SLOT);
+    setSlotB(EMPTY_SLOT);
+    onClear();
+  };
+
+  const draftHint = (() => {
+    const incomplete = (s: Slot) => Boolean(s.date) !== Boolean(s.time);
+    if (incomplete(slotA) || (mode === "between" && incomplete(slotB))) {
+      return "Enter a time to apply";
+    }
+    if (mode === "between") {
+      const aReady = Boolean(slotA.date && slotA.time);
+      const bReady = Boolean(slotB.date && slotB.time);
+      if (aReady !== bReady) return "Complete the range to apply";
+    }
+    return null;
+  })();
 
   return (
     <div className="flex w-[320px] flex-col gap-4 p-3">
@@ -155,39 +183,40 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
           <SlotRow
             label="Start"
             slot={slotA}
-            onChange={(next) => {
-              setSlotA(next);
-              applyFromSlots(mode, next, slotB);
-            }}
+            calendarDefaultTime={calendarDefaultTime(mode, "A")}
+            onChange={patchSlotA}
           />
           <div className="flex flex-col gap-1">
             <SlotRow
               label="End"
               slot={slotB}
-              invalid={rangeInvalid}
-              onChange={(next) => {
-                setSlotB(next);
-                applyFromSlots(mode, slotA, next);
-              }}
+              invalid={isRangeInverted}
+              calendarDefaultTime={calendarDefaultTime(mode, "B")}
+              onChange={patchSlotB}
             />
-            {rangeInvalid && (
-              <p className="comet-body-xs pl-[39px] text-warning">
+            {isRangeInverted && (
+              <FormErrorSkeleton className="comet-body-xs pl-[39px]">
                 End must be after start
-              </p>
+              </FormErrorSkeleton>
             )}
           </div>
         </>
       ) : (
         <SlotRow
           slot={slotA}
-          onChange={(next) => {
-            setSlotA(next);
-            applyFromSlots(mode, next, slotB);
-          }}
+          calendarDefaultTime={calendarDefaultTime(mode, "A")}
+          onChange={patchSlotA}
         />
       )}
 
-      <PopoverClearFooter onClear={onClear} />
+      {draftHint && (
+        <p className="comet-body-xs text-muted-slate">{draftHint}</p>
+      )}
+
+      <PopoverClearFooter
+        onClear={handleClear}
+        disabled={!isTimeApplied(value)}
+      />
     </div>
   );
 };
@@ -196,181 +225,33 @@ interface SlotRowProps {
   label?: string;
   slot: Slot;
   invalid?: boolean;
-  onChange: (slot: Slot) => void;
+  calendarDefaultTime: SimpleTime;
+  onChange: (patch: SlotPatch) => void;
 }
 
 const SlotRow: React.FC<SlotRowProps> = ({
   label,
   slot,
   invalid,
+  calendarDefaultTime,
   onChange,
-}) => {
-  return (
-    <div className="flex w-full items-start gap-2">
-      {label && (
-        <span className="comet-body-xs mt-2 w-[31px] shrink-0 text-muted-slate">
-          {label}
-        </span>
-      )}
-      <div className="flex min-w-0 flex-1 items-start gap-1">
-        <DateInput slot={slot} invalid={invalid} onChange={onChange} />
-        <TimeInput slot={slot} invalid={invalid} onChange={onChange} />
-      </div>
-    </div>
-  );
-};
-
-const DateInput: React.FC<SlotRowProps> = ({ slot, invalid, onChange }) => {
-  const [calendarOpen, setCalendarOpen] = useState(false);
-
-  const commitDateText = (raw: string) => {
-    const parsed = parseDateInput(raw);
-    if (parsed) {
-      onChange({
-        ...slot,
-        date: parsed,
-        dateText: dayjs(parsed).format(DATE_FORMAT),
-      });
-    } else if (raw.trim() === "") {
-      onChange({ ...slot, date: null, dateText: "" });
-    } else {
-      onChange({ ...slot, dateText: raw });
-    }
-  };
-
-  return (
-    <div className="relative min-w-0 flex-1">
-      <Input
-        dimension="sm"
-        type="text"
-        value={slot.dateText}
-        placeholder="yyyy/mm/dd"
-        onChange={(event) =>
-          onChange({ ...slot, dateText: event.target.value })
-        }
-        onBlur={(event) => commitDateText(event.target.value)}
-        className={cn("pr-8", invalid && "border-warning")}
+}) => (
+  <div className="flex w-full items-start gap-2">
+    {label && (
+      <span className="comet-body-xs mt-2 w-[31px] shrink-0 text-muted-slate">
+        {label}
+      </span>
+    )}
+    <div className="flex min-w-0 flex-1 items-start gap-1">
+      <TimeChipDateInput
+        slot={slot}
+        invalid={invalid}
+        calendarDefaultTime={calendarDefaultTime}
+        onChange={onChange}
       />
-      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="Open calendar"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-slate hover:text-foreground"
-          >
-            <CalendarIcon className="size-[14px]" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          sideOffset={6}
-          className="w-auto rounded-md border border-border bg-background p-0 shadow-sm"
-        >
-          <Calendar
-            mode="single"
-            selected={slot.date ?? undefined}
-            onSelect={(next) => {
-              if (next) {
-                onChange({
-                  ...slot,
-                  date: next,
-                  dateText: dayjs(next).format(DATE_FORMAT),
-                });
-                setCalendarOpen(false);
-              }
-            }}
-          />
-        </PopoverContent>
-      </Popover>
+      <TimeChipTimeInput slot={slot} invalid={invalid} onChange={onChange} />
     </div>
-  );
-};
-
-const TimeInput: React.FC<SlotRowProps> = ({ slot, invalid, onChange }) => {
-  const [focused, setFocused] = useState(false);
-
-  const commitTimeText = (raw: string) => {
-    if (raw.trim() === "") {
-      onChange({ ...slot, time: null, timeText: "", timeInvalid: false });
-      return;
-    }
-    const parsed = parseTimeInput(raw, slot.period);
-    if (parsed) {
-      onChange({
-        ...slot,
-        time: parsed,
-        timeText: formatTimeNumeric(parsed.hour, parsed.minute),
-        period: getPeriod(parsed.hour),
-        timeInvalid: false,
-      });
-    } else {
-      onChange({ ...slot, timeText: raw, timeInvalid: true });
-    }
-  };
-
-  const togglePeriod = () => {
-    const nextPeriod: Period = slot.period === "AM" ? "PM" : "AM";
-    if (slot.time) {
-      const nextHour = shiftHourForPeriod(slot.time.hour, nextPeriod);
-      onChange({
-        ...slot,
-        period: nextPeriod,
-        time: { hour: nextHour, minute: slot.time.minute },
-      });
-    } else {
-      onChange({ ...slot, period: nextPeriod });
-    }
-  };
-
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <div
-        className={cn(
-          "flex h-8 items-center gap-1 rounded-md border bg-background pl-3 pr-3",
-          slot.timeInvalid || invalid
-            ? "border-warning"
-            : focused
-              ? "border-primary"
-              : "border-border",
-        )}
-      >
-        <input
-          type="text"
-          value={slot.timeText}
-          placeholder="hh:mm"
-          onFocus={() => setFocused(true)}
-          onBlur={(event) => {
-            setFocused(false);
-            commitTimeText(event.target.value);
-          }}
-          onChange={(event) =>
-            onChange({
-              ...slot,
-              timeText: event.target.value,
-              timeInvalid: false,
-            })
-          }
-          className="comet-body-s min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-light-slate"
-        />
-        <button
-          type="button"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={togglePeriod}
-          className="comet-body-s flex shrink-0 cursor-pointer items-center gap-0.5 text-foreground"
-          aria-label={`Toggle AM/PM (current: ${slot.period})`}
-        >
-          <span>{slot.period}</span>
-          {focused && (
-            <ChevronsUpDown className="size-[14px] text-muted-slate" />
-          )}
-        </button>
-        <Clock className="pointer-events-none size-[14px] shrink-0 text-muted-slate" />
-      </div>
-      {slot.timeInvalid && (
-        <p className="comet-body-xs px-0.5 text-warning">Enter valid time</p>
-      )}
-    </div>
-  );
-};
+  </div>
+);
 
 export default TimeChipPopoverContent;

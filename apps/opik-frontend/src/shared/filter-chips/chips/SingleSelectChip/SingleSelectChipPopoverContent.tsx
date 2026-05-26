@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from "react";
-import { Check, Search, X } from "lucide-react";
+import { X } from "lucide-react";
+import { DropdownMenuItem } from "@/ui/dropdown-menu";
+import { Separator } from "@/ui/separator";
+import SearchInput from "@/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   SingleSelectChipDefinition,
   SingleSelectChipValue,
 } from "@/shared/filter-chips/types";
-import { cn } from "@/lib/utils";
-import { Input } from "@/ui/input";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 interface SingleSelectChipPopoverContentProps {
   definition: SingleSelectChipDefinition;
@@ -32,79 +33,67 @@ const SingleSelectChipPopoverContent: React.FC<
   }, [definition.options, search, showSearch]);
 
   return (
-    <div className="flex w-[238px] flex-col p-1">
+    <>
       {showSearch && (
-        <div className="relative p-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-slate" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+        <div
+          className="shrink-0"
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <SearchInput
+            searchText={search}
+            setSearchText={setSearch}
             placeholder="Search"
-            className="h-8 pl-8"
-            autoFocus
+            size="sm"
+            variant="ghost"
           />
+          <Separator className="my-1" />
         </div>
       )}
-      {filteredOptions.length === 0 && (
-        <div className="px-4 py-2 text-sm text-muted-slate">No results</div>
-      )}
-      {filteredOptions.map((option) => {
-        const isSelected = value?.value === option.value;
-        return (
-          <div
-            key={option.value}
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              if (isSelected) return;
-              onSelect({ value: option.value });
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                if (!isSelected) onSelect({ value: option.value });
-              }
-            }}
-            className={cn(
-              "group flex h-10 min-w-0 cursor-pointer items-center justify-between gap-2 rounded-[4px] px-4 outline-none",
-              "hover:bg-primary-foreground focus-visible:bg-primary-foreground",
-              isSelected && "bg-primary-foreground",
-            )}
-          >
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              {isSelected && (
-                <Check className="size-4 shrink-0 text-foreground" />
-              )}
-              <TooltipWrapper content={option.label}>
-                <span
-                  className={cn(
-                    "truncate text-sm text-foreground",
-                    isSelected ? "font-medium" : "font-normal",
-                  )}
-                >
-                  {option.label}
-                </span>
-              </TooltipWrapper>
-            </div>
-            {isSelected && (
-              <TooltipWrapper content="Clear filter">
-                <button
-                  type="button"
-                  aria-label="Clear filter"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onClear();
-                  }}
-                  className="hidden size-4 items-center justify-center text-muted-slate group-hover:flex group-focus-visible:flex"
-                >
-                  <X className="size-4" />
-                </button>
-              </TooltipWrapper>
-            )}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {filteredOptions.length === 0 && (
+          <div className="comet-body-s flex h-32 w-full items-center justify-center text-muted-slate">
+            No search results
           </div>
-        );
-      })}
-    </div>
+        )}
+        {filteredOptions.map((option) => {
+          const isSelected = value?.value === option.value;
+          return (
+            <DropdownMenuItem
+              key={option.value}
+              size="sm"
+              selected={isSelected}
+              onSelect={(event) => {
+                if (isSelected) {
+                  event.preventDefault();
+                  return;
+                }
+                onSelect({ value: option.value });
+              }}
+              className="group flex justify-between gap-2"
+            >
+              <TooltipWrapper content={option.label}>
+                <span className="truncate text-sm">{option.label}</span>
+              </TooltipWrapper>
+              {isSelected && (
+                <TooltipWrapper content="Clear filter">
+                  <button
+                    type="button"
+                    aria-label="Clear filter"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onClear();
+                    }}
+                    className="hidden size-4 items-center justify-center text-primary group-hover:flex group-focus-visible:flex"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </TooltipWrapper>
+              )}
+            </DropdownMenuItem>
+          );
+        })}
+      </div>
+    </>
   );
 };
 

@@ -1,6 +1,7 @@
 import React from "react";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
+import { isPseudoSearchApplied } from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip.logic";
 import { trimValue } from "@/shared/filter-chips/lib/helpers";
 import {
   PseudoSearchChipDefinition,
@@ -54,7 +55,10 @@ const PseudoSearchChipPopoverContent: React.FC<
         />
       </div>
 
-      <PopoverClearFooter onClear={onClear} />
+      <PopoverClearFooter
+        onClear={onClear}
+        disabled={!isPseudoSearchApplied(value)}
+      />
     </div>
   );
 };

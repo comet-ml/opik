@@ -16,7 +16,7 @@ export const FilterRow: React.FC<FilterRowProps> = ({
 }) => (
   <div
     className={cn(
-      "flex w-full items-center",
+      "flex w-full items-center rounded-[4px]",
       "[&>*:first-child]:rounded-l-[2px]",
       "[&>*:last-child]:rounded-r-[2px]",
       "[&>*:not(:first-child)]:-ml-px",

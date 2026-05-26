@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import compact from "lodash/compact";
 import isEqual from "lodash/isEqual";
+import keyBy from "lodash/keyBy";
 import omit from "lodash/omit";
+import uniq from "lodash/uniq";
 import without from "lodash/without";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, useQueryParam } from "use-query-params";
@@ -82,9 +85,9 @@ const useFilterChips = ({
   const [openChipId, setOpenChipId] = useState<string | null>(null);
 
   const chipsPinned = useMemo<ChipDefinition[]>(() => {
-    const explicit = new Set(pinnedIds);
-    const applied = new Set(Object.keys(values));
-    return definitions.filter((d) => explicit.has(d.id) || applied.has(d.id));
+    const defById = keyBy(definitions, "id");
+    const orderedIds = uniq([...pinnedIds, ...Object.keys(values)]);
+    return compact(orderedIds.map((id) => defById[id]));
   }, [pinnedIds, values, definitions]);
 
   const chipsUnpinned = useMemo<ChipDefinition[]>(() => {

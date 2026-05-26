@@ -29,6 +29,7 @@ const NumericChip: React.FC<NumericChipProps> = ({
     valueSummary={formatNumericSummary(value, definition)}
     open={open}
     onOpenChange={onOpenChange}
+    onClear={onClear}
   >
     <NumericChipPopoverContent
       definition={definition}
