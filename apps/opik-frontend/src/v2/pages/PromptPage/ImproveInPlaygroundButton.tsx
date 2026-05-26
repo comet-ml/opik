@@ -1,68 +1,98 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Wand2 } from "lucide-react";
 
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  LLMPromptConfigsType,
+} from "@/types/providers";
+import { MessageContent } from "@/types/llm";
 import { Button } from "@/ui/button";
-import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import { useToast } from "@/ui/use-toast";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
-import { parsePromptVersionContent } from "@/lib/llm";
+import PromptImprovementDialog from "@/v2/pages-shared/llm/PromptImprovementDialog/PromptImprovementDialog";
+import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 
 type ImproveInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
   activeVersion?: PromptVersion;
 };
 
+const EMPTY_CONFIGS: LLMPromptConfigsType = {};
+
 const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
   prompt,
   activeVersion,
 }) => {
-  const resetKeyRef = useRef(0);
-  const [open, setOpen] = useState<boolean>(false);
+  const [open, setOpen] = useState(false);
 
-  const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
-    useLoadPlayground();
+  const workspaceName = useAppStore((s) => s.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
+  const { toast } = useToast();
+  const { mutate: createVersion } = useCreatePromptVersionMutation();
 
-  const handleLoadPlayground = useCallback(() => {
-    loadPlayground({
-      promptContent: parsePromptVersionContent(
-        activeVersion ?? prompt?.latest_version,
-      ),
-      promptId: prompt?.id,
-      promptVersionId: activeVersion?.id ?? prompt?.latest_version?.id,
-      autoImprove: true,
-      templateStructure: prompt?.template_structure,
-    });
-  }, [loadPlayground, prompt, activeVersion]);
+  const sourceVersion = activeVersion ?? prompt?.latest_version;
+  const originalPrompt = useMemo<MessageContent>(
+    () => parsePromptVersionContent(sourceVersion),
+    [sourceVersion],
+  );
+
+  const handleAccept = useCallback(
+    (_messageId: string, improvedPrompt: MessageContent) => {
+      if (!prompt) return;
+      const template =
+        typeof improvedPrompt === "string"
+          ? improvedPrompt
+          : parseLLMMessageContent(improvedPrompt).text ?? "";
+      createVersion({
+        name: prompt.name,
+        template,
+        templateStructure: prompt.template_structure,
+        type: sourceVersion?.type,
+        metadata: sourceVersion?.metadata,
+        projectId: activeProjectId ?? undefined,
+        onSuccess: () => {
+          toast({ description: `Saved improved version of ${prompt.name}` });
+          setOpen(false);
+        },
+      });
+    },
+    [
+      prompt,
+      sourceVersion?.type,
+      sourceVersion?.metadata,
+      activeProjectId,
+      createVersion,
+      toast,
+    ],
+  );
 
   return (
     <>
-      <TooltipWrapper content="Opens the prompt in the Playground for improvement">
+      <TooltipWrapper content="Improve this prompt with AI">
         <Button
-          variant="secondary"
+          variant="ghost"
           size="sm"
-          disabled={!prompt || isPendingProviderKeys}
-          onClick={() => {
-            if (isPlaygroundEmpty) {
-              handleLoadPlayground();
-            } else {
-              resetKeyRef.current = resetKeyRef.current + 1;
-              setOpen(true);
-            }
-          }}
+          className="px-0"
+          disabled={!prompt}
+          onClick={() => setOpen(true)}
         >
           <Wand2 className="mr-1.5 size-3.5" />
-          Improve prompt
+          Improve
         </Button>
       </TooltipWrapper>
-      <ConfirmDialog
-        key={resetKeyRef.current}
-        open={Boolean(open)}
+      <PromptImprovementDialog
+        open={open}
         setOpen={setOpen}
-        onConfirm={handleLoadPlayground}
-        title="Load prompt"
-        description="Loading this prompt into the Playground will replace any unsaved changes. This action cannot be undone."
-        confirmText="Load prompt"
+        id={sourceVersion?.id ?? prompt?.id ?? "improve-prompt"}
+        originalPrompt={originalPrompt}
+        model=""
+        provider={"" as COMPOSED_PROVIDER_TYPE}
+        configs={EMPTY_CONFIGS}
+        workspaceName={workspaceName}
+        onAccept={handleAccept}
       />
     </>
   );

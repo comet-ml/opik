@@ -3,48 +3,57 @@ import { Clock, FilePen, Loader2, User } from "lucide-react";
 import { useInView } from "react-intersection-observer";
 
 import { cn } from "@/lib/utils";
-import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
+import VersionTagList from "./VersionTagList";
 
-import AgentConfigTagList from "./AgentConfigTagList";
+export interface VersionHistoryItem {
+  id: string;
+  label: string;
+  tags: string[];
+  description?: string;
+  created_at: string;
+  created_by?: string;
+  environment?: string | null;
+}
 
-type AgentConfigurationHistoryTimelineProps = {
-  items: ConfigHistoryItem[];
-  selectedIndex: number | null;
-  onSelect: (index: number) => void;
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  onLoadMore: () => void;
-};
+interface VersionHistoryTimelineProps {
+  items: VersionHistoryItem[];
+  selectedId?: string;
+  onSelect: (item: VersionHistoryItem) => void;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
+  emptyTitle?: string;
+}
 
-const AgentConfigurationHistoryTimeline: React.FC<
-  AgentConfigurationHistoryTimelineProps
-> = ({
+const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
   items,
-  selectedIndex,
+  selectedId,
   onSelect,
-  hasNextPage,
-  isFetchingNextPage,
+  hasNextPage = false,
+  isFetchingNextPage = false,
   onLoadMore,
+  emptyTitle = "No version history",
 }) => {
   const { ref: sentinelRef, inView } = useInView();
 
   useEffect(() => {
-    if (inView && hasNextPage && !isFetchingNextPage) {
+    if (inView && hasNextPage && !isFetchingNextPage && onLoadMore) {
       onLoadMore();
     }
   }, [inView, hasNextPage, isFetchingNextPage, onLoadMore]);
 
   if (items.length === 0) {
-    return <DataTableNoData title="No configuration history" />;
+    return <DataTableNoData title={emptyTitle} />;
   }
 
   return (
-    <ul className="p-4">
+    <ul className="px-4 pb-4 pt-1">
       {items.map((item, index) => {
-        const isSelected = index === selectedIndex;
+        const isSelected = item.id === selectedId;
         const isLast = index === items.length - 1;
 
         return (
@@ -83,13 +92,18 @@ const AgentConfigurationHistoryTimeline: React.FC<
                   ? "relative z-10 bg-primary-foreground ring-1 ring-primary"
                   : "hover:bg-primary-foreground/60",
               )}
-              onClick={() => onSelect(index)}
+              onClick={() => onSelect(item)}
             >
               <div className="flex items-center gap-1">
                 <span className="comet-body-s-accented shrink-0">
-                  {item.name}
+                  {item.label}
                 </span>
-                <AgentConfigTagList tags={item.tags} size="sm" maxWidth={200} />
+                <VersionTagList tags={item.tags} size="sm" maxWidth={200} />
+                <EnvironmentBadge
+                  name={item.environment}
+                  size="sm"
+                  className="max-w-[120px]"
+                />
               </div>
               {item.description && (
                 <p className="comet-body-xs mt-1.5 flex min-w-0 items-center gap-1 text-light-slate">
@@ -113,10 +127,12 @@ const AgentConfigurationHistoryTimeline: React.FC<
                     {getTimeFromNow(item.created_at)}
                   </span>
                 </TooltipWrapper>
-                <span className="flex items-center gap-1">
-                  <User className="size-3 shrink-0" />
-                  {item.created_by}
-                </span>
+                {item.created_by && (
+                  <span className="flex items-center gap-1">
+                    <User className="size-3 shrink-0" />
+                    {item.created_by}
+                  </span>
+                )}
               </div>
             </div>
           </li>
@@ -132,4 +148,4 @@ const AgentConfigurationHistoryTimeline: React.FC<
   );
 };
 
-export default AgentConfigurationHistoryTimeline;
+export default VersionHistoryTimeline;
