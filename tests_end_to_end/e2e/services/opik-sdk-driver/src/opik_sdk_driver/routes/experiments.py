@@ -40,7 +40,7 @@ def evaluate_experiment(
             description=body.dataset_description,
             project_name=body.project_name,
         )
-        dataset.insert(body.items)
+        dataset.insert([item.model_dump() for item in body.items])
 
         def _task(item: dict) -> dict:
             return {"output": item["task_output"]}

@@ -48,13 +48,21 @@ class DatasetResponse(BaseModel):
     name: str
 
 
+class ExperimentItemSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    input: str
+    expected_output: str
+    task_output: str
+
+
 class ExperimentEvaluateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     project_name: str
     dataset_name: str
     experiment_name: str
-    items: list[dict[str, Any]]
+    items: list[ExperimentItemSeed]
     dataset_description: str | None = None
     workspace: str | None = None
 
