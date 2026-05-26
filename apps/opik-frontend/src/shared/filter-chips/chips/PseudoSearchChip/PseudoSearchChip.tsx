@@ -1,6 +1,5 @@
 import React from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
-import BaseChip from "@/shared/filter-chips/chips/BaseChip/BaseChip";
+import FilterChipPopover from "@/shared/filter-chips/chips/FilterChipPopover";
 import PseudoSearchChipPopoverContent from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChipPopoverContent";
 import { formatPseudoSearchSummary } from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip.logic";
 import {
@@ -24,33 +23,21 @@ const PseudoSearchChip: React.FC<PseudoSearchChipProps> = ({
   onClear,
   open,
   onOpenChange,
-}) => {
-  const summary = formatPseudoSearchSummary(value, definition);
-
-  return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <BaseChip
-          label={definition.label}
-          valueSummary={summary}
-          isOpen={open}
-        />
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={4}
-        className="w-auto rounded-md border border-border bg-background p-0 shadow-sm"
-      >
-        <PseudoSearchChipPopoverContent
-          definition={definition}
-          value={value}
-          onApply={onApply}
-          onClear={onClear}
-          onCommit={() => onOpenChange(false)}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-};
+}) => (
+  <FilterChipPopover
+    label={definition.label}
+    valueSummary={formatPseudoSearchSummary(value, definition)}
+    open={open}
+    onOpenChange={onOpenChange}
+  >
+    <PseudoSearchChipPopoverContent
+      definition={definition}
+      value={value}
+      onApply={onApply}
+      onClear={onClear}
+      onCommit={() => onOpenChange(false)}
+    />
+  </FilterChipPopover>
+);
 
 export default PseudoSearchChip;
