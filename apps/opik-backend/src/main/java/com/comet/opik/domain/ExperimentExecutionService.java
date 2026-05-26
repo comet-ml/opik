@@ -9,13 +9,13 @@ import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -239,7 +239,7 @@ public class ExperimentExecutionService {
             String workspaceId,
             String userName,
             UUID batchId,
-            List<ArrayNode> opikPromptsByVariant) {
+            List<List<OpikPromptEntry>> opikPromptsByVariant) {
 
         int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
         var messages = new ArrayList<ExperimentItemToProcess>();
@@ -248,7 +248,7 @@ public class ExperimentExecutionService {
             for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
                 var prompt = request.prompts().get(promptIdx);
                 UUID experimentId = experimentIds.get(promptIdx);
-                ArrayNode opikPrompts = opikPromptsByVariant.get(promptIdx);
+                List<OpikPromptEntry> opikPrompts = opikPromptsByVariant.get(promptIdx);
 
                 messages.add(ExperimentItemToProcess.builder()
                         .batchId(batchId)
@@ -271,12 +271,12 @@ public class ExperimentExecutionService {
 
     /**
      * Resolves the prompt versions linked to each variant via a single bulk lookup against
-     * the prompt store, and returns one prebuilt opik_prompts ArrayNode per variant (in the
-     * order of request.prompts()). This avoids re-doing the lookup for every dataset item
-     * — large experiments would otherwise hit the prompt store thousands of times for the
-     * same set of version ids. A null entry is used for variants with no linked prompts.
+     * the prompt store, and returns one prebuilt {@code opik_prompts} list per variant (in
+     * the order of {@code request.prompts()}). This avoids re-doing the lookup for every
+     * dataset item — large experiments would otherwise hit the prompt store thousands of
+     * times for the same set of version ids.
      */
-    private Mono<List<ArrayNode>> resolveOpikPromptsByVariant(ExperimentExecutionRequest request) {
+    private Mono<List<List<OpikPromptEntry>>> resolveOpikPromptsByVariant(ExperimentExecutionRequest request) {
         List<List<Experiment.PromptVersionLink>> linksByVariant = request.prompts().stream()
                 .map(variant -> variant.promptVersions() != null
                         ? variant.promptVersions()
@@ -291,62 +291,54 @@ public class ExperimentExecutionService {
                 .collect(Collectors.toSet());
 
         if (uniqueVersionIds.isEmpty()) {
-            List<ArrayNode> empties = linksByVariant.stream().map(unused -> (ArrayNode) null).toList();
-            return Mono.just(empties);
+            return Mono.just(linksByVariant.stream()
+                    .map(unused -> List.<OpikPromptEntry>of())
+                    .toList());
         }
 
         return promptService.findVersionByIds(uniqueVersionIds)
                 .map(versionsById -> linksByVariant.stream()
-                        .map(links -> buildOpikPromptsArray(links, versionsById))
+                        .map(links -> buildOpikPromptEntries(links, versionsById))
                         .toList())
                 .onErrorResume(error -> {
                     log.warn(
                             "Failed to resolve prompt versions for opik_prompts metadata; traces will not be linked to their prompt(s) for dataset '{}' (id '{}', versionHash '{}')",
                             request.datasetName(), request.datasetId(), request.versionHash(), error);
-                    return Mono.just(linksByVariant.stream().map(unused -> (ArrayNode) null).toList());
+                    return Mono.just(linksByVariant.stream()
+                            .map(unused -> List.<OpikPromptEntry>of())
+                            .toList());
                 });
     }
 
-    private static ArrayNode buildOpikPromptsArray(List<Experiment.PromptVersionLink> links,
+    private static List<OpikPromptEntry> buildOpikPromptEntries(List<Experiment.PromptVersionLink> links,
             Map<UUID, PromptVersion> versionsById) {
         if (links == null || links.isEmpty()) {
+            return List.of();
+        }
+        return links.stream()
+                .map(link -> toOpikPromptEntry(link, versionsById.get(link.id())))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static OpikPromptEntry toOpikPromptEntry(Experiment.PromptVersionLink link, PromptVersion version) {
+        if (version == null) {
             return null;
         }
-        ArrayNode array = JsonUtils.createArrayNode();
-        for (Experiment.PromptVersionLink link : links) {
-            PromptVersion version = versionsById.get(link.id());
-            if (version == null) {
-                continue;
-            }
-            ObjectNode promptNode = JsonUtils.createObjectNode();
-            UUID promptId = version.promptId() != null ? version.promptId() : link.promptId();
-            if (promptId != null) {
-                promptNode.put("id", promptId.toString());
-            }
-            if (link.promptName() != null) {
-                promptNode.put("name", link.promptName());
-            }
-            if (version.templateStructure() != null) {
-                promptNode.put("template_structure", version.templateStructure().getValue());
-            }
-
-            ObjectNode versionNode = JsonUtils.createObjectNode();
-            versionNode.put("id", version.id().toString());
-            if (version.template() != null) {
-                versionNode.set("template", JsonUtils.getJsonNodeFromStringWithFallback(version.template()));
-            }
-            if (version.commit() != null) {
-                versionNode.put("commit", version.commit());
-            }
-            if (version.versionNumber() != null) {
-                versionNode.put("version_number", version.versionNumber());
-            }
-            if (version.metadata() != null) {
-                versionNode.set("metadata", version.metadata());
-            }
-            promptNode.set("version", versionNode);
-            array.add(promptNode);
-        }
-        return array.isEmpty() ? null : array;
+        UUID promptId = version.promptId() != null ? version.promptId() : link.promptId();
+        return OpikPromptEntry.builder()
+                .id(promptId)
+                .name(link.promptName())
+                .templateStructure(version.templateStructure())
+                .version(OpikPromptEntry.Version.builder()
+                        .id(version.id())
+                        .template(version.template() != null
+                                ? JsonUtils.getJsonNodeFromStringWithFallback(version.template())
+                                : null)
+                        .commit(version.commit())
+                        .versionNumber(version.versionNumber())
+                        .metadata(version.metadata())
+                        .build())
+                .build();
     }
 }

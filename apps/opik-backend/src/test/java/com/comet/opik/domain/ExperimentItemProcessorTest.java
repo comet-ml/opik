@@ -3,18 +3,17 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.template.MustacheParser;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.IntNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
@@ -149,7 +148,7 @@ class ExperimentItemProcessorTest {
             String projectName,
             String workspaceId,
             String userName,
-            ArrayNode opikPrompts) {
+            List<OpikPromptEntry> opikPrompts) {
         when(datasetItemService.get(datasetItem.id())).thenReturn(Mono.just(datasetItem));
         return ExperimentItemToProcess.builder()
                 .batchId(UUID.randomUUID())
@@ -636,18 +635,26 @@ class ExperimentItemProcessorTest {
             var experimentId = UUID.randomUUID();
             var datasetId = UUID.randomUUID();
 
-            ArrayNode opikPrompts = JsonUtils.createArrayNode();
-            ObjectNode promptNode = JsonUtils.createObjectNode();
-            promptNode.put("id", "prompt-uuid");
-            promptNode.put("name", "greeting");
-            opikPrompts.add(promptNode);
+            var promptId = UUID.randomUUID();
+            var versionId = UUID.randomUUID();
+            var entry = OpikPromptEntry.builder()
+                    .id(promptId)
+                    .name("greeting")
+                    .templateStructure(TemplateStructure.TEXT)
+                    .version(OpikPromptEntry.Version.builder()
+                            .id(versionId)
+                            .template(new TextNode("Hello {{name}}"))
+                            .commit("abc12345")
+                            .versionNumber("v3")
+                            .build())
+                    .build();
 
             stubCommonMocks();
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
             processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, opikPrompts)).block();
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, List.of(entry))).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());
@@ -657,8 +664,13 @@ class ExperimentItemProcessorTest {
             var actual = metadata.get("opik_prompts");
             assertThat(actual.isArray()).isTrue();
             assertThat(actual).hasSize(1);
-            assertThat(actual.get(0).get("id").asText()).isEqualTo("prompt-uuid");
+            assertThat(actual.get(0).get("id").asText()).isEqualTo(promptId.toString());
             assertThat(actual.get(0).get("name").asText()).isEqualTo("greeting");
+            assertThat(actual.get(0).get("template_structure").asText()).isEqualTo("text");
+            assertThat(actual.get(0).get("version").get("id").asText()).isEqualTo(versionId.toString());
+            assertThat(actual.get(0).get("version").get("commit").asText()).isEqualTo("abc12345");
+            assertThat(actual.get(0).get("version").get("version_number").asText()).isEqualTo("v3");
+            assertThat(actual.get(0).get("version").get("template").asText()).isEqualTo("Hello {{name}}");
         }
 
         @Test
@@ -681,7 +693,7 @@ class ExperimentItemProcessorTest {
         }
 
         @Test
-        void processOmitsOpikPromptsMetadataWhenArrayIsEmpty() {
+        void processOmitsOpikPromptsMetadataWhenListIsEmpty() {
             var prompt = buildPrompt("gpt-4", "user", "Hello");
             var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
             var experimentId = UUID.randomUUID();
@@ -692,7 +704,7 @@ class ExperimentItemProcessorTest {
                     .thenReturn(buildLlmResponse("response"));
 
             processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, JsonUtils.createArrayNode())).block();
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, List.of())).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());

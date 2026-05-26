@@ -3,13 +3,13 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import jakarta.inject.Inject;
@@ -53,7 +53,7 @@ class ExperimentTracePersistence {
             @NonNull UUID datasetId,
             String versionHash,
             @NonNull UUID datasetItemId,
-            ArrayNode opikPrompts) {
+            List<OpikPromptEntry> opikPrompts) {
     }
 
     Mono<Void> persistTraceSpanAndItem(@NonNull PersistenceContext ctx) {
@@ -78,7 +78,7 @@ class ExperimentTracePersistence {
         metadata.put(TestSuiteMetadataKeys.MODEL, ctx.prompt().model());
         metadata.put(TestSuiteMetadataKeys.EXPERIMENT_ID, ctx.experimentId().toString());
         if (ctx.opikPrompts() != null && !ctx.opikPrompts().isEmpty()) {
-            metadata.set(OPIK_PROMPTS_METADATA_KEY, ctx.opikPrompts());
+            metadata.set(OPIK_PROMPTS_METADATA_KEY, JsonUtils.getMapper().valueToTree(ctx.opikPrompts()));
         }
 
         var traceBuilder = Trace.builder()

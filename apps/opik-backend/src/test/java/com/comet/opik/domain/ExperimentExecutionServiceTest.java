@@ -525,12 +525,12 @@ class ExperimentExecutionServiceTest {
                 assertThat(msg.opikPrompts()).hasSize(1);
             }
             // Variant 0 messages reference link1; variant 1 messages reference link2.
-            var firstVariantNames = messages.stream()
-                    .filter(m -> "first".equals(m.opikPrompts().get(0).get("name").asText())).toList();
-            var secondVariantNames = messages.stream()
-                    .filter(m -> "second".equals(m.opikPrompts().get(0).get("name").asText())).toList();
-            assertThat(firstVariantNames).hasSize(2);
-            assertThat(secondVariantNames).hasSize(2);
+            var firstVariantMessages = messages.stream()
+                    .filter(m -> "first".equals(m.opikPrompts().get(0).name())).toList();
+            var secondVariantMessages = messages.stream()
+                    .filter(m -> "second".equals(m.opikPrompts().get(0).name())).toList();
+            assertThat(firstVariantMessages).hasSize(2);
+            assertThat(secondVariantMessages).hasSize(2);
         }
 
         @Test
@@ -550,7 +550,7 @@ class ExperimentExecutionServiceTest {
 
             verify(promptService, never()).findVersionByIds(any());
             var messages = capturePublishedMessages();
-            assertThat(messages).allSatisfy(m -> assertThat(m.opikPrompts()).isNull());
+            assertThat(messages).allSatisfy(m -> assertThat(m.opikPrompts()).isEmpty());
         }
 
         @Test
@@ -575,7 +575,7 @@ class ExperimentExecutionServiceTest {
             executeRequest(request);
 
             var messages = capturePublishedMessages();
-            assertThat(messages).allSatisfy(m -> assertThat(m.opikPrompts()).isNull());
+            assertThat(messages).allSatisfy(m -> assertThat(m.opikPrompts()).isEmpty());
         }
     }
 }
