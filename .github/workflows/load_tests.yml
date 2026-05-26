@@ -3,6 +3,10 @@ run-name: "Load Tests ${{ github.ref_name }} by @${{ github.actor }}"
 
 permissions:
   contents: read
+  # checks: write so EnricoMi/publish-unit-test-result-action can post the
+  # "Load Test Results" check; without it the step gets 403 Forbidden and
+  # fails the whole workflow even when all scenarios passed.
+  checks: write
 
 on:
   schedule:
