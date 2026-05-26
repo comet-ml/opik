@@ -295,9 +295,6 @@ public class ExperimentExecutionService {
             return Mono.just(empties);
         }
 
-        // findVersionByIds is lenient: missing ids fall through to the buildOpikPromptsArray
-        // skip below, so a stale version id in one variant doesn't strip prompt metadata
-        // from sibling variants.
         return promptService.findVersionByIds(uniqueVersionIds)
                 .map(versionsById -> linksByVariant.stream()
                         .map(links -> buildOpikPromptsArray(links, versionsById))

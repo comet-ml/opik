@@ -97,11 +97,6 @@ public interface PromptService {
 
     int updateVersions(PromptVersionBatchUpdate update);
 
-    /**
-     * Returns the prompt versions that exist in the current workspace for the given ids.
-     * Missing ids are silently dropped from the returned map; callers that require all ids
-     * to resolve must enforce that themselves (e.g. by comparing map size against the input).
-     */
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
     PromptVersion retrievePromptVersion(String name, String commit, String environment, String versionNumber,
@@ -642,7 +637,14 @@ class PromptServiceImpl implements PromptService {
                                 .variables(getVariables(promptVersion.template(), promptVersion.type()))
                                 .build()));
             });
-        }).subscribeOn(Schedulers.boundedElastic()));
+        })
+                .flatMap(versions -> {
+                    if (versions.size() != ids.size()) {
+                        return Mono.error(new NotFoundException(PROMPT_VERSION_NOT_FOUND));
+                    }
+                    return Mono.just(versions);
+                })
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     public PromptVersion getVersionById(@NonNull String workspaceId, @NonNull UUID id) {

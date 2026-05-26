@@ -554,57 +554,6 @@ class ExperimentExecutionServiceTest {
         }
 
         @Test
-        void createAndExecutePreservesSiblingVariantsWhenOneVersionIsMissing() {
-            var presentVersionId = UUID.randomUUID();
-            var presentPromptId = UUID.randomUUID();
-            var missingVersionId = UUID.randomUUID();
-
-            var presentVersion = PromptVersion.builder()
-                    .id(presentVersionId).promptId(presentPromptId)
-                    .commit("present1").versionNumber("v1").template("t1")
-                    .templateStructure(TemplateStructure.TEXT).build();
-
-            var presentLink = Experiment.PromptVersionLink.builder()
-                    .id(presentVersionId).promptId(presentPromptId).promptName("present").build();
-            var missingLink = Experiment.PromptVersionLink.builder()
-                    .id(missingVersionId).promptId(UUID.randomUUID()).promptName("missing").build();
-
-            var request = ExperimentExecutionRequest.builder()
-                    .datasetName("test-dataset")
-                    .datasetId(UUID.randomUUID())
-                    .prompts(List.of(
-                            buildVariantWithVersions("gpt-4", List.of(presentLink)),
-                            buildVariantWithVersions("gpt-4", List.of(missingLink))))
-                    .build();
-
-            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
-            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
-            stubExperimentCreate();
-            stubFinishExperiments();
-            // Lenient lookup returns only what exists — does NOT error when one id is missing.
-            when(promptService.findVersionByIds(Set.of(presentVersionId, missingVersionId)))
-                    .thenReturn(Mono.just(Map.of(presentVersionId, presentVersion)));
-
-            executeRequest(request);
-
-            var messages = capturePublishedMessages();
-            assertThat(messages).hasSize(2);
-
-            var present = messages.stream()
-                    .filter(m -> m.opikPrompts() != null && !m.opikPrompts().isEmpty())
-                    .toList();
-            assertThat(present).hasSize(1);
-            assertThat(present.get(0).opikPrompts().get(0).get("name").asText()).isEqualTo("present");
-
-            // Variant with the missing version gets a null array, not a partial dump of every other variant.
-            var missing = messages.stream()
-                    .filter(m -> m.opikPrompts() == null
-                            || m.opikPrompts().isEmpty())
-                    .toList();
-            assertThat(missing).hasSize(1);
-        }
-
-        @Test
         void createAndExecuteFallsBackToNullArraysWhenLookupFails() {
             var versionId = UUID.randomUUID();
             var link = Experiment.PromptVersionLink.builder()
