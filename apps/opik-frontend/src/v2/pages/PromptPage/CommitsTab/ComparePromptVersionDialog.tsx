@@ -2,19 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
 import isEqual from "fast-deep-equal";
-import { ChevronDown, Clock, User } from "lucide-react";
+import { Clock, User } from "lucide-react";
 
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { Tag } from "@/ui/tag";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
-import PromptDiff from "@/shared/CodeDiff/PromptDiff";
+import { FormFieldModeSelect } from "@/v2/pages-shared/llm/FormFieldCard";
 import { normalizeChatTemplate, parseChatTemplate } from "@/lib/chatTemplate";
+import { extractMessageContent } from "@/lib/prompt";
+import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { PromptVersion } from "@/types/prompts";
 import { cn } from "@/lib/utils";
 import { formatDate, getTimeFromNow } from "@/lib/date";
@@ -26,9 +22,15 @@ import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 type VersionWithMaybeAuthor = PromptVersion & { created_by?: string };
 type DiffSide = "base" | "diff";
 type ViewMode = "messages" | "raw";
+type ChatMessage = { role: string; content: unknown };
 
 const TWO_COLUMN_GRID =
   "grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none";
+
+const VIEW_MODE_OPTIONS: Array<{ value: ViewMode; label: string }> = [
+  { value: "messages", label: "Messages" },
+  { value: "raw", label: "Raw" },
+];
 
 const stringifyMetadata = (m: unknown): string => {
   if (m === undefined || m === null) return "";
@@ -38,6 +40,98 @@ const stringifyMetadata = (m: unknown): string => {
   } catch {
     return String(m);
   }
+};
+
+const roleLabel = (role: string): string =>
+  LLM_MESSAGE_ROLE_NAME_MAP[role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP] ??
+  role;
+
+const ColumnHeader: React.FC<{ version: PromptVersion; label: string }> = ({
+  version,
+  label,
+}) => {
+  const author = (version as VersionWithMaybeAuthor).created_by;
+  return (
+    <div className="flex h-8 items-center justify-between gap-2 border-b bg-soft-background px-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="comet-body-s-accented shrink-0 text-muted-slate">
+          {label}
+        </span>
+        <EnvironmentBadge name={version.environment} size="sm" />
+        <VersionTagList tags={version.tags ?? []} size="sm" />
+      </div>
+      <div className="comet-body-xs flex shrink-0 items-center gap-3 text-light-slate">
+        <span className="flex items-center gap-1">
+          <Clock className="size-3" />
+          {getTimeFromNow(version.created_at)}
+        </span>
+        {author && (
+          <span className="flex items-center gap-1">
+            <User className="size-3" />
+            {author}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const MessageBlock: React.FC<{
+  message: ChatMessage | undefined;
+  otherMessage: ChatMessage | undefined;
+  side: DiffSide;
+}> = ({ message, otherMessage, side }) => {
+  if (!message) {
+    return (
+      <div className="comet-body-xs flex min-h-16 items-center justify-center rounded-md border border-dashed border-border bg-soft-background px-3 py-2 text-muted-slate">
+        {side === "base" ? "Added in the target version" : "Removed in this version"}
+      </div>
+    );
+  }
+
+  const thisContent = extractMessageContent(message.content);
+  const otherContent = otherMessage
+    ? extractMessageContent(otherMessage.content)
+    : "";
+  const baseContent = side === "base" ? thisContent : otherContent;
+  const diffContent = side === "base" ? otherContent : thisContent;
+  const rolesDiffer =
+    otherMessage !== undefined && message.role !== otherMessage.role;
+
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="comet-body-s-accented text-foreground">
+          {roleLabel(message.role)}
+        </span>
+        {rolesDiffer && (
+          <Tag variant="orange" size="sm">
+            Role changed
+          </Tag>
+        )}
+        {!otherMessage && (
+          <Tag
+            variant={side === "base" ? "red" : "green"}
+            size="sm"
+          >
+            {side === "base" ? "Removed" : "Added"}
+          </Tag>
+        )}
+      </div>
+      <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+        {otherMessage ? (
+          <TextDiff
+            content1={baseContent}
+            content2={diffContent}
+            mode="words"
+            side={side}
+          />
+        ) : (
+          thisContent
+        )}
+      </div>
+    </div>
+  );
 };
 
 const MetadataColumn: React.FC<{
@@ -206,34 +300,15 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     isChatDiff,
   ]);
 
-  const renderTemplateColumn = (version: PromptVersion | undefined, side: DiffSide) => {
+  const renderRawColumn = (
+    version: PromptVersion | undefined,
+    side: DiffSide,
+  ) => {
     if (!version) return null;
     const label = versionLabelByCommit.get(version.commit) ?? version.commit;
-    const author = (version as VersionWithMaybeAuthor).created_by;
-
     return (
       <div className="overflow-hidden rounded-md border bg-background">
-        <div className="flex h-8 items-center justify-between gap-2 border-b bg-soft-background px-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="comet-body-s-accented shrink-0 text-muted-slate">
-              {label}
-            </span>
-            <EnvironmentBadge name={version.environment} size="sm" />
-            <VersionTagList tags={version.tags ?? []} size="sm" />
-          </div>
-          <div className="comet-body-xs flex shrink-0 items-center gap-3 text-light-slate">
-            <span className="flex items-center gap-1">
-              <Clock className="size-3" />
-              {getTimeFromNow(version.created_at)}
-            </span>
-            {author && (
-              <span className="flex items-center gap-1">
-                <User className="size-3" />
-                {author}
-              </span>
-            )}
-          </div>
-        </div>
+        <ColumnHeader version={version} label={label} />
         <div
           className={cn(
             "overflow-y-auto bg-background p-2",
@@ -248,6 +323,38 @@ const ComparePromptVersionDialog: React.FunctionComponent<
               side={side}
             />
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderChatColumn = (
+    version: PromptVersion | undefined,
+    side: DiffSide,
+  ) => {
+    if (!version || !baseChat || !diffChat) return null;
+    const label = versionLabelByCommit.get(version.commit) ?? version.commit;
+    const messages = side === "base" ? baseChat : diffChat;
+    const otherMessages = side === "base" ? diffChat : baseChat;
+    const rowCount = Math.max(messages.length, otherMessages.length);
+
+    return (
+      <div className="overflow-hidden rounded-md border bg-background">
+        <ColumnHeader version={version} label={label} />
+        <div
+          className={cn(
+            "space-y-2 overflow-y-auto bg-background p-2",
+            anyMediaChanged ? "max-h-[520px]" : "max-h-[620px]",
+          )}
+        >
+          {Array.from({ length: rowCount }).map((_, i) => (
+            <MessageBlock
+              key={i}
+              message={messages[i]}
+              otherMessage={otherMessages[i]}
+              side={side}
+            />
+          ))}
         </div>
       </div>
     );
@@ -274,48 +381,28 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <div className="flex flex-col gap-4 pb-2">
             {isChatDiff && (
-              <div className="flex items-center justify-end">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="2xs"
-                      className="comet-body-xs gap-1 px-2 text-muted-slate"
-                    >
-                      {viewMode === "messages" ? "Messages" : "Raw"}
-                      <ChevronDown className="size-3 text-light-slate" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      size="sm"
-                      selected={viewMode === "messages"}
-                      onClick={() => setViewMode("messages")}
-                    >
-                      Messages
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      size="sm"
-                      selected={viewMode === "raw"}
-                      onClick={() => setViewMode("raw")}
-                    >
-                      Raw
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              <div className="flex items-center justify-start">
+                <FormFieldModeSelect
+                  value={viewMode}
+                  options={VIEW_MODE_OPTIONS}
+                  onChange={setViewMode}
+                />
               </div>
             )}
 
-            {isChatDiff && viewMode === "messages" ? (
-              <div className="overflow-hidden rounded-md border bg-background p-4">
-                <PromptDiff baseline={baseChat} current={diffChat} />
-              </div>
-            ) : (
-              <div className={TWO_COLUMN_GRID}>
-                {renderTemplateColumn(baseVersion, "base")}
-                {renderTemplateColumn(diffVersion, "diff")}
-              </div>
-            )}
+            <div className={TWO_COLUMN_GRID}>
+              {isChatDiff && viewMode === "messages" ? (
+                <>
+                  {renderChatColumn(baseVersion, "base")}
+                  {renderChatColumn(diffVersion, "diff")}
+                </>
+              ) : (
+                <>
+                  {renderRawColumn(baseVersion, "base")}
+                  {renderRawColumn(diffVersion, "diff")}
+                </>
+              )}
+            </div>
 
             <div>
               <div className="comet-body-s-accented mb-2 text-foreground">

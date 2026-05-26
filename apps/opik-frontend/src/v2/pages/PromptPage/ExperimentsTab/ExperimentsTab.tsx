@@ -522,29 +522,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
         noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <div className="flex flex-col items-center gap-3 pt-2">
-                <p className="comet-body-xs max-w-md text-center text-light-slate">
-                  Reference this prompt by name in your evaluation script and
-                  run an experiment from the Opik SDK to see results here.
-                </p>
-                <Button variant="outline" size="sm" asChild>
-                  <a
-                    href={buildDocsUrl(
-                      "/evaluation/overview",
-                      "#running-an-evaluation",
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View docs
-                    <ExternalLink className="ml-1.5 size-3.5" />
-                  </a>
-                </Button>
-              </div>
-            )}
-          </DataTableNoData>
+          <DataTableNoData title={noDataText} />
         }
         TableBody={DataTableVirtualBody}
         TableWrapper={PageBodyStickyTableWrapper}

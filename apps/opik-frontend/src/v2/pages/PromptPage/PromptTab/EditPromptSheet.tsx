@@ -1,19 +1,24 @@
 import React, {
-  useState,
-  useMemo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
+  useState,
 } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
-import { ChevronDown, Plus, Sparkles } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { Label } from "@/ui/label";
 import { Button } from "@/ui/button";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
+import {
+  FormFieldCard,
+  FormFieldModeSelect,
+} from "@/v2/pages-shared/llm/FormFieldCard";
+import CodeBlockCopy from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlockCopy";
 import { useActiveProjectId } from "@/store/AppStore";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
@@ -25,6 +30,10 @@ import {
   getNextMessageType,
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
+import {
+  normalizeChatTemplate,
+  serializeChatTemplate,
+} from "@/lib/chatTemplate";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { LLMMessage } from "@/types/llm";
 import ChatPromptRawView from "@/v2/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
@@ -40,6 +49,20 @@ type EditPromptSheetProps = {
   type?: PROMPT_TYPE;
   onSetActiveVersionId: (versionId: string) => void;
 };
+
+type ChatViewMode = "messages" | "json";
+
+const CHAT_VIEW_OPTIONS: Array<{ value: ChatViewMode; label: string }> = [
+  { value: "messages", label: "Messages" },
+  { value: "json", label: "JSON" },
+];
+
+const serializeMessagesForRaw = (messages: LLMMessage[]): string =>
+  JSON.stringify(
+    messages.map((m) => ({ role: m.role, content: m.content })),
+    null,
+    2,
+  );
 
 const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
   open,
@@ -73,8 +96,10 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
   }, [isChatPrompt, promptTemplate]);
 
   const [messages, setMessages] = useState<LLMMessage[]>(initialMessages);
-  const [showRawView, setShowRawView] = useState(false);
-  const [rawJsonValue, setRawJsonValue] = useState("");
+  const [chatViewMode, setChatViewMode] = useState<ChatViewMode>("messages");
+  const [rawJsonValue, setRawJsonValue] = useState(() =>
+    isChatPrompt ? normalizeChatTemplate(promptTemplate) : "",
+  );
   const [isRawJsonValid, setIsRawJsonValid] = useState(true);
 
   // Reset all editor state to the latest props each time the sheet opens.
@@ -93,10 +118,12 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
     setMetadata(props.metadataString);
     setMessages(props.initialMessages);
     setChangeDescription("");
-    setShowRawView(false);
-    setRawJsonValue("");
+    setRawJsonValue(
+      isChatPrompt ? normalizeChatTemplate(props.promptTemplate) : "",
+    );
     setIsRawJsonValid(true);
-  }, [open]);
+    setChatViewMode("messages");
+  }, [open, isChatPrompt]);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -108,33 +135,49 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
     onChangeContent: (content) => setTemplate(content as string),
   });
 
-  const { mutate } = useCreatePromptVersionMutation();
+  const { mutate, isPending: isSaving } = useCreatePromptVersionMutation();
 
   const handleAddMessage = useCallback(() => {
     setMessages((prev) => {
-      const lastMessage = prev[prev.length - 1];
-      const nextRole = lastMessage
-        ? getNextMessageType(lastMessage)
-        : undefined;
+      const last = prev[prev.length - 1];
+      const nextRole = last ? getNextMessageType(last) : undefined;
       return [...prev, generateDefaultLLMPromptMessage({ role: nextRole })];
     });
   }, []);
 
-  const handleClickEditPrompt = () => {
+  const handleSwitchChatView = useCallback(
+    (next: ChatViewMode) => {
+      if (next === chatViewMode) return;
+      if (next === "json") {
+        setRawJsonValue(serializeMessagesForRaw(messages));
+        setIsRawJsonValid(true);
+      }
+      setChatViewMode(next);
+    },
+    [chatViewMode, messages],
+  );
+
+  const templateHasChanges = isChatPrompt
+    ? serializeChatTemplate(messages) !== promptTemplate
+    : template !== promptTemplate;
+  const metadataHasChanges = metadata !== metadataString;
+  const isValid = isChatPrompt
+    ? messages.length > 0 &&
+      (chatViewMode === "messages" || isRawJsonValid) &&
+      (templateHasChanges || metadataHasChanges)
+    : (template?.length ?? 0) > 0 &&
+      (templateHasChanges || metadataHasChanges);
+
+  const handleClickEditPrompt = useCallback(() => {
+    if (!isValid || isSaving) return;
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
     if (!isMetadataValid) {
       return setShowInvalidJSON(true);
     }
 
-    // For chat prompts, serialize messages to JSON
     const finalTemplate = isChatPrompt
-      ? JSON.stringify(
-          messages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-        )
+      ? serializeChatTemplate(messages)
       : template;
 
     mutate({
@@ -151,19 +194,35 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
     });
 
     setOpen(false);
-  };
+  }, [
+    isValid,
+    isSaving,
+    metadata,
+    isChatPrompt,
+    messages,
+    template,
+    mutate,
+    promptName,
+    changeDescription,
+    templateStructure,
+    promptType,
+    activeProjectId,
+    onSetActiveVersionId,
+    setOpen,
+    setShowInvalidJSON,
+  ]);
 
-  const templateHasChanges = isChatPrompt
-    ? JSON.stringify(
-        messages.map((m) => ({ role: m.role, content: m.content })),
-      ) !== promptTemplate
-    : template !== promptTemplate;
-  const metadataHasChanges = metadata !== metadataString;
-  const isValid = isChatPrompt
-    ? messages.length > 0 &&
-      (!showRawView || isRawJsonValid) &&
-      (templateHasChanges || metadataHasChanges)
-    : template?.length && (templateHasChanges || metadataHasChanges);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleClickEditPrompt();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, handleClickEditPrompt]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -174,105 +233,82 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           {isChatPrompt ? (
-            <div className="space-y-1.5">
-              <Label>Chat messages</Label>
-              <div className="rounded-md border bg-soft-background">
-                <div className="flex items-center justify-between border-b px-3 py-1.5">
+            <FormFieldCard
+              title="Chat messages"
+              actions={
+                <>
+                  <FormFieldModeSelect
+                    value={chatViewMode}
+                    options={CHAT_VIEW_OPTIONS}
+                    onChange={handleSwitchChatView}
+                  />
+                  <CodeBlockCopy
+                    text={
+                      chatViewMode === "json"
+                        ? rawJsonValue
+                        : serializeMessagesForRaw(messages)
+                    }
+                  />
+                </>
+              }
+            >
+              {chatViewMode === "json" ? (
+                <ChatPromptRawView
+                  value={rawJsonValue}
+                  onMessagesChange={setMessages}
+                  onRawValueChange={setRawJsonValue}
+                  onValidationChange={setIsRawJsonValid}
+                  bare
+                />
+              ) : (
+                <>
+                  <LLMPromptMessages
+                    messages={messages}
+                    onChange={setMessages}
+                    onAddMessage={handleAddMessage}
+                    hidePromptActions
+                    disableMedia
+                    hideAddButton
+                  />
                   <Button
-                    variant="ghost"
-                    size="2xs"
-                    onClick={() => {
-                      const newShowRawView = !showRawView;
-                      if (newShowRawView) {
-                        setRawJsonValue(
-                          JSON.stringify(
-                            messages.map((m) => ({
-                              role: m.role,
-                              content: m.content,
-                            })),
-                            null,
-                            2,
-                          ),
-                        );
-                        setIsRawJsonValid(true);
-                      }
-                      setShowRawView(newShowRawView);
-                    }}
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-fit"
+                    onClick={handleAddMessage}
+                    type="button"
                   >
-                    {showRawView ? (
-                      <>JSON</>
-                    ) : (
-                      <>
-                        Pretty <Sparkles className="ml-1 size-3" />
-                      </>
-                    )}
-                    <ChevronDown className="ml-1 size-3" />
+                    <Plus className="mr-2 size-4" />
+                    Message
                   </Button>
-                </div>
-                <div className="p-3">
-                  {showRawView ? (
-                    <ChatPromptRawView
-                      value={rawJsonValue}
-                      onMessagesChange={setMessages}
-                      onRawValueChange={setRawJsonValue}
-                      onValidationChange={setIsRawJsonValid}
-                    />
-                  ) : (
-                    <>
-                      <LLMPromptMessages
-                        messages={messages}
-                        onChange={setMessages}
-                        onAddMessage={handleAddMessage}
-                        hidePromptActions={true}
-                        disableMedia={true}
-                        hideAddButton={true}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 w-fit"
-                        onClick={handleAddMessage}
-                        type="button"
-                      >
-                        <Plus className="mr-2 size-4" />
-                        Message
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <p className="comet-body-xs text-light-slate">
-                {showRawView
-                  ? "Edit chat messages as raw JSON. Must be a valid array with at least one message containing a role and content."
-                  : "Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}."}
-              </p>
-            </div>
+                </>
+              )}
+            </FormFieldCard>
           ) : (
             <div className="space-y-1.5">
-              <Label>Prompt</Label>
-              <div className="rounded-md border bg-soft-background p-3">
+              <FormFieldCard
+                title="Prompt"
+                actions={<CodeBlockCopy text={localText} />}
+              >
                 <AutoResizeTextarea
                   value={localText}
                   onChange={handleContentChange}
                   placeholder="Type your prompt..."
-                  className="comet-body-s"
+                  className="comet-code"
                 />
-              </div>
+              </FormFieldCard>
               <p className="comet-body-xs text-light-slate">
-                {
-                  "Use mustache syntax to reference test suite variables in your prompt. Example: {{question}}."
-                }
+                Use mustache syntax to reference test suite variables in your
+                prompt. Example: {"{{question}}"}.
               </p>
             </div>
           )}
+
           <div className="space-y-1.5">
-            <Label>Metadata</Label>
-            <div className="rounded-md border bg-soft-background">
-              <div className="flex items-center justify-between border-b py-1.5 pl-6 pr-3">
-                <span className="comet-body-xs uppercase tracking-wide text-foreground">
-                  JSON
-                </span>
-              </div>
+            <FormFieldCard
+              title="Metadata"
+              actions={<CodeBlockCopy text={metadata} />}
+              bodyClassName="px-0 pt-2"
+            >
               <div className="max-h-60 overflow-y-auto">
                 <CodeMirror
                   theme={theme}
@@ -281,7 +317,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
                   extensions={[jsonLanguage, EditorView.lineWrapping]}
                 />
               </div>
-            </div>
+            </FormFieldCard>
             {showInvalidJSON && (
               <p className="comet-body-s text-destructive">
                 Metadata field is not valid
@@ -290,12 +326,13 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="promptCommitMessage">Commit message</Label>
-            <div className="min-h-8 rounded-md border bg-background px-3 py-1.5">
+            <Label htmlFor="promptVersionNotes">Version notes</Label>
+            <div className="rounded-md border bg-background">
               <AutoResizeTextarea
                 value={changeDescription}
                 onChange={setChangeDescription}
                 placeholder="Describe what changed in this version"
+                className="comet-body-s min-h-8 px-3 py-1.5"
               />
             </div>
           </div>
@@ -307,7 +344,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
           <Button
             size="sm"
             type="submit"
-            disabled={!isValid}
+            disabled={!isValid || isSaving}
             onClick={handleClickEditPrompt}
           >
             Create new commit

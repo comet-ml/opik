@@ -364,7 +364,7 @@ const PromptsPage: React.FunctionComponent = () => {
         <h1 className="comet-body-accented truncate break-words">
           Prompt library
         </h1>
-        {canCreatePrompts && (
+        {canCreatePrompts && !isEmpty && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="default" size="xs">

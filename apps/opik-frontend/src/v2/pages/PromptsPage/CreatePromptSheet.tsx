@@ -1,23 +1,29 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Copy, Plus, Sparkles } from "lucide-react";
-import copy from "clipboard-copy";
+import { Plus } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
-import { useToast } from "@/ui/use-toast";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import ChatPromptRawView from "@/v2/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
-import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
+import {
+  FormFieldCard,
+  FormFieldModeSelect,
+} from "@/v2/pages-shared/llm/FormFieldCard";
+import CodeBlockCopy from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlockCopy";
+import {
+  generateDefaultLLMPromptMessage,
+  getNextMessageType,
+} from "@/lib/llm";
+import { serializeChatTemplate } from "@/lib/chatTemplate";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import { isMessageEmpty } from "@/v2/pages-shared/agent-configuration/useAgentConfigurationSave";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
@@ -31,6 +37,20 @@ type CreatePromptSheetProps = {
   templateStructure: PROMPT_TEMPLATE_STRUCTURE;
 };
 
+type ChatViewMode = "messages" | "json";
+
+const CHAT_VIEW_OPTIONS: Array<{ value: ChatViewMode; label: string }> = [
+  { value: "messages", label: "Messages" },
+  { value: "json", label: "JSON" },
+];
+
+const serializeMessagesForRaw = (messages: LLMMessage[]): string =>
+  JSON.stringify(
+    messages.map((m) => ({ role: m.role, content: m.content })),
+    null,
+    2,
+  );
+
 const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
   open,
   setOpen,
@@ -39,7 +59,6 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
   const workspaceName = useAppStore((s) => s.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const theme = useCodemirrorTheme({ editable: true });
 
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
@@ -52,8 +71,10 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
   const [messages, setMessages] = useState<LLMMessage[]>([
     generateDefaultLLMPromptMessage(),
   ]);
-  const [showChatRaw, setShowChatRaw] = useState(false);
-  const [chatRaw, setChatRaw] = useState("");
+  const [chatViewMode, setChatViewMode] = useState<ChatViewMode>("messages");
+  const [chatRaw, setChatRaw] = useState(() =>
+    serializeMessagesForRaw([generateDefaultLLMPromptMessage()]),
+  );
   const [isChatRawValid, setIsChatRawValid] = useState(true);
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
 
@@ -64,22 +85,12 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
     if (!name.trim().length) return false;
     if (isChatPrompt) {
       const hasNonEmptyMessage = messages.some((m) => !isMessageEmpty(m));
-      return hasNonEmptyMessage && (!showChatRaw || isChatRawValid);
+      return (
+        hasNonEmptyMessage && (chatViewMode === "messages" || isChatRawValid)
+      );
     }
     return template.trim().length > 0;
-  }, [name, isChatPrompt, messages, showChatRaw, isChatRawValid, template]);
-
-  const handleCopyPrompt = useCallback(async () => {
-    if (!template) return;
-    await copy(template);
-    toast({ description: "Prompt copied to clipboard" });
-  }, [template, toast]);
-
-  const handleCopyMetadata = useCallback(async () => {
-    if (!metadata) return;
-    await copy(metadata);
-    toast({ description: "Metadata copied to clipboard" });
-  }, [metadata, toast]);
+  }, [name, isChatPrompt, messages, chatViewMode, isChatRawValid, template]);
 
   const handleAddMessage = useCallback(() => {
     setMessages((prev) => {
@@ -88,6 +99,19 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
       return [...prev, generateDefaultLLMPromptMessage({ role: nextRole })];
     });
   }, []);
+
+  const handleSwitchChatView = useCallback(
+    (next: ChatViewMode) => {
+      if (next === chatViewMode) return;
+      if (next === "json") {
+        // Capture the latest structured messages before showing the raw editor.
+        setChatRaw(serializeMessagesForRaw(messages));
+        setIsChatRawValid(true);
+      }
+      setChatViewMode(next);
+    },
+    [chatViewMode, messages],
+  );
 
   const onPromptCreated = useCallback(
     (prompt: Prompt) => {
@@ -104,18 +128,15 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
     [navigate, workspaceName, activeProjectId],
   );
 
-  const handleCreate = () => {
+  const handleCreate = useCallback(() => {
+    if (!isValid || isCreating) return;
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
     if (!isMetadataValid) {
       return setShowInvalidJSON(true);
     }
 
     const promptTemplate = isChatPrompt
-      ? JSON.stringify(
-          messages.map((m) => ({ role: m.role, content: m.content })),
-          null,
-          2,
-        )
+      ? serializeChatTemplate(messages)
       : template;
 
     createMutate(
@@ -136,7 +157,34 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
         },
       },
     );
-  };
+  }, [
+    isValid,
+    isCreating,
+    metadata,
+    isChatPrompt,
+    messages,
+    template,
+    createMutate,
+    name,
+    templateStructure,
+    description,
+    activeProjectId,
+    onPromptCreated,
+    setOpen,
+    setShowInvalidJSON,
+  ]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleCreate();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, handleCreate]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -159,130 +207,85 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
 
           {!isChatPrompt && (
             <div className="space-y-1.5">
-              <Label>Prompt</Label>
-              <div className="rounded-md border bg-soft-background">
-                <div className="flex items-center justify-end border-b px-3 py-1.5">
-                  <TooltipWrapper content="Copy prompt">
-                    <Button
-                      variant="minimal"
-                      size="icon-2xs"
-                      onClick={handleCopyPrompt}
-                    >
-                      <Copy />
-                    </Button>
-                  </TooltipWrapper>
-                </div>
-                <div className="min-h-[120px] p-3">
+              <FormFieldCard
+                title="Prompt"
+                actions={<CodeBlockCopy text={template} />}
+              >
+                <div className="min-h-[120px]">
                   <AutoResizeTextarea
                     value={template}
                     onChange={setTemplate}
                     placeholder="Type your prompt..."
-                    className="comet-body-s"
+                    className="comet-code"
                   />
                 </div>
-              </div>
+              </FormFieldCard>
               <p className="comet-body-xs text-light-slate">
-                {
-                  "Use mustache syntax to reference test suite variables in your prompt. Example: {{question}}."
-                }
+                Use mustache syntax to reference test suite variables in your
+                prompt. Example: {"{{question}}"}.
               </p>
             </div>
           )}
 
           {isChatPrompt && (
-            <div className="space-y-1.5">
-              <Label>Chat messages</Label>
-              <div className="rounded-md border bg-soft-background">
-                <div className="flex items-center justify-between border-b px-3 py-1.5">
+            <FormFieldCard
+              title="Chat messages"
+              actions={
+                <>
+                  <FormFieldModeSelect
+                    value={chatViewMode}
+                    options={CHAT_VIEW_OPTIONS}
+                    onChange={handleSwitchChatView}
+                  />
+                  <CodeBlockCopy
+                    text={
+                      chatViewMode === "json"
+                        ? chatRaw
+                        : serializeMessagesForRaw(messages)
+                    }
+                  />
+                </>
+              }
+            >
+              {chatViewMode === "json" ? (
+                <ChatPromptRawView
+                  value={chatRaw}
+                  onMessagesChange={setMessages}
+                  onRawValueChange={setChatRaw}
+                  onValidationChange={setIsChatRawValid}
+                  bare
+                />
+              ) : (
+                <>
+                  <LLMPromptMessages
+                    messages={messages}
+                    onChange={setMessages}
+                    onAddMessage={handleAddMessage}
+                    hidePromptActions
+                    disableMedia
+                    hideAddButton
+                  />
                   <Button
-                    variant="ghost"
-                    size="2xs"
-                    onClick={() => {
-                      const next = !showChatRaw;
-                      if (next) {
-                        setChatRaw(
-                          JSON.stringify(
-                            messages.map((m) => ({
-                              role: m.role,
-                              content: m.content,
-                            })),
-                            null,
-                            2,
-                          ),
-                        );
-                        setIsChatRawValid(true);
-                      }
-                      setShowChatRaw(next);
-                    }}
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-fit"
+                    onClick={handleAddMessage}
+                    type="button"
                   >
-                    {showChatRaw ? (
-                      <>JSON</>
-                    ) : (
-                      <>
-                        Pretty <Sparkles className="ml-1 size-3" />
-                      </>
-                    )}
-                    <ChevronDown className="ml-1 size-3" />
+                    <Plus className="mr-2 size-4" />
+                    Message
                   </Button>
-                </div>
-                <div className="p-3">
-                  {showChatRaw ? (
-                    <ChatPromptRawView
-                      value={chatRaw}
-                      onMessagesChange={setMessages}
-                      onRawValueChange={setChatRaw}
-                      onValidationChange={setIsChatRawValid}
-                    />
-                  ) : (
-                    <>
-                      <LLMPromptMessages
-                        messages={messages}
-                        onChange={setMessages}
-                        onAddMessage={handleAddMessage}
-                        hidePromptActions={true}
-                        disableMedia={true}
-                        hideAddButton={true}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 w-fit"
-                        onClick={handleAddMessage}
-                        type="button"
-                      >
-                        <Plus className="mr-2 size-4" />
-                        Message
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-              {showChatRaw && (
-                <p className="comet-body-xs text-light-slate">
-                  Edit chat messages as raw JSON. Must be a valid array with at
-                  least one message containing a role and content.
-                </p>
+                </>
               )}
-            </div>
+            </FormFieldCard>
           )}
 
           <div className="space-y-1.5">
-            <Label>Metadata</Label>
-            <div className="rounded-md border bg-soft-background">
-              <div className="flex items-center justify-between border-b py-1.5 pl-6 pr-3">
-                <span className="comet-body-xs uppercase tracking-wide text-foreground">
-                  JSON
-                </span>
-                <TooltipWrapper content="Copy metadata">
-                  <Button
-                    variant="minimal"
-                    size="icon-2xs"
-                    onClick={handleCopyMetadata}
-                  >
-                    <Copy />
-                  </Button>
-                </TooltipWrapper>
-              </div>
+            <FormFieldCard
+              title="Metadata"
+              actions={<CodeBlockCopy text={metadata} />}
+              bodyClassName="px-0 pt-2"
+            >
               <div className="max-h-60 overflow-y-auto">
                 <CodeMirror
                   theme={theme}
@@ -291,7 +294,7 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
                   extensions={[jsonLanguage, EditorView.lineWrapping]}
                 />
               </div>
-            </div>
+            </FormFieldCard>
             {showInvalidJSON && (
               <p className="comet-body-s text-destructive">
                 Metadata field is not valid
@@ -301,11 +304,12 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
 
           <div className="space-y-1.5">
             <Label htmlFor="versionNotes">Version notes</Label>
-            <div className="min-h-8 rounded-md border bg-background px-3 py-1.5">
+            <div className="rounded-md border bg-background">
               <AutoResizeTextarea
                 value={description}
                 onChange={setDescription}
                 placeholder="Add optional description"
+                className="comet-body-s min-h-8 px-3 py-1.5"
               />
             </div>
           </div>
