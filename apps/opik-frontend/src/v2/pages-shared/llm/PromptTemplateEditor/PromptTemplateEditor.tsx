@@ -39,40 +39,56 @@ const PromptTemplateEditor: React.FC<PromptTemplateEditorProps> = ({
   editor,
   textMinHeightClassName,
 }) => {
+  const isJsonMode = editor.chatViewMode === "json";
+
   if (editor.isChatPrompt) {
     return (
-      <FormFieldCard
-        title="Chat messages"
-        actions={
-          <>
-            <FormFieldModeSelect
-              value={editor.chatViewMode}
-              options={CHAT_VIEW_OPTIONS}
-              onChange={editor.onChatViewModeChange}
+      <div className="space-y-1.5">
+        <FormFieldCard
+          title="Chat messages"
+          actions={
+            <>
+              <FormFieldModeSelect
+                value={editor.chatViewMode}
+                options={CHAT_VIEW_OPTIONS}
+                onChange={editor.onChatViewModeChange}
+              />
+              <Separator orientation="vertical" className="-ml-2 h-3" />
+              <CodeBlockCopy text={editor.copyableRaw} />
+            </>
+          }
+          // JSON mode: drop body x-padding so the line-number gutter sits at
+          // the same x-offset as the Metadata block below (also `px-0 pt-2`).
+          // Pretty mode keeps default padding; the header's bottom border is
+          // dropped since the message cards have their own borders (would
+          // otherwise look like a double divider).
+          bodyClassName={isJsonMode ? "px-0 pt-2" : undefined}
+          headerBordered={isJsonMode}
+        >
+          {isJsonMode ? (
+            <ChatPromptRawView
+              value={editor.rawJsonValue}
+              onMessagesChange={editor.setMessages}
+              onRawValueChange={editor.setRawJsonValue}
+              onValidationChange={editor.setIsRawJsonValid}
+              bare
             />
-            <Separator orientation="vertical" className="-ml-2 h-3" />
-            <CodeBlockCopy text={editor.copyableRaw} />
-          </>
-        }
-      >
-        {editor.chatViewMode === "json" ? (
-          <ChatPromptRawView
-            value={editor.rawJsonValue}
-            onMessagesChange={editor.setMessages}
-            onRawValueChange={editor.setRawJsonValue}
-            onValidationChange={editor.setIsRawJsonValid}
-            bare
-          />
-        ) : (
-          <LLMPromptMessages
-            messages={editor.messages}
-            onChange={editor.setMessages}
-            onAddMessage={editor.handleAddMessage}
-            hidePromptActions
-            disableMedia
-          />
+          ) : (
+            <LLMPromptMessages
+              messages={editor.messages}
+              onChange={editor.setMessages}
+              onAddMessage={editor.handleAddMessage}
+              hidePromptActions
+              disableMedia
+            />
+          )}
+        </FormFieldCard>
+        {isJsonMode && !editor.isRawJsonValid && (
+          <p className="comet-body-s text-destructive" role="alert">
+            Message format is invalid.
+          </p>
         )}
-      </FormFieldCard>
+      </div>
     );
   }
 

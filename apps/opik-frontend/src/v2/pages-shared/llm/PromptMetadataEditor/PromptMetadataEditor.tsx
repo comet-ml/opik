@@ -25,7 +25,9 @@ const PromptMetadataEditor: React.FC<PromptMetadataEditorProps> = ({
   onChange,
   showInvalidJSON,
 }) => {
-  const theme = useCodemirrorTheme({ editable: true });
+  // Use a transparent CodeMirror bg so the FormFieldCard's `bg-soft-background`
+  // shows through instead of stacking a second `--codemirror-background` panel.
+  const theme = useCodemirrorTheme({ editable: true, transparent: true });
 
   return (
     <div className="space-y-1.5">

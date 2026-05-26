@@ -51,7 +51,7 @@ const LoadedPromptDisplay: React.FC<LoadedPromptDisplayProps> = ({
         </div>
       </TooltipWrapper>
       {versionLabel && (
-        <span className="flex shrink-0 items-center gap-1 text-light-slate">
+        <span className="ml-1.5 flex shrink-0 items-center text-light-slate">
           <GitCommitVertical className="size-3 shrink-0" />
           {versionLabel}
         </span>

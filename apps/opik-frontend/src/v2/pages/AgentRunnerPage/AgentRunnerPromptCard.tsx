@@ -293,12 +293,7 @@ const AgentRunnerPromptCard = forwardRef<
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-soft-background">
-      <div
-        className={cn(
-          "flex items-center gap-1.5 bg-muted/50 px-2 py-1",
-          isOpen && "border-b border-border",
-        )}
-      >
+      <div className="flex items-center gap-1.5 px-2 py-1">
         <button
           type="button"
           aria-expanded={isOpen}
@@ -318,7 +313,7 @@ const AgentRunnerPromptCard = forwardRef<
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              variant="ghost"
+              variant="minimal"
               size="2xs"
               className="comet-body-xs gap-1 px-1 text-muted-slate"
               disabled={isVersionsLoading || versions.length === 0}
@@ -363,7 +358,7 @@ const AgentRunnerPromptCard = forwardRef<
 
         {hasUnsavedChanges && (
           <div className="ml-auto flex items-center gap-1">
-            <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
+            <span className="comet-body-xs flex items-center gap-1 text-light-slate">
               <span className="size-1.5 rounded-full bg-destructive" />
               {PROMPT_UNSAVED_CHANGES_LABEL}
             </span>
@@ -383,7 +378,7 @@ const AgentRunnerPromptCard = forwardRef<
         )}
       </div>
 
-      <div className={cn("p-3", !isOpen && "hidden")}>{renderBody()}</div>
+      <div className={cn("px-2 pb-2", !isOpen && "hidden")}>{renderBody()}</div>
 
       <SaveVersionDialog
         open={isSaveDialogOpen}

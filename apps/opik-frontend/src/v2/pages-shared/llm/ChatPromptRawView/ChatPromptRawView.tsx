@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
@@ -116,15 +116,17 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
   onValidationChange,
   bare = false,
 }) => {
+  // In bare mode the editor slots into a parent container (FormFieldCard),
+  // so use a transparent bg to inherit the container color instead of
+  // stacking a second `--codemirror-background` panel.
   const theme = useCodemirrorTheme({
     editable: true,
+    transparent: bare,
   });
-  const [isValid, setIsValid] = useState(true);
 
   const processWithValidation = useCallback(
     (jsonValue: string) => {
       const result = validateAndParseJson(jsonValue);
-      setIsValid(result.isValid);
       onValidationChange?.(result.isValid);
 
       if (result.isValid && result.messages) {
@@ -149,21 +151,11 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
     />
   );
 
+  if (bare) return editor;
   return (
-    <>
-      {bare ? (
-        editor
-      ) : (
-        <div className="max-h-[400px] overflow-y-auto rounded-md border">
-          {editor}
-        </div>
-      )}
-      {!isValid && (
-        <p className="mt-2 text-sm text-destructive" role="alert">
-          Message format is invalid.
-        </p>
-      )}
-    </>
+    <div className="max-h-[400px] overflow-y-auto rounded-md border">
+      {editor}
+    </div>
   );
 };
 

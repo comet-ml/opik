@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import {
   Dialog,
@@ -33,6 +33,23 @@ const SaveVersionDialog: React.FC<SaveVersionDialogProps> = ({
     if (open) setChangeDescription("");
   }, [open]);
 
+  const handleSave = useCallback(() => {
+    if (isSaving) return;
+    onSave(changeDescription);
+  }, [isSaving, onSave, changeDescription]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, handleSave]);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[480px]">
@@ -54,11 +71,7 @@ const SaveVersionDialog: React.FC<SaveVersionDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button
-            type="submit"
-            disabled={isSaving}
-            onClick={() => onSave(changeDescription)}
-          >
+          <Button type="submit" disabled={isSaving} onClick={handleSave}>
             Save version
           </Button>
         </DialogFooter>

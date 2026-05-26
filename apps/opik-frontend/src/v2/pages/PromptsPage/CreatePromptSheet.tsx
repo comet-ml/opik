@@ -68,6 +68,12 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
     editor.template,
   ]);
 
+  const isDirty =
+    name.length > 0 ||
+    description.length > 0 ||
+    metadata.length > 0 ||
+    editor.isDirty;
+
   const onPromptCreated = useCallback(
     (prompt: Prompt) => {
       if (!prompt.id) return;
@@ -141,6 +147,7 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[720px]"
         header={<SheetTopBar variant="form" title={title} />}
+        blockOverlayClose={isDirty}
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           <div className="space-y-1.5">
@@ -167,9 +174,9 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
           />
 
           <div className="space-y-1.5">
-            <Label htmlFor="versionNotes">Version notes</Label>
+            <Label htmlFor="promptDescription">Description</Label>
             <AutoGrowTextarea
-              id="versionNotes"
+              id="promptDescription"
               dimension="sm"
               className="comet-body-s"
               value={description}

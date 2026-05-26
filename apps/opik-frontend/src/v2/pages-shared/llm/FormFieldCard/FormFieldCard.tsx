@@ -7,6 +7,12 @@ type FormFieldCardProps = {
   actions?: React.ReactNode;
   className?: string;
   bodyClassName?: string;
+  /**
+   * When false, the header omits its bottom border. Use this when the body
+   * renders items that already have their own border (e.g. message cards),
+   * to avoid a double divider between header and first item.
+   */
+  headerBordered?: boolean;
   children: React.ReactNode;
 };
 
@@ -20,6 +26,7 @@ const FormFieldCard: React.FC<FormFieldCardProps> = ({
   actions,
   className,
   bodyClassName,
+  headerBordered = true,
   children,
 }) => (
   <div
@@ -28,7 +35,12 @@ const FormFieldCard: React.FC<FormFieldCardProps> = ({
       className,
     )}
   >
-    <div className="flex h-8 items-center gap-2 border-b border-border px-2">
+    <div
+      className={cn(
+        "flex h-8 items-center gap-2 px-2",
+        headerBordered && "border-b border-border",
+      )}
+    >
       <span className="comet-body-xs flex-1 truncate text-muted-slate">
         {title}
       </span>

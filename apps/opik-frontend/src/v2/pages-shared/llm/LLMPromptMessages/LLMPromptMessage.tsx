@@ -340,7 +340,7 @@ const LLMPromptMessage = forwardRef<
             {isLoading ? (
               <Loader className="min-h-32" />
             ) : (
-              <div className="flex flex-col gap-1 px-1">
+              <div className="flex flex-col gap-1 pl-[7px] pr-1">
                 <div className="relative">
                   <div
                     className={

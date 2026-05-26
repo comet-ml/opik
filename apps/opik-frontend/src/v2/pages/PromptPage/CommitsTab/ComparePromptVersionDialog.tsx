@@ -52,8 +52,15 @@ const SectionContainer: React.FC<{
       <span className="comet-body-s text-foreground">{title}</span>
       {actions}
     </div>
-    <div className="overflow-hidden rounded-md border border-border bg-background">
+    <div className="relative overflow-hidden rounded-md border border-border bg-background">
       {children}
+      {/* Vertical divider between the two diff columns. The inner grids use
+          `grid-cols-2 gap-2` so the visual center sits in the middle of the
+          gap; an absolute 1px line at left-1/2 spans the full container. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-border"
+      />
     </div>
   </div>
 );

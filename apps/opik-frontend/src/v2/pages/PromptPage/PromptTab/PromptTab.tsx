@@ -245,7 +245,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </div>
         </div>
         <div className="hidden min-w-0 xl:block">
-          <p className="comet-body-s-accented ml-3 mt-1">Version history</p>
+          <p className="comet-body-s-accented mb-1 ml-3">Version history</p>
           <div className="space-y-3 p-4">
             {[0, 1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-16 w-full" />
@@ -345,23 +345,24 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                     <DropdownMenuItem
                       disabled={!prompt || isPendingProviderKeys}
                       onClick={handleOpenInPlaygroundClick}
+                      className="px-3"
                     >
                       <Blocks className="mr-2 size-3.5 shrink-0 text-light-slate" />
                       Load in Prompt playground
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() =>
-                      window.open(
-                        buildDocsUrl("/prompt_engineering/prompt_management"),
-                        "_blank",
-                        "noopener,noreferrer",
-                      )
-                    }
-                  >
-                    Reference prompt in code
-                    <ExternalLink className="ml-2 size-3.5 shrink-0" />
+                  <DropdownMenuItem asChild className="px-3">
+                    <a
+                      href={buildDocsUrl(
+                        "/prompt_engineering/prompt_management",
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Reference prompt in code
+                      <ExternalLink className="ml-2 size-3.5 shrink-0" />
+                    </a>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -417,13 +418,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             <div className="comet-body-s flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-slate">
               {activeVersion?.created_at && (
                 <span className="flex items-center gap-1">
-                  <Clock className="size-3" />
+                  <Clock className="size-3.5" />
                   {getTimeFromNow(activeVersion.created_at)}
                 </span>
               )}
               {activeAuthor && (
                 <span className="flex items-center gap-1">
-                  <User className="size-3" />
+                  <User className="size-3.5" />
                   {activeAuthor}
                 </span>
               )}
@@ -459,6 +460,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 <CodeHighlighter
                   data={template}
                   language={SUPPORTED_LANGUAGE.json}
+                  hideCopy
                 />
               ) : (
                 <pre className="comet-code whitespace-pre-wrap break-words text-foreground">
@@ -489,7 +491,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
       {/* Right sidebar (visible only on xl+ screens) */}
       <div className="hidden min-w-0 xl:block">
-        <p className="comet-body-s-accented ml-3 mt-1">Version history</p>
+        <p className="comet-body-s-accented mb-1 ml-3">Version history</p>
         <VersionHistoryTimeline
           items={historyItems}
           selectedId={effectiveVersionId}

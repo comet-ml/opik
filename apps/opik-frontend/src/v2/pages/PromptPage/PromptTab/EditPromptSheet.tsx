@@ -63,6 +63,8 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
 
   const metadataHasChanges = metadata !== metadataString;
   const isValid = editor.isValid && (editor.isDirty || metadataHasChanges);
+  const isDirty =
+    editor.isDirty || metadataHasChanges || changeDescription.length > 0;
 
   const handleClickEditPrompt = useCallback(() => {
     if (!isValid || isSaving) return;
@@ -120,6 +122,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[720px]"
         header={<SheetTopBar variant="form" title="Edit prompt" />}
+        blockOverlayClose={isDirty}
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           <PromptTemplateEditor editor={editor} />

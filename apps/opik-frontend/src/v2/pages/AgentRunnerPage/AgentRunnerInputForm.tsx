@@ -151,7 +151,7 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
                 key={field.name}
                 className="overflow-hidden rounded-md border border-border bg-soft-background"
               >
-                <div className="flex items-center gap-2 px-3 py-2">
+                <div className="flex items-center gap-1.5 px-2 py-1">
                   <button
                     type="button"
                     aria-expanded={isOpen}
@@ -159,9 +159,9 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
                     className="flex shrink-0 items-center text-light-slate hover:text-foreground"
                   >
                     {isOpen ? (
-                      <ChevronDown className="size-4" />
+                      <ChevronDown className="size-3" />
                     ) : (
-                      <ChevronRight className="size-4" />
+                      <ChevronRight className="size-3" />
                     )}
                   </button>
                   <span className="comet-body-xs text-muted-slate">
@@ -181,7 +181,7 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
                 </div>
 
                 {isOpen && (
-                  <div className="flex flex-col gap-1 px-3 pb-3">
+                  <div className="flex flex-col gap-1 px-2 pb-2">
                     {normalized === "boolean" ? (
                       <Switch
                         checked={watch(field.name) === "true"}
