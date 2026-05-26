@@ -1087,7 +1087,7 @@ class PromptResourceTest {
                     .projectId(null)
                     .build();
 
-            Prompt duplicatedPrompt = buildPrompt().build();
+            Prompt duplicatedPrompt = buildPrompt().projectName("conflict-test-project").build();
             createPrompt(duplicatedPrompt, API_KEY, TEST_WORKSPACE);
 
             return Stream.of(
@@ -1116,6 +1116,22 @@ class PromptResourceTest {
                     Arguments.of(buildPrompt().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class));
+        }
+
+        @Test
+        @DisplayName("when creating prompts with the same name in different projects, then both succeed")
+        void when__creatingPromptsWithSameNameInDifferentProjects__thenBothSucceed() {
+            String sharedName = UUID.randomUUID().toString();
+
+            var prompt1 = buildPrompt().name(sharedName).projectName("project-alpha").build();
+            var prompt2 = buildPrompt().name(sharedName).projectName("project-beta").build();
+
+            var id1 = createPrompt(prompt1, API_KEY, TEST_WORKSPACE);
+            var id2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
+            assertThat(id1).isNotNull();
+            assertThat(id2).isNotNull();
+            assertThat(id1).isNotEqualTo(id2);
         }
     }
 
@@ -1177,11 +1193,13 @@ class PromptResourceTest {
             var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .projectName("update-conflict-project")
                     .build();
 
             var prompt2 = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .projectName("update-conflict-project")
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
