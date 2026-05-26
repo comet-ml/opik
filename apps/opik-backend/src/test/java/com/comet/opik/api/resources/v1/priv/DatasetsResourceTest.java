@@ -10974,6 +10974,90 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("when chaining 3 snapshot-mode versions, each version's row set equals its payload (no leakage from prior versions)")
+        void snapshot__threeVersionChain__eachVersionEqualsItsPayload() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var itemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemD = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+
+            // v1 (first version, snapshot=true is a no-op here): {A, B}
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB))
+                            .batchGroupId(UUID.randomUUID())
+                            .snapshot(true)
+                            .build(),
+                    workspaceName, apiKey);
+
+            // v2 (snapshot): drop B, add C → {A, C}
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .snapshot(true)
+                            .build(),
+                    workspaceName, apiKey);
+
+            // v3 (snapshot): drop A, add B back, add D → {B, C, D}
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemB, itemC, itemD))
+                            .batchGroupId(UUID.randomUUID())
+                            .snapshot(true)
+                            .build(),
+                    workspaceName, apiKey);
+
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            assertThat(versions.content()).hasSize(3);
+
+            // versions are sorted newest-first
+            var v3 = versions.content().get(0);
+            var v2 = versions.content().get(1);
+            var v1 = versions.content().get(2);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, v1.versionHash(), apiKey, workspaceName);
+            assertThat(v1Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemA.id(), itemB.id());
+            assertThat(v1.itemsTotal()).isEqualTo(2);
+
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, v2.versionHash(), apiKey, workspaceName);
+            assertThat(v2Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemA.id(), itemC.id());
+            assertThat(v2.itemsTotal()).isEqualTo(2);
+
+            var v3Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, v3.versionHash(), apiKey, workspaceName);
+            assertThat(v3Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemB.id(), itemC.id(), itemD.id());
+            assertThat(v3.itemsTotal()).isEqualTo(3);
+
+            // Per-item data payload round-trips across the chain. Pick one (itemC) present in both
+            // v2 and v3 to confirm the row content matches the original payload at both points, not
+            // a residual carry-forward.
+            var c2 = v2Items.content().stream().filter(i -> i.id().equals(itemC.id())).findFirst().orElseThrow();
+            var c3 = v3Items.content().stream().filter(i -> i.id().equals(itemC.id())).findFirst().orElseThrow();
+            assertThat(c2.data()).isEqualTo(itemC.data());
+            assertThat(c3.data()).isEqualTo(itemC.data());
+        }
+
+        @Test
         @DisplayName("when snapshot=true on first version (no base), then behaves like createFirstVersion")
         void snapshot__firstVersion__behavesLikeCreateFirstVersion() {
             var workspaceName = UUID.randomUUID().toString();
