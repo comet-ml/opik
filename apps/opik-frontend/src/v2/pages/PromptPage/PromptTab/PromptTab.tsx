@@ -406,7 +406,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           {/* Change description + meta */}
           <div className="space-y-1 px-4 pb-3">
             {activeVersion?.change_description && (
-              <div className="comet-body-s flex min-w-0 items-center gap-2 text-muted-slate">
+              <div className="comet-body-s flex min-w-0 items-center gap-1.5 text-muted-slate">
                 <FilePen className="size-3.5 shrink-0 text-muted-slate" />
                 <TooltipWrapper content={activeVersion.change_description}>
                   <span className="w-fit max-w-full truncate">
@@ -417,13 +417,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             )}
             <div className="comet-body-s flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-slate">
               {activeVersion?.created_at && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1.5">
                   <Clock className="size-3.5" />
                   {getTimeFromNow(activeVersion.created_at)}
                 </span>
               )}
               {activeAuthor && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1.5">
                   <User className="size-3.5" />
                   {activeAuthor}
                 </span>
