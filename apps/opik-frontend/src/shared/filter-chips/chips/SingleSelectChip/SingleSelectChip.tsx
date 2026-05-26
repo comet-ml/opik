@@ -1,6 +1,5 @@
 import React from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
-import BaseChip from "@/shared/filter-chips/chips/BaseChip/BaseChip";
+import FilterChipPopover from "@/shared/filter-chips/chips/FilterChipPopover";
 import SingleSelectChipPopoverContent from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChipPopoverContent";
 import { formatSingleSelectSummary } from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip.logic";
 import {
@@ -24,35 +23,23 @@ const SingleSelectChip: React.FC<SingleSelectChipProps> = ({
   onClear,
   open,
   onOpenChange,
-}) => {
-  const summary = formatSingleSelectSummary(value, definition);
-
-  return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <BaseChip
-          label={definition.label}
-          valueSummary={summary}
-          isOpen={open}
-        />
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={4}
-        className="w-auto rounded-md border border-border bg-background p-0 shadow-sm"
-      >
-        <SingleSelectChipPopoverContent
-          definition={definition}
-          value={value}
-          onSelect={(next) => {
-            onApply(next);
-            onOpenChange(false);
-          }}
-          onClear={onClear}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-};
+}) => (
+  <FilterChipPopover
+    label={definition.label}
+    valueSummary={formatSingleSelectSummary(value, definition)}
+    open={open}
+    onOpenChange={onOpenChange}
+  >
+    <SingleSelectChipPopoverContent
+      definition={definition}
+      value={value}
+      onSelect={(next) => {
+        onApply(next);
+        onOpenChange(false);
+      }}
+      onClear={onClear}
+    />
+  </FilterChipPopover>
+);
 
 export default SingleSelectChip;
