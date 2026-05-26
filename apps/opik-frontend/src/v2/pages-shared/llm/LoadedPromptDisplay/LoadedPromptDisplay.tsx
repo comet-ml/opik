@@ -37,7 +37,7 @@ const LoadedPromptDisplay: React.FC<LoadedPromptDisplayProps> = ({
       : FileText;
 
   return (
-    <div className="flex min-w-0 items-center gap-1 rounded-md border border-border bg-background px-1 text-[11px]">
+    <div className="flex min-w-0 items-center rounded-md border border-border bg-background pl-2 pr-1 text-[11px]">
       <TooltipWrapper
         content={hasUnsavedChanges ? "Unsaved changes" : displayName}
       >
@@ -50,7 +50,7 @@ const LoadedPromptDisplay: React.FC<LoadedPromptDisplayProps> = ({
         </div>
       </TooltipWrapper>
       {versionLabel && (
-        <span className="flex shrink-0 items-center gap-0.5 text-light-slate">
+        <span className="flex shrink-0 items-center gap-1 text-light-slate">
           <GitCommitVertical className="size-3 shrink-0" />
           {versionLabel}
         </span>

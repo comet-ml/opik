@@ -2,15 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
 import isEqual from "fast-deep-equal";
-import { Clock, User } from "lucide-react";
+import { Clock, LucideIcon, Sparkles, User } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { Tag } from "@/ui/tag";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
 import { FormFieldModeSelect } from "@/v2/pages-shared/llm/FormFieldCard";
+import ChatMessageCard from "@/v2/pages-shared/llm/ChatMessageCard/ChatMessageCard";
 import { normalizeChatTemplate, parseChatTemplate } from "@/lib/chatTemplate";
 import { extractMessageContent } from "@/lib/prompt";
-import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { PromptVersion } from "@/types/prompts";
 import { cn } from "@/lib/utils";
 import { formatDate, getTimeFromNow } from "@/lib/date";
@@ -21,15 +21,19 @@ import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 
 type VersionWithMaybeAuthor = PromptVersion & { created_by?: string };
 type DiffSide = "base" | "diff";
-type ViewMode = "messages" | "raw";
+type ViewMode = "pretty" | "json";
 type ChatMessage = { role: string; content: unknown };
 
 const TWO_COLUMN_GRID =
   "grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none";
 
-const VIEW_MODE_OPTIONS: Array<{ value: ViewMode; label: string }> = [
-  { value: "messages", label: "Messages" },
-  { value: "raw", label: "Raw" },
+const VIEW_MODE_OPTIONS: Array<{
+  value: ViewMode;
+  label: string;
+  icon?: LucideIcon;
+}> = [
+  { value: "pretty", label: "Pretty", icon: Sparkles },
+  { value: "json", label: "JSON" },
 ];
 
 const stringifyMetadata = (m: unknown): string => {
@@ -41,10 +45,6 @@ const stringifyMetadata = (m: unknown): string => {
     return String(m);
   }
 };
-
-const roleLabel = (role: string): string =>
-  LLM_MESSAGE_ROLE_NAME_MAP[role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP] ??
-  role;
 
 const ColumnHeader: React.FC<{ version: PromptVersion; label: string }> = ({
   version,
@@ -84,7 +84,9 @@ const MessageBlock: React.FC<{
   if (!message) {
     return (
       <div className="comet-body-xs flex min-h-16 items-center justify-center rounded-md border border-dashed border-border bg-soft-background px-3 py-2 text-muted-slate">
-        {side === "base" ? "Added in the target version" : "Removed in this version"}
+        {side === "base"
+          ? "Added in the target version"
+          : "Removed in this version"}
       </div>
     );
   }
@@ -99,25 +101,24 @@ const MessageBlock: React.FC<{
     otherMessage !== undefined && message.role !== otherMessage.role;
 
   return (
-    <div className="rounded-md border bg-background p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="comet-body-s-accented text-foreground">
-          {roleLabel(message.role)}
-        </span>
-        {rolesDiffer && (
-          <Tag variant="orange" size="sm">
-            Role changed
-          </Tag>
-        )}
-        {!otherMessage && (
-          <Tag
-            variant={side === "base" ? "red" : "green"}
-            size="sm"
-          >
-            {side === "base" ? "Removed" : "Added"}
-          </Tag>
-        )}
-      </div>
+    <ChatMessageCard
+      role={message.role}
+      className="bg-background"
+      badges={
+        <>
+          {rolesDiffer && (
+            <Tag variant="orange" size="sm">
+              Role changed
+            </Tag>
+          )}
+          {!otherMessage && (
+            <Tag variant={side === "base" ? "red" : "green"} size="sm">
+              {side === "base" ? "Removed" : "Added"}
+            </Tag>
+          )}
+        </>
+      }
+    >
       <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
         {otherMessage ? (
           <TextDiff
@@ -130,7 +131,7 @@ const MessageBlock: React.FC<{
           thisContent
         )}
       </div>
-    </div>
+    </ChatMessageCard>
   );
 };
 
@@ -203,7 +204,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   const [diffVersion, setDiffVersion] = useState<PromptVersion | undefined>(
     first(versions),
   );
-  const [viewMode, setViewMode] = useState<ViewMode>("messages");
+  const [viewMode, setViewMode] = useState<ViewMode>("pretty");
 
   const baseText = useMemo(
     () => normalizeChatTemplate(baseVersion?.template || ""),
@@ -290,7 +291,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
       requestedDiff ??
         versions.find((v) => v.commit === last(versionOptions)?.value),
     );
-    setViewMode(isChatDiff ? "messages" : "raw");
+    setViewMode(isChatDiff ? "pretty" : "json");
   }, [
     open,
     versionOptions,
@@ -391,7 +392,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
             )}
 
             <div className={TWO_COLUMN_GRID}>
-              {isChatDiff && viewMode === "messages" ? (
+              {isChatDiff && viewMode === "pretty" ? (
                 <>
                   {renderChatColumn(baseVersion, "base")}
                   {renderChatColumn(diffVersion, "diff")}

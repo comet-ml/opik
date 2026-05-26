@@ -10,10 +10,9 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  GitCommitHorizontal,
+  GitCommitVertical,
   Save,
 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/ui/button";
 import {
@@ -28,6 +27,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
+import SaveVersionDialog from "@/v2/pages-shared/llm/SaveVersionDialog/SaveVersionDialog";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import {
@@ -45,7 +45,7 @@ import {
 import { chatTemplatesEqual, serializeChatTemplate } from "@/lib/chatTemplate";
 import { pickHighestStage } from "@/utils/version-stages";
 import { formatDate, getTimeFromNow } from "@/lib/date";
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +71,6 @@ const AgentRunnerPromptCard = forwardRef<
   AgentRunnerPromptCardHandle,
   AgentRunnerPromptCardProps
 >(({ prompt }, ref) => {
-  const workspaceName = useAppStore((s) => s.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
   const {
@@ -82,6 +81,7 @@ const AgentRunnerPromptCard = forwardRef<
   const [pickedVersionId, setPickedVersionId] = useState<string | null>(null);
   const [draftTemplate, setDraftTemplate] = useState<string>("");
   const [draftMessages, setDraftMessages] = useState<LLMMessage[]>([]);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
 
   const isChatPrompt =
     prompt.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
@@ -156,41 +156,46 @@ const AgentRunnerPromptCard = forwardRef<
   const { mutateAsync: createVersionAsync, isPending: isSaving } =
     useCreatePromptVersionMutation();
 
-  const handleSave = useCallback(async () => {
-    if (!hasUnsavedChanges || !canCreatePrompts) return;
-    const template = isChatPrompt
-      ? serializeChatTemplate(draftMessages)
-      : draftTemplate;
-    try {
-      await createVersionAsync({
-        name: prompt.name,
-        template,
-        metadata: selectedVersion?.version.metadata,
-        templateStructure: prompt.template_structure,
-        type: selectedVersion?.version.type,
-        projectId: activeProjectId ?? undefined,
-        onSuccess: (v) => setPickedVersionId(v.id),
-      });
-      toast({
-        description: `Saved new version of ${prompt.name}`,
-      });
-    } catch {
-      // toast handled in mutation
-    }
-  }, [
-    hasUnsavedChanges,
-    canCreatePrompts,
-    createVersionAsync,
-    prompt.name,
-    prompt.template_structure,
-    isChatPrompt,
-    draftMessages,
-    draftTemplate,
-    selectedVersion?.version.type,
-    selectedVersion?.version.metadata,
-    activeProjectId,
-    toast,
-  ]);
+  const handleSave = useCallback(
+    async (changeDescription: string) => {
+      if (!hasUnsavedChanges || !canCreatePrompts) return;
+      const template = isChatPrompt
+        ? serializeChatTemplate(draftMessages)
+        : draftTemplate;
+      try {
+        await createVersionAsync({
+          name: prompt.name,
+          template,
+          changeDescription,
+          metadata: selectedVersion?.version.metadata,
+          templateStructure: prompt.template_structure,
+          type: selectedVersion?.version.type,
+          projectId: activeProjectId ?? undefined,
+          onSuccess: (v) => setPickedVersionId(v.id),
+        });
+        toast({
+          description: `Saved new version of ${prompt.name}`,
+        });
+        setIsSaveDialogOpen(false);
+      } catch {
+        // toast handled in mutation
+      }
+    },
+    [
+      hasUnsavedChanges,
+      canCreatePrompts,
+      createVersionAsync,
+      prompt.name,
+      prompt.template_structure,
+      isChatPrompt,
+      draftMessages,
+      draftTemplate,
+      selectedVersion?.version.type,
+      selectedVersion?.version.metadata,
+      activeProjectId,
+      toast,
+    ],
+  );
 
   useImperativeHandle(
     ref,
@@ -295,7 +300,12 @@ const AgentRunnerPromptCard = forwardRef<
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-soft-background">
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div
+        className={cn(
+          "flex items-center gap-1.5 bg-muted/50 px-2 py-1",
+          isOpen && "border-b border-border",
+        )}
+      >
         <button
           type="button"
           aria-expanded={isOpen}
@@ -303,26 +313,13 @@ const AgentRunnerPromptCard = forwardRef<
           className="flex shrink-0 items-center text-light-slate hover:text-foreground"
         >
           {isOpen ? (
-            <ChevronDown className="size-4" />
+            <ChevronDown className="size-3" />
           ) : (
-            <ChevronRight className="size-4" />
+            <ChevronRight className="size-3" />
           )}
         </button>
-        <Link
-          to="/$workspaceName/projects/$projectId/prompts/$promptId"
-          params={{
-            workspaceName,
-            projectId: activeProjectId!,
-            promptId: prompt.id,
-          }}
-          search={{ activeVersionId: selectedVersionId }}
-          className="comet-body-xs truncate text-muted-slate underline-offset-2 hover:underline"
-        >
+        <span className="comet-body-xs truncate text-muted-slate">
           {prompt.name}
-        </Link>
-
-        <span className="-mr-1 text-[10px] text-light-slate opacity-60">
-          |
         </span>
 
         <DropdownMenu>
@@ -330,13 +327,13 @@ const AgentRunnerPromptCard = forwardRef<
             <Button
               variant="ghost"
               size="2xs"
-              className="comet-body-xs gap-1 px-1 text-light-slate"
+              className="comet-body-xs gap-1 px-1 text-muted-slate"
               disabled={isVersionsLoading || versions.length === 0}
             >
               {selectedStage ? (
                 <StageTag value={selectedStage} size="xs" />
               ) : (
-                <GitCommitHorizontal className="size-3 text-light-slate" />
+                <GitCommitVertical className="size-3 text-muted-slate" />
               )}
               {selectedVersion?.label ?? "v?"}
               <ChevronDown className="size-3" />
@@ -354,7 +351,7 @@ const AgentRunnerPromptCard = forwardRef<
                   onClick={() => setPickedVersionId(version.id)}
                   className="flex items-center gap-2"
                 >
-                  <span className="comet-body-s-accented">{label}</span>
+                  <span className="comet-body-s">{label}</span>
                   {stage && <StageTag value={stage} size="xs" />}
                   <TooltipWrapper
                     content={`${formatDate(version.created_at, {
@@ -374,7 +371,7 @@ const AgentRunnerPromptCard = forwardRef<
         </DropdownMenu>
 
         {hasUnsavedChanges && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
             <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
               <span className="size-1.5 rounded-full bg-destructive" />
               Unsaved changes
@@ -385,7 +382,7 @@ const AgentRunnerPromptCard = forwardRef<
                   variant="minimal"
                   size="icon-2xs"
                   disabled={isSaving}
-                  onClick={handleSave}
+                  onClick={() => setIsSaveDialogOpen(true)}
                 >
                   <Save />
                 </Button>
@@ -395,7 +392,15 @@ const AgentRunnerPromptCard = forwardRef<
         )}
       </div>
 
-      <div className={cn("px-3 pb-3", !isOpen && "hidden")}>{renderBody()}</div>
+      <div className={cn("p-3", !isOpen && "hidden")}>{renderBody()}</div>
+
+      <SaveVersionDialog
+        open={isSaveDialogOpen}
+        setOpen={setIsSaveDialogOpen}
+        promptName={prompt.name}
+        isSaving={isSaving}
+        onSave={handleSave}
+      />
     </div>
   );
 });

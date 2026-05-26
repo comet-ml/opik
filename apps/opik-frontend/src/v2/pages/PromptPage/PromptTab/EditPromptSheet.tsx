@@ -8,9 +8,10 @@ import React, {
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
-import { Plus } from "lucide-react";
-
+import { LucideIcon, Sparkles } from "lucide-react";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { Separator } from "@/ui/separator";
+import { AutoGrowTextarea } from "@/ui/auto-grow-textarea";
 import { Label } from "@/ui/label";
 import { Button } from "@/ui/button";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
@@ -31,6 +32,7 @@ import {
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 import {
+  chatTemplatesEqual,
   normalizeChatTemplate,
   serializeChatTemplate,
 } from "@/lib/chatTemplate";
@@ -50,10 +52,14 @@ type EditPromptSheetProps = {
   onSetActiveVersionId: (versionId: string) => void;
 };
 
-type ChatViewMode = "messages" | "json";
+type ChatViewMode = "pretty" | "json";
 
-const CHAT_VIEW_OPTIONS: Array<{ value: ChatViewMode; label: string }> = [
-  { value: "messages", label: "Messages" },
+const CHAT_VIEW_OPTIONS: Array<{
+  value: ChatViewMode;
+  label: string;
+  icon?: LucideIcon;
+}> = [
+  { value: "pretty", label: "Pretty", icon: Sparkles },
   { value: "json", label: "JSON" },
 ];
 
@@ -96,7 +102,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
   }, [isChatPrompt, promptTemplate]);
 
   const [messages, setMessages] = useState<LLMMessage[]>(initialMessages);
-  const [chatViewMode, setChatViewMode] = useState<ChatViewMode>("messages");
+  const [chatViewMode, setChatViewMode] = useState<ChatViewMode>("pretty");
   const [rawJsonValue, setRawJsonValue] = useState(() =>
     isChatPrompt ? normalizeChatTemplate(promptTemplate) : "",
   );
@@ -122,7 +128,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
       isChatPrompt ? normalizeChatTemplate(props.promptTemplate) : "",
     );
     setIsRawJsonValid(true);
-    setChatViewMode("messages");
+    setChatViewMode("pretty");
   }, [open, isChatPrompt]);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
@@ -158,15 +164,14 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
   );
 
   const templateHasChanges = isChatPrompt
-    ? serializeChatTemplate(messages) !== promptTemplate
+    ? !chatTemplatesEqual(serializeChatTemplate(messages), promptTemplate)
     : template !== promptTemplate;
   const metadataHasChanges = metadata !== metadataString;
   const isValid = isChatPrompt
     ? messages.length > 0 &&
-      (chatViewMode === "messages" || isRawJsonValid) &&
+      (chatViewMode === "pretty" || isRawJsonValid) &&
       (templateHasChanges || metadataHasChanges)
-    : (template?.length ?? 0) > 0 &&
-      (templateHasChanges || metadataHasChanges);
+    : (template?.length ?? 0) > 0 && (templateHasChanges || metadataHasChanges);
 
   const handleClickEditPrompt = useCallback(() => {
     if (!isValid || isSaving) return;
@@ -242,6 +247,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
                     options={CHAT_VIEW_OPTIONS}
                     onChange={handleSwitchChatView}
                   />
+                  <Separator orientation="vertical" className="-ml-2 h-3" />
                   <CodeBlockCopy
                     text={
                       chatViewMode === "json"
@@ -261,26 +267,13 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
                   bare
                 />
               ) : (
-                <>
-                  <LLMPromptMessages
-                    messages={messages}
-                    onChange={setMessages}
-                    onAddMessage={handleAddMessage}
-                    hidePromptActions
-                    disableMedia
-                    hideAddButton
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 w-fit"
-                    onClick={handleAddMessage}
-                    type="button"
-                  >
-                    <Plus className="mr-2 size-4" />
-                    Message
-                  </Button>
-                </>
+                <LLMPromptMessages
+                  messages={messages}
+                  onChange={setMessages}
+                  onAddMessage={handleAddMessage}
+                  hidePromptActions
+                  disableMedia
+                />
               )}
             </FormFieldCard>
           ) : (
@@ -327,14 +320,14 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
 
           <div className="space-y-1.5">
             <Label htmlFor="promptVersionNotes">Version notes</Label>
-            <div className="rounded-md border bg-background">
-              <AutoResizeTextarea
-                value={changeDescription}
-                onChange={setChangeDescription}
-                placeholder="Describe what changed in this version"
-                className="comet-body-s min-h-8 px-3 py-1.5"
-              />
-            </div>
+            <AutoGrowTextarea
+              id="promptVersionNotes"
+              dimension="sm"
+              className="comet-body-s"
+              value={changeDescription}
+              onChange={setChangeDescription}
+              placeholder="Describe what changed in this version"
+            />
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 border-t px-6 py-3">

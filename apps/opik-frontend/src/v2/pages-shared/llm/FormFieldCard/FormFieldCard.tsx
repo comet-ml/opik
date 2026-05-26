@@ -29,7 +29,7 @@ const FormFieldCard: React.FC<FormFieldCardProps> = ({
     )}
   >
     <div className="flex h-8 items-center gap-2 border-b border-border px-2">
-      <span className="comet-body-xs-accented flex-1 truncate text-muted-slate">
+      <span className="comet-body-xs flex-1 truncate text-muted-slate">
         {title}
       </span>
       {actions && (

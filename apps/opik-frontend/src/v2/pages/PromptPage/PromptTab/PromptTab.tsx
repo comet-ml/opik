@@ -1,25 +1,25 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  Blocks,
   ChevronDown,
   Clock,
-  Copy,
+  ExternalLink,
   FilePen,
+  LucideIcon,
   Pencil,
   Play,
   Sparkles,
   Undo2,
   User,
-  Wand2,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
-import copy from "clipboard-copy";
-
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import {
@@ -27,15 +27,18 @@ import {
   PromptWithLatestVersion,
   PROMPT_TEMPLATE_STRUCTURE,
 } from "@/types/prompts";
-import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
+import {
+  FormFieldCard,
+  FormFieldModeSelect,
+} from "@/v2/pages-shared/llm/FormFieldCard";
+import CodeBlockCopy from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlockCopy";
 import { Skeleton } from "@/ui/skeleton";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/shared/CodeHighlighter/CodeHighlighter";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import UseThisPromptDialog from "@/v2/pages/PromptPage/PromptTab/UseThisPromptDialog";
 import EditPromptSheet from "@/v2/pages/PromptPage/PromptTab/EditPromptSheet";
 import VersionHistoryTimeline, {
   VersionHistoryItem,
@@ -53,15 +56,22 @@ import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { getTimeFromNow } from "@/lib/date";
 import { VersionStage, isProdTag } from "@/utils/version-stages";
-import PromptContentBlock from "./PromptContentBlock";
 import RestoreVersionDialog from "./RestoreVersionDialog";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
-import { useToast } from "@/ui/use-toast";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { cn } from "@/lib/utils";
+import { buildDocsUrl, cn } from "@/lib/utils";
 
-type ViewMode = "pretty" | "raw";
+type ViewMode = "pretty" | "json";
+
+const VIEW_MODE_OPTIONS: Array<{
+  value: ViewMode;
+  label: string;
+  icon?: LucideIcon;
+}> = [
+  { value: "pretty", label: "Pretty", icon: Sparkles },
+  { value: "json", label: "JSON" },
+];
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -78,9 +88,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const {
     permissions: { canUsePlayground },
   } = usePermissions();
-  const { toast } = useToast();
 
-  const [openUseThisPrompt, setOpenUseThisPrompt] = useState(false);
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
   const [openCompare, setOpenCompare] = useState(false);
   const [openLoadConfirm, setOpenLoadConfirm] = useState(false);
@@ -171,18 +179,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     [activeVersion?.metadata],
   );
 
-  const handleCopyPrompt = useCallback(async () => {
-    if (!template) return;
-    await copy(template);
-    toast({ description: "Prompt copied to clipboard" });
-  }, [template, toast]);
-
-  const handleCopyMetadata = useCallback(async () => {
-    if (!metadataJson) return;
-    await copy(metadataJson);
-    toast({ description: "Metadata copied to clipboard" });
-  }, [metadataJson, toast]);
-
   const fetchPromptVersion = useFetchPromptVersion();
 
   const handleLoadIntoPlayground = useCallback(async () => {
@@ -233,8 +229,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   if (isInitialLoading) {
     return (
-      <div className="flex flex-col gap-4 px-6 pt-2 xl:flex-row xl:gap-6">
-        <div className="min-w-0 flex-1">
+      <div className="grid grid-cols-1 gap-4 px-6 pt-2 xl:grid-cols-[7fr_3fr] xl:gap-6">
+        <div className="min-w-0">
           <div className="rounded-md border bg-background">
             <div className="flex items-center justify-between border-b p-4 py-3">
               <Skeleton className="h-5 w-16" />
@@ -251,7 +247,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </div>
           </div>
         </div>
-        <div className="hidden w-[340px] shrink-0 xl:block">
+        <div className="hidden min-w-0 xl:block">
           <p className="comet-body-s-accented ml-3 mt-1">Version history</p>
           <div className="space-y-3 p-4">
             {[0, 1, 2, 3, 4].map((i) => (
@@ -264,8 +260,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   }
 
   return (
-    <div className="flex flex-col gap-4 px-6 pt-2 xl:flex-row xl:gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
+    <div className="grid grid-cols-1 gap-4 px-6 pt-2 xl:grid-cols-[7fr_3fr] xl:gap-6">
+      <div className="flex min-w-0 flex-col gap-3">
         <div className="xl:hidden">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -318,19 +314,24 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         </div>
         <div className="rounded-md border bg-background">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 p-4 py-3">
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-1.5 pt-3">
             <div className="flex items-center gap-2">
               <span className="comet-body-accented text-foreground">
                 {activeVersionLabel || "v—"}
               </span>
               {activeIsProd && <StageTag value={VersionStage.PROD} size="sm" />}
               <EnvironmentBadge name={activeVersionEnvironment} size="sm" />
-              <Separator orientation="vertical" className="mx-1 h-4" />
-              <DiffVersionMenu
-                currentItemId={effectiveVersionId}
-                versions={historyItems}
-                onSelectVersion={handleSelectDiffVersion}
-              />
+              {historyItems.length > 1 && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <DiffVersionMenu
+                    currentItemId={effectiveVersionId}
+                    versions={historyItems}
+                    onSelectVersion={handleSelectDiffVersion}
+                    triggerLabel="Diff"
+                  />
+                </>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-1 md:ml-auto">
@@ -338,52 +339,44 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="px-0">
                     <Play className="mr-1.5 size-3.5" />
-                    Use prompt
-                    <ChevronDown className="ml-1 size-3.5" />
+                    Use
+                    <ChevronDown className="ml-1 size-3" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setOpenUseThisPrompt(true)}>
-                    {isLatest || !activeVersionLabel
-                      ? "Show code snippets"
-                      : `Show code snippets for ${activeVersionLabel}`}
-                  </DropdownMenuItem>
                   {canUsePlayground && (
                     <DropdownMenuItem
                       disabled={!prompt || isPendingProviderKeys}
                       onClick={handleOpenInPlaygroundClick}
                     >
-                      {isLatest || !activeVersionLabel
-                        ? "Open in playground"
-                        : `Open ${activeVersionLabel} in playground`}
+                      <Blocks className="mr-2 size-3.5 shrink-0 text-light-slate" />
+                      Load in Prompt playground
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      window.open(
+                        buildDocsUrl("/prompt_engineering/prompt_management"),
+                        "_blank",
+                        "noopener,noreferrer",
+                      )
+                    }
+                  >
+                    Reference prompt in code
+                    <ExternalLink className="ml-2 size-3.5 shrink-0" />
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Separator orientation="vertical" className="mx-1 h-4" />
-
-              {canUsePlayground && !isChatPrompt ? (
-                <ImproveInPlaygroundButton
-                  prompt={prompt}
-                  activeVersion={activeVersion}
-                />
-              ) : (
-                canUsePlayground && (
-                  <TooltipWrapper content="Improve flow is available for text prompts">
-                    <span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="px-0"
-                        disabled
-                      >
-                        <Wand2 className="mr-1.5 size-3.5" />
-                        Improve prompt
-                      </Button>
-                    </span>
-                  </TooltipWrapper>
-                )
+              {canUsePlayground && !isChatPrompt && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <ImproveInPlaygroundButton
+                    prompt={prompt}
+                    activeVersion={activeVersion}
+                  />
+                </>
               )}
 
               <Separator orientation="vertical" className="mx-1 h-4" />
@@ -413,14 +406,18 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </div>
 
           {/* Change description + meta */}
-          <div className="px-4 pb-4">
+          <div className="space-y-1 px-4 pb-3">
             {activeVersion?.change_description && (
-              <div className="comet-body-s flex items-center gap-2 text-muted-slate">
+              <div className="comet-body-s flex min-w-0 items-center gap-2 text-muted-slate">
                 <FilePen className="size-3.5 shrink-0 text-muted-slate" />
-                <span>{activeVersion.change_description}</span>
+                <TooltipWrapper content={activeVersion.change_description}>
+                  <span className="w-fit max-w-full truncate">
+                    {activeVersion.change_description}
+                  </span>
+                </TooltipWrapper>
               </div>
             )}
-            <div className="comet-body-s mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-slate">
+            <div className="comet-body-s flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-slate">
               {activeVersion?.created_at && (
                 <span className="flex items-center gap-1">
                   <Clock className="size-3" />
@@ -437,40 +434,22 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </div>
 
           {/* Prompt section */}
-          <div className="space-y-1.5 px-4 pb-4">
-            <Label>Prompt</Label>
-            <PromptContentBlock
-              toolbar={
+          <div className="px-4 pb-4">
+            <FormFieldCard
+              title="Prompt"
+              actions={
                 <>
-                  <Button
-                    variant="ghost"
-                    size="2xs"
-                    onClick={() =>
-                      setViewMode((m) => (m === "pretty" ? "raw" : "pretty"))
-                    }
-                  >
-                    {viewMode === "pretty" ? (
-                      <>
-                        Pretty <Sparkles className="ml-1 size-3" />
-                      </>
-                    ) : (
-                      <>Raw</>
-                    )}
-                    <ChevronDown className="ml-1 size-3" />
-                  </Button>
-                  <TooltipWrapper content="Copy prompt">
-                    <Button
-                      variant="minimal"
-                      size="icon-2xs"
-                      onClick={handleCopyPrompt}
-                    >
-                      <Copy />
-                    </Button>
-                  </TooltipWrapper>
+                  <FormFieldModeSelect
+                    value={viewMode}
+                    options={VIEW_MODE_OPTIONS}
+                    onChange={setViewMode}
+                  />
+                  <Separator orientation="vertical" className="-ml-2 h-3" />
+                  <CodeBlockCopy text={template} />
                 </>
               }
               bodyClassName={cn(
-                viewMode === "raw" && isChatPrompt && "px-0 pb-0",
+                viewMode === "json" && isChatPrompt && "px-0 pt-2",
               )}
             >
               {viewMode === "pretty" ? (
@@ -489,45 +468,30 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   {template}
                 </pre>
               )}
-            </PromptContentBlock>
+            </FormFieldCard>
           </div>
 
           {/* Metadata section */}
           {metadataJson && (
-            <div className="space-y-1.5 px-4 pb-4">
-              <Label>Metadata</Label>
-              <PromptContentBlock
-                toolbar={
-                  <>
-                    <span className="comet-body-xs ml-3 uppercase tracking-wide text-foreground">
-                      JSON
-                    </span>
-                    <TooltipWrapper content="Copy metadata">
-                      <Button
-                        variant="minimal"
-                        size="icon-2xs"
-                        onClick={handleCopyMetadata}
-                      >
-                        <Copy />
-                      </Button>
-                    </TooltipWrapper>
-                  </>
-                }
-                bodyClassName="px-0 pb-0"
+            <div className="px-4 pb-4">
+              <FormFieldCard
+                title="Metadata"
+                actions={<CodeBlockCopy text={metadataJson} />}
+                bodyClassName="px-0 pt-2"
               >
                 <CodeHighlighter
                   data={metadataJson}
                   language={SUPPORTED_LANGUAGE.json}
                   hideCopy
                 />
-              </PromptContentBlock>
+              </FormFieldCard>
             </div>
           )}
         </div>
       </div>
 
       {/* Right sidebar (visible only on xl+ screens) */}
-      <div className="hidden w-[340px] shrink-0 xl:block">
+      <div className="hidden min-w-0 xl:block">
         <p className="comet-body-s-accented ml-3 mt-1">Version history</p>
         <VersionHistoryTimeline
           items={historyItems}
@@ -535,15 +499,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           onSelect={(item) => setActiveVersionId(item.id)}
         />
       </div>
-
-      <UseThisPromptDialog
-        open={openUseThisPrompt}
-        setOpen={setOpenUseThisPrompt}
-        promptName={prompt.name}
-        templateStructure={prompt.template_structure}
-        versionLabel={isLatest ? undefined : activeVersionLabel || undefined}
-        versionCommit={isLatest ? undefined : activeVersion?.commit}
-      />
 
       <EditPromptSheet
         open={openEditPrompt}

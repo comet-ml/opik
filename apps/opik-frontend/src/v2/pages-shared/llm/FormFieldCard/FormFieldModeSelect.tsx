@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +12,7 @@ import {
 type Option<T extends string> = {
   value: T;
   label: string;
+  icon?: LucideIcon;
 };
 
 type FormFieldModeSelectProps<T extends string> = {
@@ -37,11 +38,12 @@ const FormFieldModeSelect = <T extends string>({
       <DropdownMenuTrigger
         className={cn(
           "group flex h-6 items-center gap-1 rounded px-2 py-0.5",
-          "comet-body-xs text-muted-slate transition-colors hover:bg-muted/50",
+          "comet-body-xs text-muted-slate transition-colors hover:text-foreground",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
         )}
       >
         <span className="truncate">{selected?.label ?? value}</span>
+        {selected?.icon && <selected.icon className="size-3 shrink-0" />}
         <ChevronDown className="size-3 shrink-0 text-light-slate transition-transform duration-200 group-data-[state=open]:rotate-180" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -53,6 +55,7 @@ const FormFieldModeSelect = <T extends string>({
             onClick={() => onChange(opt.value)}
           >
             {opt.label}
+            {opt.icon && <opt.icon className="ml-1 size-3" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

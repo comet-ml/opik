@@ -53,7 +53,7 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-3 border-b px-4">
-        <span className="comet-body-s text-foreground">Result</span>
+        <span className="comet-body-xs-accented text-foreground">Result</span>
 
         {isCompleted && (
           <TraceStatsDisplay

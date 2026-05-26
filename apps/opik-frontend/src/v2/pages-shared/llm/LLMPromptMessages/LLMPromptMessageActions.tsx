@@ -284,7 +284,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
               <TooltipWrapper content={promptButtonTooltip}>
                 <Button
                   variant="minimal"
-                  size="icon-sm"
+                  size="icon-2xs"
                   onClick={handleOpenWizard}
                   type="button"
                   disabled={isPromptButtonDisabled}
@@ -298,7 +298,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             <TooltipWrapper content={promptButtonTooltip}>
               <Button
                 variant="minimal"
-                size="icon-sm"
+                size="icon-2xs"
                 onClick={handleOpenWizard}
                 type="button"
                 disabled={isPromptButtonDisabled}
@@ -338,7 +338,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             <TooltipWrapper content={saveTooltip}>
               <Button
                 variant="minimal"
-                size="icon-sm"
+                size="icon-2xs"
                 onClick={() => {
                   resetKeyRef.current = resetKeyRef.current + 1;
                   setOpen("save");

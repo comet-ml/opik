@@ -56,7 +56,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
     >
       <ResizablePanel id="agent-runner-input" defaultSize={50} minSize={25}>
         <div className="flex h-full min-h-0 flex-col">
-          <div className="comet-body-xs flex h-10 shrink-0 items-center border-b bg-soft-background px-4 text-foreground">
+          <div className="comet-body-xs-accented flex h-10 shrink-0 items-center border-b bg-soft-background px-4 text-foreground">
             Test input
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -79,7 +79,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
 
       <ResizablePanel id="agent-runner-prompts" defaultSize={50} minSize={25}>
         <div className="flex h-full min-h-0 flex-col">
-          <div className="comet-body-xs flex h-10 shrink-0 items-center border-b bg-soft-background px-4 text-foreground">
+          <div className="comet-body-xs-accented flex h-10 shrink-0 items-center border-b bg-soft-background px-4 text-foreground">
             Prompts
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">

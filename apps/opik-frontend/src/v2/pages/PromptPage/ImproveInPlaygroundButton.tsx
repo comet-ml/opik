@@ -80,7 +80,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
           onClick={() => setOpen(true)}
         >
           <Wand2 className="mr-1.5 size-3.5" />
-          Improve prompt
+          Improve
         </Button>
       </TooltipWrapper>
       <PromptImprovementDialog

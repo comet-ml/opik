@@ -51,7 +51,7 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
   }
 
   return (
-    <ul className="p-4">
+    <ul className="px-4 pb-4 pt-1">
       {items.map((item, index) => {
         const isSelected = item.id === selectedId;
         const isLast = index === items.length - 1;
