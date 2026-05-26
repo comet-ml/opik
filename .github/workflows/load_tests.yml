@@ -18,14 +18,6 @@ env:
   OPIK_SENTRY_ENABLE: False
   OPIK_URL_OVERRIDE: http://localhost:8080
   OPIK_CONSOLE_LOGGING_LEVEL: WARNING
-  # Slow the SDK's connection-monitor daemon from its 10s default to 60s.
-  # The monitor pings via httpx, which emits an INFO log per request; under
-  # a 60-min CI run with -n 2 xdist workers this previously produced ~70k
-  # log lines that pytest's stream handler tried to write to (sometimes
-  # closed) captured stdout. ``log_cli_level = WARNING`` in ``pytest.ini``
-  # already filters those out at the handler level, so this is belt-and-
-  # suspenders: keeps liveness probing alive but at 1/6 the volume.
-  OPIK_CONNECTION_MONITOR_PING_INTERVAL: 60
 
 jobs:
   run-load-tests:
