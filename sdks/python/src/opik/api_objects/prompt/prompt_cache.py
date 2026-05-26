@@ -221,7 +221,14 @@ def get_or_fetch(
     refresh_callback = (
         fetch_fn if (ttl_seconds is not None and mask_id is None) else None
     )
-    key: _CacheKey = (name, identifier, project_name, template_structure, environment, mask_id)
+    key: _CacheKey = (
+        name,
+        identifier,
+        project_name,
+        template_structure,
+        environment,
+        mask_id,
+    )
     result = _cache.get_or_fetch(
         key=key,
         fetch_fn=fetch_fn,

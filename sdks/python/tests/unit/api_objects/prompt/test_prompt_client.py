@@ -34,6 +34,7 @@ def _make_mock_version(
     metadata: Optional[dict] = None,
     version_number: Optional[str] = "v1",
     tags: Optional[list] = None,
+    environments: Optional[list] = None,
 ) -> prompt_version_detail.PromptVersionDetail:
     """Helper to create a mock PromptVersionDetail."""
     return prompt_version_detail.PromptVersionDetail(
@@ -45,6 +46,7 @@ def _make_mock_version(
         commit="abc123",
         version_number=version_number,
         tags=tags,
+        environments=environments,
         template_structure="text",
     )
 
@@ -496,12 +498,12 @@ class TestPromptEnvironment:
             prompt="hello",
             metadata=None,
             type=prompt_types.PromptType.MUSTACHE,
-            environment="staging",
+            environments=["staging"],
         )
 
         mock_rest_client.prompts.create_prompt_version.assert_called_once()
         call_kwargs = mock_rest_client.prompts.create_prompt_version.call_args[1]
-        assert call_kwargs["version"].environment == "staging"
+        assert call_kwargs["version"].environments == ["staging"]
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
 
     def test_create_new_prompt_with_container_params__calls_set_environment_after_create(
@@ -518,16 +520,44 @@ class TestPromptEnvironment:
             metadata=None,
             type=prompt_types.PromptType.MUSTACHE,
             tags=["t1"],
-            environment="staging",
+            environments=["staging"],
         )
 
         mock_rest_client.prompts.create_prompt.assert_called_once()
         create_kwargs = mock_rest_client.prompts.create_prompt.call_args[1]
         assert "environment" not in create_kwargs
+        assert "environments" not in create_kwargs
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
             environment="staging",
         )
+
+    def test_create_new_prompt__multiple_environments__calls_set_for_each(
+        self, client, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
+            _make_404_error(),
+            _make_mock_version(),
+        ]
+
+        client.create_prompt(
+            name="env-prompt",
+            prompt="hello",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            tags=["t1"],
+            environments=["staging", "production"],
+        )
+
+        mock_rest_client.prompts.create_prompt.assert_called_once()
+        assert mock_rest_client.prompts.set_prompt_version_environment.call_count == 2
+        call_args_list = (
+            mock_rest_client.prompts.set_prompt_version_environment.call_args_list
+        )
+        forwarded_envs = [call.kwargs["environment"] for call in call_args_list]
+        assert forwarded_envs == ["staging", "production"]
+        for call in call_args_list:
+            assert call.kwargs["version_id"] == "version-id"
 
     def test_update_existing_prompt__environment_differs__set_environment_called(
         self, client, mock_rest_client
@@ -541,7 +571,7 @@ class TestPromptEnvironment:
             metadata=existing_version.metadata,
             type=existing_version.type,
             template_structure="text",
-            environment=None,
+            environments=None,
         )
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             existing_version_with_env_none
@@ -552,7 +582,7 @@ class TestPromptEnvironment:
             prompt="same template",
             metadata=None,
             type=prompt_types.PromptType.MUSTACHE,
-            environment="production",
+            environments=["production"],
         )
 
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
@@ -573,7 +603,7 @@ class TestPromptEnvironment:
             metadata=None,
             commit="abc123",
             template_structure="text",
-            environment="production",
+            environments=["production"],
         )
         mock_rest_client.prompts.retrieve_prompt_version.return_value = existing_version
 
@@ -582,10 +612,40 @@ class TestPromptEnvironment:
             prompt="same template",
             metadata=None,
             type=prompt_types.PromptType.MUSTACHE,
-            environment="production",
+            environments=["production"],
         )
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
+
+    def test_update_existing_prompt__environments_partially_differ__calls_set_only_for_new_envs(
+        self, client, mock_rest_client
+    ):
+        existing_version = prompt_version_detail.PromptVersionDetail(
+            id="version-id",
+            prompt_id="prompt-id",
+            template="same template",
+            type="mustache",
+            metadata=None,
+            commit="abc123",
+            template_structure="text",
+            environments=["staging"],
+        )
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = existing_version
+
+        client.create_prompt(
+            name="env-prompt",
+            prompt="same template",
+            metadata=None,
+            type=prompt_types.PromptType.MUSTACHE,
+            environments=["staging", "production"],
+        )
+
+        mock_rest_client.prompts.create_prompt_version.assert_not_called()
+        mock_rest_client.prompts.create_prompt.assert_not_called()
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environment="production",
+        )
 
     def test_get_prompt__forwards_environment_to_retrieve(
         self, client, mock_rest_client
@@ -624,7 +684,7 @@ class TestPromptEnvironment:
             metadata=None,
             commit="aaa",
             template_structure="text",
-            environment="staging",
+            environments=["staging"],
         )
         production_version = prompt_version_detail.PromptVersionDetail(
             id="prod-id",
@@ -634,7 +694,7 @@ class TestPromptEnvironment:
             metadata=None,
             commit="bbb",
             template_structure="text",
-            environment="production",
+            environments=["production"],
         )
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             staging_version,

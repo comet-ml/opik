@@ -72,11 +72,11 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     const prompt = await client.createPrompt({
       name: promptName,
       prompt: "Hello {{name}}",
-      environment: stagingName,
+      environments: [stagingName],
     });
     createdPromptIds.push(prompt.id!);
 
-    expect(prompt.environment).toBe(stagingName);
+    expect(prompt.environments).toContain(stagingName);
 
     const retrieved = await client.getPrompt({
       name: promptName,
@@ -84,7 +84,68 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     });
     expect(retrieved).not.toBeNull();
     expect(retrieved?.commit).toBe(prompt.commit);
-    expect(retrieved?.environment).toBe(stagingName);
+    expect(retrieved?.environments).toContain(stagingName);
+  }, 30000);
+
+  it("creates a prompt with two environments", async () => {
+    const ts = Date.now();
+    const stagingName = `staging-${ts}`;
+    const productionName = `production-${ts}`;
+    const promptName = `env-multi-${ts}`;
+    await ensureEnvironment(stagingName);
+    await ensureEnvironment(productionName);
+
+    const prompt = await client.createPrompt({
+      name: promptName,
+      prompt: "Hello {{name}}",
+      environments: [stagingName, productionName],
+    });
+    createdPromptIds.push(prompt.id!);
+
+    expect(prompt.environments).toContain(stagingName);
+    expect(prompt.environments).toContain(productionName);
+
+    const fromStaging = await client.getPrompt({
+      name: promptName,
+      environment: stagingName,
+    });
+    expect(fromStaging?.commit).toBe(prompt.commit);
+
+    const fromProd = await client.getPrompt({
+      name: promptName,
+      environment: productionName,
+    });
+    expect(fromProd?.commit).toBe(prompt.commit);
+  }, 30000);
+
+  it("setPromptEnvironment accumulates environments on the version", async () => {
+    const ts = Date.now();
+    const envA = `staging-${ts}`;
+    const envB = `production-${ts}`;
+    const promptName = `env-accumulate-${ts}`;
+    await ensureEnvironment(envA);
+    await ensureEnvironment(envB);
+
+    const prompt = await client.createPrompt({
+      name: promptName,
+      prompt: "Hello {{name}}",
+      environments: [envA],
+    });
+    createdPromptIds.push(prompt.id!);
+    expect(prompt.environments).toContain(envA);
+
+    await client.setPromptEnvironment({
+      name: prompt.name,
+      environment: envB,
+    });
+    getGlobalCache().clear();
+
+    const retrieved = await client.getPrompt({
+      name: promptName,
+    });
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.environments).toContain(envA);
+    expect(retrieved?.environments).toContain(envB);
   }, 30000);
 
   it("moves environment ownership via setPromptEnvironment", async () => {
@@ -98,10 +159,10 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     const prompt = await client.createPrompt({
       name: promptName,
       prompt: "v1 {{x}}",
-      environment: stagingName,
+      environments: [stagingName],
     });
     createdPromptIds.push(prompt.id!);
-    expect(prompt.environment).toBe(stagingName);
+    expect(prompt.environments).toContain(stagingName);
 
     await client.setPromptEnvironment({
       name: prompt.name,
@@ -115,7 +176,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     });
     expect(retrieved).not.toBeNull();
     expect(retrieved?.commit).toBe(prompt.commit);
-    expect(retrieved?.environment).toBe(productionName);
+    expect(retrieved?.environments).toContain(productionName);
   }, 30000);
 
   it("targets a specific version when commit is provided", async () => {
@@ -151,7 +212,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     });
     expect(retrieved).not.toBeNull();
     expect(retrieved?.commit).toBe(v1Commit);
-    expect(retrieved?.environment).toBe(envName);
+    expect(retrieved?.environments).toContain(envName);
   }, 30000);
 
   it("clears environment ownership via setPromptEnvironment with null", async () => {
@@ -163,10 +224,10 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     const prompt = await client.createPrompt({
       name: promptName,
       prompt: "v1 {{x}}",
-      environment: stagingName,
+      environments: [stagingName],
     });
     createdPromptIds.push(prompt.id!);
-    expect(prompt.environment).toBe(stagingName);
+    expect(prompt.environments).toContain(stagingName);
 
     await client.setPromptEnvironment({
       name: prompt.name,
@@ -178,7 +239,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
       name: promptName,
     });
     expect(retrieved).not.toBeNull();
-    expect(retrieved?.environment).toBeUndefined();
+    expect(retrieved?.environments ?? []).toHaveLength(0);
   }, 30000);
 
   it("sets environment by prompt name without a prompt instance", async () => {
@@ -205,7 +266,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     });
     expect(retrieved).not.toBeNull();
     expect(retrieved?.commit).toBe(created.commit);
-    expect(retrieved?.environment).toBe(productionName);
+    expect(retrieved?.environments).toContain(productionName);
   }, 30000);
 
   it("retrieves the correct version by environment", async () => {
@@ -219,14 +280,14 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     const v1 = await client.createPrompt({
       name: promptName,
       prompt: "v1 {{x}}",
-      environment: productionName,
+      environments: [productionName],
     });
     createdPromptIds.push(v1.id!);
 
     const v2 = await client.createPrompt({
       name: promptName,
       prompt: "v2 {{x}}",
-      environment: stagingName,
+      environments: [stagingName],
     });
 
     const fromProd = await client.getPrompt({
@@ -251,7 +312,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     const prompt = await client.createPrompt({
       name: promptName,
       prompt: "v1",
-      environment: stagingName,
+      environments: [stagingName],
     });
     createdPromptIds.push(prompt.id!);
 

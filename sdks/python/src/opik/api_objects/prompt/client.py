@@ -18,14 +18,14 @@ LOGGER = logging.getLogger(__name__)
 _PromptT = TypeVar("_PromptT", bound=BasePrompt)
 
 
-def _with_environment(
+def _with_environments(
     version: prompt_version_detail.PromptVersionDetail,
-    environment: Optional[str],
+    environments: Optional[List[str]],
 ) -> prompt_version_detail.PromptVersionDetail:
-    """Return a copy of ``version`` with its ``environment`` replaced.
+    """Return a copy of ``version`` with its ``environments`` replaced.
 
     ``PromptVersionDetail`` is a frozen pydantic model, so a new instance must
-    be constructed to reflect the updated environment value locally after a
+    be constructed to reflect the updated environments list locally after a
     successful backend write.
     """
     return prompt_version_detail.PromptVersionDetail(
@@ -35,7 +35,7 @@ def _with_environment(
         template=version.template,
         metadata=version.metadata,
         type=version.type,
-        environment=environment,
+        environments=environments,
         change_description=version.change_description,
         tags=version.tags,
         variables=version.variables,
@@ -71,7 +71,7 @@ class PromptClient:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environment: Optional[str] = None,
+        environments: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -87,8 +87,9 @@ class PromptClient:
         - change_description: Optional description of changes in this version.
         - tags: Optional list of tags to associate with the prompt.
         - project_name: Optional project name to associate with the prompt. If not provided, the default project will be used.
-        - environment: Optional environment name to own this prompt version. The environment must already be
-          registered in the workspace; otherwise the backend returns 404.
+        - environments: Optional list of environment names that should own this prompt version. Each environment
+          must already be registered in the workspace; otherwise the backend returns 404. New environments are
+          assigned via the singular set-environment endpoint, one call per entry.
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -145,14 +146,21 @@ class PromptClient:
                 description=description,
                 change_description=change_description,
                 tags=tags,
-                environment=environment,
+                environments=environments,
             )
-        elif environment is not None and prompt_version.environment != environment:
-            self._rest_client.prompts.set_prompt_version_environment(
-                version_id=prompt_version.id,
-                environment=environment,
-            )
-            prompt_version = _with_environment(prompt_version, environment)
+        elif environments:
+            new_envs = [
+                env
+                for env in environments
+                if env not in (prompt_version.environments or [])
+            ]
+            if new_envs:
+                for env in new_envs:
+                    self._rest_client.prompts.set_prompt_version_environment(
+                        version_id=prompt_version.id,
+                        environment=env,
+                    )
+                prompt_version = _with_environments(prompt_version, environments)
 
         return prompt_version
 
@@ -169,7 +177,7 @@ class PromptClient:
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
-        environment: Optional[str] = None,
+        environments: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         # If it's a new prompt and container-level params are provided, use create_prompt endpoint
         # which creates both the container and first version in one call
@@ -200,15 +208,16 @@ class PromptClient:
                 new_prompt_version_detail = new_prompt_version_detail.model_copy(
                     update={"tags": tags}
                 )
-            # The create_prompt container endpoint does not accept environment,
-            # so apply it via the dedicated environment endpoint after creation.
-            if environment is not None:
-                self._rest_client.prompts.set_prompt_version_environment(
-                    version_id=new_prompt_version_detail.id,
-                    environment=environment,
-                )
-                new_prompt_version_detail = _with_environment(
-                    new_prompt_version_detail, environment
+            # The create_prompt container endpoint does not accept environments,
+            # so apply each one via the dedicated environment endpoint after creation.
+            if environments:
+                for env in environments:
+                    self._rest_client.prompts.set_prompt_version_environment(
+                        version_id=new_prompt_version_detail.id,
+                        environment=env,
+                    )
+                new_prompt_version_detail = _with_environments(
+                    new_prompt_version_detail, environments
                 )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version
@@ -216,7 +225,7 @@ class PromptClient:
                 template=prompt,
                 metadata=metadata,
                 type=type,
-                environment=environment,
+                environments=environments,
             )
             new_prompt_version_detail = self._rest_client.prompts.create_prompt_version(
                 name=name,
@@ -498,7 +507,7 @@ class PromptClient:
                         template=version.template,
                         type=version.type,
                         version_type=version.version_type,
-                        environment=version.environment,
+                        environments=version.environments,
                         metadata=version.metadata,
                         commit=version.commit,
                         version_number=version.version_number,

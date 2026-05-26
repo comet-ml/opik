@@ -2169,7 +2169,7 @@ class Opik:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environment: Optional[str] = None,
+        environments: Optional[List[str]] = None,
     ) -> prompt_module.Prompt:
         """
         Creates a new text prompt with the given name and template.
@@ -2185,8 +2185,8 @@ class Opik:
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name to associate with the prompt. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
-            environment: Optional environment name to own this prompt version. The environment must already
-                be registered in the workspace; otherwise the backend returns 404.
+            environments: Optional list of environment names that should own this prompt version. Each environment
+                must already be registered in the workspace; otherwise the backend returns 404.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -2207,7 +2207,7 @@ class Opik:
             change_description=change_description,
             tags=tags,
             project_name=project_name,
-            environment=environment,
+            environments=environments,
         )
         return prompt_module.Prompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
@@ -2224,7 +2224,7 @@ class Opik:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environment: Optional[str] = None,
+        environments: Optional[List[str]] = None,
     ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
@@ -2240,8 +2240,8 @@ class Opik:
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name for the prompt.
-            environment: Optional environment name to own this prompt version. The environment must already
-                be registered in the workspace; otherwise the backend returns 404.
+            environments: Optional list of environment names that should own this prompt version. Each environment
+                must already be registered in the workspace; otherwise the backend returns 404.
 
         Returns:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
@@ -2268,7 +2268,7 @@ class Opik:
             change_description=change_description,
             tags=tags,
             project_name=project_name,
-            environment=environment,
+            environments=environments,
         )
         return prompt_module.ChatPrompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name

@@ -94,8 +94,8 @@ class BasePrompt(ABC):
 
     @property
     @abstractmethod
-    def environment(self) -> Optional[str]:
-        """The environment that currently owns this prompt version, or ``None`` if unowned."""
+    def environments(self) -> Optional[List[str]]:
+        """The environments that currently own this prompt version, or ``None`` if unowned."""
         pass
 
     # Internal API fields for backend synchronization

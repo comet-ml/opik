@@ -1199,7 +1199,7 @@ export class OpikClient {
               template,
               metadata: options.metadata,
               type: normalizedType,
-              environment: options.environment,
+              environments: options.environments,
             },
             templateStructure,
             projectName,
@@ -1212,23 +1212,36 @@ export class OpikClient {
         versionResponse = latestVersion!;
       }
 
-      // If caller requested an environment that doesn't match the resolved
-      // version (e.g. idempotent path returning an existing version, or the
-      // backend ignored the field on creation), explicitly set ownership.
+      // If caller requested environments that the resolved version is not
+      // already a member of (e.g. idempotent path returning an existing
+      // version, or the backend ignored the field on creation), explicitly
+      // set ownership one env at a time (the PATCH endpoint stays singular).
       if (
-        options.environment !== undefined &&
-        versionResponse.environment !== options.environment &&
+        options.environments !== undefined &&
+        options.environments.length > 0 &&
         versionResponse.id
       ) {
-        await this.api.prompts.setPromptVersionEnvironment(
-          versionResponse.id,
-          { environment: options.environment },
-          this.api.requestOptions
-        );
-        versionResponse = {
-          ...versionResponse,
-          environment: options.environment,
-        };
+        const existing = new Set(versionResponse.environments ?? []);
+        const toAdd = options.environments.filter((env) => !existing.has(env));
+        if (toAdd.length > 0) {
+          for (const env of toAdd) {
+            await this.api.prompts.setPromptVersionEnvironment(
+              versionResponse.id,
+              { environment: env },
+              this.api.requestOptions
+            );
+          }
+          const merged = [...(versionResponse.environments ?? [])];
+          for (const env of toAdd) {
+            if (!merged.includes(env)) {
+              merged.push(env);
+            }
+          }
+          versionResponse = {
+            ...versionResponse,
+            environments: merged,
+          };
+        }
       }
 
       // Fetch full prompt data and create instance
@@ -1280,10 +1293,10 @@ export class OpikClient {
    * - Uses create_prompt_version endpoint (not create_prompt which is for containers)
    * - Synchronous: Returns immediately with the created/retrieved version
    *
-   * @param options - Prompt configuration. Supports an optional `environment`
-   *   that, if provided, assigns ownership of the resulting version to that
-   *   workspace environment (must already be registered; backend returns 404
-   *   otherwise).
+   * @param options - Prompt configuration. Supports an optional `environments`
+   *   list that, if provided, assigns ownership of the resulting version to
+   *   each workspace environment (each must already be registered; backend
+   *   returns 404 otherwise).
    * @returns Promise resolving to Prompt instance
    * @throws PromptValidationError if parameters invalid
    */
@@ -1312,7 +1325,7 @@ export class OpikClient {
             tags: options.tags,
             projectName: resolvedProjectName,
             synced: false,
-            environment: options.environment,
+            environments: options.environments,
           },
           this
         ),
@@ -1327,8 +1340,8 @@ export class OpikClient {
    * Idempotent: returns existing version if messages, metadata, and type match.
    *
    * @param options - Chat prompt configuration with messages array. Supports an
-   *   optional `environment` that, if provided, assigns ownership of the
-   *   resulting version to that workspace environment (must already be
+   *   optional `environments` list that, if provided, assigns ownership of the
+   *   resulting version to each workspace environment (each must already be
    *   registered; backend returns 404 otherwise).
    * @returns Promise resolving to ChatPrompt instance
    * @throws PromptTemplateStructureMismatch if a text prompt with same name exists
@@ -1384,7 +1397,7 @@ export class OpikClient {
             tags: options.tags,
             projectName: resolvedProjectName,
             synced: false,
-            environment: options.environment,
+            environments: options.environments,
           },
           this
         ),
