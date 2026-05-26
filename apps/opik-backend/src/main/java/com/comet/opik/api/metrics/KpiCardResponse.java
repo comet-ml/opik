@@ -31,6 +31,7 @@ public record KpiCardResponse(List<KpiMetric> stats) {
     @RequiredArgsConstructor
     public enum KpiMetricType {
         COUNT("count"),
+        /** Errors KPI — value is a percentage in the range [0, 100], with 0 returned when the period has no entities. */
         ERRORS("errors"),
         AVG_DURATION("avg_duration"),
         TOTAL_COST("total_cost");

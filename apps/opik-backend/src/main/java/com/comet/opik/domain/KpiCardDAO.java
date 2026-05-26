@@ -187,8 +187,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SELECT
                 COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_count,
                 COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_count,
-                COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_errors,
-                COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_errors,
+                if(COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end) = 0,
+                    0,
+                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start AND tf.id \\<= :id_end) * 100.0
+                    / COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end)) AS current_errors,
+                if(COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) = 0,
+                    0,
+                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) * 100.0
+                    / COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start)) AS previous_errors,
                 AVGIf(tf.duration, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_duration,
                 AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
                 SUMIf(tc.cost, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_total_cost,
@@ -307,8 +313,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SELECT
                 COUNTIf(id >= :id_current_start AND id \\<= :id_end) AS current_count,
                 COUNTIf(id >= :id_prior_start AND id \\< :id_current_start) AS previous_count,
-                COUNTIf(length(error_info) > 0 AND id >= :id_current_start AND id \\<= :id_end) AS current_errors,
-                COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start) AS previous_errors,
+                if(COUNTIf(id >= :id_current_start AND id \\<= :id_end) = 0,
+                    0,
+                    COUNTIf(length(error_info) > 0 AND id >= :id_current_start AND id \\<= :id_end) * 100.0
+                    / COUNTIf(id >= :id_current_start AND id \\<= :id_end)) AS current_errors,
+                if(COUNTIf(id >= :id_prior_start AND id \\< :id_current_start) = 0,
+                    0,
+                    COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start) * 100.0
+                    / COUNTIf(id >= :id_prior_start AND id \\< :id_current_start)) AS previous_errors,
                 AVGIf(duration, id >= :id_current_start AND id \\<= :id_end) AS current_avg_duration,
                 AVGIf(duration, id >= :id_prior_start AND id \\< :id_current_start) AS previous_avg_duration,
                 SUMIf(total_estimated_cost, id >= :id_current_start AND id \\<= :id_end) AS current_total_cost,

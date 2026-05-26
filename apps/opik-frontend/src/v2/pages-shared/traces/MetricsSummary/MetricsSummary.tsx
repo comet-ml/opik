@@ -41,6 +41,7 @@ type MetricCardDef = {
   label: string;
   formatter: (value: number) => string;
   trend: PercentageTrendType;
+  hideDelta?: boolean;
 };
 
 const METRIC_CARDS: MetricCardDef[] = [
@@ -55,8 +56,9 @@ const METRIC_CARDS: MetricCardDef[] = [
     type: "errors",
     icon: AlertTriangle,
     label: "Error rate",
-    formatter: (v) => `${v.toFixed(1)}%`,
+    formatter: (v: number) => `${(v < 1 ? v.toFixed(2) : v.toFixed(1))}%`,
     trend: "inverted",
+    hideDelta: true,
   },
   {
     type: "avg_duration",
@@ -347,7 +349,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
                 isFirst && "rounded-tl-md",
                 isLast && "rounded-tr-md",
               )}
-              hideDelta={cardMode !== "full"}
+              hideDelta={cardMode !== "full" || !!card.hideDelta}
               hideLabel={cardMode === "no-label" || cardMode === "icon-only"}
               hideValue={cardMode === "icon-only"}
               testId={`metrics-card-${card.type}`}

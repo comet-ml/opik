@@ -3084,8 +3084,8 @@ paths:
                   current_value: 12500
                   previous_value: 11800
                 - type: errors
-                  current_value: 320
-                  previous_value: 290
+                  current_value: 2.5
+                  previous_value: 2.4
                 - type: avg_duration
                   current_value: 350.5
                   previous_value: 365.2
