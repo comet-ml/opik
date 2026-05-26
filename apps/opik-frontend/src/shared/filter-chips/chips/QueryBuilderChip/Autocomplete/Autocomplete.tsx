@@ -90,7 +90,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
 
   return (
     <Popover open={popoverOpen}>
-      <Command shouldFilter={false}>
+      <Command shouldFilter={false} className="contents">
         <PopoverAnchor asChild>
           <CommandPrimitive.Input
             asChild

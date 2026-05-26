@@ -918,6 +918,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         kind: "query-builder",
         columnType: COLUMN_TYPE.dictionary,
         operators: DICTIONARY_OPERATORS,
+        defaultOperator: "contains",
         key: {
           placeholder: "key",
           options: chipOptions(usePathsOptions, {
@@ -1064,6 +1065,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         kind: "query-builder",
         columnType: COLUMN_TYPE.dictionary,
         operators: DICTIONARY_OPERATORS,
+        defaultOperator: "contains",
         key: {
           placeholder: "key",
           options: chipOptions(usePathsOptions, {

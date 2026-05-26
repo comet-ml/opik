@@ -5,6 +5,7 @@ import partition from "lodash/partition";
 import { Filter, FilterOperator } from "@/types/filters";
 import {
   NumericChipDefinition,
+  NumericChipMode,
   NumericChipValue,
 } from "@/shared/filter-chips/types";
 import {
@@ -18,6 +19,8 @@ import {
   FromFiltersResult,
 } from "@/shared/filter-chips/lib/sanitizeFilters.types";
 import { toNumber } from "@/shared/filter-chips/lib/helpers";
+
+export const NUMERIC_DEFAULT_MODE: NumericChipMode = "atLeast";
 
 const SUPPORTED_OPERATORS: ReadonlySet<FilterOperator> = new Set([
   "=",

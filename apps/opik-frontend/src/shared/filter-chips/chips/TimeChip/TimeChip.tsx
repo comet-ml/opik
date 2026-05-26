@@ -26,6 +26,7 @@ const TimeChip: React.FC<TimeChipProps> = ({
     valueSummary={formatTimeSummary(value)}
     open={open}
     onOpenChange={onOpenChange}
+    onClear={onClear}
   >
     <TimeChipPopoverContent value={value} onApply={onApply} onClear={onClear} />
   </FilterChipPopover>

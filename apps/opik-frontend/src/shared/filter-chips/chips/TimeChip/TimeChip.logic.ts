@@ -1,8 +1,15 @@
 import groupBy from "lodash/groupBy";
 import partition from "lodash/partition";
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import { Filter, FilterOperator } from "@/types/filters";
-import { TimeChipDefinition, TimeChipValue } from "@/shared/filter-chips/types";
+import {
+  TimeChipDefinition,
+  TimeChipMode,
+  TimeChipValue,
+} from "@/shared/filter-chips/types";
+
+dayjs.extend(customParseFormat);
 import type { Period } from "@/ui/time-picker-utils";
 import {
   drop,
@@ -12,6 +19,8 @@ import {
 } from "@/shared/filter-chips/lib/sanitizeFilters.types";
 
 export const DATE_FORMAT = "YYYY/MM/DD";
+
+export const TIME_DEFAULT_MODE: TimeChipMode = "after";
 
 const TIME_EXACTLY_WINDOW_MS = 60_000;
 const SUPPORTED_OPERATORS: ReadonlySet<FilterOperator> = new Set([
@@ -193,28 +202,23 @@ export const timeFromFilters = (
 const SUMMARY_DATETIME_FORMAT = "YYYY/MM/DD h:mm A";
 const SUMMARY_DATE_FORMAT = "YYYY/MM/DD";
 
-const formatIso = (iso: string): string => {
-  const d = dayjs(iso);
-  const isMidnight = d.hour() === 0 && d.minute() === 0;
-  return d.format(isMidnight ? SUMMARY_DATE_FORMAT : SUMMARY_DATETIME_FORMAT);
-};
-
 export const formatTimeSummary = (
   value: TimeChipValue | undefined,
 ): string | null => {
   if (!isTimeApplied(value) || !value) return null;
+  const dt = (iso: string) => dayjs(iso).format(SUMMARY_DATETIME_FORMAT);
   switch (value.mode) {
     case "exactly":
-      return formatIso(value.at);
+      return `= ${dt(value.at)}`;
     case "between": {
       const start = dayjs(value.start).format(SUMMARY_DATE_FORMAT);
       const end = dayjs(value.end).format(SUMMARY_DATE_FORMAT);
-      return `${start} - ${end}`;
+      return `${start} – ${end}`;
     }
     case "before":
-      return formatIso(value.before);
+      return `< ${dt(value.before)}`;
     case "after":
-      return formatIso(value.after);
+      return `> ${dt(value.after)}`;
     default:
       return null;
   }
@@ -315,9 +319,25 @@ export const combineDateAndTime = (
     .toISOString();
 };
 
+// Accepted shapes (all year-first to avoid US/EU month-day ambiguity):
+//   "2026/05/26", "2026/5/26", "2026-05-26", "2026-5-26",
+//   "2026.05.26", "2026.5.26", "20260526"
+const DATE_INPUT_FORMATS = [
+  "YYYY/MM/DD",
+  "YYYY/M/D",
+  "YYYY-MM-DD",
+  "YYYY-M-D",
+  "YYYY.MM.DD",
+  "YYYY.M.D",
+  "YYYYMMDD",
+];
+
 export const parseDateInput = (raw: string): Date | null => {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
-  const d = dayjs(trimmed, DATE_FORMAT, true);
-  return d.isValid() ? d.startOf("day").toDate() : null;
+  for (const fmt of DATE_INPUT_FORMATS) {
+    const d = dayjs(trimmed, fmt, true);
+    if (d.isValid()) return d.startOf("day").toDate();
+  }
+  return null;
 };

@@ -33,6 +33,7 @@ const QueryBuilderChip: React.FC<QueryBuilderChipProps> = ({
       valueSummaryFull={summary?.tooltip}
       open={open}
       onOpenChange={onOpenChange}
+      onClear={onClear}
       contentProps={{
         onOpenAutoFocus: (event) => {
           if (value?.rows && value.rows.length > 0) event.preventDefault();
