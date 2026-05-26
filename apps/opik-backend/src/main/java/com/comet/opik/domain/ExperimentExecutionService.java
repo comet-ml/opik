@@ -11,12 +11,15 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
@@ -332,13 +335,21 @@ public class ExperimentExecutionService {
                 .templateStructure(version.templateStructure())
                 .version(OpikPromptEntry.Version.builder()
                         .id(version.id())
-                        .template(version.template() != null
-                                ? JsonUtils.getJsonNodeFromStringWithFallback(version.template())
-                                : null)
+                        .template(toTemplateNode(version.template(), version.templateStructure()))
                         .commit(version.commit())
                         .versionNumber(version.versionNumber())
                         .metadata(version.metadata())
                         .build())
                 .build();
+    }
+
+    private static JsonNode toTemplateNode(String template, TemplateStructure structure) {
+        if (template == null) {
+            return null;
+        }
+        if (structure == TemplateStructure.CHAT) {
+            return JsonUtils.getJsonNodeFromStringWithFallback(template);
+        }
+        return TextNode.valueOf(template);
     }
 }

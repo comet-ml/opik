@@ -21,6 +21,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.shared.Usage;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -637,15 +638,19 @@ class ExperimentItemProcessorTest {
 
             var promptId = UUID.randomUUID();
             var versionId = UUID.randomUUID();
+            var name = RandomStringUtils.randomAlphanumeric(10);
+            var commit = RandomStringUtils.randomAlphanumeric(8);
+            var versionNumber = "v" + RandomStringUtils.randomNumeric(2);
+            var template = RandomStringUtils.randomAlphanumeric(20);
             var entry = OpikPromptEntry.builder()
                     .id(promptId)
-                    .name("greeting")
+                    .name(name)
                     .templateStructure(TemplateStructure.TEXT)
                     .version(OpikPromptEntry.Version.builder()
                             .id(versionId)
-                            .template(new TextNode("Hello {{name}}"))
-                            .commit("abc12345")
-                            .versionNumber("v3")
+                            .template(new TextNode(template))
+                            .commit(commit)
+                            .versionNumber(versionNumber)
                             .build())
                     .build();
 
@@ -665,12 +670,12 @@ class ExperimentItemProcessorTest {
             assertThat(actual.isArray()).isTrue();
             assertThat(actual).hasSize(1);
             assertThat(actual.get(0).get("id").asText()).isEqualTo(promptId.toString());
-            assertThat(actual.get(0).get("name").asText()).isEqualTo("greeting");
+            assertThat(actual.get(0).get("name").asText()).isEqualTo(name);
             assertThat(actual.get(0).get("template_structure").asText()).isEqualTo("text");
             assertThat(actual.get(0).get("version").get("id").asText()).isEqualTo(versionId.toString());
-            assertThat(actual.get(0).get("version").get("commit").asText()).isEqualTo("abc12345");
-            assertThat(actual.get(0).get("version").get("version_number").asText()).isEqualTo("v3");
-            assertThat(actual.get(0).get("version").get("template").asText()).isEqualTo("Hello {{name}}");
+            assertThat(actual.get(0).get("version").get("commit").asText()).isEqualTo(commit);
+            assertThat(actual.get(0).get("version").get("version_number").asText()).isEqualTo(versionNumber);
+            assertThat(actual.get(0).get("version").get("template").asText()).isEqualTo(template);
         }
 
         @Test
