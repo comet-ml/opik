@@ -52,8 +52,7 @@ import usePromptVersionById, {
 } from "@/api/prompts/usePromptVersionById";
 import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlaygroundButton";
-import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
-import { parsePromptVersionContent } from "@/lib/llm";
+import useLoadPromptIntoPlayground from "@/v2/pages-shared/playground/useLoadPromptIntoPlayground";
 import { getTimeFromNow } from "@/lib/date";
 import { pickHighestStage } from "@/utils/version-stages";
 import RestoreVersionDialog from "./RestoreVersionDialog";
@@ -96,8 +95,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   >(null);
   const [viewMode, setViewMode] = useState<ViewMode>("pretty");
 
-  const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
-    useLoadPlayground();
+  const { loadPrompt, isPlaygroundEmpty, isPendingProviderKeys } =
+    useLoadPromptIntoPlayground();
 
   const [activeVersionId, setActiveVersionId] = useQueryParam(
     "activeVersionId",
@@ -191,20 +190,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         version = activeVersion;
       }
     }
-    const source = version ?? prompt.latest_version;
-    loadPlayground({
-      promptContent: parsePromptVersionContent(source),
-      promptId: prompt.id,
-      promptVersionId: source?.id,
-      templateStructure: prompt.template_structure,
-    });
-  }, [
-    loadPlayground,
-    prompt,
-    activeVersion,
-    effectiveVersionId,
-    fetchPromptVersion,
-  ]);
+    loadPrompt({ prompt, version });
+  }, [loadPrompt, prompt, activeVersion, effectiveVersionId, fetchPromptVersion]);
 
   const handleOpenInPlaygroundClick = useCallback(() => {
     if (isPlaygroundEmpty) {

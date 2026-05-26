@@ -1,13 +1,13 @@
 import React, { useEffect } from "react";
-import { Clock, FilePen, Loader2, User } from "lucide-react";
+import { FilePen, Loader2 } from "lucide-react";
 import { useInView } from "react-intersection-observer";
 
 import { cn } from "@/lib/utils";
-import { formatDate, getTimeFromNow } from "@/lib/date";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import VersionTagList from "./VersionTagList";
+import VersionMeta from "./VersionMeta";
 
 export interface VersionHistoryItem {
   id: string;
@@ -115,25 +115,11 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
                   </TooltipWrapper>
                 </p>
               )}
-              <div className="comet-body-xs mt-1.5 flex items-center gap-3 text-light-slate">
-                <TooltipWrapper
-                  content={`${formatDate(item.created_at, {
-                    utc: true,
-                    includeSeconds: true,
-                  })} UTC`}
-                >
-                  <span className="flex items-center gap-1">
-                    <Clock className="size-3 shrink-0" />
-                    {getTimeFromNow(item.created_at)}
-                  </span>
-                </TooltipWrapper>
-                {item.created_by && (
-                  <span className="flex items-center gap-1">
-                    <User className="size-3 shrink-0" />
-                    {item.created_by}
-                  </span>
-                )}
-              </div>
+              <VersionMeta
+                className="mt-1.5"
+                createdAt={item.created_at}
+                createdBy={item.created_by}
+              />
             </div>
           </li>
         );

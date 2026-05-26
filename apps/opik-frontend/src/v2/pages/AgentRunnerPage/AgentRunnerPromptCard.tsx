@@ -28,7 +28,7 @@ import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
 import SaveVersionDialog from "@/v2/pages-shared/llm/SaveVersionDialog/SaveVersionDialog";
-import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
+import usePromptVersionsWithLabels from "@/v2/pages-shared/version-history/usePromptVersionsWithLabels";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import {
   Prompt,
@@ -43,11 +43,14 @@ import {
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 import { chatTemplatesEqual, serializeChatTemplate } from "@/lib/chatTemplate";
-import { pickHighestStage } from "@/utils/version-stages";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { cn } from "@/lib/utils";
+import {
+  PROMPT_SAVE_NEW_VERSION_TOOLTIP,
+  PROMPT_UNSAVED_CHANGES_LABEL,
+} from "@/constants/prompts";
 
 type AgentRunnerPromptCardProps = {
   prompt: Prompt;
@@ -86,31 +89,21 @@ const AgentRunnerPromptCard = forwardRef<
   const isChatPrompt =
     prompt.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
 
-  const { data: versionsData, isLoading: isVersionsLoading } =
-    usePromptVersionsById(
-      {
-        promptId: prompt.id,
-        page: 1,
-        size: 100,
-        sorting: [{ id: "created_at", desc: true }],
-      },
-      { enabled: isOpen, staleTime: 60_000 },
-    );
-
-  const versions = useMemo(
-    () => versionsData?.content ?? [],
-    [versionsData?.content],
-  );
-  const total = versionsData?.total ?? versions.length;
+  const {
+    versions,
+    descriptors,
+    isLoading: isVersionsLoading,
+    getDescriptor,
+  } = usePromptVersionsWithLabels(prompt.id, { enabled: isOpen });
 
   const selectedVersionId =
     pickedVersionId ?? prompt.latest_version?.id ?? versions[0]?.id ?? "";
 
   const selectedVersion = useMemo<LoadedVersion | undefined>(() => {
-    const idx = versions.findIndex((v) => v.id === selectedVersionId);
-    if (idx === -1) return undefined;
-    return { version: versions[idx], label: `v${total - idx}` };
-  }, [versions, total, selectedVersionId]);
+    const descriptor = getDescriptor(selectedVersionId);
+    if (!descriptor) return undefined;
+    return { version: descriptor.version, label: descriptor.label };
+  }, [getDescriptor, selectedVersionId]);
 
   const baselineTemplate = selectedVersion?.version.template ?? "";
   const [loadedVersionId, setLoadedVersionId] = useState<string | null>(null);
@@ -265,7 +258,7 @@ const AgentRunnerPromptCard = forwardRef<
     });
   }, []);
 
-  const selectedStage = pickHighestStage(selectedVersion?.version.tags);
+  const selectedStage = getDescriptor(selectedVersionId)?.stage;
 
   const renderBody = () => {
     if (!selectedVersion && !loadedVersionId) {
@@ -340,9 +333,7 @@ const AgentRunnerPromptCard = forwardRef<
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[220px]">
-            {versions.map((version, idx) => {
-              const label = `v${total - idx}`;
-              const stage = pickHighestStage(version.tags);
+            {descriptors.map(({ version, label, stage }) => {
               const isActive = version.id === selectedVersionId;
               return (
                 <DropdownMenuItem
@@ -374,10 +365,10 @@ const AgentRunnerPromptCard = forwardRef<
           <div className="ml-auto flex items-center gap-1">
             <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
               <span className="size-1.5 rounded-full bg-destructive" />
-              Unsaved changes
+              {PROMPT_UNSAVED_CHANGES_LABEL}
             </span>
             {canCreatePrompts && (
-              <TooltipWrapper content="Save as new version">
+              <TooltipWrapper content={PROMPT_SAVE_NEW_VERSION_TOOLTIP}>
                 <Button
                   variant="minimal"
                   size="icon-2xs"

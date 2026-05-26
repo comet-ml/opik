@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
 import isEqual from "fast-deep-equal";
-import { Clock, LucideIcon, Sparkles, User } from "lucide-react";
+import { LucideIcon, Sparkles } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
@@ -12,10 +12,11 @@ import { normalizeChatTemplate, parseChatTemplate } from "@/lib/chatTemplate";
 import { extractMessageContent } from "@/lib/prompt";
 import { PromptVersion } from "@/types/prompts";
 import { cn } from "@/lib/utils";
-import { formatDate, getTimeFromNow } from "@/lib/date";
+import { formatDate } from "@/lib/date";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import MediaTagsList from "@/v2/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import VersionTagList from "@/v2/pages-shared/version-history/VersionTagList";
+import VersionMeta from "@/v2/pages-shared/version-history/VersionMeta";
 import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
 
 type VersionWithMaybeAuthor = PromptVersion & { created_by?: string };
@@ -69,18 +70,11 @@ const ColumnHeader: React.FC<{ version: PromptVersion; label: string }> = ({
         <EnvironmentBadge name={version.environment} size="sm" />
         <VersionTagList tags={version.tags ?? []} size="sm" />
       </div>
-      <div className="comet-body-xs flex shrink-0 items-center gap-3 text-light-slate">
-        <span className="flex items-center gap-1">
-          <Clock className="size-3" />
-          {getTimeFromNow(version.created_at)}
-        </span>
-        {author && (
-          <span className="flex items-center gap-1">
-            <User className="size-3" />
-            {author}
-          </span>
-        )}
-      </div>
+      <VersionMeta
+        className="shrink-0"
+        createdAt={version.created_at}
+        createdBy={author}
+      />
     </div>
   );
 };

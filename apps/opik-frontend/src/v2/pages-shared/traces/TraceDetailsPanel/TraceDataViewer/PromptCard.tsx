@@ -40,10 +40,9 @@ import PromptMessagesReadonly, {
 } from "@/v2/pages-shared/llm/PromptMessagesReadonly/PromptMessagesReadonly";
 import { parseMessagesFromTemplate } from "@/v2/pages-shared/llm/PromptTemplateView/PromptTemplateView";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
-import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
+import usePromptVersionsWithLabels from "@/v2/pages-shared/version-history/usePromptVersionsWithLabels";
 import { PromptLibraryMetadata } from "@/types/playground";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { pickHighestStage } from "@/utils/version-stages";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { useActiveProjectId } from "@/store/AppStore";
@@ -111,35 +110,19 @@ const PromptCard: React.FC<PromptCardProps> = ({
   const versionId = rawPrompt.version.id;
   const template = rawPrompt.version.template;
 
-  const { data: versionsData, isLoading: isVersionsLoading } =
-    usePromptVersionsById(
-      {
-        promptId,
-        page: 1,
-        size: 100,
-        sorting: [{ id: "created_at", desc: true }],
-      },
-      {
-        enabled: Boolean(promptId),
-        staleTime: 60_000,
-      },
-    );
+  const { getDescriptor, isLoading: isVersionsLoading } =
+    usePromptVersionsWithLabels(promptId);
 
   const { versionLabel, stage } = useMemo(() => {
-    const versions = versionsData?.content ?? [];
-    const total = versionsData?.total ?? versions.length;
-    const idx = versions.findIndex((v) => v.id === versionId);
-    if (idx === -1) {
+    const descriptor = getDescriptor(versionId);
+    if (!descriptor) {
       const fallback = rawPrompt.version.commit
         ? rawPrompt.version.commit.slice(0, 7)
         : undefined;
       return { versionLabel: fallback, stage: undefined };
     }
-    return {
-      versionLabel: `v${total - idx}`,
-      stage: pickHighestStage(versions[idx].tags),
-    };
-  }, [versionsData, versionId, rawPrompt.version.commit]);
+    return { versionLabel: descriptor.label, stage: descriptor.stage };
+  }, [getDescriptor, versionId, rawPrompt.version.commit]);
 
   const messages = useMemo<ChatMessage[]>(
     () => parseMessagesFromTemplate(template),

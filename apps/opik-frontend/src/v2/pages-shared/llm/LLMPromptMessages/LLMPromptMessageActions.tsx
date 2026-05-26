@@ -35,6 +35,7 @@ import {
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 import {
+  PROMPT_SAVE_TO_LIBRARY_TOOLTIP,
   PROMPT_UNSAVED_EXPERIMENT_TOOLTIP,
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
@@ -202,7 +203,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     ? !datasetId
       ? PROMPT_UNSAVED_TOOLTIP
       : PROMPT_UNSAVED_EXPERIMENT_TOOLTIP
-    : "Save to prompt library";
+    : PROMPT_SAVE_TO_LIBRARY_TOOLTIP;
 
   const onPromptSelectBoxOpenChange = useCallback(
     (open: boolean) => {

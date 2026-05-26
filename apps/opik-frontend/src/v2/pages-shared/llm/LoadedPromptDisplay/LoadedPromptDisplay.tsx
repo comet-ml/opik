@@ -11,6 +11,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import { pickHighestStage } from "@/utils/version-stages";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { PROMPT_UNSAVED_CHANGES_LABEL } from "@/constants/prompts";
 
 type LoadedPromptDisplayProps = {
   name?: string;
@@ -39,7 +40,7 @@ const LoadedPromptDisplay: React.FC<LoadedPromptDisplayProps> = ({
   return (
     <div className="flex min-w-0 items-center rounded-md border border-border bg-background pl-2 pr-1 text-[11px]">
       <TooltipWrapper
-        content={hasUnsavedChanges ? "Unsaved changes" : displayName}
+        content={hasUnsavedChanges ? PROMPT_UNSAVED_CHANGES_LABEL : displayName}
       >
         <div className="flex min-w-0 items-center gap-1">
           <Icon className="size-3 shrink-0 text-muted-slate" />

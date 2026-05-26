@@ -195,7 +195,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b bg-soft-background px-4 py-3">
+      <div className="flex items-center gap-3 border-b bg-gray-100 px-4 py-3">
         <h1 className="comet-title-xs">Agent playground</h1>
 
         {pairing.isInitialLoading ? null : isConnected ? (
