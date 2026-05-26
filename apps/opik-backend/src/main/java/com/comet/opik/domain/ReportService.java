@@ -54,9 +54,15 @@ public class ReportService {
         String projectName = projectService.findByIds(workspaceId, Set.of(projectId))
                 .stream().findFirst().map(p -> p.name()).orElse(projectId.toString());
 
+        String customPrompt = transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(ReportPreferenceDAO.class)
+                        .findByProjectId(workspaceId, projectId)
+                        .map(ReportPreference::customPrompt)
+                        .orElse(null));
+
         orchestratorClient.triggerReportGeneration(
                 reportId.toString(), projectId.toString(), projectName,
-                workspaceName,
+                workspaceName, customPrompt,
                 () -> markReportFailed(reportId, workspaceId, projectId));
 
         return reportId;
@@ -100,24 +106,25 @@ public class ReportService {
                 .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
                         handle -> handle.attach(ReportPreferenceDAO.class)
                                 .findByProjectId(workspaceId, projectId)
-                                .orElse(ReportPreference.defaultForProject(projectId))))
+                                .orElse(null)))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    public Mono<ReportPreference> updatePreference(@NonNull UUID projectId, boolean enabled) {
+    public Mono<ReportPreference> updatePreference(@NonNull UUID projectId, @NonNull ReportPreference preference) {
         var ctx = requestContext.get();
 
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(ReportPreferenceDAO.class);
-            dao.upsert(ctx.getWorkspaceId(), ctx.getWorkspaceName(), projectId, enabled,
-                    ReportPreference.DEFAULT_SCHEDULE_TIME_UTC);
+            dao.upsert(ctx.getWorkspaceId(), ctx.getWorkspaceName(), projectId, preference.enabled(),
+                    preference.scheduleTime(), preference.customPrompt());
             return dao.findByProjectId(ctx.getWorkspaceId(), projectId).orElseThrow();
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
-    public List<ReportPreference> findAllEnabledPreferences() {
+    public List<ReportPreference> findEnabledPreferencesInTimeWindow(String windowStart, String windowEnd) {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(ReportPreferenceDAO.class).findAllEnabled());
+                handle -> handle.attach(ReportPreferenceDAO.class)
+                        .findAllEnabledInTimeWindow(windowStart, windowEnd));
     }
 
     private void markReportFailed(UUID reportId, String workspaceId, UUID projectId) {
