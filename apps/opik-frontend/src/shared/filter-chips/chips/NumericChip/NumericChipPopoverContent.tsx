@@ -12,7 +12,7 @@ import {
   NumericFormat,
   resolveNumericFormat,
 } from "@/shared/filter-chips/chips/NumericChip/NumericChip.format";
-import { toNumber } from "@/shared/filter-chips/lib/helpers";
+import { toNumber, trimValue } from "@/shared/filter-chips/lib/helpers";
 
 interface NumericChipPopoverContentProps {
   definition: NumericChipDefinition;
@@ -63,8 +63,16 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
     to?: string;
   }) => {
     const m = next.mode ?? mode;
-    const f = toNumber(next.from ?? fromDraft);
-    const t = toNumber(next.to ?? toDraft);
+    const fromRaw = next.from ?? fromDraft;
+    const toRaw = next.to ?? toDraft;
+    const fromEmpty = trimValue(fromRaw) === "";
+    const toEmpty = trimValue(toRaw) === "";
+    if (m === "between" ? fromEmpty || toEmpty : fromEmpty) {
+      onClear();
+      return;
+    }
+    const f = toNumber(fromRaw);
+    const t = toNumber(toRaw);
     switch (m) {
       case "exactly":
         if (f !== null) onApply({ mode: "exactly", exact: f });
