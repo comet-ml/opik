@@ -48,7 +48,6 @@ import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/Quickstart
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
 import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -77,14 +76,25 @@ import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
-import ThreadsFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
-import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
-import ListCell from "@/shared/DataTableCells/ListCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
+import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
+import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
+import {
+  ChipDefinition,
+  chipOptions,
+  chipOptionsValue,
+} from "@/shared/filter-chips/types";
+import {
+  TAGS_OPERATORS,
+  FEEDBACK_SCORE_OPERATORS,
+} from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
+import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
+import ListCell from "@/shared/DataTableCells/ListCell";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -219,25 +229,6 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
   },
 ];
 
-const FILTER_COLUMNS: ColumnData<Thread>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-  ...SHARED_COLUMNS,
-  {
-    id: "annotation_queue_ids",
-    label: "Annotation queue ID",
-    type: COLUMN_TYPE.list,
-  },
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-  },
-];
-
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
   right: [],
@@ -270,6 +261,81 @@ const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
   COLUMN_COMMENTS_ID,
   "created_by",
 ];
+
+const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
+  {
+    id: "duration",
+    field: "duration",
+    label: "Duration",
+    group: "Time",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.duration,
+    format: "duration",
+  },
+  {
+    id: "start_time",
+    field: "start_time",
+    label: "Start time",
+    group: "Time",
+    kind: "time",
+    columnType: COLUMN_TYPE.time,
+  },
+  {
+    id: "end_time",
+    field: "end_time",
+    label: "End time",
+    group: "Time",
+    kind: "time",
+    columnType: COLUMN_TYPE.time,
+  },
+  {
+    id: "number_of_messages",
+    field: "number_of_messages",
+    label: "Message count",
+    group: "Performance",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.number,
+    format: "integer",
+  },
+  {
+    id: "first_message",
+    field: "first_message",
+    label: "First message",
+    group: "Content",
+    kind: "pseudo-search",
+    searchMode: "contains",
+    columnType: COLUMN_TYPE.string,
+  },
+  {
+    id: "last_message",
+    field: "last_message",
+    label: "Last message",
+    group: "Content",
+    kind: "pseudo-search",
+    searchMode: "contains",
+    columnType: COLUMN_TYPE.string,
+  },
+  {
+    id: "id",
+    field: "id",
+    label: "Thread ID",
+    group: "Identifiers",
+    kind: "pseudo-search",
+    searchMode: "equals",
+    columnType: COLUMN_TYPE.string,
+  },
+  {
+    id: "annotation_queue_ids",
+    field: "annotation_queue_ids",
+    label: "Annotation queue ID",
+    group: "Identifiers",
+    kind: "pseudo-search",
+    searchMode: "contains",
+    columnType: COLUMN_TYPE.list,
+  },
+];
+
+const THREAD_DEFAULT_PINNED_CHIPS = ["tags", "duration", "start_time"];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
@@ -356,13 +422,91 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [filters = [], setFilters] = useQueryParam(
-    `threads_filters`,
-    JsonParam,
-    {
-      updateType: "replaceIn",
-    },
+  const handleChipFiltersChange = useCallback(() => {
+    setPage(1);
+  }, [setPage]);
+
+  const threadScoreOptions = useMemo(
+    () => ({
+      items: (feedbackScoresNames?.scores ?? []).map((s) => s.name),
+      isLoading: isFeedbackScoresNamesPending,
+    }),
+    [feedbackScoresNames, isFeedbackScoresNamesPending],
   );
+
+  const threadChipDefinitions = useMemo<ChipDefinition[]>(() => {
+    const tagsChip: ChipDefinition = {
+      id: "tags",
+      field: "tags",
+      label: "Tags",
+      group: "Identifiers",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.list,
+      operators: TAGS_OPERATORS,
+      defaultOperator: "contains",
+      value: {
+        placeholder: "Type a tag…",
+        options: chipOptions(useTagsOptions, {
+          projectId,
+          entityType: "threads",
+        }),
+      },
+      addLabel: "Add tag",
+    };
+    const idIndex = THREAD_CHIP_DEFINITIONS.findIndex((d) => d.id === "id");
+    const withTags = [
+      ...THREAD_CHIP_DEFINITIONS.slice(0, idIndex),
+      tagsChip,
+      ...THREAD_CHIP_DEFINITIONS.slice(idIndex),
+    ];
+    return [
+      ...withTags,
+      {
+        id: "feedback_scores",
+        field: COLUMN_FEEDBACK_SCORES_ID,
+        label: "Feedback scores",
+        group: "Scoring",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.numberDictionary,
+        operators: FEEDBACK_SCORE_OPERATORS,
+        defaultOperator: ">=",
+        key: {
+          placeholder: "Select score",
+          options: chipOptionsValue(threadScoreOptions),
+        },
+        value: { type: "numeric", decimals: 2, placeholder: "0" },
+      },
+    ];
+  }, [projectId, threadScoreOptions]);
+
+  const {
+    chipsPinned: threadChipsPinned,
+    chipsUnpinned: threadChipsUnpinned,
+    values: threadChipValues,
+    filters: threadChipFilters,
+    applyValue: applyThreadChipValue,
+    clearValue: clearThreadChipValue,
+    clearAll: clearAllThreadChips,
+    pinChip: pinThreadChip,
+    unpinChip: unpinThreadChip,
+    managerOpen: threadChipManagerOpen,
+    setManagerOpen: setThreadChipManagerOpen,
+    openChipId: threadOpenChipId,
+    setOpenChipId: setThreadOpenChipId,
+  } = useFilterChips({
+    tableId: "logs.threads",
+    urlKey: "threads_filters",
+    definitions: threadChipDefinitions,
+    defaultPinned: THREAD_DEFAULT_PINNED_CHIPS,
+    onChange: handleChipFiltersChange,
+  });
+
+  const { addTag: addThreadTagFilter } = useTagsChipActions({
+    chipId: "tags",
+    values: threadChipValues,
+    applyValue: applyThreadChipValue,
+    pinChip: pinThreadChip,
+  });
 
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
@@ -395,7 +539,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       {
         projectId,
         sorting: sortedColumns,
-        filters,
+        filters: threadChipFilters,
         page: page as number,
         size: size as number,
         search: trimmedSearch,
@@ -416,7 +560,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     {
       projectId,
       sorting: sortedColumns,
-      filters,
+      filters: threadChipFilters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -434,7 +578,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const { data: statisticData } = useThreadsStatistic(
     {
       projectId,
-      filters,
+      filters: threadChipFilters,
       search: search as string,
       fromTime: intervalStart,
       toTime: intervalEnd,
@@ -460,25 +604,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
 
   const handleClearFilters = useCallback(() => {
     setSearch("");
-    setFilters([]);
+    clearAllThreadChips();
     setPage(1);
-  }, [setSearch, setFilters, setPage]);
-
-  const filtersConfig = useMemo(
-    () => ({
-      rowsMap: {
-        [COLUMN_FEEDBACK_SCORES_ID]: {
-          keyComponent: ThreadsFeedbackScoresSelect,
-          keyComponentProps: {
-            projectId,
-            placeholder: "Select score",
-          },
-        },
-        ...getTagsFilterConfig({ projectId, entityType: "threads" }),
-      },
-    }),
-    [projectId],
-  );
+  }, [setSearch, clearAllThreadChips, setPage]);
 
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresNames?.scores ?? [])
@@ -582,8 +710,21 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   );
 
   const columns = useMemo(() => {
+    const columnDefsWithTagClick: ColumnData<Thread>[] = DEFAULT_COLUMNS.map(
+      (col) =>
+        col.id === "tags"
+          ? {
+              ...col,
+              customMeta: {
+                ...col.customMeta,
+                onItemClick: addThreadTagFilter,
+                getItemTooltip: (tag: string) => `Filter by tag: "${tag}"`,
+              },
+            }
+          : col,
+    );
     const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
-      DEFAULT_COLUMNS,
+      columnDefsWithTagClick,
       {
         columnsOrder,
         selectedColumns,
@@ -607,6 +748,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     scoresColumnsData,
     scoresColumnsOrder,
     handleRowClick,
+    addThreadTagFilter,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -699,7 +841,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           projectId={projectId}
           entityType="threads"
           countLabel="Threads"
-          filters={filters}
+          filters={threadChipFilters}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
@@ -735,13 +877,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
                 className="w-[320px]"
                 dimension="sm"
               />
-              <FiltersButton
-                columns={FILTER_COLUMNS}
-                filters={filters}
-                onChange={setFilters}
-                config={filtersConfig as never}
-                layout="icon"
-              />
             </div>
             <div className="flex items-center gap-2">
               <DataTableRowHeightSelector
@@ -768,6 +903,29 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
               />
             </div>
           </div>
+        </PageBodyStickyContainer>
+      )}
+
+      {selectedRows.length === 0 && (
+        <PageBodyStickyContainer
+          className="py-2"
+          direction="bidirectional"
+          limitWidth
+        >
+          <FilterChipBar
+            chipsPinned={threadChipsPinned}
+            chipsUnpinned={threadChipsUnpinned}
+            values={threadChipValues}
+            managerOpen={threadChipManagerOpen}
+            onManagerOpenChange={setThreadChipManagerOpen}
+            onApplyValue={applyThreadChipValue}
+            onClearValue={clearThreadChipValue}
+            onPinChip={pinThreadChip}
+            onUnpinChip={unpinThreadChip}
+            onClearAll={clearAllThreadChips}
+            openChipId={threadOpenChipId}
+            onOpenChipIdChange={setThreadOpenChipId}
+          />
         </PageBodyStickyContainer>
       )}
 
@@ -821,7 +979,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           noData={
             <DataTableNoMatchingData
               onClearFilters={
-                search || filters.length > 0 ? handleClearFilters : undefined
+                search || threadChipFilters.length > 0
+                  ? handleClearFilters
+                  : undefined
               }
             />
           }

@@ -1,9 +1,8 @@
 import React from "react";
 
 import { FilterRowConfig } from "@/types/filters";
-import TagsAutocomplete, {
-  TagsAutocompleteEntityType,
-} from "./TagsAutocomplete";
+import TagsAutocomplete from "./TagsAutocomplete";
+import { TagsAutocompleteEntityType } from "./useTagsOptions";
 
 type GetTagsFilterConfigArgs = {
   projectId: string;
