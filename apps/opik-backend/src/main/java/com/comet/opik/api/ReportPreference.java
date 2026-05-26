@@ -17,17 +17,8 @@ public record ReportPreference(
         @JsonIgnore String workspaceName,
         UUID projectId,
         boolean enabled,
-        String scheduleTimeUtc,
+        String scheduleTime,
+        String customPrompt,
         Instant createdAt,
         Instant lastUpdatedAt) {
-
-    public static final String DEFAULT_SCHEDULE_TIME_UTC = "05:00:00";
-
-    public static ReportPreference defaultForProject(UUID projectId) {
-        return ReportPreference.builder()
-                .projectId(projectId)
-                .enabled(false)
-                .scheduleTimeUtc(DEFAULT_SCHEDULE_TIME_UTC)
-                .build();
-    }
 }

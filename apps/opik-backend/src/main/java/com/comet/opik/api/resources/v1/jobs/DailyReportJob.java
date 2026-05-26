@@ -15,34 +15,53 @@ import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.time.LocalTime;
 import java.util.List;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 /**
- * Fires at 05:00 UTC, matching {@link ReportPreference#DEFAULT_SCHEDULE_TIME_UTC}.
- * When per-project schedule times are supported, replace with a frequent job that queries
- * enabled preferences and triggers only those whose schedule_time_utc falls within the current window.
+ * Runs every 10 minutes and triggers report generation for projects
+ * whose schedule_time falls within the previous 10-minute window.
  */
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@On(value = "0 0 5 * * ?", timeZone = "UTC")
+@On(value = "0 0/10 * * * ?", timeZone = "UTC")
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DailyReportJob extends Job {
 
+    private static final int WINDOW_MINUTES = 10;
     private static final Lock JOB_LOCK = new Lock("daily_report_job:lock");
 
     private final @NonNull ReportService reportService;
     private final @NonNull LockService lockService;
 
+    record TimeWindow(String start, String end) {
+    }
+
+    static TimeWindow computeWindow(LocalTime now) {
+        int minute = now.getMinute();
+        LocalTime windowEnd = now.withMinute(minute - (minute % WINDOW_MINUTES)).withSecond(0).withNano(0);
+        LocalTime windowStart = windowEnd.minusMinutes(WINDOW_MINUTES);
+
+        String startStr = windowStart.toString();
+        // At 00:00, window is [23:50, 00:00) — use "24:00:00" so the SQL range is continuous
+        String endStr = windowEnd.equals(LocalTime.MIDNIGHT) ? "24:00:00" : windowEnd.toString();
+        return new TimeWindow(startStr, endStr);
+    }
+
     @Override
     public void doJob(JobExecutionContext context) {
-        log.info("Starting daily report job");
+        TimeWindow window = computeWindow(LocalTime.now(java.time.ZoneOffset.UTC));
+        String startStr = window.start();
+        String endStr = window.end();
+
+        log.info("Daily report job checking window [{}, {})", startStr, endStr);
 
         lockService.bestEffortLock(
                 JOB_LOCK,
-                Mono.fromRunnable(this::triggerReports),
+                Mono.fromRunnable(() -> triggerReports(startStr, endStr)),
                 Mono.defer(() -> {
                     log.info("Could not acquire lock for daily report job, another instance is running");
                     return Mono.empty();
@@ -54,11 +73,11 @@ public class DailyReportJob extends Job {
                         error -> log.error("Daily report job failed", error));
     }
 
-    private void triggerReports() {
-        List<ReportPreference> enabledPrefs = reportService.findAllEnabledPreferences();
-        log.info("Found {} projects with daily reports enabled", enabledPrefs.size());
+    private void triggerReports(String windowStart, String windowEnd) {
+        List<ReportPreference> prefs = reportService.findEnabledPreferencesInTimeWindow(windowStart, windowEnd);
+        log.info("Found {} projects scheduled in window [{}, {})", prefs.size(), windowStart, windowEnd);
 
-        for (var pref : enabledPrefs) {
+        for (var pref : prefs) {
             try {
                 reportService.createAndTriggerReport(pref.workspaceId(), pref.workspaceName(), pref.projectId());
             } catch (Exception e) {
