@@ -985,6 +985,18 @@ def test_dataset_item_oql__empty_filter__returns_none(filter_string):
             [{"field": "commit", "operator": "=", "value": "abc123"}],
         ),
         (
+            'version_number = "v3"',
+            [{"field": "version_number", "operator": "=", "value": "v3"}],
+        ),
+        (
+            'version_number != "v1"',
+            [{"field": "version_number", "operator": "!=", "value": "v1"}],
+        ),
+        (
+            'version_number ends_with "0"',
+            [{"field": "version_number", "operator": "ends_with", "value": "0"}],
+        ),
+        (
             'template contains "hello"',
             [{"field": "template", "operator": "contains", "value": "hello"}],
         ),
@@ -1068,6 +1080,22 @@ def test_prompt_version_oql__valid_filters__happyflow(filter_string, expected):
         (
             'template = "test" extra_stuff',
             r"Invalid filter string, trailing characters.*",
+        ),
+        (
+            'version_number > "v2"',
+            r"Operator > is not supported for field version_number.*",
+        ),
+        (
+            'version_number < "v2"',
+            r"Operator < is not supported for field version_number.*",
+        ),
+        (
+            'commit > "abc"',
+            r"Operator > is not supported for field commit.*",
+        ),
+        (
+            'id < "00000000"',
+            r"Operator < is not supported for field id.*",
         ),
     ],
 )

@@ -30,6 +30,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -303,6 +305,51 @@ class AlertProjectMigrationServiceTest {
         assertThat(afterSecondCycle.lastUpdatedAt()).isEqualTo(afterFirstCycle.lastUpdatedAt());
     }
 
+    enum ScopeFormat {
+        /** Standard format: project_ids stored as a JSON-encoded array string, e.g. "[\"uuid\"]" */
+        JSON_ARRAY,
+        /** Legacy format: project_ids stored as a plain UUID string, e.g. "uuid" */
+        PLAIN_UUID
+    }
+
+    @ParameterizedTest(name = "scope format: {0}")
+    @EnumSource(ScopeFormat.class)
+    void scopeProjectIdFormatMigratedToCorrectProject(ScopeFormat format) {
+        var ws = newWorkspace();
+        var p1 = createProject(ws, randomName("project"));
+
+        var alertId = createOrphanAlert(ws, randomName("alert"), List.of(
+                scopedTrigger(AlertEventType.PROMPT_CREATED, format, p1)));
+
+        migrationService.runMigrationCycle().block();
+
+        var alert = getAlert(ws, alertId);
+        assertThat(alert.projectId()).isEqualTo(p1);
+        assertNoScopeProjectConfig(alert);
+    }
+
+    @Test
+    void malformedScopeProjectIdTreatedAsWorkspaceWide() {
+        var ws = newWorkspace();
+        var defaultProjectId = createProject(ws, ProjectService.DEFAULT_PROJECT);
+
+        var malformedConfig = AlertTriggerConfig.builder()
+                .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                .configValue(Map.of(PROJECT_IDS_CONFIG_KEY, "not-a-valid-uuid-or-json"))
+                .build();
+        var trigger = AlertTrigger.builder()
+                .eventType(AlertEventType.PROMPT_CREATED)
+                .triggerConfigs(List.of(malformedConfig))
+                .build();
+
+        var alertId = createOrphanAlert(ws, randomName("alert"), List.of(trigger));
+
+        migrationService.runMigrationCycle().block();
+
+        var alert = getAlert(ws, alertId);
+        assertThat(alert.projectId()).isEqualTo(defaultProjectId);
+    }
+
     @Test
     void postMigrationAlertIsEditableViaApi() {
         var ws = newWorkspace();
@@ -368,6 +415,21 @@ class AlertProjectMigrationServiceTest {
                 .build();
 
         return alertResourceClient.createAlert(alert, ws.apiKey(), ws.workspaceName(), HttpStatus.SC_CREATED);
+    }
+
+    private static AlertTrigger scopedTrigger(AlertEventType eventType, ScopeFormat format, UUID projectId) {
+        var projectIdsValue = switch (format) {
+            case JSON_ARRAY -> JsonUtils.writeValueAsString(Set.of(projectId));
+            case PLAIN_UUID -> projectId.toString();
+        };
+        var scopeConfig = AlertTriggerConfig.builder()
+                .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                .configValue(Map.of(PROJECT_IDS_CONFIG_KEY, projectIdsValue))
+                .build();
+        return AlertTrigger.builder()
+                .eventType(eventType)
+                .triggerConfigs(List.of(scopeConfig))
+                .build();
     }
 
     private static AlertTrigger scopedTrigger(AlertEventType eventType, UUID... projectIds) {

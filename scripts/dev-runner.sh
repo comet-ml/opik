@@ -37,7 +37,10 @@ OLLIE_LOG_FILE="/tmp/${RESOURCE_PREFIX}-ollie.log"
 # Sidecar so --stop can find the ollie repo even without OLLIE_REPO_PATH in scope.
 OLLIE_REPO_PATH_FILE="/tmp/${RESOURCE_PREFIX}-ollie.repo"
 
-# Ollie local dev integration (Opik team only — set OLLIE_REPO_PATH to enable)
+# Ollie local dev integration (Opik team only).
+# Auto-detected at $PROJECT_ROOT/../ollie-assist if not explicitly set; see the
+# detect block below. Override with OLLIE_REPO_PATH=/some/other/path; opt out
+# with OLLIE_REPO_PATH= (empty string).
 OLLIE_API_PORT="${OLLIE_API_PORT:-9080}"
 OLLIE_CONSOLE_PORT="${OLLIE_CONSOLE_PORT:-3333}"
 
@@ -77,6 +80,21 @@ require_command() {
         exit 1
     fi
 }
+
+# Auto-detect a sibling ollie-assist checkout when OLLIE_REPO_PATH is unset
+# entirely. Most Opik devs keep ollie-assist next to opik (e.g.
+# ~/repos/opik and ~/repos/ollie-assist), so defaulting here removes the need
+# to export the variable each session. Explicit values still win; setting
+# OLLIE_REPO_PATH="" opts out (the `unset+set` test below treats empty as
+# "user-provided", so the auto-detect skips).
+if [ -z "${OLLIE_REPO_PATH+set}" ]; then
+    _ollie_candidate="$(cd "$PROJECT_ROOT/.." 2>/dev/null && pwd)/ollie-assist"
+    if [ -d "$_ollie_candidate" ] && [ -f "$_ollie_candidate/Makefile" ]; then
+        OLLIE_REPO_PATH="$_ollie_candidate"
+        log_info "Auto-detected ollie-assist checkout at $OLLIE_REPO_PATH (export OLLIE_REPO_PATH= to opt out)"
+    fi
+    unset _ollie_candidate
+fi
 
 # Function to find JAR files in target directory
 find_jar_files() {
@@ -350,10 +368,12 @@ wait_for_backend_ready() {
 }
 
 # --- Ollie local dev (gated on OLLIE_REPO_PATH) ---------------------------
-# When OLLIE_REPO_PATH is exported, dev-runner spawns `make dev` in that
-# checkout (docker-compose API on 9080 + console JS dev server on 3333) and
-# wires the frontend to it via VITE_ASSISTANT_SIDEBAR_BASE_URL. Unset means
-# no-op — OSS contributors and Opik devs not testing the assistant are
+# When OLLIE_REPO_PATH points at a valid ollie-assist checkout (auto-detected
+# at $PROJECT_ROOT/../ollie-assist or set explicitly), dev-runner spawns
+# `make dev` in that checkout (docker-compose API on 9080 + console JS dev
+# server on 3333) and wires the frontend to it via
+# VITE_ASSISTANT_SIDEBAR_BASE_URL. Empty / no sibling means no-op — OSS
+# contributors and Opik devs not testing the assistant are
 # unaffected.
 
 # Has the user opted into the local ollie integration?
@@ -1262,8 +1282,10 @@ show_usage() {
     echo "  DEBUG_MODE=true       - Enable debug mode"
     echo "  OPIK_PORT_OFFSET=<n>  - Override automatic port offset (0-99)"
     echo "  OLLIE_REPO_PATH=<p>   - Opik-team only: path to a local ollie-assist checkout."
-    echo "                          When set, dev-runner runs 'make dev' in that repo and"
-    echo "                          enables the assistant sidebar in the frontend."
+    echo "                          Defaults to <opik-root>/../ollie-assist if that path"
+    echo "                          exists and contains a Makefile. dev-runner runs 'make"
+    echo "                          dev' in that repo and enables the assistant sidebar."
+    echo "                          Set to empty string to opt out: OLLIE_REPO_PATH="
     echo "  OLLIE_API_PORT=<n>    - Override ollie healthcheck/API port (default: 9080)"
     echo "  OLLIE_CONSOLE_PORT=<n>- Override ollie console port (default: 3333)"
 }

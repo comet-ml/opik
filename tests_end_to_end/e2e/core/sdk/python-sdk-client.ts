@@ -1,5 +1,41 @@
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
+  createTrace(args: {
+    project_name: string;
+    name: string;
+    input: string;
+    output: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string }>;
+  createDataset(args: {
+    name: string;
+    project_name: string;
+    description?: string;
+    items?: Array<Record<string, unknown>>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  evaluateExperiment(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    items: Array<Record<string, unknown>>;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    experiment_name: string;
+    dataset_id: string;
+    item_count: number;
+    scored_item_count: number;
+    scores: Array<{
+      dataset_item_id: string;
+      input: string;
+      expected_output: string;
+      task_output: string;
+      score_name: string;
+      score_value: number;
+    }>;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -31,9 +67,15 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
     try {
+      const headers: Record<string, string> = {};
+      if (body !== undefined) headers['content-type'] = 'application/json';
+      // Read OPIK_API_KEY at request time so the minted key from globalSetup
+      // is picked up after the bridge has already spawned.
+      const apiKey = process.env.OPIK_API_KEY;
+      if (apiKey) headers['X-Opik-Api-Key'] = apiKey;
       const res = await fetch(`${bridgeUrl}${path}`, {
         method,
-        headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
       });
@@ -65,6 +107,29 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
   return {
     async createProject({ name, workspace }) {
       return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+    },
+    async createTrace(args) {
+      return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
+    },
+    async createDataset(args) {
+      return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async evaluateExperiment(args) {
+      return request<{
+        experiment_id: string;
+        experiment_name: string;
+        dataset_id: string;
+        item_count: number;
+        scored_item_count: number;
+        scores: Array<{
+          dataset_item_id: string;
+          input: string;
+          expected_output: string;
+          task_output: string;
+          score_name: string;
+          score_value: number;
+        }>;
+      }>('POST', '/experiments/evaluate', args);
     },
   };
 }

@@ -74,10 +74,12 @@ jobs:
       - name: Print summary
         if: always() && steps.sync.outputs.summary != ''
         run: |
-          echo "## Sync Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.sync.outputs.summary }}" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Sync Summary"
+            echo '```'
+            echo "${{ steps.sync.outputs.summary }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check for changes
         if: steps.sync.outputs.exit_code == '0'
