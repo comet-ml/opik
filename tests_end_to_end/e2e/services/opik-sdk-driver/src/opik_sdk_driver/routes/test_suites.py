@@ -59,10 +59,16 @@ def insert_test_suite_items(
     body: TestSuiteInsertItemsRequest,
     x_opik_api_key: str | None = Header(default=None),
 ) -> TestSuiteInsertItemsResponse:
-    """Insert items into an existing test suite by name (idempotent get-or-create)."""
+    """Insert items into an existing test suite by name (idempotent get-or-create).
+
+    Resolves the suite within the caller's `project_name` scope; without that,
+    same-named suites across projects could collide.
+    """
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
-        suite = client.get_or_create_test_suite(name=body.suite_name)
+        suite = client.get_or_create_test_suite(
+            name=body.suite_name, project_name=body.project_name
+        )
         items = [item.model_dump(exclude_none=True) for item in body.items]
         suite.insert(items)
         suite_id = str(suite.id)
@@ -90,7 +96,9 @@ def run_test_suite(
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     opik.set_global_client(client, context_wise=True)
     try:
-        suite = client.get_or_create_test_suite(name=body.suite_name)
+        suite = client.get_or_create_test_suite(
+            name=body.suite_name, project_name=body.project_name
+        )
 
         def task(item: dict) -> dict:
             return {"input": item, "output": body.task_output}

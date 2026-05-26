@@ -36,7 +36,6 @@ test.describe('Playground — smoke', { tag: ['@t1-smoke', '@playground'] }, () 
     dataset,
     project,
     backendClient,
-    testNamespace,
     page,
   }) => {
     test.setTimeout(180_000);
@@ -65,22 +64,18 @@ test.describe('Playground — smoke', { tag: ['@t1-smoke', '@playground'] }, () 
 
     await test.step('SDK-verify an experiment landed under the project (auto-named)', async () => {
       // The playground generates experiment names server-side (e.g.
-      // "redundant_landaulet_8244"). Filter by the dataset name prefix via the
-      // existing listExperimentsWithPrefix — fall back to scanning ALL recent
-      // experiments if the name shape changes.
-      const experiments = await backendClient.listExperimentsWithPrefix(testNamespace);
-      // The auto-generated name doesn't share our test prefix, so search by
-      // the underlying datasetId instead via a direct API call would require a
-      // new backendClient method. Pragmatic check: any experiment created with
-      // this dataset's id. Use findExperimentByName fallback if needed.
-      // For the smoke, assert at least one matching experiment exists with our
-      // dataset's id (covers auto-named experiments).
-      const all = await backendClient.listExperimentsWithPrefix('');
-      const recentMatching = all.filter((e) => e.datasetId === dataset.id);
-      expect(
-        recentMatching.length,
-        `expected at least one experiment with datasetId=${dataset.id}; experiments listed: ${experiments.length}`,
-      ).toBeGreaterThanOrEqual(1);
+      // "redundant_landaulet_8244"), and the experiment record is written
+      // shortly AFTER the result rows render. Poll briefly to ride out that
+      // window. We match on datasetId since the name is auto-generated.
+      await expect
+        .poll(
+          async () => {
+            const all = await backendClient.listExperimentsWithPrefix('');
+            return all.filter((e) => e.datasetId === dataset.id).length;
+          },
+          { timeout: 15_000, intervals: [500, 1000, 2000] },
+        )
+        .toBeGreaterThanOrEqual(1);
     });
   });
 });

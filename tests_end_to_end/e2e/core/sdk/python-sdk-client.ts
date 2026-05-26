@@ -52,6 +52,7 @@ export interface PythonSdkClient {
   }): Promise<{ id: string; name: string }>;
   insertTestSuiteItems(args: {
     suite_name: string;
+    project_name: string;
     items: Array<{
       data: Record<string, unknown>;
       assertions?: string[];
@@ -61,6 +62,7 @@ export interface PythonSdkClient {
   }): Promise<{ suite_id: string; inserted: number }>;
   runTestSuite(args: {
     suite_name: string;
+    project_name: string;
     task_output: string;
     experiment_name: string;
     judge_model?: string;

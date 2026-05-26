@@ -46,6 +46,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
     await test.step('SDK-trigger a run against the seeded suite', async () => {
       const result = await sdkClient.python.runTestSuite({
         suite_name: testSuite.name,
+        project_name: testSuite.projectName,
         task_output: 'PASS',
         experiment_name: experimentName,
         judge_model: 'anthropic/claude-haiku-4-5',
@@ -140,6 +141,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
       // version (v2 here).
       await sdkClient.python.insertTestSuiteItems({
         suite_name: name,
+        project_name: project.name,
         items: [{ data: { question: 'ui-added question' } }],
       });
       // Reload the items page so the FE refetches the latest version.

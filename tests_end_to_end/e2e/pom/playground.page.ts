@@ -129,20 +129,24 @@ export class PlaygroundPage {
    *  - test_suite: rows show "Passed <output>" / "Failed <output>" (LLM-judged).
    *  - dataset: rows show the raw output cell (no pass/fail label).
    *
-   * We poll for the absence of "No runs yet" placeholders. When all expected
-   * cells have transitioned out of that empty state, the run is done.
+   * Completion requires BOTH: all "No runs yet" placeholders are gone, AND the
+   * rendered row count meets `expectedRows`. Checking only the placeholder
+   * disappearance lets us return early if the table briefly re-renders during
+   * loading (`No runs yet` is unmounted while rows are still being painted).
    */
   async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
     const table = this.resultsTable();
     await expect
       .poll(
         async () => {
-          const noRunsYetCount = await table.getByText('No runs yet').count();
-          return noRunsYetCount;
+          const noRunsYet = await table.getByText('No runs yet').count();
+          if (noRunsYet !== 0) return false;
+          const rowCount = await this.countOutputRows();
+          return rowCount >= opts.expectedRows;
         },
         { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
       )
-      .toBe(0);
+      .toBe(true);
   }
 
   /**

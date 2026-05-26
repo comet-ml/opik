@@ -115,6 +115,7 @@ class TestSuiteRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     suite_name: str
+    project_name: str
     task_output: str
     experiment_name: str
     judge_model: str | None = None
@@ -125,6 +126,7 @@ class TestSuiteInsertItemsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     suite_name: str
+    project_name: str
     items: list[TestSuiteItemSeed]
     workspace: str | None = None
 

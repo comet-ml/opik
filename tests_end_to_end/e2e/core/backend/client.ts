@@ -159,9 +159,10 @@ export function makeBackendClient(apiKey: string | null = null) {
           ...(projectName ? { projectName } : {}),
         });
         // Backend stores test suites and datasets on the same table, discriminated
-        // by `type`. Guard against returning a dataset that happens to share a name.
+        // by `type`. Require an explicit match: if `type` is missing or anything
+        // other than 'evaluation_suite', this isn't a test suite.
         const typeFromBackend = (dataset as { type?: string }).type;
-        if (typeFromBackend !== undefined && typeFromBackend !== TEST_SUITE_TYPE) {
+        if (typeFromBackend !== TEST_SUITE_TYPE) {
           return null;
         }
         return {
