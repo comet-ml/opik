@@ -27,6 +27,30 @@ function parseRunIdTimestamp(name: string): number | null {
 async function sweepOrphans(apiKey: string | null): Promise<void> {
   const backend = makeBackendClient(apiKey);
   const cutoff = Date.now() - ORPHAN_MAX_AGE_MS;
+
+  /** Sweep datasets before projects — datasets don't cascade-delete with their parent project. */
+  try {
+    const staleDatasets = await backend.listDatasetsWithPrefix('cuj-');
+    let sweptCount = 0;
+    for (const d of staleDatasets) {
+      const ts = parseRunIdTimestamp(d.name);
+      if (ts === null) continue;
+      if (ts < cutoff) {
+        try {
+          await backend.deleteDataset(d.id);
+          sweptCount++;
+        } catch {
+          // Best-effort; another runner may have just deleted it.
+        }
+      }
+    }
+    if (sweptCount > 0) {
+      console.log(`[global-setup] Swept ${sweptCount} orphaned datasets (>6h old)`);
+    }
+  } catch (e) {
+    console.warn('[global-setup] dataset orphan sweep warning (continuing):', e);
+  }
+
   try {
     const stale = await backend.listProjectsWithPrefix('cuj-');
     let sweptCount = 0;

@@ -7,6 +7,13 @@ export interface PythonSdkClient {
     output: string;
     workspace?: string;
   }): Promise<{ id: string; name: string; project_id: string }>;
+  createDataset(args: {
+    name: string;
+    project_name: string;
+    description?: string;
+    items?: Array<Record<string, unknown>>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -81,6 +88,9 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createTrace(args) {
       return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
+    },
+    async createDataset(args) {
+      return request<{ id: string; name: string }>('POST', '/datasets', args);
     },
   };
 }

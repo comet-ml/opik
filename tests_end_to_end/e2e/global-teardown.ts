@@ -21,6 +21,24 @@ async function globalTeardown() {
 
   console.log(`[global-teardown] Sweeping entities with prefix ${prefix}`);
 
+  /** Sweep datasets before projects — datasets don't cascade-delete with their parent project. */
+  try {
+    const datasets = await backend.listDatasetsWithPrefix(prefix);
+    if (datasets.length === 0) {
+      console.log('  no datasets to sweep');
+    }
+    for (const d of datasets) {
+      try {
+        await backend.deleteDataset(d.id);
+        console.log(`  deleted dataset ${d.name}`);
+      } catch (e) {
+        console.warn(`  dataset ${d.name} delete warning:`, e);
+      }
+    }
+  } catch (e) {
+    console.warn('[global-teardown] dataset sweep warning:', e);
+  }
+
   try {
     const projects = await backend.listProjectsWithPrefix(prefix);
     if (projects.length === 0) {
