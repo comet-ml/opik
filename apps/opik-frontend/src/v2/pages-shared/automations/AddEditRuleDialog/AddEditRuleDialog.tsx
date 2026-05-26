@@ -486,7 +486,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg sm:max-w-[790px]">
+        <DialogContent
+          className="max-w-lg sm:max-w-[790px]"
+          data-testid="add-edit-rule-dialog"
+        >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
@@ -620,6 +623,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                           <div className="flex">
                             <ToggleGroup
                               type="single"
+                              data-testid="add-edit-rule-dialog-type"
                               value={field.value}
                               onValueChange={(
                                 value: UI_EVALUATORS_RULE_TYPE,
@@ -712,7 +716,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 </span>
               </TooltipWrapper>
             ) : (
-              <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+              <Button
+                type="submit"
+                onClick={form.handleSubmit(onSubmit)}
+                data-testid="add-edit-rule-dialog-submit"
+              >
                 {submitText}
               </Button>
             )}
