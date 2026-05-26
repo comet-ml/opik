@@ -34,7 +34,6 @@ const VIEW_MODE_OPTIONS: Array<{
 
 const stringifyMetadata = (m: unknown): string => {
   if (m === undefined || m === null) return "";
-  if (typeof m === "object" && Object.keys(m as object).length === 0) return "";
   try {
     return JSON.stringify(m, null, 2);
   } catch {
@@ -303,28 +302,34 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   // Reset selection and view mode each time the sheet reopens.
   useEffect(() => {
     if (!open) return;
-    const requestedBase = initialBaseVersionId
-      ? versions.find((v) => v.id === initialBaseVersionId)
-      : undefined;
-    const requestedDiff = initialDiffVersionId
-      ? versions.find((v) => v.id === initialDiffVersionId)
-      : undefined;
-    setBaseVersion(
-      requestedBase ??
-        versions.find((v) => v.commit === first(versionOptions)?.value),
-    );
-    setDiffVersion(
-      requestedDiff ??
-        versions.find((v) => v.commit === last(versionOptions)?.value),
-    );
-    setViewMode(isChatDiff ? "pretty" : "json");
+    const requestedBase =
+      (initialBaseVersionId
+        ? versions.find((v) => v.id === initialBaseVersionId)
+        : undefined) ??
+      versions.find((v) => v.commit === first(versionOptions)?.value);
+    const requestedDiff =
+      (initialDiffVersionId
+        ? versions.find((v) => v.id === initialDiffVersionId)
+        : undefined) ??
+      versions.find((v) => v.commit === last(versionOptions)?.value);
+    setBaseVersion(requestedBase);
+    setDiffVersion(requestedDiff);
+    // Compute viewMode from the requested versions, not the stale state-derived
+    // `isChatDiff`, so we don't briefly render the wrong mode on reopen.
+    const requestedIsChatDiff =
+      parseChatTemplate(
+        normalizeChatTemplate(requestedBase?.template || ""),
+      ) !== null &&
+      parseChatTemplate(
+        normalizeChatTemplate(requestedDiff?.template || ""),
+      ) !== null;
+    setViewMode(requestedIsChatDiff ? "pretty" : "json");
   }, [
     open,
     versionOptions,
     versions,
     initialBaseVersionId,
     initialDiffVersionId,
-    isChatDiff,
   ]);
 
   const baseLabel = baseVersion

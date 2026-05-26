@@ -26,11 +26,9 @@ const useSetPromptVersionEnvironmentMutation = () => {
       );
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "message"], error.message) ??
+        "An unknown error occurred while updating the prompt environment. Please try again.";
 
       toast({
         title: "Error",

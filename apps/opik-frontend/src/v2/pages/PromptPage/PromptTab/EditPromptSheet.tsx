@@ -63,6 +63,8 @@ const CHAT_VIEW_OPTIONS: Array<{
   { value: "json", label: "JSON" },
 ];
 
+const METADATA_EDITOR_EXTENSIONS = [jsonLanguage, EditorView.lineWrapping];
+
 const serializeMessagesForRaw = (messages: LLMMessage[]): string =>
   JSON.stringify(
     messages.map((m) => ({ role: m.role, content: m.content })),
@@ -307,7 +309,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
                   theme={theme}
                   value={metadata}
                   onChange={setMetadata}
-                  extensions={[jsonLanguage, EditorView.lineWrapping]}
+                  extensions={METADATA_EDITOR_EXTENSIONS}
                 />
               </div>
             </FormFieldCard>

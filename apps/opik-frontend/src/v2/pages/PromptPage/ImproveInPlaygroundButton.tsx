@@ -14,6 +14,7 @@ import PromptImprovementDialog from "@/v2/pages-shared/llm/PromptImprovementDial
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ImproveInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
@@ -32,6 +33,9 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
   const { mutate: createVersion } = useCreatePromptVersionMutation();
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
 
   const sourceVersion = activeVersion ?? prompt?.latest_version;
   const originalPrompt = useMemo<MessageContent>(
@@ -41,7 +45,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
 
   const handleAccept = useCallback(
     (_messageId: string, improvedPrompt: MessageContent) => {
-      if (!prompt) return;
+      if (!prompt || !canCreatePrompts) return;
       const template =
         typeof improvedPrompt === "string"
           ? improvedPrompt
@@ -61,6 +65,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
     },
     [
       prompt,
+      canCreatePrompts,
       sourceVersion?.type,
       sourceVersion?.metadata,
       activeProjectId,

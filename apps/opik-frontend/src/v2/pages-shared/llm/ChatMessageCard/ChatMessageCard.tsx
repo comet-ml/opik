@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 
-export const getRoleLabel = (role: string): string => {
+export const getRoleLabel = (role: unknown): string => {
+  if (typeof role !== "string") return String(role ?? "");
   const roleKey = role.toUpperCase() as keyof typeof LLM_MESSAGE_ROLE;
   if (LLM_MESSAGE_ROLE[roleKey]) {
     return LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE[roleKey]] || role;

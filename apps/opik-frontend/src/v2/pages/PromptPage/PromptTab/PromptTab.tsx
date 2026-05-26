@@ -55,7 +55,7 @@ import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlayground
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { getTimeFromNow } from "@/lib/date";
-import { VersionStage, isProdTag } from "@/utils/version-stages";
+import { pickHighestStage } from "@/utils/version-stages";
 import RestoreVersionDialog from "./RestoreVersionDialog";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
@@ -80,9 +80,6 @@ interface PromptTabInterface {
 interface VersionWithMaybeAuthor extends PromptVersion {
   created_by?: string;
 }
-
-const versionHasProdTag = (version: PromptVersion | undefined) =>
-  Boolean(version?.tags?.some(isProdTag));
 
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const {
@@ -159,7 +156,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const activeVersionLabel =
     activeIndex >= 0 && total > 0 ? `v${total - activeIndex}` : "";
 
-  const activeIsProd = versionHasProdTag(activeVersion);
+  const activeStage = pickHighestStage(activeVersion?.tags);
   const activeAuthor =
     (activeVersion as VersionWithMaybeAuthor | undefined)?.created_by ?? "";
   const activeVersionEnvironment = activeVersion?.environment ?? null;
@@ -319,7 +316,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               <span className="comet-body-accented text-foreground">
                 {activeVersionLabel || "v—"}
               </span>
-              {activeIsProd && <StageTag value={VersionStage.PROD} size="sm" />}
+              {activeStage && <StageTag value={activeStage} size="sm" />}
               <EnvironmentBadge name={activeVersionEnvironment} size="sm" />
               {historyItems.length > 1 && (
                 <>
