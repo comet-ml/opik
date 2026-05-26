@@ -138,6 +138,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
         {latestVersion && (
           <>
             <Tag
+              data-testid="dataset-detail-version-label"
               size="md"
               variant="transparent"
               className="flex shrink-0 items-center gap-1"
@@ -159,6 +160,8 @@ const DatasetItemsPageHeader: React.FunctionComponent<
           <Tooltip>
             <TooltipTrigger asChild>
               <div
+                data-testid="dataset-detail-global-assertions-pill"
+                data-count={effectiveAssertions.length}
                 className="flex shrink-0 cursor-pointer items-center gap-1 rounded bg-thread-active px-1.5 py-0.5"
                 onClick={onSettingsClick}
               >

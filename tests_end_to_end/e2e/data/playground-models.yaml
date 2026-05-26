@@ -1,0 +1,43 @@
+# Test prompt + model configuration for Prompt Playground provider sanity tests.
+# Per-model toggles match the v1 suite's models_config.yaml at
+# tests_end_to_end/typescript-tests/models_config.yaml.
+#
+# `options` is the model-config knob exercised by the test (in addition to the
+# baseline prompt run). Each test sets these options on the variant before
+# clicking Run. Keep values conservative — don't set max_tokens: 1.
+providers:
+  openai:
+    display_name: "OpenAI"
+    provider_name: "OpenAI"
+    api_key_env_var: "OPENAI_API_KEY"
+    models:
+      - name: "GPT 4o Mini"
+        ui_selector: "GPT 4o Mini"
+        enabled: true
+        options:
+          temperature: 0
+          max_tokens: 128
+  anthropic:
+    display_name: "Anthropic"
+    provider_name: "Anthropic"
+    api_key_env_var: "ANTHROPIC_API_KEY"
+    models:
+      - name: "Claude Haiku 4.5"
+        ui_selector: "Claude Haiku 4.5"
+        enabled: true
+        options:
+          temperature: 0
+          max_tokens: 128
+  gemini:
+    display_name: "Gemini"
+    provider_name: "Gemini"
+    api_key_env_var: "GEMINI_API_KEY"
+    models:
+      - name: "Gemini 2.5 Flash"
+        ui_selector: "Gemini 2.5 Flash"
+        enabled: true
+        options:
+          temperature: 0
+test_config:
+  test_prompt: "Explain what is an LLM in one paragraph."
+  response_timeout_seconds: 60

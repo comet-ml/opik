@@ -333,6 +333,8 @@ const PlaygroundHeader = ({
         <>
           <div className="flex h-6 items-center rounded-md border bg-background">
             <button
+              data-testid="playground-loaded-source-pill"
+              data-source-type={currentDatasetType}
               className="flex items-center gap-1.5 px-2 text-muted-slate hover:text-primary-hover"
               onClick={() => setIsRunModalOpen(true)}
             >
@@ -368,6 +370,8 @@ const PlaygroundHeader = ({
 
     return (
       <Button
+        data-testid="playground-run-button"
+        data-mode="experiment-trigger"
         variant="outline"
         size="2xs"
         onClick={() => setIsRunModalOpen(true)}
@@ -398,6 +402,8 @@ const PlaygroundHeader = ({
     return (
       <TooltipWrapper content={tooltip}>
         <Button
+          data-testid="playground-run-button"
+          data-mode={isExperimentMode ? "re-run" : "run"}
           size="2xs"
           onClick={() => onRunAll()}
           disabled={isRunDisabled}

@@ -83,3 +83,63 @@ class ExperimentEvaluateResponse(BaseModel):
     item_count: int
     scored_item_count: int
     scores: list[ExperimentItemScore]
+
+
+class TestSuiteItemSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: dict[str, Any]
+    assertions: list[str] | None = None
+    description: str | None = None
+
+
+class TestSuiteCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    project_name: str
+    description: str | None = None
+    global_assertions: list[str] = []
+    runs_per_item: int | None = None
+    pass_threshold: int | None = None
+    items: list[TestSuiteItemSeed] | None = None
+    workspace: str | None = None
+
+
+class TestSuiteResponse(BaseModel):
+    id: str
+    name: str
+
+
+class TestSuiteRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suite_name: str
+    project_name: str
+    task_output: str
+    experiment_name: str
+    judge_model: str | None = None
+    workspace: str | None = None
+
+
+class TestSuiteInsertItemsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suite_name: str
+    project_name: str
+    items: list[TestSuiteItemSeed]
+    workspace: str | None = None
+
+
+class TestSuiteInsertItemsResponse(BaseModel):
+    suite_id: str
+    inserted: int
+
+
+class TestSuiteRunResponse(BaseModel):
+    experiment_id: str | None
+    experiment_name: str | None
+    pass_rate: float | None
+    items_passed: int
+    items_failed: int
+    items_total: int
