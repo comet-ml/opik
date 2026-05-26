@@ -38,12 +38,16 @@ import com.comet.opik.api.runner.ParamPresence;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.Response;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -67,8 +71,15 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -112,17 +123,26 @@ class LocalRunnersResourceTest {
         MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
+        // Capture the BI events StatsClient would send to stats.comet.com so we can assert
+        // the exact payloads emitted by the disconnect endpoint.
+        wireMock.server().stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(okJson("{\"message\":\"Event added successfully\",\"success\":\"true\"}")));
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
+                        .usageReportEnabled(true)
+                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
                         .customConfigs(List.of(
                                 new CustomConfig("localRunner.heartbeatTtl", "2s"),
                                 new CustomConfig("localRunner.maxPendingJobsPerRunner", "3"),
                                 new CustomConfig("localRunner.bridgePollTimeout", "2s"),
-                                new CustomConfig("localRunner.bridgeMaxPendingPerRunner", "3")))
+                                new CustomConfig("localRunner.bridgeMaxPendingPerRunner", "3"),
+                                new CustomConfig("analytics.enabled", "true"),
+                                new CustomConfig("analytics.environment", "test")))
                         .build());
     }
 
@@ -981,6 +1001,37 @@ class LocalRunnersResourceTest {
         }
 
         @Test
+        void storesPromptMasksWhenProvided() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-prompt-masks", projectId, ctx.apiKey, ctx.workspace);
+            Map<UUID, UUID> promptMasks = Map.of(
+                    randomUUID(), randomUUID(),
+                    randomUUID(), randomUUID());
+
+            UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectId).promptMasks(promptMasks).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(job.promptMasks()).isEqualTo(promptMasks);
+        }
+
+        @Test
+        void storesPromptMasksNullWhenNotProvided() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-no-prompt-masks", projectId, ctx.apiKey, ctx.workspace);
+
+            UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectId).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(job.promptMasks()).isNull();
+        }
+
+        @Test
         void storesMaskIdAndMetadataNullWhenNotProvided() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
@@ -1029,6 +1080,23 @@ class LocalRunnersResourceTest {
                 assertThat(claimed.status().getValue()).isEqualTo("running");
                 assertThat(claimed.startedAt()).isNotNull();
             }
+        }
+
+        @Test
+        void returnsPromptMasksWhenClaimed() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("nj-prompt-masks", projectId, ctx.apiKey, ctx.workspace);
+            Map<UUID, UUID> promptMasks = Map.of(
+                    randomUUID(), randomUUID(),
+                    randomUUID(), randomUUID());
+
+            runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectId).promptMasks(promptMasks).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob claimed = runnersClient.nextJob(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(claimed.promptMasks()).isEqualTo(promptMasks);
         }
 
         @Test
@@ -1669,6 +1737,58 @@ class LocalRunnersResourceTest {
 
             LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
             assertThat(runner.capabilities()).containsExactly("jobs");
+        }
+    }
+
+    @Nested
+    @DisplayName("BI events on disconnect")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BiEvents {
+
+        private static final String DISCONNECTED = AnalyticsService.EVENT_PREFIX + "runner_disconnected";
+
+        @BeforeEach
+        void resetWireMock() {
+            wireMock.server().resetRequests();
+        }
+
+        @Test
+        @DisplayName("opik_runner_disconnected fires with reason=stopped on a real SDK-initiated disconnect")
+        void disconnectRunner__owned__emitsRunnerDisconnected() {
+            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+            UUID runnerId = connectRunnerWithPairing("disconnect-bi", projectId, API_KEY, TEST_WORKSPACE,
+                    RunnerType.ENDPOINT);
+
+            try (Response response = runnersClient.callDisconnect(runnerId, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+
+            Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(DISCONNECTED))
+                                    .and(matchingJsonPath("$.event_properties.runner_id",
+                                            equalTo(runnerId.toString())))
+                                    .and(matchingJsonPath("$.event_properties.runner_type",
+                                            equalTo("endpoint")))
+                                    .and(matchingJsonPath("$.event_properties.reason", equalTo("stopped")))
+                                    .and(matchingJsonPath("$.event_properties.workspace_id",
+                                            equalTo(WORKSPACE_ID))))));
+        }
+
+        @Test
+        @DisplayName("opik_runner_disconnected does NOT fire on a no-op disconnect of an unknown runner")
+        void disconnectRunner__unknown__doesNotEmit() {
+            UUID unknownRunnerId = randomUUID();
+
+            try (Response response = runnersClient.callDisconnect(unknownRunnerId, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+
+            // No-op disconnects must not pollute the clean-shutdown signal: assert that NO
+            // opik_runner_disconnected event landed in the wait window.
+            Awaitility.await().during(2, TimeUnit.SECONDS).atMost(5, TimeUnit.SECONDS).untilAsserted(
+                    () -> wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(DISCONNECTED)))));
         }
     }
 }

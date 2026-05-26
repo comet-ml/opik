@@ -41,7 +41,10 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent
+        className="max-w-lg"
+        data-testid="dataset-version-commit-dialog"
+      >
         <DialogHeader>
           <DialogTitle>Save changes</DialogTitle>
         </DialogHeader>

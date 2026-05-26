@@ -8,7 +8,7 @@ import { calculateWorkspaceName } from "@/lib/utils";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useUser from "@/plugins/comet/useUser";
-import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAppStore from "@/store/AppStore";
 import {
   Workspace,
@@ -26,7 +26,7 @@ const useWorkspaceSelectorData = () => {
   const [isOrgSubmenuOpen, setIsOrgSubmenuOpen] = useState(false);
 
   const { data: user } = useUser();
-  const { data: userInvitedWorkspaces, isLoading } = useUserInvitedWorkspaces({
+  const { data: allWorkspaces, isLoading } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
   });
   const { data: organizations } = useOrganizations({
@@ -63,7 +63,7 @@ const useWorkspaceSelectorData = () => {
   const handleChangeOrganization = useCallback(
     (newOrganization: Organization) => {
       const newOrganizationWorkspaces =
-        userInvitedWorkspaces?.filter(
+        allWorkspaces?.filter(
           (workspace) => workspace.organizationId === newOrganization.id,
         ) || [];
 
@@ -86,7 +86,7 @@ const useWorkspaceSelectorData = () => {
         });
       }
     },
-    [navigate, userInvitedWorkspaces, toast],
+    [navigate, allWorkspaces, toast],
   );
 
   const handleOrgSettingsClick = useCallback(() => {
@@ -99,13 +99,13 @@ const useWorkspaceSelectorData = () => {
   }, [currentOrganization, workspaceName]);
 
   const memberWorkspaces = useMemo(() => {
-    if (!userInvitedWorkspaces || !currentOrganization) return [];
-    return userInvitedWorkspaces.filter(
+    if (!allWorkspaces || !currentOrganization) return [];
+    return allWorkspaces.filter(
       (workspace) =>
         workspace.organizationId === currentOrganization.id &&
         workspace.workspaceName !== DEFAULT_WORKSPACE_NAME,
     );
-  }, [userInvitedWorkspaces, currentOrganization]);
+  }, [allWorkspaces, currentOrganization]);
 
   const filteredWorkspaces = useMemo(() => {
     if (!search) return memberWorkspaces;

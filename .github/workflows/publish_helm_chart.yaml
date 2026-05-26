@@ -15,7 +15,6 @@ on:
         type: string
         required: true
         description: Version
-        default: ""
 
 
 jobs:
@@ -105,7 +104,7 @@ jobs:
             
             # 2. Restore timestamps for existing files from gh-pages git history
             echo "Restoring file timestamps from git history..."
-            git ls-files -z | while read -d $'\0' file; do
+            git ls-files -z | while read -r -d $'\0' file; do
               if [ -f "$file" ]; then
                 TIME=$(git log -1 --format="%cI" -- "$file")
                 if [ -n "$TIME" ]; then
@@ -149,6 +148,6 @@ jobs:
 
         - name: Summary
           run: |
-            echo "Helm chart is published, version is : $VERSION" >> $GITHUB_STEP_SUMMARY
+            echo "Helm chart is published, version is : $VERSION" >> "$GITHUB_STEP_SUMMARY"
 
 

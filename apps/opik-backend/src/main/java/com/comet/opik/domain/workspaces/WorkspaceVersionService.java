@@ -3,10 +3,10 @@ package com.comet.opik.domain.workspaces;
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.domain.AlertDAO;
-import com.comet.opik.domain.DashboardDAO;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ExperimentDAO;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.OptimizationDAO;
 import com.comet.opik.domain.PromptDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
@@ -61,7 +61,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Entity Types Checked:</h3>
  * <ul>
- *   <li>State database (cheapest-first): dashboards, automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
+ *   <li>State database (cheapest-first): automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
  *   <li>Analytics database (cheapest-first): optimizations, experiments (excl. demo) etc.</li>
  *   <li>Not yet checked: alerts (no project_id column yet)</li>
  * </ul>
@@ -107,6 +107,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     protected final TransactionTemplate transactionTemplate;
     protected final ExperimentDAO experimentDAO;
     protected final OptimizationDAO optimizationDAO;
+    protected final FeedbackScoreDAO feedbackScoreDAO;
     protected final ServiceTogglesConfig serviceTogglesConfig;
     protected final CacheManager cacheManager;
     protected final CacheConfiguration cacheConfiguration;
@@ -116,6 +117,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     protected AbstractWorkspaceVersionService(@NonNull TransactionTemplate transactionTemplate,
             @NonNull ExperimentDAO experimentDAO,
             @NonNull OptimizationDAO optimizationDAO,
+            @NonNull FeedbackScoreDAO feedbackScoreDAO,
             @NonNull ServiceTogglesConfig serviceTogglesConfig,
             @NonNull CacheManager cacheManager,
             @NonNull CacheConfiguration cacheConfiguration,
@@ -124,6 +126,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         this.transactionTemplate = transactionTemplate;
         this.experimentDAO = experimentDAO;
         this.optimizationDAO = optimizationDAO;
+        this.feedbackScoreDAO = feedbackScoreDAO;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.cacheManager = cacheManager;
         this.cacheConfiguration = cacheConfiguration;
@@ -213,15 +216,32 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response, String userName) {
         var newVersion = response.opikVersion();
-        var previousVersion = workspacesService.findById(workspaceId)
+        var existingWorkspace = workspacesService.findById(workspaceId);
+        var previousVersion = existingWorkspace
                 .map(Workspace::lastKnownVersion)
                 .flatMap(OpikVersion::findByValue);
         workspacesService.upsertVersion(workspaceId, newVersion, userName);
+        // Skip the CH probe + MySQL write once the flag is false — the legacy table only
+        // shrinks (no new writes land there), so the answer can't flip back to true.
+        boolean storedHasLegacyScores = existingWorkspace
+                .map(Workspace::hasLegacyScores)
+                .orElse(true);
+        if (storedHasLegacyScores) {
+            try {
+                boolean hasLegacyScores = Boolean.TRUE.equals(feedbackScoreDAO.hasLegacyScores(workspaceId).block());
+                if (existingWorkspace.isEmpty() || !hasLegacyScores) {
+                    workspacesService.upsertHasLegacyScores(workspaceId, hasLegacyScores, userName);
+                }
+            } catch (RuntimeException exception) {
+                log.warn("Failed to probe legacy feedback_scores, leaving flag untouched, workspaceId '{}'",
+                        workspaceId, exception);
+            }
+        }
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,
-                "previous_version", previousVersion.map(OpikVersion::getValue).orElse("unknown"),
-                "new_version", newVersion.getValue(),
+                "previous_version", previousVersion.map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
+                "new_version", Optional.ofNullable(newVersion).map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
                 "version_changed", String.valueOf(versionChanged),
                 "date", Instant.now().toString()));
     }
@@ -280,10 +300,6 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      */
     private boolean hasStateDbVersion1Entities(String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            if (handle.attach(DashboardDAO.class).hasVersion1Dashboards(workspaceId)) {
-                log.info("Found version_1 dashboards in workspace '{}'", workspaceId);
-                return true;
-            }
             if (handle.attach(AutomationRuleDAO.class).hasVersion1AutomationRules(workspaceId)) {
                 log.info("Found multi-project automation rules in workspace '{}'", workspaceId);
                 return true;

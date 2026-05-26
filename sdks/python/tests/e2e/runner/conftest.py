@@ -16,7 +16,7 @@ import pytest
 import opik
 import opik.api_objects.opik_client
 from opik.api_objects import rest_helpers
-from opik.cli.pairing import hkdf_sha256
+from opik.cli.local_runner.pairing import hkdf_sha256
 from opik.rest_api import core as rest_api_core
 
 

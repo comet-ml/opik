@@ -1,7 +1,14 @@
+# HTTP server semconv histograms are emitted with explicit-bucket advice
+# baked into the OTel Java instrumentation (boundaries cap at 10s). The
+# OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION env var does
+# not override that advice, so we set the aggregation explicitly here.
+# `base2_exponential_bucket_histogram` removes the 10s ceiling and keeps
+# quantile accuracy across the full latency range.
 - selector:
     instrument_name: http.server.request.duration
     instrument_type: HISTOGRAM
   view:
+    aggregation: base2_exponential_bucket_histogram
     attribute_keys:
       - http.request.method
       - url.scheme
@@ -18,6 +25,7 @@
     instrument_name: http.server.request.body.size
     instrument_type: HISTOGRAM
   view:
+    aggregation: base2_exponential_bucket_histogram
     attribute_keys:
       - http.request.method
       - url.scheme
@@ -34,6 +42,7 @@
     instrument_name: http.server.response.body.size
     instrument_type: HISTOGRAM
   view:
+    aggregation: base2_exponential_bucket_histogram
     attribute_keys:
       - http.request.method
       - url.scheme

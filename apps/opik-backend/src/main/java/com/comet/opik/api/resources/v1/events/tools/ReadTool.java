@@ -21,11 +21,14 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Fetches an Opik entity by {@code (type, id)}, caches the FULL JSON form in
@@ -47,8 +50,9 @@ import java.util.UUID;
  * exceeds {@link #CACHE_CAP_CHARS} (≈ 10 MB), the MEDIUM-tier truncated form is
  * cached instead and a {@code cache_warning} field is inlined in the response.
  *
- * <p>Errors are returned as {@code {"error": "..."}} JSON strings rather than
- * thrown — the tool-call loop must remain non-fatal.
+ * <p>Errors are emitted as {@code {"error": "..."}} JSON strings (via the
+ * returned {@link Mono}) rather than failing the Mono — the tool-call loop must
+ * remain non-fatal.
  */
 @Singleton
 @Slf4j
@@ -76,6 +80,26 @@ public class ReadTool implements ToolExecutor {
 
     static final String CACHE_WARNING_MESSAGE = "Entity exceeded 10 MB; only MEDIUM-tier form was cached."
             + " jq queries against this entity will reflect truncated content.";
+
+    /**
+     * Per-call cap on serialized tool-output size returned to the model. When a compressed
+     * payload exceeds this many characters the tool downgrades the tier one step
+     * ({@code FULL → MEDIUM → SKELETON}) and recompresses, so a {@code tier=FULL} request
+     * on a multi-MB trace still fits in the model's window. At ~2 chars/token worst case,
+     * this caps any single read at ~20K tokens.
+     *
+     * <p>This is a <strong>best-effort heuristic, not a hard boundary</strong>. If the
+     * payload is still over the cap once the smallest tier (SKELETON) is reached,
+     * {@link #guardOutput} logs a WARN and returns the over-cap result anyway — hard-
+     * truncating the JSON payload would corrupt the envelope and break the agent's tool
+     * round. Additionally, {@link #buildResponse} wraps the payload in an envelope with
+     * a few extra fields ({@code tier}, {@code type}, {@code id}, optional
+     * {@code cache_warning}), so the final response can exceed {@code OUTPUT_SAFETY_CHARS}
+     * by a few hundred chars even in the common path. Operators investigating the WARN
+     * should tighten the per-tier limits in {@link TraceCompressor} or
+     * {@link GenericCompressor} rather than raising this cap.
+     */
+    static final int OUTPUT_SAFETY_CHARS = 40_000;
 
     private static final ToolSpecification SPEC = ToolSpecification.builder()
             .name(NAME)
@@ -136,37 +160,39 @@ public class ReadTool implements ToolExecutor {
     }
 
     @Override
-    public String execute(String arguments, TraceToolContext ctx) {
+    public Mono<String> execute(String arguments, @NonNull TraceToolContext ctx) {
         ParsedArgs args = parseArgs(arguments);
         if (args.error != null) {
-            return args.error;
+            return Mono.just(args.error);
         }
 
-        try {
-            return switch (args.type) {
-                case TRACE -> readTrace(args, ctx);
-                case SPAN -> readGeneric(args, ctx, () -> fetchSpanJson(args.id, ctx));
-                case DATASET -> readDataset(args, ctx);
-                case DATASET_ITEM -> readGeneric(args, ctx, () -> fetchDatasetItemJson(args.id, ctx));
-                case PROJECT -> readGeneric(args, ctx, () -> fetchProjectJson(args.id, ctx));
-                case THREAD -> ToolArgs.errorJson("type=thread is not supported by the read tool");
-            };
-        } catch (NotFoundLikeException e) {
-            return ToolArgs.errorJson(e.getMessage());
-        } catch (Exception e) {
-            // Don't echo the raw exception message to the LLM — it can include ClickHouse
-            // query fragments, stack-trace-like detail, or internal paths. Surface a short
-            // correlation id instead so an operator can grep the warn log to find the cause.
-            String correlationId = UUID.randomUUID().toString();
-            log.warn("read tool failed for ref ('{}', '{}'), correlationId='{}'",
-                    args.type, args.id, correlationId, e);
-            return ToolArgs.errorJson("Failed to fetch entity (ref: " + correlationId + ")");
-        }
+        // Mono.defer so any synchronous throw from parseUuid / cache lookups is captured as
+        // a Mono error and rendered as a `{"error": "..."}` JSON string by onErrorResume.
+        Mono<String> dispatch = Mono.defer(() -> switch (args.type) {
+            case TRACE -> readTrace(args, ctx);
+            case SPAN -> readGeneric(args, ctx, fetchSpanJsonReactive(args.id, ctx));
+            case DATASET -> readDataset(args, ctx);
+            case DATASET_ITEM -> readGeneric(args, ctx, fetchDatasetItemJsonReactive(args.id, ctx));
+            case PROJECT -> readGeneric(args, ctx, fetchProjectJsonReactive(args.id, ctx));
+            case THREAD -> Mono.just(ToolArgs.errorJson("type=thread is not supported by the read tool"));
+        });
+
+        return dispatch
+                .onErrorResume(NotFoundLikeException.class, e -> Mono.just(ToolArgs.errorJson(e.getMessage())))
+                .onErrorResume(Exception.class, e -> {
+                    // Don't echo the raw exception message to the LLM — it can include ClickHouse
+                    // query fragments, stack-trace-like detail, or internal paths. Surface a short
+                    // correlation id instead so an operator can grep the warn log to find the cause.
+                    String correlationId = UUID.randomUUID().toString();
+                    log.warn("read tool failed for ref ('{}', '{}'), correlationId='{}'",
+                            args.type, args.id, correlationId, e);
+                    return Mono.just(ToolArgs.errorJson("Failed to fetch entity (ref: " + correlationId + ")"));
+                });
     }
 
     // ---------------- Trace ----------------
 
-    private String readTrace(ParsedArgs args, TraceToolContext ctx) throws NotFoundLikeException {
+    private Mono<String> readTrace(ParsedArgs args, TraceToolContext ctx) {
         UUID id = parseUuid(args.id);
         EntityRef ref = new EntityRef(EntityType.TRACE, args.id);
 
@@ -175,36 +201,39 @@ public class ReadTool implements ToolExecutor {
         // Cache pre-seeded by OnlineScoringLlmAsJudgeScorer for the active trace; reuse if present.
         Optional<JsonNode> cached = ctx.getCached(ref);
 
-        Trace trace;
-        List<Span> spans;
-        JsonNode fullJson;
+        Mono<TraceWithSpans> dataMono;
         if (cached.isPresent()) {
-            fullJson = cached.get();
-            trace = readJson(fullJson.get("trace"), Trace.class);
-            spans = readJsonList(fullJson.get("spans"), Span.class);
+            JsonNode fullJson = cached.get();
+            Trace trace = readJson(fullJson.get("trace"), Trace.class);
+            List<Span> spans = readJsonList(fullJson.get("spans"), Span.class);
+            dataMono = Mono.just(new TraceWithSpans(fullJson, trace, spans));
         } else {
-            trace = blockingGet(traceService.get(id), ctx);
-            if (trace == null) {
-                throw new NotFoundLikeException("Trace not found: " + args.id);
-            }
-            spans = blockingCollect(spanService.getByTraceIds(Set.of(id)), ctx);
-            fullJson = traceCompressor.buildFullJson(trace, spans);
+            dataMono = withRequestContext(traceService.get(id), ctx)
+                    .switchIfEmpty(Mono.error(new NotFoundLikeException("Trace not found: " + args.id)))
+                    .flatMap(trace -> collectWithRequestContext(spanService.getByTraceIds(Set.of(id)), ctx)
+                            .map(spans -> new TraceWithSpans(
+                                    traceCompressor.buildFullJson(trace, spans), trace, spans)));
         }
 
-        CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
-        // Always replace the cache with outcome.cachedNode — even when the cache was
-        // pre-seeded (e.g. the active trace from OnlineScoringLlmAsJudgeScorer) we want
-        // to swap an oversize seed for the truncated form so JVM heap stays bounded.
-        // For under-cap entities outcome.cachedNode is the same node, so this is a no-op.
-        ctx.cache(ref, outcome.cachedNode);
+        return dataMono.map(data -> {
+            CacheOutcome outcome = applyCacheCap(data.fullJson(), ref, ctx);
+            // Always replace the cache with outcome.cachedNode — even when the cache was
+            // pre-seeded (e.g. the active trace from OnlineScoringLlmAsJudgeScorer) we want
+            // to swap an oversize seed for the truncated form so JVM heap stays bounded.
+            // For under-cap entities outcome.cachedNode is the same node, so this is a no-op.
+            ctx.cache(ref, outcome.cachedNode());
 
-        var result = traceCompressor.compress(fullJson, trace, spans, args.tier, suffixStyleFor(ref, ctx));
-        return buildResponse(args, result, outcome.warning).toString();
+            PathAwareTruncator.SuffixStyle suffix = suffixStyleFor(ref, ctx);
+            var result = guardOutput(
+                    traceCompressor.compress(data.fullJson(), data.trace(), data.spans(), args.tier, suffix),
+                    tier -> traceCompressor.compress(data.fullJson(), data.trace(), data.spans(), tier, suffix));
+            return buildResponse(args, result, outcome.warning()).toString();
+        });
     }
 
     // ---------------- Dataset ----------------
 
-    private String readDataset(ParsedArgs args, TraceToolContext ctx) throws NotFoundLikeException {
+    private Mono<String> readDataset(ParsedArgs args, TraceToolContext ctx) {
         UUID id = parseUuid(args.id);
         EntityRef ref = new EntityRef(EntityType.DATASET, args.id);
 
@@ -212,17 +241,17 @@ public class ReadTool implements ToolExecutor {
 
         Optional<JsonNode> cached = ctx.getCached(ref);
 
-        Dataset dataset;
-        List<DatasetItem> sampleItems;
-        JsonNode fullJson;
+        Mono<DatasetWithItems> dataMono;
         if (cached.isPresent()) {
-            fullJson = cached.get();
-            dataset = readJson(fullJson.get("dataset"), Dataset.class);
-            sampleItems = readJsonList(fullJson.get("sample_items"), DatasetItem.class);
+            JsonNode fullJson = cached.get();
+            Dataset dataset = readJson(fullJson.get("dataset"), Dataset.class);
+            List<DatasetItem> sampleItems = readJsonList(fullJson.get("sample_items"), DatasetItem.class);
+            dataMono = Mono.just(new DatasetWithItems(fullJson, dataset, sampleItems));
         } else {
-            dataset = datasetService.getById(id, ctx.getWorkspaceId())
+            // datasetService.getById is already synchronous (returns Optional<Dataset>).
+            Dataset dataset = datasetService.getById(id, ctx.getWorkspaceId())
                     .orElseThrow(() -> new NotFoundLikeException("Dataset not found: " + args.id));
-            sampleItems = blockingCollect(
+            dataMono = withRequestContext(
                     datasetItemService.getItems(1, DatasetCompressor.SAMPLE_SIZE,
                             DatasetItemSearchCriteria.builder()
                                     .datasetId(id)
@@ -230,85 +259,87 @@ public class ReadTool implements ToolExecutor {
                                     .entityType(com.comet.opik.domain.EntityType.TRACE)
                                     .truncate(false)
                                     .build())
-                            .map(page -> page.content() == null ? List.of() : page.content()),
-                    ctx);
-            fullJson = datasetCompressor.buildFullJson(dataset, sampleItems);
+                            .map(page -> page.content() == null ? List.<DatasetItem>of() : page.content()),
+                    ctx)
+                    .map(sampleItems -> new DatasetWithItems(
+                            datasetCompressor.buildFullJson(dataset, sampleItems), dataset, sampleItems));
         }
 
-        CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
-        ctx.cache(ref, outcome.cachedNode);
+        return dataMono.map(data -> {
+            CacheOutcome outcome = applyCacheCap(data.fullJson(), ref, ctx);
+            ctx.cache(ref, outcome.cachedNode());
 
-        var result = datasetCompressor.compress(dataset, sampleItems);
-        return buildResponse(args, result, outcome.warning).toString();
+            var result = datasetCompressor.compress(data.dataset(), data.sampleItems());
+            return buildResponse(args, result, outcome.warning()).toString();
+        });
     }
 
     // ---------------- Generic (span / dataset_item / project) ----------------
 
-    private String readGeneric(ParsedArgs args, TraceToolContext ctx, FetchSupplier fetcher)
-            throws NotFoundLikeException {
+    private Mono<String> readGeneric(ParsedArgs args, TraceToolContext ctx, Mono<JsonNode> fetcher) {
         EntityRef ref = new EntityRef(args.type, args.id);
-        JsonNode fullJson = ctx.getCached(ref).orElseGet(fetcher::get);
+        // Cold Mono: fetcher is built but not subscribed; only the cache-miss branch subscribes it.
+        Mono<JsonNode> jsonMono = ctx.getCached(ref)
+                .map(Mono::just)
+                .orElse(fetcher);
 
         log.debug("readGeneric (span / dataset_item / project): id={}, ref={}", args.id, ref);
 
-        CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
-        ctx.cache(ref, outcome.cachedNode);
+        return jsonMono.map(fullJson -> {
+            CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
+            ctx.cache(ref, outcome.cachedNode());
 
-        var result = genericCompressor.compress(fullJson, args.tier, suffixStyleFor(ref, ctx));
-        return buildResponse(args, result, outcome.warning).toString();
+            PathAwareTruncator.SuffixStyle suffix = suffixStyleFor(ref, ctx);
+            var result = guardOutput(
+                    genericCompressor.compress(fullJson, args.tier, suffix),
+                    tier -> genericCompressor.compress(fullJson, tier, suffix));
+            return buildResponse(args, result, outcome.warning()).toString();
+        });
     }
 
     // ---------------- Fetchers ----------------
 
-    private JsonNode fetchSpanJson(String idStr, TraceToolContext ctx) {
-        UUID id = parseUuid(idStr);
-        Span span = blockingGet(spanService.getById(id), ctx);
-        if (span == null) {
-            throw new NotFoundLikeException("Span not found: " + idStr);
-        }
-        return JsonUtils.getMapper().valueToTree(span);
+    private Mono<JsonNode> fetchSpanJsonReactive(String idStr, TraceToolContext ctx) {
+        return Mono.defer(() -> {
+            UUID id = parseUuid(idStr);
+            return withRequestContext(spanService.getById(id), ctx)
+                    .switchIfEmpty(Mono.error(new NotFoundLikeException("Span not found: " + idStr)))
+                    .map(span -> JsonUtils.getMapper().valueToTree(span));
+        });
     }
 
-    private JsonNode fetchDatasetItemJson(String idStr, TraceToolContext ctx) {
-        UUID id = parseUuid(idStr);
-        DatasetItem item = blockingGet(datasetItemService.get(id), ctx);
-        if (item == null) {
-            throw new NotFoundLikeException("Dataset item not found: " + idStr);
-        }
-        return JsonUtils.getMapper().valueToTree(item);
+    private Mono<JsonNode> fetchDatasetItemJsonReactive(String idStr, TraceToolContext ctx) {
+        return Mono.defer(() -> {
+            UUID id = parseUuid(idStr);
+            return withRequestContext(datasetItemService.get(id), ctx)
+                    .switchIfEmpty(Mono.error(new NotFoundLikeException("Dataset item not found: " + idStr)))
+                    .map(item -> JsonUtils.getMapper().valueToTree(item));
+        });
     }
 
-    private JsonNode fetchProjectJson(String idStr, TraceToolContext ctx) {
-        UUID id = parseUuid(idStr);
-        var project = projectService.get(id, ctx.getWorkspaceId());
-        if (project == null) {
-            throw new NotFoundLikeException("Project not found: " + idStr);
-        }
-        return JsonUtils.getMapper().valueToTree(project);
+    private Mono<JsonNode> fetchProjectJsonReactive(String idStr, TraceToolContext ctx) {
+        // projectService.get is already synchronous; fromCallable so a throw is captured.
+        return Mono.fromCallable(() -> {
+            UUID id = parseUuid(idStr);
+            var project = projectService.get(id, ctx.getWorkspaceId());
+            if (project == null) {
+                throw new NotFoundLikeException("Project not found: " + idStr);
+            }
+            return JsonUtils.getMapper().valueToTree(project);
+        });
     }
 
     // ---------------- Helpers ----------------
 
-    private static <T> T blockingGet(reactor.core.publisher.Mono<T> mono, TraceToolContext ctx) {
-        return mono
-                .contextWrite(rc -> rc.put(RequestContext.WORKSPACE_ID, ctx.getWorkspaceId())
-                        .put(RequestContext.USER_NAME, ctx.getUserName()))
-                .block();
+    private static <T> Mono<T> withRequestContext(Mono<T> mono, TraceToolContext ctx) {
+        return mono.contextWrite(rc -> rc.put(RequestContext.WORKSPACE_ID, ctx.getWorkspaceId())
+                .put(RequestContext.USER_NAME, ctx.getUserName()));
     }
 
-    private static <T> List<T> blockingCollect(reactor.core.publisher.Flux<T> flux, TraceToolContext ctx) {
+    private static <T> Mono<List<T>> collectWithRequestContext(Flux<T> flux, TraceToolContext ctx) {
         return flux.collectList()
                 .contextWrite(rc -> rc.put(RequestContext.WORKSPACE_ID, ctx.getWorkspaceId())
-                        .put(RequestContext.USER_NAME, ctx.getUserName()))
-                .block();
-    }
-
-    private static <T> List<T> blockingCollect(reactor.core.publisher.Mono<List<T>> mono, TraceToolContext ctx) {
-        var result = mono
-                .contextWrite(rc -> rc.put(RequestContext.WORKSPACE_ID, ctx.getWorkspaceId())
-                        .put(RequestContext.USER_NAME, ctx.getUserName()))
-                .block();
-        return result == null ? List.of() : result;
+                        .put(RequestContext.USER_NAME, ctx.getUserName()));
     }
 
     private static UUID parseUuid(String id) {
@@ -449,6 +480,79 @@ public class ReadTool implements ToolExecutor {
         return tier;
     }
 
+    /**
+     * Recompresses at a smaller tier if the initial output exceeds {@link #OUTPUT_SAFETY_CHARS}.
+     * Walks {@code FULL → MEDIUM → SKELETON}, stopping at the first tier under the cap or when
+     * no smaller tier exists.
+     *
+     * <p>The walk drives off the LAST REQUESTED tier, not {@code current.tier()}, because
+     * some compressors collapse multiple request tiers to the same returned tier (e.g.
+     * {@link GenericCompressor} returns {@code tier=MEDIUM} for both {@code MEDIUM} and
+     * {@code SKELETON} requests). Tracking the request prevents an infinite loop in that
+     * case — once we've asked for SKELETON, the next call returns SKELETON regardless of
+     * the {@code tier} field on the result.
+     *
+     * <p><strong>Best-effort cap:</strong> if the smallest tier is still over
+     * {@link #OUTPUT_SAFETY_CHARS}, the over-cap result is returned anyway (with a WARN
+     * log carrying the actual size) — see {@link #OUTPUT_SAFETY_CHARS} for why we don't
+     * hard-truncate.
+     */
+    private static CompressionResult guardOutput(
+            CompressionResult initial,
+            Function<CompressionTier, CompressionResult> recompress) {
+        CompressionResult current = initial;
+        CompressionTier lastRequested = current.tier();
+        // Bounded by the tier ladder (FULL → MEDIUM → SKELETON terminal), but capped explicitly
+        // at the enum's cardinality so a future tier change can't accidentally turn this into
+        // an unbounded loop even if downgradeTierOrSame's contract drifts. Cached locally
+        // because Enum.values() allocates a fresh array on each call.
+        int maxAttempts = CompressionTier.values().length;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            int currentSize = current.payload().toString().length();
+            if (currentSize <= OUTPUT_SAFETY_CHARS) {
+                return current;
+            }
+            CompressionTier next = downgradeTierOrSame(lastRequested);
+            if (next == lastRequested) {
+                // Single warn per call: we've exhausted the ladder. Emitted at most once even if
+                // the agent issues many read() calls, since this is the terminal branch.
+                // currentSize gives operators the actual overshoot so they can decide whether to
+                // tighten the per-tier limits in TraceCompressor / GenericCompressor.
+                log.warn(
+                        "Read tool output '{}' chars exceeded cap '{}' at smallest tier '{}' — returning anyway (cap is best-effort, not hard)",
+                        currentSize, OUTPUT_SAFETY_CHARS, lastRequested);
+                return current;
+            }
+            // debug, not info: a many-rounds-per-evaluation agent could trigger one downgrade per
+            // read call, and 2-3 downgrades per guard. Keeping this at info would multiply into
+            // tens of lines per evaluation without operator value — the warn above catches the
+            // case that actually matters.
+            log.debug("Read tool output exceeded '{}' chars at tier '{}', downgrading to '{}'",
+                    OUTPUT_SAFETY_CHARS, lastRequested, next);
+            current = recompress.apply(next);
+            lastRequested = next;
+        }
+        // Defensive: the for loop's iteration cap should never be hit in practice because the
+        // tier ladder reaches a terminal state in at most 3 steps. If it does, log loudly and
+        // return what we have rather than spinning.
+        log.warn("Read tool guardOutput exhausted '{}' iterations without reaching a terminal tier",
+                maxAttempts);
+        return current;
+    }
+
+    /**
+     * Returns the next-smaller tier, or the same tier when there is nothing smaller to
+     * fall back to. Callers must check {@code result == input} to detect "can't downgrade
+     * any further" rather than rely on a sentinel like {@code null} or {@code Optional}.
+     */
+    private static CompressionTier downgradeTierOrSame(CompressionTier tier) {
+        return switch (tier) {
+            case FULL -> CompressionTier.MEDIUM;
+            case MEDIUM -> CompressionTier.SKELETON;
+            case SKELETON, SUMMARY -> tier;
+        };
+    }
+
     // ---------------- Argument parsing ----------------
 
     private static ParsedArgs parseArgs(String arguments) {
@@ -488,9 +592,10 @@ public class ReadTool implements ToolExecutor {
         }
     }
 
-    @FunctionalInterface
-    private interface FetchSupplier {
-        JsonNode get();
+    private record TraceWithSpans(JsonNode fullJson, Trace trace, List<Span> spans) {
+    }
+
+    private record DatasetWithItems(JsonNode fullJson, Dataset dataset, List<DatasetItem> sampleItems) {
     }
 
     @Builder(toBuilder = true)

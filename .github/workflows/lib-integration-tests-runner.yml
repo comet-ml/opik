@@ -21,7 +21,7 @@ on:
           - anthropic
           - aisuite
           - haystack
-          - guardrails
+          # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
           - dspy
           - crewai_v0
           - crewai_v1
@@ -70,7 +70,7 @@ jobs:
       - name: Print has secrets into output
         id: init
         run: |
-          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
 
   missed_api_key_warning:
     name: Missed OpenAI API Key Warning
@@ -95,7 +95,7 @@ jobs:
       - name: Make LIBS variable global (workaround for cron)
         id: init
         run: |
-          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
+          echo "LIBS=${{ env.LIBS }}" >> "$GITHUB_OUTPUT"
 
   openai_tests:
     needs: [init_environment]
@@ -142,11 +142,13 @@ jobs:
     uses: ./.github/workflows/lib-haystack-tests.yml
     secrets: inherit
 
-  guardrails_tests:
-    needs: [init_environment]
-    if: contains(fromJSON('["guardrails", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-guardrails-tests.yml
-    secrets: inherit
+  # guardrails-ai is on PyPI quarantine, so the install step fails before
+  # pytest runs. Re-enable once the package is back on PyPI.
+  # guardrails_tests:
+  #   needs: [init_environment]
+  #   if: contains(fromJSON('["guardrails", "all"]'), needs.init_environment.outputs.LIBS)
+  #   uses: ./.github/workflows/lib-guardrails-tests.yml
+  #   secrets: inherit
 
   dspy_tests:
     needs: [init_environment]
@@ -225,7 +227,7 @@ jobs:
       - anthropic_tests
       - aisuite_tests
       - haystack_tests
-      - guardrails_tests
+      # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
       - dspy_tests
       - crewai_v0_tests
       - crewai_v1_tests
@@ -253,7 +255,7 @@ jobs:
           else
             TYPE="Manual Dispatch"
           fi
-          echo "type=$TYPE" >> $GITHUB_OUTPUT
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
 
       - name: Send Slack notification
         env:
@@ -269,7 +271,6 @@ jobs:
               "Anthropic": "${{ needs.anthropic_tests.result }}",
               "AISuite": "${{ needs.aisuite_tests.result }}",
               "Haystack": "${{ needs.haystack_tests.result }}",
-              "Guardrails": "${{ needs.guardrails_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",
               "CrewAI v0": "${{ needs.crewai_v0_tests.result }}",
               "CrewAI v1": "${{ needs.crewai_v1_tests.result }}",

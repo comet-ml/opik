@@ -4,11 +4,8 @@ import { AxiosError } from "axios";
 import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span } from "@/types/traces";
 import { useToast } from "@/ui/use-toast";
-import {
-  TagUpdateFields,
-  buildTagUpdatePayload,
-  extractErrorMessage,
-} from "@/lib/tags";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 type UseSpanBatchUpdateMutationParams = {
   projectId: string;

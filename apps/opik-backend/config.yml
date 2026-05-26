@@ -535,6 +535,16 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: ${REDIS_SCORING_STREAM_TRIM_LIMIT:-100}
+  # Default: 50000
+  # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes through the
+  #   agentic-tools path (skeleton initial prompt + read/jq/search tools). Below the threshold the inline
+  #   path is used.
+  agenticToolsThresholdTokens: ${ONLINE_SCORING_AGENTIC_TOOLS_THRESHOLD_TOKENS:-50000}
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate a trace's token count from its serialized JSON
+  #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
+  #   pessimistic estimate so the agentic-tools path engages earlier.
+  agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -1005,9 +1015,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
@@ -1017,6 +1024,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
   datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether the deployment is expected to produce demo project data on signup. When false, the FE skips the onboarding demo-loading screen and lets the user proceed to the empty workspace immediately.
+  demoDataEnabled: ${TOGGLE_DEMO_DATA_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
@@ -1044,13 +1054,13 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
-  # Deprecated (OPIK-6434): the Collaborators tab is always enabled on the frontend.
-  # The TOGGLE_COLLABORATORS_TAB_ENABLED env var is no longer consulted; value is
-  # hardcoded to preserve the /v1/private/feature-toggles response shape for older
-  # Python/TypeScript SDK clients that declare it as a required boolean. Safe to
-  # delete (along with the dangling helm-chart env-var settings) once those SDK
-  # versions are out of support.
-  collaboratorsTabEnabled: false
+  # Default: false
+  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
+  # Default: false
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
+  #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
+  agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
@@ -1082,9 +1092,6 @@ serviceToggles:
 
 # Local Runner configuration
 localRunner:
-  # Default: false
-  # Description: Whether the local runner feature is enabled
-  enabled: ${TOGGLE_RUNNERS_ENABLED:-false}
   # Default: 30m
   # Description: Maximum time a job can run before being considered timed out
   jobTimeout: ${OPIK_RUNNER_JOB_TIMEOUT:-30m}
@@ -1399,6 +1406,112 @@ experimentProjectMigration:
   lockWaitTime: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
   # Per-cycle timeout — safety net for stuck cycles, not normal completion
   jobTimeout: ${EXPERIMENT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+datasetProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${DATASET_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${DATASET_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of datasets to update per MySQL batch
+  datasetBatchSize: ${DATASET_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${DATASET_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${DATASET_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${DATASET_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${DATASET_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${DATASET_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Prompt Project Migration configuration (D4)
+# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Mirrors
+# experimentProjectMigration. Operational prerequisite (enforced via the rollout runbook, not in
+# code): D1 (OPIK-6184) and OPIK-6579 must be fully shipped to this environment first because the
+# only inference signal is experiment.project_id.
+promptProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${PROMPT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${PROMPT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of prompts to update per MySQL UPDATE batch
+  promptBatchSize: ${PROMPT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${PROMPT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${PROMPT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas. Intentionally shorter than
+  # jobTimeout: the WHERE project_id IS NULL predicate makes the cycle idempotent so replica
+  # overlap after lock expiry is safe.
+  lockTimeout: ${PROMPT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it
+  lockWaitTime: ${PROMPT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${PROMPT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the idle window.
+  schedulerThreadTtl: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+automationRuleProjectMigration:
+  # Master switch — set to true to activate the recurring Quartz job.
+  enabled: ${AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED:-false}
+  # Max workspaces processed per cycle (global, across all replicas via distributed lock).
+  workspacesPerRun: ${AUTOMATION_RULE_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions.
+  maxRulesPerCycle: ${AUTOMATION_RULE_PROJECT_MIGRATION_MAX_RULES_PER_CYCLE:-100}
+  # How often the Quartz job fires.
+  interval: ${AUTOMATION_RULE_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay after application start before the first cycle runs.
+  startupDelay: ${AUTOMATION_RULE_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Redis distributed lock held by the winning replica — must be shorter than jobTimeout.
+  lockTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # How long to wait trying to acquire the lock before giving up (non-blocking skip).
+  lockWaitTime: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Hard timeout for the entire cycle — safety net if processing stalls.
+  jobTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated bounded-elastic scheduler — isolates migration from the shared reactive chain.
+  schedulerThreadCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-2}
+  schedulerQueuedTaskCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+alertProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${ALERT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${ALERT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-100}
+  # Number of orphan alerts to process per workspace per cycle
+  alertBatchSize: ${ALERT_PROJECT_MIGRATION_ALERT_BATCH_SIZE:-100}
+  # Interval between recurring job runs
+  interval: ${ALERT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${ALERT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${ALERT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${ALERT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${ALERT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list

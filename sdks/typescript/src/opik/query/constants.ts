@@ -16,6 +16,18 @@ export const OPERATOR_SETS = {
     ">",
     "<",
   ],
+  // Operators supported by backend FieldType.STRING_STATE_DB. Mirrors
+  // ANALYTICS_DB_OPERATOR_MAP in FilterQueryBuilder.java: STRING_STATE_DB has
+  // entries only for CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH, EQUAL,
+  // and NOT_EQUAL — > and < resolve to a null operator and produce a 400.
+  STRING_STATE_DB_OPS: [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+  ],
   NUMERIC_OPS: ["=", "!=", ">", "<", ">=", "<="],
   DATETIME_OPS: ["=", ">", "<", ">=", "<="],
   LIST_OPS: [

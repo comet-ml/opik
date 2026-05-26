@@ -277,6 +277,26 @@ public interface DatasetItemVersionDAO {
     Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId, String workspaceId);
 
     /**
+     * Counts distinct {@code dataset_item_id}s in a version after applying the same exclusion
+     * semantics used by the copy-from-base path: exclude a set of stable item IDs and/or exclude
+     * rows matching a set of filters.
+     *
+     * <p>Source of truth for sizing the UUID pool passed into {@link #copyVersionItems} and
+     * {@link #applyDelta}. Replaces the previous reliance on the MySQL-stored {@code items_total},
+     * which can drift away from the actual ClickHouse row count and silently truncate copies
+     * (OPIK-6390).
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the source version ID
+     * @param excludedIds stable {@code dataset_item_id}s to exclude (deletes + edits); may be empty
+     * @param excludeFilters filters whose matching rows should be excluded; may be null/empty
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the count of rows that would be copied
+     */
+    Mono<Long> countRowsInVersion(UUID datasetId, UUID versionId, Set<UUID> excludedIds,
+            List<DatasetItemFilter> excludeFilters, String workspaceId);
+
+    /**
      * Counts items for multiple dataset versions in a single query.
      * This is used for batch migration of items_total field.
      * Uses workspace_id, dataset_id, and dataset_version_id to optimize the query
@@ -392,18 +412,87 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
               <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
+    // OPIK-6390: count distinct stable items that would be copied from a source version after
+    // applying the same exclusion semantics as COPY_VERSION_ITEMS. Used to size the UUID pool
+    // from the actual ClickHouse row count rather than the (drift-prone) MySQL items_total.
+    private static final String COUNT_ROWS_IN_VERSION = """
+            SELECT count(DISTINCT dataset_item_id) as count
+            FROM dataset_item_versions
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND workspace_id = :workspace_id
+              <if(exclude_filters)>AND NOT (<exclude_filters>)<endif>
+              <if(exclude_ids)>AND dataset_item_id NOT IN :excluded_ids<endif>
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     /**
-     * Counts dataset items with experiment items, applying all filters from search criteria.
-     * This ensures pagination totals match the filtered results.
-     * Note: Uses simplified feedback scores processing (only aggregated values, not full details)
-     * since we only need values for filtering in HAVING clauses, not for display.
-     * This keeps the count query closer to the legacy pattern while supporting all required filters.
+     * Counts dataset items with experiment items. The {@code slim_count} branch routes the count
+     * through {@code experiment_item_aggregates}; the legacy branch keeps the full CTE chain for
+     * search and raw-only inputs. OPIK-6177 stable-id resolution shape is preserved in both.
      *
-     * <p>OPIK-6177: same stable-id resolution shape as
-     * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS} — see that constant's comment
-     * for the rationale on the lookup_for_count CTE and the direct-table lookup_div LEFT JOIN.
+     * <p>The slim branch's {@code dataset_items_filtered_ids} CTE mirrors the one in
+     * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS}'s {@code push_top_limit} branch,
+     * minus the {@code dataset_version_id} predicate (the slim path doesn't have
+     * {@code experiment_aggregated_scope_ids} in scope). Keep the column list and dataset scoping
+     * aligned across both call sites.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
+            <if(slim_count)>
+            <if(dataset_item_filters)>
+            WITH dataset_items_filtered_ids AS (
+                SELECT id, row_id
+                FROM (
+                    SELECT
+                        dataset_item_id AS id,
+                        id AS row_id,
+                        data,
+                        description,
+                        source,
+                        trace_id,
+                        span_id,
+                        tags,
+                        evaluators,
+                        execution_policy,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    FROM dataset_item_versions FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND dataset_id = :datasetId
+                ) AS resolved
+                WHERE <dataset_item_filters>
+            )
+            <endif>
+            SELECT count(DISTINCT
+                if(notEmpty(lookup_div.dataset_item_id),
+                   lookup_div.dataset_item_id,
+                   eia.dataset_item_id)
+            ) AS count
+            FROM experiment_item_aggregates AS eia FINAL
+            LEFT JOIN (
+                SELECT id, workspace_id, dataset_item_id
+                FROM dataset_item_versions FINAL
+                WHERE workspace_id = :workspace_id
+                  AND dataset_id = :datasetId
+            ) AS lookup_div
+                ON lookup_div.workspace_id = eia.workspace_id
+                AND lookup_div.id = eia.dataset_item_id
+            WHERE eia.workspace_id = :workspace_id
+            AND eia.experiment_id IN (
+                SELECT id
+                FROM experiment_aggregates
+                WHERE workspace_id = :workspace_id
+                  AND dataset_id = :datasetId
+                  <if(experiment_ids)>AND id IN :experiment_ids<endif>
+            )
+            <if(experiment_item_filters)>AND <experiment_item_filters><endif>
+            <if(feedback_scores_filters_agg)>AND <feedback_scores_filters_agg><endif>
+            <if(feedback_scores_empty_filters_agg)>AND <feedback_scores_empty_filters_agg><endif>
+            <if(dataset_item_filters)>AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_filtered_ids)<endif>
+            SETTINGS log_comment = '<log_comment>'
+            <else>
             WITH experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
@@ -703,6 +792,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <endif>
             )
+            <endif>
             """;
 
     // Query to extract columns from trace output for experiment items view
@@ -1775,6 +1865,23 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     // Copy items from source version to target version
     // Optionally excludes items matching filters (when exclude_filters is set)
     // Optionally excludes specific item IDs (when exclude_ids is set)
+    //
+    // OPIK-6390:
+    //   - LIMIT 1 BY dataset_item_id (not id) so that any duplicate physical rows for the same
+    //     stable item within a version collapse to one, matching the dedup pattern used by every
+    //     other read path in this file.
+    //   - row_number() OVER (ORDER BY id DESC) AS rn is computed on the *post-dedup* result
+    //     (inner `deduped` subquery wraps the WHERE + LIMIT 1 BY). Numbering before LIMIT 1 BY
+    //     would leave sparse ranks (e.g. 1,3,5) on unmerged ReplacingMergeTree duplicates and
+    //     the `rn <= length(:uuids)` predicate would push valid rows onto the generateUUIDv7
+    //     fallback even when the pool size is correct, breaking the sort-order invariant.
+    //   - if(rn <= length(:uuids), arrayElement(...), generateUUIDv7()) guarantees each copied row
+    //     receives a unique id even when the Java-supplied pool is shorter than the source row
+    //     count. Previously, out-of-range arrayElement returned an empty string which was padded
+    //     to a NUL-byte FixedString(36); identical NUL ids then collapsed under ReplacingMergeTree
+    //     and items disappeared silently. The fallback UUIDv7 preserves insert atomicity at the
+    //     cost of putting overflowing rows ahead of added/edited rows in id-desc order — a
+    //     visible-but-non-destructive degradation only reached if the pool is undersized.
     private static final String COPY_VERSION_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -1801,7 +1908,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                arrayElement(:uuids, row_number() OVER (ORDER BY src.id DESC)) as id,
+                if(src.rn \\<= length(:uuids),
+                   arrayElement(:uuids, src.rn),
+                   toString(generateUUIDv7())) AS id,
                 src.dataset_item_id,
                 src.dataset_id,
                 :targetVersionId as dataset_version_id,
@@ -1824,19 +1933,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 :user_name as last_updated_by,
                 src.workspace_id
             FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE dataset_id = :datasetId
-                AND dataset_version_id = :sourceVersionId
-                AND workspace_id = :workspace_id
-                <if(exclude_filters)>
-                AND NOT (<exclude_filters>)
-                <endif>
-                <if(exclude_ids)>
-                AND dataset_item_id NOT IN :excludedIds
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                SELECT
+                    *,
+                    row_number() OVER (ORDER BY id DESC) AS rn
+                FROM (
+                    SELECT *
+                    FROM dataset_item_versions
+                    WHERE dataset_id = :datasetId
+                    AND dataset_version_id = :sourceVersionId
+                    AND workspace_id = :workspace_id
+                    <if(exclude_filters)>
+                    AND NOT (<exclude_filters>)
+                    <endif>
+                    <if(exclude_ids)>
+                    AND dataset_item_id NOT IN :excludedIds
+                    <endif>
+                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY dataset_item_id
+                ) AS deduped
             ) AS src
             ORDER BY src.id DESC
             """;
@@ -2801,53 +2915,73 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
                 versionId);
 
-        return asyncTemplate.nonTransaction(connection -> {
-            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
+        // OPIK-6311: slim_count routes the count through EIA when search is absent; filters use
+        // the same renderable strategies as the data path's top_dataset_items CTE.
+        boolean slimCount = hasAggregated && !hasRaw && StringUtils.isBlank(criteria.search());
 
-            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-            template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-            // Add experiment IDs if present
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                template.add("experiment_ids", true);
-            }
+            return asyncTemplate.nonTransaction(connection -> {
+                ST template = slimCount
+                        ? getSTWithLogComment(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT,
+                                "count_dataset_item_versions_with_experiment_items_slim",
+                                workspaceId, userName, criteria.datasetId().toString())
+                        : TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
 
-            // Add branch flags to conditionally include/exclude UNION ALL branches
-            template.add("has_aggregated", hasAggregated);
-            template.add("has_raw", hasRaw);
+                if (slimCount) {
+                    template.add("slim_count", true);
+                }
 
-            // Add filters and search criteria using helper method
-            addFiltersToTemplate(template, criteria);
+                template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
-            // Add target project IDs flag to template (from separate query to reduce traces table scans)
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                template.add("has_target_projects", true);
-            }
+                // Add experiment IDs if present
+                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                    template.add("experiment_ids", true);
+                }
 
-            var statement = connection.createStatement(template.render())
-                    .bind("datasetId", criteria.datasetId())
-                    .bind("versionId", versionId);
+                // Add branch flags to conditionally include/exclude UNION ALL branches
+                template.add("has_aggregated", hasAggregated);
+                template.add("has_raw", hasRaw);
 
-            // Bind target project IDs (from separate query to reduce traces table scans)
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
-            }
+                // Add filters and search criteria using helper method
+                addFiltersToTemplate(template, criteria);
 
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-            }
+                // Add target project IDs flag to template (from separate query to reduce traces table scans)
+                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                    template.add("has_target_projects", true);
+                }
 
-            // Bind search and filter parameters using helper method
-            statement = bindSearchAndFilters(statement, criteria);
+                var statement = connection.createStatement(template.render())
+                        .bind("datasetId", criteria.datasetId());
 
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
-                    "count_dataset_item_versions_with_experiment_filters");
+                if (!slimCount) {
+                    statement.bind("versionId", versionId);
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
-                    .reduce(0L, Long::sum)
-                    .onErrorResume(e -> handleSqlError(e, 0L));
+                    if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                        statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                    }
+                }
+
+                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                    statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+                }
+
+                statement = bindSearchAndFilters(statement, criteria);
+
+                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                        slimCount
+                                ? "count_dataset_item_versions_with_experiment_items_slim"
+                                : "count_dataset_item_versions_with_experiment_filters");
+
+                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                        .doFinally(signalType -> endSegment(segment))
+                        .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
+                        .reduce(0L, Long::sum)
+                        .onErrorResume(e -> handleSqlError(e, 0L));
+            });
         });
     }
 
@@ -3083,8 +3217,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .map(UUID::toString)
                     .toArray(String[]::new);
 
-            // Build query using StringTemplate
-            ST template = new ST(COPY_VERSION_ITEMS);
+            // Build query using StringTemplate (OPIK-6390: switched to TemplateUtils.newST so this
+            // hot-path template is not retained in the default STGroup singleton).
+            ST template = TemplateUtils.newST(COPY_VERSION_ITEMS);
             template.add("exclude_ids", true);
             String query = template.render();
 
@@ -3426,6 +3561,48 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             // Bind filter parameters (only if filters exist)
             if (CollectionUtils.isNotEmpty(filters)) {
                 statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> countRowsInVersion(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull Set<UUID> excludedIds, List<DatasetItemFilter> excludeFilters,
+            @NonNull String workspaceId) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Optional<String> filterConditionsOpt = CollectionUtils.isEmpty(excludeFilters)
+                    ? Optional.empty()
+                    : FilterQueryBuilder.toAnalyticsDbFilters(excludeFilters, FilterStrategy.DATASET_ITEM);
+
+            ST template = getSTWithLogComment(COUNT_ROWS_IN_VERSION, "count_rows_in_version", workspaceId, "",
+                    datasetId);
+            filterConditionsOpt.ifPresent(filterConditions -> template.add("exclude_filters", filterConditions));
+            if (CollectionUtils.isNotEmpty(excludedIds)) {
+                template.add("exclude_ids", true);
+            }
+            String countQuery = template.render();
+
+            var statement = connection.createStatement(countQuery)
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", workspaceId);
+
+            if (CollectionUtils.isNotEmpty(excludedIds)) {
+                String[] excludedIdStrings = excludedIds.stream()
+                        .map(UUID::toString)
+                        .toArray(String[]::new);
+                statement.bind("excluded_ids", excludedIdStrings);
+            }
+
+            if (CollectionUtils.isNotEmpty(excludeFilters)) {
+                statement = FilterQueryBuilder.bind(statement, excludeFilters, FilterStrategy.DATASET_ITEM);
             }
 
             return Flux.from(statement.execute())

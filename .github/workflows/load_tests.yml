@@ -1,0 +1,150 @@
+name: Load Tests (SDK ingestion)
+run-name: "Load Tests ${{ github.ref_name }} by @${{ github.actor }}"
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '0 4 * * 0'  # Weekly, Sunday 04:00 UTC
+  workflow_dispatch:
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_CONSOLE_LOGGING_LEVEL: WARNING
+
+jobs:
+  run-load-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run latest Opik server
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+          COMPOSE_BAKE: false
+          TOGGLE_RUNNERS_ENABLED: "true"
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --backend --port-mapping --build
+
+      - name: Check Opik server availability
+        shell: bash
+        run: |
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+          cd ${{ github.workspace }}/deployment/docker-compose
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Install Opik SDK
+        run: |
+          cd ${{ github.workspace }}/sdks/python
+          pip install .
+
+      - name: Install Python SDK load-test requirements
+        run: |
+          cd ${{ github.workspace }}/tests_load/suite/python_sdk
+          pip install -r requirements.txt
+
+      - name: Run Python SDK load tests
+        # -n 2 + --dist=worksteal runs two scenarios in parallel at a time.
+        # `-n auto` (= 4 workers on ubuntu-latest) was the previous setting
+        # but reliably OOM-killed the heaviest scenarios
+        # (test_many_traces_one_span_each, test_many_spans_per_trace) when
+        # they ended up co-scheduled with other heavy tests against the
+        # same docker-compose Opik stack on the runner's 7 GB RAM. -n 2
+        # halves concurrent backend pressure and per-runner memory, at the
+        # cost of ~1.5x wall-clock (~32 min -> ~50 min). Each test still
+        # uses a unique project so isolation holds. Worksteal balances the
+        # very uneven per-test durations (spread is window-locked at 600 s,
+        # others run in 1-6 min).
+        run: |
+          cd ${{ github.workspace }}/tests_load
+          pytest suite/python_sdk -n 2 --dist=worksteal --junitxml=${{ github.workspace }}/load_test_results.xml
+
+      - name: Render metrics into job summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import pathlib
+
+          metrics_dir = pathlib.Path("tests_load/.last_run")
+          files = sorted(metrics_dir.glob("*.json")) if metrics_dir.exists() else []
+
+          if not files:
+              print("## Load test metrics\n\n_No metrics produced (suite did not run)._")
+              raise SystemExit
+
+          def fmt_seconds(value):
+              return f"{value:.1f} s" if isinstance(value, (int, float)) else "—"
+
+          def fmt_count(value):
+              return f"{value:,}" if isinstance(value, int) else (value or "—")
+
+          print("## Load test metrics\n")
+          print("| Test | Logged | Flush | Verify | Delivered |")
+          print("| --- | ---: | ---: | ---: | ---: |")
+          payloads = []
+          for path in files:
+              m = json.loads(path.read_text())
+              payloads.append(m)
+              name = m.get("test_name", path.stem)
+              logged = fmt_seconds(m.get("logging_seconds"))
+              flush = fmt_seconds(m.get("flush_seconds"))
+              verify = fmt_seconds(m.get("verify_seconds"))
+              delivered = fmt_count(m.get("delivered_trace_count"))
+              print(f"| `{name}` | {logged} | {flush} | {verify} | {delivered} |")
+
+          print("\n<details>\n<summary>Per-test metrics (raw JSON)</summary>\n")
+          for m in payloads:
+              print(f"\n**{m.get('test_name', '?')}**")
+              print("```json")
+              print(json.dumps(m, indent=2))
+              print("```")
+          print("\n</details>")
+          PY
+
+      - name: Upload metrics report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: load-test-metrics
+          path: ${{ github.workspace }}/tests_load/.last_run/
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          comment_mode: failures
+          check_name: Load Test Results
+          files: ${{ github.workspace }}/load_test_results.xml
+
+      - name: Keep BE log in case of failure
+        if: failure()
+        run: |
+          docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend.log
+
+      - name: Attach BE log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: opik-backend-log
+          path: ${{ github.workspace }}/opik-backend.log
+
+      - name: Stop opik server
+        if: always()
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --stop

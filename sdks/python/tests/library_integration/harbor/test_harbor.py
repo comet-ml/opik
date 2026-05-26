@@ -42,13 +42,32 @@ class TestTrackHarborPatching:
             "Trial.run should have opik_tracked attribute after track_harbor()"
         )
 
+    @pytest.mark.skipif(
+        not hasattr(Trial, "_setup_environment"),
+        reason="harbor >= 0.8.0 renamed _setup_environment to _setup_agent_environment",
+    )
     def test_track_harbor_patches_trial_setup_environment(self):
-        """Verify Trial._setup_environment method is patched with opik_tracked attribute."""
+        """Verify Trial._setup_environment method is patched (harbor < 0.8.0)."""
         track_harbor()
         assert hasattr(Trial._setup_environment, "opik_tracked"), (
             "Trial._setup_environment should have opik_tracked attribute after track_harbor()"
         )
 
+    @pytest.mark.skipif(
+        not hasattr(Trial, "_setup_agent_environment"),
+        reason="harbor < 0.8.0 exposed _setup_environment; this method only exists from 0.8.0",
+    )
+    def test_track_harbor_patches_trial_setup_agent_environment(self):
+        """Verify Trial._setup_agent_environment method is patched (harbor >= 0.8.0)."""
+        track_harbor()
+        assert hasattr(Trial._setup_agent_environment, "opik_tracked"), (
+            "Trial._setup_agent_environment should have opik_tracked attribute after track_harbor()"
+        )
+
+    @pytest.mark.skipif(
+        not hasattr(Trial, "_setup_agent"),
+        reason="installed harbor version doesn't expose Trial._setup_agent",
+    )
     def test_track_harbor_patches_trial_setup_agent(self):
         """Verify Trial._setup_agent method is patched with opik_tracked attribute."""
         track_harbor()
@@ -56,6 +75,10 @@ class TestTrackHarborPatching:
             "Trial._setup_agent should have opik_tracked attribute after track_harbor()"
         )
 
+    @pytest.mark.skipif(
+        not hasattr(Trial, "_execute_agent"),
+        reason="installed harbor version doesn't expose Trial._execute_agent (removed in 0.8.0)",
+    )
     def test_track_harbor_patches_trial_execute_agent(self):
         """Verify Trial._execute_agent method is patched with opik_tracked attribute."""
         track_harbor()
@@ -63,6 +86,10 @@ class TestTrackHarborPatching:
             "Trial._execute_agent should have opik_tracked attribute after track_harbor()"
         )
 
+    @pytest.mark.skipif(
+        not hasattr(Trial, "_run_verification"),
+        reason="installed harbor version doesn't expose Trial._run_verification",
+    )
     def test_track_harbor_patches_trial_run_verification(self):
         """Verify Trial._run_verification method is patched with opik_tracked attribute."""
         track_harbor()
@@ -110,19 +137,29 @@ class TestHarborClassesExist:
     alerting us to update the integration.
     """
 
-    def test_trial_class_has_expected_methods(self):
-        """Verify Trial class has all methods we expect to patch."""
-        expected_methods = [
-            "run",
+    def test_trial_class_has_run_method(self):
+        """Trial.run is the only hook we treat as load-bearing — all other
+        method patches are best-effort and gracefully skipped if the method
+        was renamed or removed in the installed harbor version."""
+        assert hasattr(Trial, "run"), "Trial class should have run method"
+
+    def test_trial_class_has_at_least_one_known_method(self):
+        """At least one of the harbor-internal methods we used to patch
+        must still be present. If harbor removes all of them, the
+        integration becomes a no-op and we want to know."""
+        known_method_names = (
             "_setup_environment",
+            "_setup_agent_environment",
             "_setup_agent",
             "_execute_agent",
             "_run_verification",
-        ]
-        for method_name in expected_methods:
-            assert hasattr(Trial, method_name), (
-                f"Trial class should have {method_name} method"
-            )
+        )
+        present = [name for name in known_method_names if hasattr(Trial, name)]
+        assert present, (
+            "None of the harbor Trial methods we used to patch are present "
+            f"({known_method_names!r}); the integration is now a no-op. "
+            "Update trial_patch_targets in opik_tracker._enable_harbor_tracking."
+        )
 
     def test_verifier_class_has_verify_method(self):
         """Verify Verifier class has verify method."""

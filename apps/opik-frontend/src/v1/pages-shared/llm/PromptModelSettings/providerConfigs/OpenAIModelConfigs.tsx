@@ -8,7 +8,11 @@ import {
   ReasoningEffort,
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
-import { isReasoningModel } from "@/lib/modelUtils";
+import {
+  getOpenAIReasoningEffortOptions,
+  isReasoningModel,
+  supportsOpenAIReasoningEffort,
+} from "@/lib/modelUtils";
 import isUndefined from "lodash/isUndefined";
 import {
   Select,
@@ -122,7 +126,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {isReasoning && (
+      {supportsOpenAIReasoningEffort(model) && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
@@ -131,7 +135,7 @@ const OpenAIModelConfigs = ({
             <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." />
           </div>
           <Select
-            value={configs.reasoningEffort || "medium"}
+            value={configs.reasoningEffort ?? "high"}
             onValueChange={(value: ReasoningEffort) =>
               onChange({ reasoningEffort: value })
             }
@@ -140,11 +144,11 @@ const OpenAIModelConfigs = ({
               <SelectValue placeholder="Select reasoning effort" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="minimal">Minimal</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="xhigh">XHigh</SelectItem>
+              {getOpenAIReasoningEffortOptions(model).map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

@@ -46,6 +46,8 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .prompt.text import prompt as text_prompt_module
+from .prompt.chat import chat_prompt as chat_prompt_module
 from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
 from .agent_config.base import Config
 from .agent_config.config import ConfigManager
@@ -2268,37 +2270,40 @@ class Opik:
         name: str,
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
+        no_cache: bool = False,
+        version: Optional[str] = None,
     ) -> Optional[prompt_module.Prompt]:
         """
-        Retrieve a text prompt by name and optional commit version.
+        Retrieve a text prompt by name, optionally targeting a specific ``version``.
 
-        This method only returns text prompts.
+        This method only returns text prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        When called inside an @track context the prompt reference is injected
+        into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+            ValueError: If both ``commit`` and ``version`` are provided.
         """
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        project_name = self._resolve_project_name(project_name)
-        fern_prompt_version = prompt_client_.get_prompt(
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
-            raise_if_not_template_structure="text",
-            project_name=project_name,
-        )
-
-        if fern_prompt_version is None:
-            return None
-
-        return prompt_module.Prompt.from_fern_prompt_version(
-            name, fern_prompt_version, project_name=project_name
+            project_name=self._resolve_project_name(project_name),
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=no_cache,
+            version=version,
         )
 
     def get_chat_prompt(
@@ -2306,37 +2311,40 @@ class Opik:
         name: str,
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
+        no_cache: bool = False,
+        version: Optional[str] = None,
     ) -> Optional[prompt_module.ChatPrompt]:
         """
-        Retrieve a chat prompt by name and optional commit version.
+        Retrieve a chat prompt by name, optionally targeting a specific ``version``.
 
-        This method only returns chat prompts.
+        This method only returns chat prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        When called inside an @track context the prompt reference is injected
+        into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+            ValueError: If both ``commit`` and ``version`` are provided.
         """
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        project_name = self._resolve_project_name(project_name)
-        fern_prompt_version = prompt_client_.get_prompt(
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
-            raise_if_not_template_structure="chat",
-            project_name=project_name,
-        )
-
-        if fern_prompt_version is None:
-            return None
-
-        return prompt_module.ChatPrompt.from_fern_prompt_version(
-            name, fern_prompt_version, project_name=project_name
+            project_name=self._resolve_project_name(project_name),
+            template_structure="chat",
+            prompt_cls=chat_prompt_module.ChatPrompt,
+            no_cache=no_cache,
+            version=version,
         )
 
     def get_prompt_history(

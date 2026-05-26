@@ -211,6 +211,7 @@ class Span:
             error_info=error_info,
             total_cost=total_cost,
             source=self.source,
+            environment=self._environment,
         )
 
     def span(
@@ -434,6 +435,7 @@ def update_span(
     error_info: Optional[ErrorInfoDict] = None,
     total_cost: Optional[float] = None,
     attachments: Optional[List[attachment.Attachment]] = None,
+    environment: Optional[str] = None,
 ) -> None:
     backend_compatible_usage = validation_helpers.validate_and_parse_usage(
         usage=usage,
@@ -460,6 +462,7 @@ def update_span(
         error_info=error_info,
         total_cost=total_cost,
         source=source,
+        environment=environment,
     )
 
     if attachments is not None:

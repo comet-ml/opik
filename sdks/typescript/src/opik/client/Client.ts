@@ -40,6 +40,8 @@ import {
   fetchLatestPromptVersion,
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
+import { getOrFetch as promptCacheGetOrFetch, getGlobalCache } from "@/prompt/promptCache";
+import { getActiveMaskForPrompt } from "@/prompt/maskContext";
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
@@ -65,7 +67,8 @@ import {
   getCachedBlueprint,
   initBlueprintCacheEntry,
 } from "@/agent-config/blueprintCache";
-import { trackStorage } from "@/decorators/track";
+import { trackStorage, getTrackContext } from "@/decorators/track";
+import { UpdateService } from "@/tracer/UpdateService";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
 import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
@@ -1210,6 +1213,7 @@ export class OpikClient {
 
       const promptData = await this.api.prompts.getPromptById(
         versionResponse.promptId,
+        {},
         this.api.requestOptions
       );
 
@@ -1357,81 +1361,47 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a text prompt by name and optional version.
-   * Throws PromptTemplateStructureMismatch if the prompt is a chat prompt.
+   * Retrieves a text prompt by name, optionally targeting a specific `version`.
+   * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
    * @returns Promise resolving to Prompt or null if not found
+   * @throws Error if both `commit` and `version` are provided
    * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
    */
   public getPrompt = async (
     options: GetPromptOptions
   ): Promise<Prompt | null> => {
-    logger.debug("Getting prompt", options);
-
-    try {
-      // Resolve project name for filtering
-      const resolvedProjectName = this.resolveProjectName(options.projectName);
-      const resolvedOptions = { ...options, projectName: resolvedProjectName };
-
-      let projectId: string | undefined;
-      try {
-        projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch {
-        // Project doesn't exist yet — search without project filter
-      }
-
-      // Step 1: Search for the prompt by name to get tags and description
-      const searchResponse = await this.api.prompts.getPrompts(
-        {
-          filters: JSON.stringify([
-            { field: "name", operator: "=", value: options.name },
-          ]),
-          size: 1,
-          ...(projectId && { projectId }),
-        },
-        this.api.requestOptions
-      );
-
-      const promptData = searchResponse.content?.[0];
-      if (!promptData) {
-        logger.debug("Prompt not found", { name: options.name });
-        return null;
-      }
-
-      // Step 2: Get the version (latest if no commit specified)
-      const versionData = await this.api.prompts.retrievePromptVersion(
-        resolvedOptions,
-        this.api.requestOptions
-      );
-
-      // Step 3: Validate template structure
-      const templateStructure = versionData.templateStructure;
-      if (templateStructure && templateStructure !== PromptTemplateStructure.Text) {
-        throw new PromptTemplateStructureMismatch(
-          options.name,
-          templateStructure,
-          PromptTemplateStructure.Text
-        );
-      }
-
-      // Step 4: Create the Prompt object with metadata
-      return Prompt.fromApiResponse(promptData, versionData, this, resolvedProjectName);
-    } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
-        return null;
-      }
-      logger.error("Failed to get prompt", { name: options.name, error });
-      throw error;
-    }
+    return this.getPromptWithCache<Prompt>(
+      options,
+      PromptTemplateStructure.Text,
+      (promptData, versionData, projectName) =>
+        Prompt.fromApiResponse(promptData, versionData, this, projectName),
+      "prompt"
+    );
   };
 
   /**
-   * Retrieves a chat prompt by name and optional version.
-   * Throws PromptTemplateStructureMismatch if the prompt is a text prompt.
+   * Retrieves a chat prompt by name, optionally targeting a specific `version`.
+   * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
    * @returns Promise resolving to ChatPrompt or null if not found
+   * @throws Error if both `commit` and `version` are provided
    * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
    *
    * @example
@@ -1445,66 +1415,166 @@ export class OpikClient {
   public getChatPrompt = async (
     options: GetPromptOptions
   ): Promise<ChatPrompt | null> => {
-    logger.debug("Getting chat prompt", options);
+    return this.getPromptWithCache<ChatPrompt>(
+      options,
+      PromptTemplateStructure.Chat,
+      (promptData, versionData, projectName) =>
+        ChatPrompt.fromApiResponse(promptData, versionData, this, projectName),
+      "chat prompt"
+    );
+  };
 
-    try {
-      // Resolve project name for filtering
-      const resolvedProjectName = this.resolveProjectName(options.projectName);
-      const resolvedOptions = { ...options, projectName: resolvedProjectName };
-
-      let projectId: string | undefined;
-      try {
-        projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch {
-        // Project doesn't exist yet — search without project filter
-      }
-
-      // Step 1: Search for the prompt by name to get tags and description
-      const searchResponse = await this.api.prompts.getPrompts(
-        {
-          filters: JSON.stringify([
-            { field: "name", operator: "=", value: options.name },
-          ]),
-          size: 1,
-          ...(projectId && { projectId }),
-        },
-        this.api.requestOptions
+  private getPromptWithCache = async <T extends BasePrompt>(
+    options: GetPromptOptions,
+    expectedStructure: PromptTemplateStructure,
+    createInstance: (
+      promptData: OpikApi.PromptPublic,
+      versionData: OpikApi.PromptVersionDetail,
+      projectName: string
+    ) => T,
+    logContext: string
+  ): Promise<T | null> => {
+    // Validate mutual exclusivity synchronously, before touching any async work.
+    if (options.commit && options.version) {
+      throw new Error(
+        "Provide either `commit` or `version`, not both. " +
+          "Prefer `version` — `commit` is deprecated."
       );
-
-      const promptData = searchResponse.content?.[0];
-      if (!promptData) {
-        logger.debug("Chat prompt not found", { name: options.name });
-        return null;
-      }
-
-      // Step 2: Get the version (latest if no commit specified)
-      const versionData = await this.api.prompts.retrievePromptVersion(
-        resolvedOptions,
-        this.api.requestOptions
-      );
-
-      // Step 3: Validate template structure
-      const templateStructure = versionData.templateStructure;
-      if (!templateStructure || templateStructure !== PromptTemplateStructure.Chat) {
-        throw new PromptTemplateStructureMismatch(
-          options.name,
-          templateStructure ?? "undefined",
-          PromptTemplateStructure.Chat
-        );
-      }
-
-      // Step 4: Create the ChatPrompt object with metadata
-      return ChatPrompt.fromApiResponse(promptData, versionData, this, resolvedProjectName);
-    } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
-        return null;
-      }
-      logger.error("Failed to get chat prompt", {
-        name: options.name,
-        error,
-      });
-      throw error;
     }
+
+    logger.debug(`Getting ${logContext}`, options);
+
+    const resolvedProjectName = this.resolveProjectName(options.projectName);
+
+    const fetchFn = async (maskId?: string | null): Promise<T | null> => {
+      try {
+        let promptData: OpikApi.PromptPublic | undefined;
+        let versionData: OpikApi.PromptVersionDetail;
+
+        if (maskId) {
+          versionData = await this.api.prompts.getPromptVersionById(
+            maskId,
+            {},
+            this.api.requestOptions
+          );
+          if (!versionData.promptId) {
+            return null;
+          }
+          promptData = await this.api.prompts.getPromptById(
+            versionData.promptId,
+            {},
+            this.api.requestOptions
+          );
+        } else {
+          let projectId: string | undefined;
+          try {
+            projectId = await this.getProjectIdByName(resolvedProjectName);
+          } catch {
+            // Project doesn't exist yet — search without project filter
+          }
+
+          const searchResponse = await this.api.prompts.getPrompts(
+            {
+              filters: JSON.stringify([
+                { field: "name", operator: "=", value: options.name },
+              ]),
+              size: 1,
+              ...(projectId && { projectId }),
+            },
+            this.api.requestOptions
+          );
+
+          promptData = searchResponse.content?.[0];
+          if (!promptData) {
+            logger.debug(`${logContext.charAt(0).toUpperCase() + logContext.slice(1)} not found`, { name: options.name });
+            return null;
+          }
+
+          // Build the REST request body explicitly so we never leak SDK-only
+          // fields (such as `version` — the wire format calls it `versionNumber`).
+          const retrieveRequest: OpikApi.PromptVersionRetrieveDetail = {
+            name: options.name,
+            projectName: resolvedProjectName,
+            ...(options.commit ? { commit: options.commit } : {}),
+            ...(options.version ? { versionNumber: options.version } : {}),
+          };
+
+          versionData = await this.api.prompts.retrievePromptVersion(
+            retrieveRequest,
+            this.api.requestOptions
+          );
+        }
+
+
+        const templateStructure = versionData.templateStructure;
+        if (expectedStructure === PromptTemplateStructure.Text) {
+          if (templateStructure && templateStructure !== PromptTemplateStructure.Text) {
+            throw new PromptTemplateStructureMismatch(
+              options.name,
+              templateStructure,
+              PromptTemplateStructure.Text
+            );
+          }
+        } else {
+          if (!templateStructure || templateStructure !== PromptTemplateStructure.Chat) {
+            throw new PromptTemplateStructureMismatch(
+              options.name,
+              templateStructure ?? "undefined",
+              PromptTemplateStructure.Chat
+            );
+          }
+        }
+
+        return createInstance(promptData, versionData, resolvedProjectName);
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 404) {
+          return null;
+        }
+        logger.error(`Failed to get ${logContext}`, { name: options.name, error });
+        throw error;
+      }
+    };
+
+    const unmasked = await promptCacheGetOrFetch<T>(
+      options.name,
+      options.commit,
+      resolvedProjectName,
+      expectedStructure,
+      () => fetchFn(),
+      this.config.promptCacheTtlSeconds,
+      undefined,
+      options.version
+    );
+
+    const activeMaskId = unmasked?.id
+      ? getActiveMaskForPrompt(unmasked.id)
+      : null;
+    const result = activeMaskId
+      ? await promptCacheGetOrFetch<T>(
+          options.name,
+          options.commit,
+          resolvedProjectName,
+          expectedStructure,
+          () => fetchFn(activeMaskId),
+          this.config.promptCacheTtlSeconds,
+          activeMaskId,
+          options.version
+        )
+      : unmasked;
+
+    if (result !== null) {
+      const ctx = getTrackContext();
+      if (ctx) {
+        if (!UpdateService.promptAlreadyInjected(ctx.trace.data.metadata, result.id, result.commit)) {
+          ctx.trace.update({ prompts: [result], appendPrompts: true });
+        }
+        if (!UpdateService.promptAlreadyInjected(ctx.span.data.metadata, result.id, result.commit)) {
+          ctx.span.update({ prompts: [result], appendPrompts: true });
+        }
+      }
+    }
+
+    return result;
   };
 
   /**
@@ -1647,6 +1717,7 @@ export class OpikClient {
         this.api.requestOptions
       );
 
+      getGlobalCache().evictByIds(ids);
       logger.info("Successfully deleted prompts", { count: ids.length });
     } catch (error) {
       logger.error("Failed to delete prompts", { count: ids.length, error });

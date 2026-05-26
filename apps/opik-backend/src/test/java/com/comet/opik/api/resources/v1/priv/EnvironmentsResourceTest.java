@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.EnvironmentsResourceClient;
+import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.fasterxml.uuid.Generators;
@@ -174,16 +175,20 @@ class EnvironmentsResourceTest {
         }
 
         @Test
-        @DisplayName("create with only name uses defaults: color='default', position=0, description=null")
+        @DisplayName("create with only name picks a palette color, position=0, description=null")
         void createWithDefaults() {
             var input = Environment.builder().name(randomEnvName()).build();
-            var expected = input.toBuilder().color("default").position(0).build();
+            var expected = input.toBuilder()
+                    .color(EnvironmentService.pickAutoColor(input.name()))
+                    .position(0)
+                    .build();
 
             UUID id = environmentsClient.createEnvironment(input, API_KEY, WORKSPACE_NAME);
 
             try (var response = environmentsClient.callGet(id, API_KEY, WORKSPACE_NAME)) {
                 var fetched = response.readEntity(Environment.class);
                 assertCreatedMatches(fetched, expected);
+                assertThat(fetched.color()).isIn(EnvironmentService.AUTO_COLORS);
             }
         }
 

@@ -36,7 +36,7 @@ jobs:
 
       - name: Set branch name
         run: |
-          echo "BRANCH_NAME=github-actions/NA-sync-provider-models-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
+          echo "BRANCH_NAME=github-actions/NA-sync-provider-models-$(date +%Y-%m-%d-%H-%M-%S)" >> "$GITHUB_ENV"
 
       - name: Run sync script
         id: sync
@@ -47,19 +47,25 @@ jobs:
           FORCE_REGEN_FLAG: ${{ inputs.force_regen == true && '--force-regen' || '' }}
         run: |
           set +e -o pipefail
+          # $FORCE_REGEN_FLAG is intentionally unquoted: it holds either
+          # `--force-regen` (a single flag) or the empty string. Quoting it
+          # would pass a literal empty argument to python, which is harmless
+          # here but conceptually wrong — the variable is acting as an
+          # optional argv slot, not a single value.
+          # shellcheck disable=SC2086
           python scripts/sync_provider_models.py $FORCE_REGEN_FLAG 2>sync_stderr.txt | tee sync_summary.txt
           EXIT_CODE=${PIPESTATUS[0]}
           set -e
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
           # Capture summary for PR body (multiline output)
           {
             echo "summary<<EOF"
             cat sync_summary.txt
             echo "EOF"
-          } >> $GITHUB_OUTPUT
+          } >> "$GITHUB_OUTPUT"
 
-          if [ $EXIT_CODE -eq 1 ]; then
+          if [ "$EXIT_CODE" -eq 1 ]; then
             echo "No new models found, skipping PR creation."
           fi
 
@@ -68,19 +74,21 @@ jobs:
       - name: Print summary
         if: always() && steps.sync.outputs.summary != ''
         run: |
-          echo "## Sync Summary" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.sync.outputs.summary }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Sync Summary"
+            echo '```'
+            echo "${{ steps.sync.outputs.summary }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check for changes
         if: steps.sync.outputs.exit_code == '0'
         id: check_changes
         run: |
           if git diff --quiet; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit files

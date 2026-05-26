@@ -20,7 +20,9 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
@@ -29,7 +31,6 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/feedback-scores";
@@ -91,7 +92,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_NAME_ID,
   "prompt",
   COLUMN_DATASET_ID,
-  "dataset_version",
   "pass_rate",
   "trace_count",
   "duration.p50",
@@ -199,23 +199,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: ITEM_SOURCE_LABEL,
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
         },
-      },
-      {
-        id: "dataset_version",
-        label: "Test suite version",
-        type: COLUMN_TYPE.string,
-        iconType: "version" as const,
-        accessorFn: (row: GroupedExperiment) =>
-          row.dataset_version_summary?.version_name || "",
-        cell: DatasetVersionCell as never,
       },
       {
         id: "created_at",
@@ -393,6 +383,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     return data?.aggregationMap ?? {};
   }, [data?.aggregationMap]);
 
+  const datasetTypeMap = useMemo(
+    () => data?.datasetTypeMap ?? {},
+    [data?.datasetTypeMap],
+  );
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -427,6 +422,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     rowSelection,
     sortedColumns,
     setSortedColumns,
+    datasetTypeMap,
   });
 
   const total = data?.total ?? 0;

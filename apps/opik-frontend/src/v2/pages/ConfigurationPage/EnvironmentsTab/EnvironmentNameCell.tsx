@@ -17,14 +17,14 @@ const EnvironmentNameCell: React.FunctionComponent<
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <div className="flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-2">
-        <EnvironmentSquare color={color} />
-        <TooltipWrapper content={name} stopClickPropagation>
+      <TooltipWrapper content={name} stopClickPropagation>
+        <div className="flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-2">
+          <EnvironmentSquare color={color} />
           <div className="comet-body-xs-accented min-w-0 flex-1 truncate text-muted-slate">
             {name}
           </div>
-        </TooltipWrapper>
-      </div>
+        </div>
+      </TooltipWrapper>
     </CellWrapper>
   );
 };

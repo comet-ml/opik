@@ -10,7 +10,13 @@ on:
     schedule:
     - cron: '0 12 * * *' # runs every day at noon UTC
     workflow_dispatch:
-    
+        inputs:
+            ALLURE_JOB_RUN_ID:
+                type: string
+                required: false
+                description: Allure job run ID for grouping test reports
+                default: ''
+
 run-name: Quickstart Guide Snippets Tests
 
 jobs:

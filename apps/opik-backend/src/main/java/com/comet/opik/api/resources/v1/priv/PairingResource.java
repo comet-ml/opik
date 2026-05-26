@@ -6,7 +6,6 @@ import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.pairing.PairingService;
-import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -26,7 +25,6 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -37,7 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,7 +50,6 @@ public class PairingResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull PairingService pairingService;
-    private final @NonNull LocalRunnerConfig runnerConfig;
     private final @NonNull AnalyticsService analyticsService;
 
     @POST
@@ -63,11 +60,9 @@ public class PairingResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable entity", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "501", description = "Feature disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response createSession(
             @RequestBody(content = @Content(schema = @Schema(implementation = CreateSessionRequest.class))) @NotNull @Valid CreateSessionRequest request) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         CreateSessionResponse response = pairingService.create(workspaceId, userName, request);
@@ -77,6 +72,7 @@ public class PairingResource {
                 "project_id", request.projectId().toString(),
                 "workspace_id", workspaceId,
                 "user_name", userName,
+                "runner_type", request.type().getValue(),
                 "date", Instant.now().toString()));
 
         return Response.status(Response.Status.CREATED).entity(response).build();
@@ -91,47 +87,40 @@ public class PairingResource {
             @ApiResponse(responseCode = "404", description = "Session not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Session already activated", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable entity", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "501", description = "Feature disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response activate(
             @PathParam("sessionId") @NotNull UUID sessionId,
             @RequestBody(content = @Content(schema = @Schema(implementation = ActivateRequest.class))) @NotNull @Valid ActivateRequest request,
             @Context UriInfo uriInfo) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
         try {
-            UUID runnerId = pairingService.activate(workspaceId, userName, sessionId, request);
+            PairingService.ActivationResult result = pairingService.activate(workspaceId, userName, sessionId, request);
 
             analyticsService.trackEvent("opik_connect_succeeded", Map.of(
                     "session_id", sessionId.toString(),
                     "workspace_id", workspaceId,
                     "user_name", userName,
+                    "runner_type", result.runnerType().getValue(),
                     "date", Instant.now().toString()));
 
             URI location = uriInfo.getBaseUriBuilder()
                     .path("v1/private/local-runners/{runnerId}")
-                    .build(runnerId);
+                    .build(result.runnerId());
             return Response.created(location).build();
         } catch (Exception e) {
-            analyticsService.trackEvent("opik_connect_failed", Map.of(
+            Map<String, String> props = new HashMap<>(Map.of(
                     "session_id", sessionId.toString(),
                     "workspace_id", workspaceId,
                     "user_name", userName,
                     "error", e.getClass().getSimpleName(),
                     "date", Instant.now().toString()));
+            // Best-effort: empty when the session is missing or in another workspace.
+            pairingService.peekSessionType(workspaceId, sessionId)
+                    .ifPresent(type -> props.put("runner_type", type.getValue()));
+            analyticsService.trackEvent("opik_connect_failed", props);
             throw e;
-        }
-    }
-
-    private void ensureEnabled() {
-        if (!runnerConfig.isEnabled()) {
-            throw new WebApplicationException(
-                    Response.status(Response.Status.NOT_IMPLEMENTED)
-                            .type(MediaType.APPLICATION_JSON)
-                            .entity(new ErrorMessage(List.of("pairing is not enabled on this deployment")))
-                            .build());
         }
     }
 }

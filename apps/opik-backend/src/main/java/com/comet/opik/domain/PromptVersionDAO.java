@@ -35,10 +35,13 @@ interface PromptVersionDAO {
                 id,
                 prompt_id,
                 commit,
+                version_number,
                 template,
                 metadata,
                 change_description,
                 type,
+                version_type,
+                environment,
                 tags,
                 created_by,
                 workspace_id
@@ -47,10 +50,13 @@ interface PromptVersionDAO {
                 :bean.id,
                 :bean.promptId,
                 :bean.commit,
+                :bean.versionNumber,
                 :bean.template,
                 :bean.metadata,
                 :bean.changeDescription,
                 :bean.type,
+                :bean.versionType,
+                :bean.environment,
                 :bean.tags,
                 :bean.createdBy,
                 :workspace_id
@@ -64,7 +70,7 @@ interface PromptVersionDAO {
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.workspace_id = :workspace_id
             <if(ids)> AND pv.id IN (<ids>) <endif>
-            <if(prompt_id)> AND pv.prompt_id = :prompt_id <endif>
+            <if(prompt_id)> AND pv.prompt_id = :prompt_id AND pv.version_type = 'prompt_version' <endif>
             <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             ORDER BY <if(sort_fields)><sort_fields>, <endif>pv.id DESC
@@ -112,7 +118,7 @@ interface PromptVersionDAO {
             FROM prompt_versions pv
             WHERE pv.workspace_id = :workspace_id
             <if(ids)> AND pv.id IN (<ids>) <endif>
-            <if(prompt_id)> AND pv.prompt_id = :prompt_id <endif>
+            <if(prompt_id)> AND pv.prompt_id = :prompt_id AND pv.version_type = 'prompt_version' <endif>
             <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             """)
@@ -140,9 +146,32 @@ interface PromptVersionDAO {
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.prompt_id = :prompt_id AND pv.commit = :commit AND pv.workspace_id = :workspace_id
+            AND pv.version_type = 'prompt_version'
             """)
     PromptVersion findByCommit(@Bind("prompt_id") UUID promptId, @Bind("commit") String commit,
             @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT pv.*, p.template_structure
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.prompt_id = :prompt_id
+            AND pv.version_number = :version_number
+            AND pv.workspace_id = :workspace_id
+            AND pv.version_type = 'prompt_version'
+            """)
+    PromptVersion findByVersionNumber(@Bind("prompt_id") UUID promptId,
+            @Bind("version_number") String versionNumber,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT COALESCE(MAX(CAST(SUBSTRING(version_number, 2) AS UNSIGNED)), 0)
+            FROM prompt_versions
+            WHERE workspace_id = :workspace_id
+            AND prompt_id = :prompt_id
+            AND version_type = 'prompt_version'
+            """)
+    int findMaxVersionNumber(@Bind("workspace_id") String workspaceId, @Bind("prompt_id") UUID promptId);
 
     /**
      * Batch update for multiple prompt versions in a single database operation.
@@ -193,6 +222,32 @@ interface PromptVersionDAO {
 
     @SqlUpdate("DELETE FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id")
     int deleteByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("""
+            UPDATE prompt_versions
+            SET environment = :environment
+            WHERE id = :id AND workspace_id = :workspace_id AND version_type = 'prompt_version'
+            """)
+    int updateEnvironment(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId,
+            @Bind("environment") String environment);
+
+    @SqlUpdate("""
+            UPDATE prompt_versions
+            SET environment = NULL
+            WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id AND environment = :environment
+            """)
+    int clearEnvironment(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId,
+            @Bind("environment") String environment);
+
+    @SqlQuery("""
+            SELECT pv.*, p.template_structure
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.prompt_id = :prompt_id AND pv.environment = :environment AND pv.workspace_id = :workspace_id
+            AND pv.version_type = 'prompt_version'
+            """)
+    PromptVersion findByEnvironment(@Bind("prompt_id") UUID promptId, @Bind("environment") String environment,
+            @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
             SELECT pv.id, pv.commit, p.name AS prompt_name

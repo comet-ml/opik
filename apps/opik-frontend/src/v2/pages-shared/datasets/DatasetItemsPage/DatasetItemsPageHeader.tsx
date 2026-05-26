@@ -81,11 +81,21 @@ const DatasetItemsPageHeader: React.FunctionComponent<
         <div className="flex items-center gap-2">
           {hasDraft && (
             <>
-              <Button variant="outline" size="sm" onClick={onDiscardClick}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onDiscardClick}
+                data-testid="dataset-items-discard-button"
+              >
                 <X className="mr-1 size-4" />
                 Discard changes
               </Button>
-              <Button variant="default" size="sm" onClick={onSaveClick}>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={onSaveClick}
+                data-testid="dataset-items-commit-button"
+              >
                 <Check className="mr-1 size-4" />
                 Save changes
               </Button>

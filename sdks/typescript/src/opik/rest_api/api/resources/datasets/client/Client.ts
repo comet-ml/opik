@@ -445,7 +445,6 @@ export class DatasetsClient {
      * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.BadRequestError}
-     * @throws {@link OpikApi.NotFoundError}
      *
      * @example
      *     import { createReadStream } from "fs";
@@ -507,8 +506,6 @@ export class DatasetsClient {
             switch (_response.error.statusCode) {
                 case 400:
                     throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
-                case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,

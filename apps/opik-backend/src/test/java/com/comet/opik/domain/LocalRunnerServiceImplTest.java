@@ -90,7 +90,6 @@ class LocalRunnerServiceImplTest {
         stringRedis = new StringRedisClient(redisClient);
 
         runnerConfig = new LocalRunnerConfig();
-        runnerConfig.setEnabled(true);
         runnerConfig.setHeartbeatTtl(Duration.seconds(2));
         runnerConfig.setNextJobPollTimeout(Duration.seconds(1));
         runnerConfig.setMaxPendingJobsPerRunner(3);
@@ -111,7 +110,8 @@ class LocalRunnerServiceImplTest {
                 .userName(USER_NAME)
                 .build();
         runnerService = new RunnerServiceImpl(stringRedis, idGenerator, projectService, runnerConfig,
-                () -> endpointJobService, () -> connectBridgeService, () -> requestContext);
+                () -> endpointJobService, () -> connectBridgeService, () -> requestContext,
+                Mockito.mock(AnalyticsService.class));
         endpointJobService = new EndpointJobServiceImpl(stringRedis, redisClient.reactive(), idGenerator,
                 runnerService, runnerConfig, Mockito.mock(AnalyticsService.class));
         connectBridgeService = new ConnectBridgeServiceImpl(stringRedis, idGenerator, runnerService, runnerConfig);

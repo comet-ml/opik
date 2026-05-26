@@ -475,6 +475,7 @@ function DatasetItemsTab({
         ? [
             generateActionsColumDef({
               cell: DatasetItemRowActionsCell,
+              customMeta: { setActiveRowId },
             }),
           ]
         : []),
@@ -486,6 +487,7 @@ function DatasetItemsTab({
     canEditDatasets,
     getDraftStatusBorderClass,
     handleRowClick,
+    setActiveRowId,
   ]);
 
   const columnsToExport = useMemo(
@@ -620,6 +622,7 @@ function DatasetItemsTab({
                 variant="default"
                 size={isCompactToolbar ? "icon-sm" : "sm"}
                 onClick={handleNewDatasetItemClick}
+                data-testid="dataset-items-add-button"
               >
                 {isCompactToolbar ? <Plus /> : "Add item"}
               </Button>

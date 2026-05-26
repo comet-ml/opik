@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       resumeUrl:
-        description: 'URL to call to resume n8n'
+        description: 'URL to call to resume release n deploy'
         required: true
       trackingId:
         description: 'UUID for tracking this release step'
@@ -27,17 +27,16 @@ jobs:
         id: status
         run: |
           if [ "${{ needs.trigger-release.result }}" == "success" ]; then
-            echo "status=completed" >> $GITHUB_OUTPUT
-            echo "conclusion=success" >> $GITHUB_OUTPUT
+            echo "status=completed" >> "$GITHUB_OUTPUT"
+            echo "conclusion=success" >> "$GITHUB_OUTPUT"
           else
-            echo "status=completed" >> $GITHUB_OUTPUT
-            echo "conclusion=failure" >> $GITHUB_OUTPUT
+            echo "status=completed" >> "$GITHUB_OUTPUT"
+            echo "conclusion=failure" >> "$GITHUB_OUTPUT"
           fi
           
       - name: Notify Release-n-Deploy-Agent
         if: ${{ inputs.resumeUrl != '' }}
         run: |
-          echo "url: ${{ inputs }}"
           echo "All inputs: ${{ toJSON(inputs) }}"
           echo "resumeUrl input: '${{ inputs.resumeUrl }}'"
           

@@ -49,6 +49,23 @@ public class StatsMapper {
     public static final String ERROR_COUNT = "error_count";
     public static final String EXPERIMENT_ITEMS_COUNT = "experiment_items_count";
 
+    public static ProjectStats mapProjectScoresStats(Row row) {
+        var stats = Stream.<ProjectStats.ProjectStatItem<?>>builder();
+
+        // FEEDBACK_SCORE / SPAN_FEEDBACK_SCORE columns are optional: SELECT_TRACES_SPANS_STATS
+        // produces stats without them and the per-project feedback maps are merged in via
+        // StatsMerger after a parallel SELECT_FEEDBACK_SCORES_STATS query.
+        if (row.getMetadata().contains(FEEDBACK_SCORE)) {
+            addMapStats(row, FEEDBACK_SCORE, stats);
+        }
+        // span_feedback_scores statistics are only applicable for traces (not spans)
+        if (row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {
+            addMapStats(row, SPAN_FEEDBACK_SCORE, stats);
+        }
+
+        return new ProjectStats(stats.build().toList());
+    }
+
     public static ProjectStats mapProjectStats(Row row, String entityCountLabel) {
 
         var stats = Stream.<ProjectStats.ProjectStatItem<?>>builder()
@@ -92,10 +109,10 @@ public class StatsMapper {
 
         addMapStats(row, USAGE, stats);
         addMapStats(row, USAGE_SUM, stats);
-        addMapStats(row, FEEDBACK_SCORE, stats);
-        // Only add span feedback scores statistics for traces (not spans)
-        if (entityCountLabel.equals(TRACE_COUNT) && row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {
-            addMapStats(row, SPAN_FEEDBACK_SCORE, stats);
+
+        // Thread stats inline feedback_scores in the row; split-A trace/span rows don't.
+        if (row.getMetadata().contains(FEEDBACK_SCORE)) {
+            addMapStats(row, FEEDBACK_SCORE, stats);
         }
 
         // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
@@ -335,6 +352,25 @@ public class StatsMapper {
             return new BigDecimal(number.toString());
         }
         return null;
+    }
+
+    /**
+     * Converts a column-value map (e.g. {@code {"accuracy": 0.5, "recall": 0.8}}) into an
+     * ordered list of {@link AvgValueStat} entries, each keyed as {@code "<prefix>.<key>"}.
+     * Numeric values arrive from ClickHouse as {@link Number} (typically {@link Double})
+     * regardless of the column's declared Decimal precision, so we coerce through Number.
+     * Returns an empty list when the input is {@code null} or empty.
+     */
+    public static List<ProjectStats.ProjectStatItem<?>> toMapStats(Map<String, Object> values, String statPrefix) {
+        if (MapUtils.isEmpty(values)) {
+            return List.of();
+        }
+        return values.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).<ProjectStats.ProjectStatItem<?>>map(entry -> {
+                    double value = entry.getValue() instanceof Number number ? number.doubleValue() : 0.0;
+                    return new AvgValueStat("%s.%s".formatted(statPrefix, entry.getKey()), value);
+                })
+                .toList();
     }
 
     /**

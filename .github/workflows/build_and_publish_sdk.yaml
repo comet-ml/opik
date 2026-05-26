@@ -19,7 +19,6 @@ on:
           type: string
           required: true
           description: Version
-          default: ""
         is_release:
           type: boolean
           required: false
@@ -40,9 +39,9 @@ jobs:
           id: setup
           run: |
             if [[ "${{inputs.version}}" == ""  ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{github.ref_name}}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{inputs.version}}" | tee -a "$GITHUB_OUTPUT"
             fi
         - name: Checkout
           uses: actions/checkout@v6
@@ -51,7 +50,7 @@ jobs:
             fetch-tags: true
 
         - name: Set up Python 3.10
-          uses: actions/setup-python@v3
+          uses: actions/setup-python@v5
           with:
                 python-version: "3.10"
 

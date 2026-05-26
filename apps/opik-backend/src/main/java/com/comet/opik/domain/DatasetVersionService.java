@@ -130,6 +130,14 @@ public interface DatasetVersionService {
     Optional<DatasetVersion> getLatestVersion(UUID datasetId, String workspaceId);
 
     /**
+     * Returns only the UUID of the latest version. Uses a PK lookup on
+     * dataset_version_tags and avoids the row-numbering CTE in
+     * {@link #getLatestVersion}, so cost stays O(1) regardless of how many
+     * versions a dataset has accumulated.
+     */
+    Optional<UUID> getLatestVersionId(UUID datasetId, String workspaceId);
+
+    /**
      * Gets a specific version by its ID.
      *
      * @param workspaceId the workspace ID
@@ -273,6 +281,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(workspaceId, datasetId, LATEST_TAG);
+    }
+
+    @Override
+    public Optional<UUID> getLatestVersionId(@NonNull UUID datasetId, @NonNull String workspaceId) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(DatasetVersionDAO.class)
+                .findVersionIdByTag(datasetId, LATEST_TAG, workspaceId));
     }
 
     @Override
@@ -540,19 +554,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
 
-            // Try to find by hash first
-            var versionByHash = dao.findByHash(datasetId, hashOrTag, workspaceId);
-            if (versionByHash.isPresent()) {
-                return versionByHash.get().id();
-            }
-
-            // Try to find by tag
-            var versionByTag = dao.findByTag(datasetId, hashOrTag, workspaceId);
-            if (versionByTag.isPresent()) {
-                return versionByTag.get().id();
-            }
-
-            throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(hashOrTag, datasetId));
+            return dao.findVersionIdByHash(datasetId, hashOrTag, workspaceId)
+                    .or(() -> dao.findVersionIdByTag(datasetId, hashOrTag, workspaceId))
+                    .orElseThrow(() -> new NotFoundException(
+                            ERROR_VERSION_NOT_FOUND.formatted(hashOrTag, datasetId)));
         });
     }
 

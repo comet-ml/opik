@@ -104,6 +104,7 @@ def verify_trace(
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
     environment: Optional[str] = mock.ANY,  # type: ignore
+    comments: List[str] = mock.ANY,  # type: ignore
 ):
     def _check() -> None:
         trace = opik_client.get_trace_content(id=trace_id)
@@ -169,6 +170,12 @@ def verify_trace(
             ):
                 testlib.assert_dicts_equal(actual_guardrail, expected_guardrail)
 
+        if comments is not mock.ANY:
+            actual_comments = [c.text for c in (trace.comments or [])]
+            assert actual_comments == comments, (
+                f"trace comments differ: expected {comments}, got {actual_comments}"
+            )
+
     _retry_until_assertions_pass(_check)
 
 
@@ -191,6 +198,7 @@ def verify_span(
     total_cost: Optional[float] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
     environment: Optional[str] = mock.ANY,  # type: ignore
+    comments: List[str] = mock.ANY,  # type: ignore
 ):
     def _check() -> None:
         span = opik_client.get_span_content(id=span_id)
@@ -239,6 +247,12 @@ def verify_span(
                 item_id=span_id,
                 feedback_scores=span.feedback_scores,
                 expected_feedback_scores=feedback_scores,
+            )
+
+        if comments is not mock.ANY:
+            actual_comments = [c.text for c in (span.comments or [])]
+            assert actual_comments == comments, (
+                f"span comments differ: expected {comments}, got {actual_comments}"
             )
 
     _retry_until_assertions_pass(_check)
@@ -763,6 +777,34 @@ def verify_chat_prompt_version(
         f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
+
+
+def verify_opik_prompt_entry(
+    entry: Dict[str, Any],
+    *,
+    name: str,
+    template_structure: str,
+) -> None:
+    """Verify a single entry inside metadata['opik_prompts']."""
+    assert entry["name"] == name, f"Expected name {name!r}, got {entry.get('name')!r}"
+    assert entry.get("template_structure") == template_structure, (
+        f"Expected template_structure {template_structure!r}, got {entry.get('template_structure')!r}"
+    )
+    assert "id" in entry, f"Missing 'id' in opik_prompts entry for {name}"
+    version = entry.get("version", {})
+    assert "template" in version, (
+        f"Missing 'version.template' in opik_prompts entry for {name}"
+    )
+    assert "commit" in version, (
+        f"Missing 'version.commit' in opik_prompts entry for {name}"
+    )
+    # Sequential version identifier (e.g. "v1"). Mask versions don't carry one,
+    # but the injected entries in this happy-path test come from non-mask
+    # `create_prompt` / `create_chat_prompt` calls, which always have it.
+    assert version.get("version_number", "").startswith("v"), (
+        f"Expected 'version.version_number' starting with 'v' in opik_prompts entry for {name}, "
+        f"got {version.get('version_number')!r}"
+    )
 
 
 def verify_dataset_filtered_items(

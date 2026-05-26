@@ -18,6 +18,8 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import DemoLoadingContent from "./AgentOnboarding/DemoLoadingContent";
 import LoggedDataStatus from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/LoggedDataStatus";
 import useFirstTraceReceived from "@/api/projects/useFirstTraceReceived";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const AgentOnboardingQuickstart: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
@@ -67,6 +69,9 @@ const NewQuickstart: React.FC = () => {
   const [showDemoLoading, setShowDemoLoading] = useState(false);
   const workspaceName = useActiveWorkspaceName();
   const navigate = useNavigate();
+  const demoDataEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DEMO_DATA_ENABLED,
+  );
 
   const [manualOnboardingDone, setManualOnboardingDone] =
     useLocalStorageState<boolean>(`${MANUAL_ONBOARDING_KEY}-${workspaceName}`, {
@@ -103,6 +108,18 @@ const NewQuickstart: React.FC = () => {
     });
   }, [navigate, workspaceName, firstTraceProjectId, setManualOnboardingDone]);
 
+  const handleSkip = useCallback(() => {
+    if (demoDataEnabled) {
+      setShowDemoLoading(true);
+      return;
+    }
+    setManualOnboardingDone(true);
+    void navigate({
+      to: "/$workspaceName/home",
+      params: { workspaceName },
+    });
+  }, [demoDataEnabled, navigate, workspaceName, setManualOnboardingDone]);
+
   if (variant === "manual") {
     if (wasDoneOnMount.current) {
       return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
@@ -128,7 +145,7 @@ const NewQuickstart: React.FC = () => {
             />
           ) : undefined
         }
-        onSkip={() => setShowDemoLoading(true)}
+        onSkip={handleSkip}
       />
     );
   }

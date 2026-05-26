@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, { EXPERIMENT_EXECUTION_REST_ENDPOINT } from "@/api/api";
+import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { snakeCaseObj } from "@/lib/utils";
 import { PlaygroundPromptType } from "@/types/playground";
 import { useToast } from "@/ui/use-toast";
@@ -37,7 +38,10 @@ const runExperimentExecution = async ({
     return {
       model: prompt.model,
       messages: prompt.messages.map((msg) => snakeCaseObj(msg)),
-      configs: prompt.configs,
+      configs: sanitizeConfigForRequest(
+        prompt.model,
+        prompt.configs as Record<string, unknown>,
+      ),
       prompt_versions: prompt.loadedChatPromptId
         ? [{ id: prompt.loadedChatPromptId }]
         : undefined,

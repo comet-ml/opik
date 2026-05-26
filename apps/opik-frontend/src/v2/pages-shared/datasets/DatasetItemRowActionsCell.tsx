@@ -1,12 +1,13 @@
 import React, { useCallback, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
@@ -15,6 +16,10 @@ import { useDeleteItem } from "@/store/TestSuiteDraftStore";
 import RemoveDatasetItemsDialog from "./RemoveDatasetItemsDialog";
 import { useDatasetItemDeletePreference } from "./hooks/useDatasetItemDeletePreference";
 
+type CustomMeta = {
+  setActiveRowId?: (id: string) => void;
+};
+
 export const DatasetItemRowActionsCell: React.FC<
   CellContext<DatasetItem, unknown>
 > = (context) => {
@@ -22,6 +27,9 @@ export const DatasetItemRowActionsCell: React.FC<
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [dontAskAgain] = useDatasetItemDeletePreference();
   const deleteItem = useDeleteItem();
+
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { setActiveRowId } = (custom ?? {}) as CustomMeta;
 
   const performDelete = useCallback(() => {
     deleteItem(datasetItem.id);
@@ -34,6 +42,10 @@ export const DatasetItemRowActionsCell: React.FC<
       setConfirmOpen(true);
     }
   }, [dontAskAgain, performDelete]);
+
+  const handleEditClick = useCallback(() => {
+    setActiveRowId?.(datasetItem.id);
+  }, [datasetItem.id, setActiveRowId]);
 
   return (
     <CellWrapper
@@ -55,6 +67,13 @@ export const DatasetItemRowActionsCell: React.FC<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
+          {setActiveRowId && (
+            <DropdownMenuItem onClick={handleEditClick}>
+              <Pencil className="mr-2 size-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
+          {setActiveRowId && <DropdownMenuSeparator />}
           <DropdownMenuItem onClick={handleDeleteClick} variant="destructive">
             <Trash className="mr-2 size-4" />
             Delete

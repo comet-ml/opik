@@ -124,6 +124,21 @@ frontend:
 
 ```
 
+## Changing the Frontend Port
+
+If port 5173 is already taken on your host (e.g. another Vite dev server or
+local app you can't move), set `NGINX_PORT` before bringing the stack up:
+
+```bash
+# UI will be available at http://localhost:5293
+NGINX_PORT=5293 ./opik.sh
+```
+
+`NGINX_PORT` is honored by the frontend container's port mapping, healthcheck,
+nginx config, and the backend's internal reverse-proxy URL. Use
+`OPIK_PORT_OFFSET=N` instead if you'd like to shift every Opik port (frontend,
+backend, MySQL, Redis, etc.) by the same delta.
+
 ## Run Opik backend locally and the rest of the components with `docker compose`
 
 1. In `nginx_default_local.conf` replace:

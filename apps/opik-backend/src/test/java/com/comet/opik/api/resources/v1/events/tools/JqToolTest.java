@@ -27,7 +27,7 @@ class JqToolTest {
     void missingExpressionReturnsError() {
         var ctx = newCtxWithCachedSpan(UUID.randomUUID(), "{\"name\":\"x\"}");
 
-        var raw = tool.execute("{\"type\": \"span\", \"id\": \"abc\"}", ctx);
+        var raw = tool.execute("{\"type\": \"span\", \"id\": \"abc\"}", ctx).block();
         var result = JsonUtils.getJsonNodeFromString(raw);
 
         assertThat(result.get("error").asText()).contains("Missing required argument: expression");
@@ -38,7 +38,7 @@ class JqToolTest {
         var ctx = newCtxWithCachedSpan(UUID.randomUUID(), "{\"name\":\"x\"}");
 
         var raw = tool.execute(
-                "{\"type\": \"unicorn\", \"id\": \"abc\", \"expression\": \".\"}", ctx);
+                "{\"type\": \"unicorn\", \"id\": \"abc\", \"expression\": \".\"}", ctx).block();
         var result = JsonUtils.getJsonNodeFromString(raw);
 
         assertThat(result.get("error").asText()).contains("Unknown type");
@@ -50,7 +50,7 @@ class JqToolTest {
         var id = UUID.randomUUID();
 
         var output = tool.execute(
-                "{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".\"}".formatted(id), ctx);
+                "{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".\"}".formatted(id), ctx).block();
 
         assertThat(output)
                 .contains("not in cache")
@@ -66,7 +66,7 @@ class JqToolTest {
 
         var output = tool.execute(
                 "{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".name\"}".formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).startsWith("[jq: span:" + spanId + " | expression='.name']");
         assertThat(output).contains("\"hello\"");
@@ -83,7 +83,7 @@ class JqToolTest {
         var output = tool.execute(
                 "{\"type\": \"trace\", \"id\": \"%s\", \"expression\": \".spans[].name\"}"
                         .formatted(traceId),
-                ctx);
+                ctx).block();
 
         // Strip the header line.
         var body = output.substring(output.indexOf('\n') + 1);
@@ -97,7 +97,7 @@ class JqToolTest {
 
         var output = tool.execute(
                 "{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".[\"}".formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("ERROR");
         assertThat(output).startsWith("[jq: span:" + spanId);
@@ -112,7 +112,7 @@ class JqToolTest {
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".depth.foo\"}")
                         .formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("ERROR");
     }
@@ -128,7 +128,7 @@ class JqToolTest {
 
         var output = tool.execute(
                 "{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".blob\"}".formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("[TRUNCATED");
         assertThat(output).contains(JqTool.OUTPUT_TRUNCATION_HINT);
@@ -144,7 +144,7 @@ class JqToolTest {
 
         var output = tool.execute(
                 "{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".items[]\"}".formatted(spanId),
-                ctx);
+                ctx).block();
 
         var lines = output.split("\n", -1);
         assertThat(lines).hasSize(2);
@@ -162,7 +162,7 @@ class JqToolTest {
 
         var output = tool.execute(
                 "{\"type\": \"span\", \"id\": \"%s\", \"expression\": \".blob\"}".formatted(spanId),
-                ctx);
+                ctx).block();
 
         // Dropped count includes the closing quote, so it's at least 4,500.
         assertThat(output).containsPattern("\\[TRUNCATED 4,5\\d{2} chars");
@@ -177,7 +177,7 @@ class JqToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 
     private static TraceToolContext newCtxWithCachedSpan(UUID spanId, String spanBodyJson) {
@@ -194,6 +194,6 @@ class JqToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 }

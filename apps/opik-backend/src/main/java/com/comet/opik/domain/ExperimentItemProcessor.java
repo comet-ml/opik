@@ -47,8 +47,13 @@ public class ExperimentItemProcessor {
                             var response = chatCompletionService.create(chatRequest, message.workspaceId());
                             return new LlmCallResult(response, null, null, startTime, Instant.now());
                         } catch (Exception e) {
-                            log.warn("LLM call failed for experiment '{}', dataset item '{}'",
-                                    message.experimentId(), datasetItem.id(), e);
+                            // Do not include e.getMessage() in the log: provider exceptions can echo
+                            // request/response bodies (tokens, API keys, raw user input). The full
+                            // message is still persisted to the trace's errorInfo for in-product
+                            // debugging where workspace ACLs apply.
+                            log.error(
+                                    "LLM call failed for experiment '{}', dataset item '{}' (exception '{}'); persisting trace with error info",
+                                    message.experimentId(), datasetItem.id(), e.getClass().getName(), e);
                             return new LlmCallResult(null, e.getClass().getSimpleName(), e.getMessage(),
                                     startTime, Instant.now());
                         }

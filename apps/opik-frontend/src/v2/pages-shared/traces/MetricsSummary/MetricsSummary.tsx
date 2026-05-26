@@ -350,6 +350,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
               hideDelta={cardMode !== "full"}
               hideLabel={cardMode === "no-label" || cardMode === "icon-only"}
               hideValue={cardMode === "icon-only"}
+              testId={`metrics-card-${card.type}`}
             />
           );
         })}

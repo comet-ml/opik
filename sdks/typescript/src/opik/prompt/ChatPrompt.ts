@@ -44,6 +44,13 @@ export class ChatPrompt extends BasePrompt {
     this.messages = data.messages;
     this.chatTemplate = new ChatPromptTemplate(data.messages, this.type);
 
+    if (!data.synced && !data.promptId) {
+      logger.warn(
+        "new ChatPrompt() is deprecated. Use client.createChatPrompt() to create or " +
+          "client.getChatPrompt() to retrieve chat prompts instead."
+      );
+    }
+
     if (opik === undefined && !data.synced) {
       this._pendingSync = this._performSync();
     }
@@ -187,6 +194,7 @@ export class ChatPrompt extends BasePrompt {
         name: promptData.name,
         messages,
         commit: apiResponse.commit,
+        version: apiResponse.versionNumber,
         metadata: apiResponse.metadata,
         type: promptType,
         changeDescription: apiResponse.changeDescription,
@@ -271,13 +279,27 @@ export class ChatPrompt extends BasePrompt {
   }
 
   /**
-   * Get a ChatPrompt with a specific version by commit hash.
+   * Get a ChatPrompt at a specific version.
    *
-   * @param commit - Commit hash (8-char short form or full)
+   * Accepts either the sequential version identifier (e.g. `"v3"`) — preferred —
+   * or a commit hash for backwards compatibility. Inputs matching `/^v\d+$/`
+   * are treated as version numbers; anything else is treated as a commit.
+   *
+   * @param version - Sequential version (`"v<N>"`) or commit hash
+   *   (commit input is **deprecated** — pass a `"v<N>"` identifier instead).
    * @returns ChatPrompt instance representing that version, or null if not found
+   *
+   * @example
+   * ```typescript
+   * // Preferred
+   * const v3 = await chatPrompt.getVersion("v3");
+   *
+   * // @deprecated — commit-shaped input
+   * const byCommit = await chatPrompt.getVersion("abc123de");
+   * ```
    */
-  async getVersion(commit: string): Promise<ChatPrompt | null> {
-    const response = await this.retrieveVersionByCommit(commit);
+  async getVersion(version: string): Promise<ChatPrompt | null> {
+    const response = await this.retrieveVersion(version);
     if (!response) {
       return null;
     }

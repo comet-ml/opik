@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events.tools;
 
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -14,8 +15,18 @@ import lombok.experimental.UtilityClass;
 @UtilityClass
 public final class ToolArgs {
 
+    // Text block with `\` line continuations: keeps the message on a single logical line
+    // for the LLM (one coherent error, not a multi-line block) while still letting the
+    // source format wrap at our column limit. %s is the calling tool's name.
+    private static final String THREAD_TYPE_REJECTION_TEMPLATE = """
+            type=thread is not supported by the %s tool — threads are not fetched as \
+            entities, they ARE the prompt context. Use read(type=trace, id=<uuid>) on \
+            the trace ids listed in the thread skeleton (system message), or \
+            jq(type=trace, id=<uuid>, expression='<path>') for path-targeted lookups \
+            within a specific trace.""";
+
     /** Wraps {@code message} as the {@code {"error": "..."}} JSON envelope tools return. */
-    public static String errorJson(String message) {
+    public static String errorJson(@NonNull String message) {
         return "{\"error\": %s}".formatted(JsonUtils.writeValueAsString(message));
     }
 
@@ -25,18 +36,20 @@ public final class ToolArgs {
     }
 
     /** Standard cache-miss hint used by jq and search to nudge the agent toward {@code read}. */
-    public static String cacheMiss(EntityType type, String id) {
+    public static String cacheMiss(@NonNull EntityType type, @NonNull String id) {
         return "Entity (type=%s, id=%s) not in cache. Call read first."
                 .formatted(type.name().toLowerCase(), id);
     }
 
     /**
      * Parses, validates, and returns the {@code type} field. Rejects
-     * {@code thread} since no tool currently caches thread entities. The tool
-     * name is interpolated into the rejection message, so the LLM sees which
-     * tool refused.
+     * {@code thread} by design — threads are not fetched as entities, they ARE
+     * the prompt context (the system prompt lists each trace by id). The error
+     * redirects the model to the right action so a misrouted call costs at most
+     * one wasted round, not many trial-and-error retries. Applies to every tool
+     * that takes a {@code type} argument (read / jq / search).
      */
-    public static Result<EntityType> parseType(JsonNode root, String toolName) {
+    public static Result<EntityType> parseType(@NonNull JsonNode root, @NonNull String toolName) {
         String typeStr = textOrNull(root.get("type"));
         if (typeStr == null || typeStr.isBlank()) {
             return Result.error(errorJson("Missing required argument: type"));
@@ -48,7 +61,7 @@ public final class ToolArgs {
             return Result.error(errorJson("Unknown type: " + typeStr));
         }
         if (type == EntityType.THREAD) {
-            return Result.error(errorJson("type=thread is not supported by the " + toolName + " tool"));
+            return Result.error(errorJson(THREAD_TYPE_REJECTION_TEMPLATE.formatted(toolName)));
         }
         return Result.ok(type);
     }
@@ -58,7 +71,7 @@ public final class ToolArgs {
      * blank, with the canonical {@code "Missing required argument: <name>"}
      * message.
      */
-    public static Result<String> requireString(JsonNode root, String fieldName) {
+    public static Result<String> requireString(@NonNull JsonNode root, @NonNull String fieldName) {
         String value = textOrNull(root.get(fieldName));
         if (value == null || value.isBlank()) {
             return Result.error(errorJson("Missing required argument: " + fieldName));

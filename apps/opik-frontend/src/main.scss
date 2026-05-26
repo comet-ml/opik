@@ -838,13 +838,7 @@
     border-right: none;
   }
 
-  // Hide the last left-pinned column border (e.g. checkbox) until
-  // the user scrolls right and content slides under the pinned column
   .comet-pinned-last-left {
-    box-shadow: none;
-  }
-
-  [data-scrolled-right] & .comet-pinned-last-left {
     box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
   }
 }

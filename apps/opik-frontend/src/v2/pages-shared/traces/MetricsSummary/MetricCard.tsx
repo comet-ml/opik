@@ -28,6 +28,7 @@ export type MetricCardProps = {
   hideDelta?: boolean;
   hideLabel?: boolean;
   hideValue?: boolean;
+  testId?: string;
 };
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -43,6 +44,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   hideDelta = false,
   hideLabel = false,
   hideValue = false,
+  testId,
 }) => {
   const percentage = computePercentageChange(
     currentRaw ?? null,
@@ -87,6 +89,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         className,
       )}
       onClick={onClick}
+      data-testid={testId}
     >
       <div
         className={cn(
@@ -114,6 +117,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
                   selected ? "text-foreground" : "text-muted-slate",
                   value === "N/A" && "comet-body-xs text-light-slate",
                 )}
+                data-testid={testId ? `${testId}-value` : undefined}
               >
                 {value}
               </span>

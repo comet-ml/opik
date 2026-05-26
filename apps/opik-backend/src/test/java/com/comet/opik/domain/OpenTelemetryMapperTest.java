@@ -1017,4 +1017,128 @@ class OpenTelemetryMapperTest {
             }
         }
     }
+
+    /**
+     * Verifies the Elastic Inference Service integration: when an OTel span emits
+     * {@code gen_ai.system = "elastic"} and a routed model ID, the mapper rewrites
+     * model/provider to the underlying provider so cost lookup and provider-based
+     * filtering downstream see the real upstream. Original values are kept in metadata.
+     */
+    @Nested
+    class ElasticInferenceService {
+
+        private Span mapEis(String modelId) {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("elastic"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.request.model")
+                            .setValue(AnyValue.newBuilder().setStringValue(modelId))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(100))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(50))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+            return spanBuilder.build();
+        }
+
+        // Jina row keeps the "jina-" prefix in the model key, so the resolver must not strip it.
+        @ParameterizedTest(name = "EIS prefix ''{0}'' -> provider=''{1}'', model=''{2}''")
+        @CsvSource({
+                "anthropic-claude-4.5-sonnet, anthropic,  claude-4.5-sonnet",
+                "openai-gpt-oss-120b,         openai,     gpt-oss-120b",
+                "jina-embeddings-v3,          jina_ai,    jina-embeddings-v3",
+                "google-gemini-3-flash,       google_ai,  gemini-3-flash",
+                "microsoft-multilingual-e5-large, azure,  multilingual-e5-large",
+        })
+        void prefixStripsAndRewritesProvider(String modelId, String expectedProvider, String expectedModel) {
+            var span = mapEis(modelId);
+
+            assertThat(span.provider()).isEqualTo(expectedProvider);
+            assertThat(span.model()).isEqualTo(expectedModel);
+        }
+
+        @Test
+        void elasticOwnModelWithoutDashIsLeftUnchanged() {
+            var span = mapEis("elser_model_2");
+
+            // No '-' in the model ID → resolver no-op; span retains the original gen_ai.system attribution.
+            // Metadata may be null when nothing else added attributes — that's also fine.
+            assertThat(span.provider()).isEqualTo("elastic");
+            assertThat(span.model()).isEqualTo("elser_model_2");
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_system")).isTrue();
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_model")).isTrue();
+        }
+
+        @Test
+        void rewriteRecordsOriginalsInMetadata() {
+            var span = mapEis("anthropic-claude-4.5-sonnet");
+
+            assertThat(span.metadata().get("eis_original_system").asText()).isEqualTo("elastic");
+            assertThat(span.metadata().get("eis_original_model").asText()).isEqualTo("anthropic-claude-4.5-sonnet");
+        }
+
+        @Test
+        void nonElasticProviderIsNotRewritten() {
+            // gen_ai.system other than "elastic" must leave the resolver inert, even for hyphenated IDs
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.request.model")
+                            .setValue(AnyValue.newBuilder().setStringValue("anthropic-claude-4.5-sonnet"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+            var span = spanBuilder.build();
+
+            assertThat(span.provider()).isEqualTo("openai");
+            assertThat(span.model()).isEqualTo("anthropic-claude-4.5-sonnet");
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_system")).isTrue();
+        }
+
+        @Test
+        void elasticSystemWithoutModelIsNoop() {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("elastic"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+            var span = spanBuilder.build();
+
+            assertThat(span.provider()).isEqualTo("elastic");
+            assertThat(span.model()).isNull();
+        }
+    }
 }

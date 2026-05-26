@@ -67,6 +67,7 @@ type GroupCustomMeta = {
   labelKey: string;
   countAggregationKey?: string;
   explainer?: Explainer;
+  getResource?: (cellData: unknown) => RESOURCE_TYPE;
 } & CustomMeta;
 
 const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -79,6 +80,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getSearch,
     getParams,
     getIsDeleted,
+    getResource,
     countAggregationKey,
     explainer,
   } = (custom ?? {}) as GroupCustomMeta;
@@ -90,6 +92,9 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
   const isDeleted = isFunction(getIsDeleted)
     ? getIsDeleted(cellData)
     : undefined;
+  const resolvedResource = isFunction(getResource)
+    ? getResource(cellData)
+    : resource;
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};
@@ -111,7 +116,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
         <ResourceLink
           id={id}
           name={name}
-          resource={resource}
+          resource={resolvedResource}
           search={search}
           params={params}
           isDeleted={isDeleted}

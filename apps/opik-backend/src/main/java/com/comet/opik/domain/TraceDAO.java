@@ -21,7 +21,9 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.domain.stats.StatsMerger;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -68,6 +70,7 @@ import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.stats.StatsMapper.mapProjectScoresStats;
 import static com.comet.opik.infrastructure.FilterUtils.bindTraceThreadSearchCriteria;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -80,7 +83,8 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
-import static java.util.stream.Collectors.*;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(TraceDAOImpl.class)
 public interface TraceDAO {
@@ -1356,10 +1360,8 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) as trace_count
              FROM traces
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)> AND id NOT IN (
-                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
-                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
-             )
+             <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
+                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
              <endif>
              GROUP BY workspace_id
             SETTINGS log_comment = '<log_comment>'
@@ -1373,10 +1375,8 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) AS trace_count
             FROM traces
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)> AND id NOT IN (
-                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
-                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
-            )
+            <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
+                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
             <endif>
             GROUP BY workspace_id, created_by
             SETTINGS log_comment = '<log_comment>'
@@ -1942,7 +1942,13 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String SELECT_TRACES_STATS = """
+    // Split-A: traces + spans aggregation. All feedback-score CTEs stay so the existing
+    // feedback_scores_filters / span_feedback_scores_filters / *_empty_filters slots inside
+    // trace_final still resolve. The feedback_scores_agg and span_feedback_scores_agg CTEs
+    // are no longer referenced by the final SELECT and CH prunes them; the per-trace feedback
+    // aggregates are produced in parallel by SELECT_FEEDBACK_SCORES_STATS and merged by
+    // StatsMerger.
+    private static final String SELECT_TRACES_SPANS_STATS = """
              WITH spans_data AS (
                 SELECT
                     id,
@@ -1952,11 +1958,13 @@ class TraceDAOImpl implements TraceDAO {
                     type,
                     workspace_id,
                     project_id
-                FROM spans FINAL
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
              ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -1981,6 +1989,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM (
+                    <if(has_legacy_scores)>
                     SELECT
                         workspace_id,
                         project_id,
@@ -2002,6 +2011,7 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                     UNION ALL
+                    <endif>
                     SELECT
                         workspace_id,
                         project_id,
@@ -2112,6 +2122,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM (
+                    <if(has_legacy_scores)>
                     SELECT workspace_id,
                            project_id,
                            entity_id,
@@ -2136,6 +2147,7 @@ class TraceDAOImpl implements TraceDAO {
                       AND entity_id IN (SELECT id FROM spans_data)
                       <endif>
                     UNION ALL
+                    <endif>
                     SELECT workspace_id,
                            project_id,
                            entity_id,
@@ -2342,8 +2354,6 @@ class TraceDAOImpl implements TraceDAO {
                 avg(tags_length) AS tags,
                 avgMap(s.usage) as usage,
                 sumMap(s.usage) as usage_sum,
-                avgMap(f.feedback_scores) AS feedback_scores,
-                avgMap(sfs.span_feedback_scores) AS span_feedback_scores,
                 avg(s.llm_span_count) AS llm_span_count_avg,
                 avg(s.span_count) AS span_count_avg,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
@@ -2359,10 +2369,393 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
             FROM trace_final t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
-            LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
-            LEFT JOIN span_feedback_scores_agg as sfs ON t.id = sfs.trace_id
             LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
             GROUP BY t.workspace_id, t.project_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    // Split-B: per-project feedback-score and span-feedback-score aggregates.
+    private static final String SELECT_FEEDBACK_SCORES_STATS = """
+            <if(filters_present)>
+            WITH spans_data AS (
+                SELECT
+                    id,
+                    trace_id,
+                    usage,
+                    total_estimated_cost,
+                    type,
+                    workspace_id,
+                    project_id
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+            ), spans_agg AS (
+                SELECT
+                    trace_id,
+                    sumMap(usage) as usage,
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(id) as span_count,
+                    toInt64(countIf(type = 'llm')) as llm_span_count
+                FROM spans_data
+                GROUP BY workspace_id, project_id, trace_id
+            ), feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM (
+                    <if(has_legacy_scores)>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    UNION ALL
+                    <endif>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                       AND workspace_id = :workspace_id
+                       AND project_id IN :project_ids
+                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+            ),
+            feedback_scores_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                FROM feedback_scores_deduped
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    IF(length(entries) = 1, entries[1].1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value
+                FROM feedback_scores_grouped
+            ),
+            guardrails_agg AS (
+                SELECT
+                    entity_id,
+                    countIf(DISTINCT id, result = 'failed') AS failed_count,
+                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
+                FROM (
+                    SELECT
+                        *
+                    FROM guardrails
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, id
+                )
+                GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), trace_annotation_queue_ids AS (
+                 SELECT trace_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                 ) AS annotation_queue_ids_with_trace_id
+                 GROUP BY trace_id
+            ),
+            span_feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM (
+                    <if(has_legacy_scores)>
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'span'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      <if(uuid_from_time || uuid_to_time)>
+                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <else>
+                      AND entity_id IN (SELECT id FROM spans_data)
+                      <endif>
+                    UNION ALL
+                    <endif>
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'span'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      <if(uuid_from_time || uuid_to_time)>
+                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <else>
+                      AND entity_id IN (SELECT id FROM spans_data)
+                      <endif>
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+            ), span_feedback_scores_with_trace_id AS (
+                SELECT workspace_id,
+                       project_id,
+                       s.trace_id AS trace_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_deduped sfs
+                INNER JOIN spans_data s ON sfs.entity_id = s.id
+            ), span_feedback_scores_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    groupArray(tuple(value, author, last_updated_at)) AS entries
+                FROM span_feedback_scores_with_trace_id
+                GROUP BY workspace_id, project_id, trace_id, name
+            ), span_feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    IF(length(entries) = 1, entries[1].1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value
+                FROM span_feedback_scores_grouped
+            )
+            <if(span_feedback_scores_empty_filters)>
+            , sfsc AS (SELECT trace_id, COUNT(trace_id) AS span_feedback_scores_count
+                 FROM span_feedback_scores_final
+                 GROUP BY trace_id
+                 HAVING <span_feedback_scores_empty_filters>
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM feedback_scores_final
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            , trace_final AS (
+                SELECT id, project_id
+                FROM traces final
+                <if(guardrails_filters)>
+                LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                LEFT JOIN fsc ON fsc.entity_id = traces.id
+                <endif>
+                <if(span_feedback_scores_empty_filters)>
+                LEFT JOIN sfsc ON sfsc.trace_id = traces.id
+                <endif>
+                <if(annotation_queue_filters)>
+                LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
+                <endif>
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(feedback_scores_filters)>
+                AND id IN (
+                    SELECT entity_id
+                    FROM feedback_scores_final
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
+                )
+                <endif>
+                <if(span_feedback_scores_filters)>
+                AND id IN (
+                    SELECT
+                        trace_id
+                    FROM span_feedback_scores_final
+                    GROUP BY trace_id
+                    HAVING <span_feedback_scores_filters>
+                )
+                <endif>
+                <if(trace_aggregation_filters)>
+                AND id IN (
+                    SELECT
+                        trace_id
+                    FROM spans_agg
+                    WHERE <trace_aggregation_filters>
+                )
+                <endif>
+                <if(experiment_filters)>
+                AND id IN (
+                    SELECT
+                        trace_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND <experiment_filters>
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND fsc.feedback_scores_count = 0
+                <endif>
+                <if(span_feedback_scores_empty_filters)>
+                AND (
+                    id IN (SELECT trace_id FROM sfsc WHERE sfsc.span_feedback_scores_count = 0)
+                        OR
+                    id NOT IN (SELECT trace_id FROM sfsc)
+                )
+                <endif>
+            ),
+            <else>
+            WITH
+            <endif>
+            span_ids AS (
+                SELECT id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
+            ), trace_fs AS (
+                <if(has_legacy_scores)>
+                SELECT project_id, entity_id, name, value,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  <if(filters_present)> AND entity_id IN (SELECT id FROM trace_final) <endif>
+                UNION ALL
+                <endif>
+                SELECT project_id, entity_id, name, value, author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  <if(filters_present)> AND entity_id IN (SELECT id FROM trace_final) <endif>
+            ), trace_fs_per_name AS (
+                SELECT project_id, entity_id, name, avg(value) AS value
+                FROM trace_fs
+                GROUP BY project_id, entity_id, name
+            ), trace_fs_per_project AS (
+                SELECT project_id, name, avg(value) AS value
+                FROM trace_fs_per_name
+                GROUP BY project_id, name
+            ), trace_feedback_scores AS (
+                SELECT project_id,
+                       mapFromArrays(groupArray(name), groupArray(value)) AS feedback_scores
+                FROM trace_fs_per_project
+                GROUP BY project_id
+            ), span_fs AS (
+                <if(has_legacy_scores)>
+                SELECT project_id, entity_id, name, value,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  AND entity_id IN (SELECT id FROM span_ids)
+                UNION ALL
+                <endif>
+                SELECT project_id, entity_id, name, value, author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  AND entity_id IN (SELECT id FROM span_ids)
+            ), span_fs_per_name AS (
+                SELECT project_id, entity_id, name, avg(value) AS value
+                FROM span_fs
+                GROUP BY project_id, entity_id, name
+            ), span_fs_per_project AS (
+                SELECT project_id, name, avg(value) AS value
+                FROM span_fs_per_name
+                GROUP BY project_id, name
+            ), span_feedback_scores AS (
+                SELECT project_id,
+                       mapFromArrays(groupArray(name), groupArray(value)) AS span_feedback_scores
+                FROM span_fs_per_project
+                GROUP BY project_id
+            )
+            SELECT
+                coalesce(t.project_id, s.project_id) AS project_id,
+                t.feedback_scores AS feedback_scores,
+                s.span_feedback_scores AS span_feedback_scores
+            FROM trace_feedback_scores t
+            FULL OUTER JOIN span_feedback_scores s ON t.project_id = s.project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2484,6 +2877,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull WorkspacesService workspacesService;
 
     @Override
     @WithSpan
@@ -3422,26 +3816,111 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("get_trace_stats", workspaceId, userName, "");
-            var statsSQL = newTraceThreadFindTemplate(SELECT_TRACES_STATS, criteria, TRACE_SEARCH_CLAUSE);
-            statsSQL.add("log_comment", logComment);
+        // Each branch runs on its own connection from the pool — R2DBC connections do not
+        // tolerate two concurrent statements on the same connection. The legacy-scores flag is
+        // looked up once (sync JDBI) and threaded through both branches so they can skip the
+        // legacy feedback_scores table UNION when no data exists there.
+        return makeMonoContextAware((userName, workspaceId) -> workspacesService.hasLegacyScores(workspaceId)
+                .flatMap(hasLegacyScores -> {
 
-            var statement = connection.createStatement(statsSQL.render())
-                    .bind("project_ids", List.of(criteria.projectId()))
-                    .bind("workspace_id", workspaceId);
+                    Mono<ProjectStats> tracesSpansMono = asyncTemplate.nonTransaction(connection -> {
+                        var logComment = getLogComment("get_trace_stats_traces_spans", workspaceId, userName, "");
+                        var template = newTraceThreadFindTemplate(SELECT_TRACES_SPANS_STATS, criteria,
+                                TRACE_SEARCH_CLAUSE);
+                        template.add("log_comment", logComment);
+                        template.add("has_legacy_scores", hasLegacyScores);
 
-            bindTraceThreadSearchCriteria(criteria, statement);
+                        var statement = connection.createStatement(template.render())
+                                .bind("project_ids", List.of(criteria.projectId()))
+                                .bind("workspace_id", workspaceId);
+                        bindTraceThreadSearchCriteria(criteria, statement);
 
-            Segment segment = startSegment("traces", "Clickhouse", "stats");
+                        Segment segment = startSegment("traces", "Clickhouse", "stats_traces_spans");
+                        return Flux.from(statement.execute())
+                                .doFinally(signalType -> endSegment(segment))
+                                .flatMap(result -> result.map(
+                                        (row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
+                                .singleOrEmpty();
+                    });
 
-            return Flux.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(
-                            result -> result
-                                    .map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
-                    .singleOrEmpty();
-        }));
+                    Mono<ProjectStats> feedbackMono = asyncTemplate.nonTransaction(connection -> {
+                        var statement = buildFeedbackStatementForCriteria(connection, criteria, workspaceId,
+                                userName, hasLegacyScores);
+
+                        Segment segment = startSegment("traces", "Clickhouse", "stats_feedback");
+                        return Flux.from(statement.execute())
+                                .doFinally(signalType -> endSegment(segment))
+                                .flatMap(result -> result.map((row, rowMetadata) -> mapProjectScoresStats(row)))
+                                .singleOrEmpty();
+                    });
+
+                    return StatsMerger.zipAndMerge(tracesSpansMono, feedbackMono);
+                }));
+    }
+
+    /**
+     * Builds SELECT_FEEDBACK_SCORES_STATS for the single-project (criteria-driven) entrypoint.
+     * Routes through {@link com.comet.opik.infrastructure.FilterUtils#newTraceThreadFindTemplate}
+     * so every filter slot (trace, aggregation, feedback-score, experiment, annotation-queue,
+     * guardrails, search) reaches the embedded trace_final CTE. When any filter is populated,
+     * sets {@code filters_present} so the template scopes feedback aggregates to filtered traces.
+     */
+    private Statement buildFeedbackStatementForCriteria(Connection connection, TraceSearchCriteria criteria,
+            String workspaceId, String userName, boolean hasLegacyScores) {
+        var logComment = getLogComment("get_trace_stats_feedback_scores", workspaceId, userName, "");
+        var template = newTraceThreadFindTemplate(SELECT_FEEDBACK_SCORES_STATS, criteria, TRACE_SEARCH_CLAUSE);
+        template.add("log_comment", logComment);
+        if (hasAnyTraceFilter(template)) {
+            template.add("filters_present", true);
+        }
+        template.add("has_legacy_scores", hasLegacyScores);
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_ids", List.of(criteria.projectId()))
+                .bind("workspace_id", workspaceId);
+        bindTraceThreadSearchCriteria(criteria, statement);
+        return statement;
+    }
+
+    /**
+     * Builds SELECT_FEEDBACK_SCORES_STATS for the multi-project (projects-list) entrypoint.
+     * The projects-list path only carries plain trace filters, so only the {@code filters}
+     * slot (FilterStrategy.TRACE) is populated. When that slot is set, marks
+     * {@code filters_present} so the template scopes feedback aggregates to filtered traces.
+     */
+    private Statement buildFeedbackStatementForProjects(Connection connection, List<UUID> projectIds,
+            String workspaceId, List<? extends Filter> filters, boolean hasLegacyScores) {
+        var logComment = getLogComment("get_trace_stats_feedback_scores", workspaceId, "", projectIds.size());
+        var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
+        template.add("has_legacy_scores", hasLegacyScores);
+        if (!CollectionUtils.isEmpty(filters)) {
+            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                    .ifPresent(traceFilters -> {
+                        template.add("filters", traceFilters);
+                        template.add("filters_present", true);
+                    });
+        }
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_ids", projectIds)
+                .bind("workspace_id", workspaceId);
+        if (!CollectionUtils.isEmpty(filters)) {
+            FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+        }
+        return statement;
+    }
+
+    private static boolean hasAnyTraceFilter(ST template) {
+        return template.getAttribute("filters") != null
+                || template.getAttribute("search_text") != null
+                || template.getAttribute("annotation_queue_filters") != null
+                || template.getAttribute("feedback_scores_filters") != null
+                || template.getAttribute("span_feedback_scores_filters") != null
+                || template.getAttribute("trace_aggregation_filters") != null
+                || template.getAttribute("experiment_filters") != null
+                || template.getAttribute("feedback_scores_empty_filters") != null
+                || template.getAttribute("span_feedback_scores_empty_filters") != null
+                || template.getAttribute("guardrails_filters") != null;
     }
 
     @Override
@@ -3487,33 +3966,54 @@ class TraceDAOImpl implements TraceDAO {
             return Mono.just(Map.of());
         }
 
-        return asyncTemplate
-                .nonTransaction(connection -> {
-                    var template = getSTWithLogComment(SELECT_TRACES_STATS, "get_trace_stats_by_project_ids",
-                            workspaceId, "", projectIds.size());
+        // Each branch runs on its own connection from the pool — R2DBC connections do not
+        // tolerate two concurrent statements on the same connection. The legacy-scores flag is
+        // resolved once (sync JDBI) so both branches can skip the legacy feedback_scores UNION
+        // when no data exists there.
+        return workspacesService.hasLegacyScores(workspaceId)
+                .flatMap(hasLegacyScores -> {
 
-                    template.add("project_stats", true);
+                    Mono<Map<UUID, ProjectStats>> tracesSpansMono = asyncTemplate.nonTransaction(connection -> {
+                        // Split-A: traces + spans aggregation per project. project_stats=true enables the
+                        // recent / past_period error count split for the projects listing.
+                        var template = getSTWithLogComment(SELECT_TRACES_SPANS_STATS,
+                                "get_trace_stats_traces_spans_by_project_ids", workspaceId, "", projectIds.size());
+                        template.add("project_stats", true);
+                        template.add("has_legacy_scores", hasLegacyScores);
+                        if (!CollectionUtils.isEmpty(filters)) {
+                            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                                    .ifPresent(traceFilters -> template.add("filters", traceFilters));
+                        }
+                        var statement = connection.createStatement(template.render())
+                                .bind("project_ids", projectIds)
+                                .bind("workspace_id", workspaceId);
+                        if (!CollectionUtils.isEmpty(filters)) {
+                            FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                        }
 
-                    if (!CollectionUtils.isEmpty(filters)) {
-                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
-                                .ifPresent(traceFilters -> template.add("filters", traceFilters));
-                    }
+                        return Mono.from(statement.execute())
+                                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(
+                                        row.get("project_id", UUID.class),
+                                        StatsMapper.mapProjectStats(row, "trace_count"))))
+                                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    });
 
-                    Statement statement = connection.createStatement(template.render())
-                            .bind("project_ids", projectIds)
-                            .bind("workspace_id", workspaceId);
+                    Mono<Map<UUID, ProjectStats>> feedbackMono = asyncTemplate.nonTransaction(connection -> {
+                        // Split-B: per-project feedback-score aggregates. When the projects-list passes
+                        // trace filters we propagate them so the feedback aggregates are scoped to the
+                        // same filtered trace set (filters_present path inside the template).
+                        var statement = buildFeedbackStatementForProjects(connection, projectIds, workspaceId,
+                                filters, hasLegacyScores);
 
-                    if (!CollectionUtils.isEmpty(filters)) {
-                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
-                    }
+                        return Mono.from(statement.execute())
+                                .flatMapMany(result -> result.map(
+                                        (row, rowMetadata) -> Map.entry(row.get("project_id", UUID.class),
+                                                mapProjectScoresStats(row))))
+                                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    });
 
-                    return Mono.from(statement.execute())
-                            .flatMapMany(result -> result.map((row, rowMetadata) -> Map.of(
-                                    row.get("project_id", UUID.class),
-                                    StatsMapper.mapProjectStats(row, "trace_count"))))
-                            .map(Map::entrySet)
-                            .flatMap(Flux::fromIterable)
-                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    return Mono.zip(tracesSpansMono, feedbackMono)
+                            .map(tuple -> StatsMerger.merge(tuple.getT1(), tuple.getT2()));
                 });
     }
 
