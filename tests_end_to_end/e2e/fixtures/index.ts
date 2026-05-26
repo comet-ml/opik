@@ -1,4 +1,4 @@
-export { test, expect } from './experiment.fixture';
+export { test, expect } from './test-suite.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -15,4 +15,9 @@ export type {
   ExperimentItemSeed,
   ExperimentItemScore,
 } from './experiment.fixture';
+export type {
+  TestSuiteRef,
+  TestSuiteFixtures,
+  TestSuiteItemSeed,
+} from './test-suite.fixture';
 export type { ProjectRef } from '../core/backend';
