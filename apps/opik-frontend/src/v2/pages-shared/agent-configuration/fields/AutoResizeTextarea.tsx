@@ -7,6 +7,7 @@ type AutoResizeTextareaProps = {
   onChange: (value: string) => void;
   className?: string;
   readOnly?: boolean;
+  placeholder?: string;
 };
 
 const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
@@ -14,6 +15,7 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   onChange,
   className,
   readOnly,
+  placeholder,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -57,12 +59,13 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
       ref={textareaRef}
       rows={1}
       className={cn(
-        "comet-body-s w-full resize-none overflow-hidden bg-transparent text-foreground outline-none",
+        "comet-body-s w-full resize-none overflow-hidden bg-transparent text-foreground outline-none placeholder:text-light-slate",
         className,
       )}
       value={value}
       onChange={handleChange}
       readOnly={readOnly}
+      placeholder={placeholder}
     />
   );
 };
