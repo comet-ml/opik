@@ -12,7 +12,7 @@ import {
   NumericFormat,
   resolveNumericFormat,
 } from "@/shared/filter-chips/chips/NumericChip/NumericChip.format";
-import { toNumber } from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
+import { toNumber } from "@/shared/filter-chips/lib/helpers";
 
 interface NumericChipPopoverContentProps {
   definition: NumericChipDefinition;
