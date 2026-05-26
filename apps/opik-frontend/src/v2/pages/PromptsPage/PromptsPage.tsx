@@ -6,12 +6,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import {
-  ExternalLink,
-  FileText,
-  MessagesSquare,
-  PlusIcon,
-} from "lucide-react";
+import { ExternalLink, FileText, MessagesSquare, PlusIcon } from "lucide-react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import { buildDocsUrl } from "@/v2/lib/utils";
