@@ -103,32 +103,38 @@ const ItemsSidebar: React.FunctionComponent = () => {
               onClick={() => navigateToItem(index)}
               className={cn(
                 "flex w-full flex-col gap-0.5 p-2 text-left transition-colors",
-                isActive
-                  ? "bg-primary-foreground"
-                  : "hover:bg-primary-foreground",
-                state !== ITEM_STATE.DEFAULT && "opacity-60",
+                isActive ? "bg-muted" : "hover:bg-primary-foreground",
               )}
             >
-              <div className="flex items-center gap-1">
-                <Tag className="flex shrink-0 items-center gap-1 border-border bg-primary-foreground px-1 text-foreground">
-                  <span className={cn("size-1.5 rounded-full", dotClass)} />
-                  {label}
-                </Tag>
-                <span className="comet-body-xs truncate text-muted-slate">
-                  {name}
-                </span>
-              </div>
-              {input && (
-                <span className="comet-body-xs-accented truncate">{input}</span>
-              )}
-              {output && (
-                <div className="flex items-center gap-1 truncate">
-                  <CornerDownRight className="size-3 shrink-0 text-light-slate" />
-                  <span className="truncate text-[10px] leading-3 text-muted-slate">
-                    {output}
+              <div
+                className={cn(
+                  "flex flex-col gap-0.5",
+                  state !== ITEM_STATE.DEFAULT && "opacity-60",
+                )}
+              >
+                <div className="flex items-center gap-1">
+                  <Tag className="flex shrink-0 items-center gap-1 border-border bg-primary-foreground px-1 text-foreground">
+                    <span className={cn("size-1.5 rounded-full", dotClass)} />
+                    {label}
+                  </Tag>
+                  <span className="comet-body-xs truncate text-muted-slate">
+                    {name}
                   </span>
                 </div>
-              )}
+                {input && (
+                  <span className="comet-body-xs-accented truncate">
+                    {input}
+                  </span>
+                )}
+                {output && (
+                  <div className="flex items-center gap-1 truncate">
+                    <CornerDownRight className="size-3 shrink-0 text-light-slate" />
+                    <span className="truncate text-[10px] leading-3 text-muted-slate">
+                      {output}
+                    </span>
+                  </div>
+                )}
+              </div>
             </button>
           );
         })}
