@@ -10,7 +10,12 @@ import {
 } from "lucide-react";
 import briefingBulbIcon from "@/icons/briefing-bulb.svg";
 import briefingBubbleIcon from "@/icons/briefing-bubble.svg";
-import { formatRelativeDateTime, formatUtcTimeAsLocal } from "@/lib/date";
+import {
+  formatRelativeDateTime,
+  formatUtcTimeAsLocal,
+  formatLocalTimeAsUtc,
+  parseUtcTimeToLocalDate,
+} from "@/lib/date";
 import { Button } from "@/ui/button";
 import { Skeleton } from "@/ui/skeleton";
 import { Switch } from "@/ui/switch";
@@ -29,9 +34,21 @@ import useUpdateReportPreferenceMutation from "@/api/projects/useUpdateReportPre
 import {
   OllieReport,
   RecommendedAction,
+  ReportPreferenceSettings,
   ReportStatus,
 } from "@/types/ollie-reports";
 import ReportPanel from "./ReportPanel";
+import ReportSettingsFields, {
+  useReportSettings,
+} from "./ReportSettingsFields";
+
+function getNextRunLabel(scheduleTimeUtc: string) {
+  const day =
+    parseUtcTimeToLocalDate(scheduleTimeUtc) > new Date()
+      ? "today"
+      : "tomorrow";
+  return `${day} at ${formatUtcTimeAsLocal(scheduleTimeUtc)}`;
+}
 
 function LoadingSkeleton() {
   return (
@@ -47,7 +64,7 @@ function StatusBadge({ enabled }: { enabled: boolean }) {
   if (enabled) {
     return (
       <span className="flex items-center gap-1.5 text-xs">
-        <span className="size-2 rounded-full bg-success" />
+        <span className="size-2 rounded-full bg-emerald-400" />
         Active
       </span>
     );
@@ -137,17 +154,15 @@ function RunningRow() {
 }
 
 function ScheduledRow({
-  scheduleTimeLocal,
+  nextRunLabel,
   onRunNow,
 }: {
-  scheduleTimeLocal: string;
+  nextRunLabel: string;
   onRunNow: () => void;
 }) {
   return (
     <BriefingRow dashed>
-      <span className="text-light-slate">
-        Scheduled: Tomorrow, {scheduleTimeLocal}
-      </span>
+      <span className="text-light-slate">Scheduled: {nextRunLabel}</span>
       <Button
         variant="ghost"
         size="2xs"
@@ -223,25 +238,37 @@ function TurnOnDialog({
   open,
   onOpenChange,
   onConfirm,
-  scheduleTimeLocal,
+  defaultScheduleTime,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (runImmediately: boolean) => void;
-  scheduleTimeLocal: string;
+  onConfirm: (
+    settings: ReportPreferenceSettings & { runImmediately: boolean },
+  ) => void;
+  defaultScheduleTime: string;
 }) {
   const [runImmediately, setRunImmediately] = useState(true);
+  const schedule = useReportSettings(defaultScheduleTime, "");
+
+  const handleConfirm = () => {
+    onConfirm({
+      enabled: true,
+      scheduleTime: schedule.getUtcTime(),
+      customPrompt: schedule.customPrompt,
+      runImmediately,
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-[560px]">
+      <DialogContent className="max-w-lg sm:max-w-[580px]">
         <DialogHeader>
           <DialogTitle>Turn on daily briefing?</DialogTitle>
           <DialogDescription asChild className="pt-6">
             <div className="flex flex-col gap-6">
               <p>
-                Ollie will run every day at {scheduleTimeLocal}, reviewing your
-                traces and telling you exactly what to improve.
+                Ollie will run every day, reviewing your traces and telling you
+                exactly what to improve.
               </p>
               <p>
                 Runs on your Ollie tokens. You can turn it off at any time.{" "}
@@ -249,6 +276,9 @@ function TurnOnDialog({
                   Learn more
                 </button>
               </p>
+
+              <ReportSettingsFields {...schedule} />
+
               <div className="flex items-center gap-3">
                 <Switch
                   checked={runImmediately}
@@ -260,8 +290,8 @@ function TurnOnDialog({
                     Run the first report immediately on activation
                   </p>
                   <p className="text-light-slate">
-                    The next scheduled run will be tomorrow at{" "}
-                    {scheduleTimeLocal}.
+                    The next scheduled run will be{" "}
+                    {getNextRunLabel(schedule.getUtcTime())}.
                   </p>
                 </div>
               </div>
@@ -272,7 +302,7 @@ function TurnOnDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => onConfirm(runImmediately)}>Turn on</Button>
+          <Button onClick={handleConfirm}>Turn on</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -283,21 +313,33 @@ function SettingsDialog({
   open,
   onOpenChange,
   enabled,
+  scheduleTime,
+  customPrompt,
   onSave,
-  scheduleTimeLocal,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   enabled: boolean;
-  onSave: (enabled: boolean) => void;
-  scheduleTimeLocal: string;
+  scheduleTime: string;
+  customPrompt: string;
+  onSave: (settings: ReportPreferenceSettings) => void;
 }) {
   const [localEnabled, setLocalEnabled] = useState(enabled);
+  const reportSettings = useReportSettings(scheduleTime, customPrompt);
+  const { reset } = reportSettings;
 
-  // Sync local state when the prop changes (e.g., after mutation settles)
   useEffect(() => {
     setLocalEnabled(enabled);
-  }, [enabled]);
+    reset(scheduleTime, customPrompt);
+  }, [enabled, scheduleTime, customPrompt, reset]);
+
+  const handleSave = () => {
+    onSave({
+      enabled: localEnabled,
+      scheduleTime: reportSettings.getUtcTime(),
+      customPrompt: reportSettings.customPrompt,
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -306,17 +348,6 @@ function SettingsDialog({
           <DialogTitle>Daily briefing settings</DialogTitle>
           <DialogDescription asChild className="pt-6">
             <div className="flex flex-col gap-6">
-              <p className="text-foreground">
-                <span className="font-medium">Next run:</span> Next report
-                scheduled for tomorrow at {scheduleTimeLocal}.
-              </p>
-              <p className="text-foreground">
-                <span className="font-medium">Billing:</span> Runs on your Ollie
-                tokens. {/* TODO: add billing link target */}
-                <button className="underline underline-offset-4 hover:text-primary">
-                  View billing
-                </button>
-              </p>
               <div className="flex items-center gap-3">
                 <Switch
                   checked={localEnabled}
@@ -346,6 +377,16 @@ function SettingsDialog({
                   )}
                 </div>
               </div>
+
+              <ReportSettingsFields {...reportSettings} />
+
+              <p className="text-foreground">
+                <span className="font-medium">Billing:</span> Runs on your Ollie
+                tokens.{" "}
+                <button className="underline underline-offset-4 hover:text-primary">
+                  View billing
+                </button>
+              </p>
             </div>
           </DialogDescription>
         </DialogHeader>
@@ -353,7 +394,7 @@ function SettingsDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => onSave(localEnabled)}>Save changes</Button>
+          <Button onClick={handleSave}>Save changes</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -361,6 +402,7 @@ function SettingsDialog({
 }
 
 const POLLING_INTERVAL = 10_000;
+const DEFAULT_SCHEDULE_TIME = formatLocalTimeAsUtc("07:00:00");
 
 export default function DailyBriefingSection() {
   const { projectId } = useParams({ strict: false }) as {
@@ -376,14 +418,13 @@ export default function DailyBriefingSection() {
   const { data: preference, isPending: isPreferencePending } =
     useReportPreference({ projectId });
   const isEnabled = preference?.enabled ?? false;
-  const scheduleTimeLocal = preference?.schedule_time_utc
-    ? formatUtcTimeAsLocal(preference.schedule_time_utc)
-    : "";
+  const scheduleTimeUtc = preference?.schedule_time ?? DEFAULT_SCHEDULE_TIME;
+  const nextRunLabel = getNextRunLabel(scheduleTimeUtc);
 
   const { data: reportsData, isPending: isReportsPending } = useReports(
     { projectId },
     {
-      enabled: isEnabled,
+      enabled: !isPreferencePending,
       refetchInterval: (query) => {
         const hasRunning = query.state.data?.content?.some(
           (r) => r.status === ReportStatus.PENDING,
@@ -413,13 +454,20 @@ export default function DailyBriefingSection() {
     generateMutation.mutate({ projectId });
   };
 
-  const handleTurnOn = (runImmediately: boolean) => {
+  const handleTurnOn = (
+    settings: ReportPreferenceSettings & { runImmediately: boolean },
+  ) => {
     setShowTurnOnDialog(false);
     updatePreferenceMutation.mutate(
-      { projectId, enabled: true },
+      {
+        projectId,
+        enabled: true,
+        schedule_time: settings.scheduleTime,
+        custom_prompt: settings.customPrompt,
+      },
       {
         onSuccess: () => {
-          if (runImmediately) {
+          if (settings.runImmediately) {
             generateMutation.mutate({ projectId });
           }
         },
@@ -427,13 +475,22 @@ export default function DailyBriefingSection() {
     );
   };
 
-  const handleSaveSettings = (enabled: boolean) => {
+  const handleSaveSettings = (settings: ReportPreferenceSettings) => {
     setShowSettingsDialog(false);
-    updatePreferenceMutation.mutate({ projectId, enabled });
+    updatePreferenceMutation.mutate({
+      projectId,
+      enabled: settings.enabled,
+      schedule_time: settings.scheduleTime,
+      custom_prompt: settings.customPrompt,
+    });
   };
 
   const handleReactivate = () => {
-    updatePreferenceMutation.mutate({ projectId, enabled: true });
+    updatePreferenceMutation.mutate({
+      projectId,
+      enabled: true,
+      schedule_time: preference?.schedule_time ?? DEFAULT_SCHEDULE_TIME,
+    });
   };
 
   const handleSelectReport = (report: OllieReport) => {
@@ -481,7 +538,7 @@ export default function DailyBriefingSection() {
         <EmptyState
           icon={briefingBubbleIcon}
           title="No briefings yet"
-          description={`Next briefing is scheduled for tomorrow at ${scheduleTimeLocal}.`}
+          description={`Next briefing is scheduled for ${nextRunLabel}.`}
           actionLabel="Run now"
           onAction={handleRunNow}
         />
@@ -496,10 +553,7 @@ export default function DailyBriefingSection() {
           {isEnabled && hasFailed && <FailedRow onRetry={handleRunNow} />}
 
           {isEnabled && !hasRunning && !hasFailed && (
-            <ScheduledRow
-              scheduleTimeLocal={scheduleTimeLocal}
-              onRunNow={handleRunNow}
-            />
+            <ScheduledRow nextRunLabel={nextRunLabel} onRunNow={handleRunNow} />
           )}
 
           {displayReports.map((report) => (
@@ -527,7 +581,7 @@ export default function DailyBriefingSection() {
         open={showTurnOnDialog}
         onOpenChange={setShowTurnOnDialog}
         onConfirm={handleTurnOn}
-        scheduleTimeLocal={scheduleTimeLocal}
+        defaultScheduleTime={DEFAULT_SCHEDULE_TIME}
       />
 
       {preference != null && (
@@ -535,8 +589,9 @@ export default function DailyBriefingSection() {
           open={showSettingsDialog}
           onOpenChange={setShowSettingsDialog}
           enabled={preference.enabled}
+          scheduleTime={preference.schedule_time}
+          customPrompt={preference.custom_prompt ?? ""}
           onSave={handleSaveSettings}
-          scheduleTimeLocal={scheduleTimeLocal}
         />
       )}
 

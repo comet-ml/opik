@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -31,18 +32,19 @@ public class OrchestratorClient {
 
     public void triggerReportGeneration(@NonNull String reportId, @NonNull String projectId,
             @NonNull String projectName, @NonNull String workspaceName,
-            @NonNull Runnable onFailure) {
+            String customPrompt, @NonNull Runnable onFailure) {
         if (StringUtils.isBlank(config.getUrl())) {
             log.warn("Report generation URL not configured, skipping report '{}'", reportId);
             onFailure.run();
             return;
         }
 
-        var payload = Map.of(
+        var payload = new HashMap<>(Map.of(
                 "report_id", reportId,
                 "project_id", projectId,
                 "project_name", projectName,
-                "workspace_name", workspaceName);
+                "workspace_name", workspaceName));
+        payload.put("custom_prompt", customPrompt);
 
         httpClient.target(config.getUrl())
                 .request(MediaType.APPLICATION_JSON)

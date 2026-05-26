@@ -31,11 +31,18 @@ export interface OllieReportPage {
 export interface ReportPreference {
   project_id: string;
   enabled: boolean;
-  schedule_time_utc: string;
+  schedule_time: string;
+  custom_prompt?: string;
   created_at?: string;
   last_updated_at?: string;
 }
 
 export interface GenerateReportResponse {
   report_id: string;
+}
+
+export interface ReportPreferenceSettings {
+  enabled: boolean;
+  scheduleTime: string;
+  customPrompt: string;
 }

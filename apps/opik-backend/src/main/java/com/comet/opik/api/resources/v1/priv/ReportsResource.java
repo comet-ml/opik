@@ -126,7 +126,7 @@ public class ReportsResource {
             @PathParam("projectId") UUID projectId,
             @Valid ReportPreference preference) {
 
-        var updated = reportService.updatePreference(projectId, preference.enabled())
+        var updated = reportService.updatePreference(projectId, preference)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
