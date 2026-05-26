@@ -6,6 +6,8 @@ from fastapi import APIRouter, Header
 from ..opik_factory import make_opik_client
 from ..schemas import (
     TestSuiteCreate,
+    TestSuiteInsertItemsRequest,
+    TestSuiteInsertItemsResponse,
     TestSuiteResponse,
     TestSuiteRunRequest,
     TestSuiteRunResponse,
@@ -46,6 +48,29 @@ def create_test_suite(
         atexit.unregister(client.end)
 
     return TestSuiteResponse(id=str(suite.id), name=suite.name)
+
+
+@router.post(
+    "/insert-items",
+    response_model=TestSuiteInsertItemsResponse,
+    status_code=200,
+)
+def insert_test_suite_items(
+    body: TestSuiteInsertItemsRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> TestSuiteInsertItemsResponse:
+    """Insert items into an existing test suite by name (idempotent get-or-create)."""
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        suite = client.get_or_create_test_suite(name=body.suite_name)
+        items = [item.model_dump(exclude_none=True) for item in body.items]
+        suite.insert(items)
+        suite_id = str(suite.id)
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    return TestSuiteInsertItemsResponse(suite_id=suite_id, inserted=len(body.items))
 
 
 @router.post("/run", response_model=TestSuiteRunResponse, status_code=200)

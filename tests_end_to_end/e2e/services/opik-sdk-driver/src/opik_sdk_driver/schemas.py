@@ -121,6 +121,19 @@ class TestSuiteRunRequest(BaseModel):
     workspace: str | None = None
 
 
+class TestSuiteInsertItemsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suite_name: str
+    items: list[TestSuiteItemSeed]
+    workspace: str | None = None
+
+
+class TestSuiteInsertItemsResponse(BaseModel):
+    suite_id: str
+    inserted: int
+
+
 class TestSuiteRunResponse(BaseModel):
     experiment_id: str | None
     experiment_name: str | None

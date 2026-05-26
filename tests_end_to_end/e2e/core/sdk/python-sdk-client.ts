@@ -50,6 +50,15 @@ export interface PythonSdkClient {
     }>;
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  insertTestSuiteItems(args: {
+    suite_name: string;
+    items: Array<{
+      data: Record<string, unknown>;
+      assertions?: string[];
+      description?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{ suite_id: string; inserted: number }>;
   runTestSuite(args: {
     suite_name: string;
     task_output: string;
@@ -161,6 +170,13 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createTestSuite(args) {
       return request<{ id: string; name: string }>('POST', '/test-suites', args);
+    },
+    async insertTestSuiteItems(args) {
+      return request<{ suite_id: string; inserted: number }>(
+        'POST',
+        '/test-suites/insert-items',
+        args,
+      );
     },
     async runTestSuite(args) {
       return request<{
