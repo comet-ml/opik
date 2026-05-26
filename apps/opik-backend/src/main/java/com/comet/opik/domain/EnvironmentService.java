@@ -57,6 +57,8 @@ public interface EnvironmentService {
 
     boolean existsByName(String name, String workspaceId);
 
+    Set<String> findExistingNames(Set<String> names, String workspaceId);
+
     Environment update(UUID id, EnvironmentUpdate environmentUpdate);
 
     Environment get(UUID id);
@@ -197,6 +199,15 @@ class EnvironmentServiceImpl implements EnvironmentService {
             var repository = handle.attach(EnvironmentDAO.class);
             return repository.countByName(workspaceId, name) > 0;
         });
+    }
+
+    @Override
+    public Set<String> findExistingNames(@NonNull Set<String> names, @NonNull String workspaceId) {
+        if (names.isEmpty()) {
+            return Set.of();
+        }
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(EnvironmentDAO.class)
+                .findExistingNames(workspaceId, names));
     }
 
     private void trackEnvironmentCreatedEvent(Environment environment, String workspaceId, String userName,

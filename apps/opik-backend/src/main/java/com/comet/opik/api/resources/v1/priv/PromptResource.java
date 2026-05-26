@@ -424,11 +424,11 @@ public class PromptResource {
     public Response setPromptVersionEnvironment(@PathParam("versionId") UUID versionId,
             @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionEnvironmentUpdate.class))) @Valid @NotNull PromptVersionEnvironmentUpdate request) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Setting environment '{}' on prompt version '{}' on workspace_id '{}'",
-                request.environment(), versionId, workspaceId);
-        promptService.setVersionEnvironment(versionId, request.environment());
-        log.info("Successfully set environment '{}' on prompt version '{}' on workspace_id '{}'",
-                request.environment(), versionId, workspaceId);
+        log.info("Setting environments '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environments(), versionId, workspaceId);
+        promptService.setVersionEnvironment(versionId, request.environments());
+        log.info("Successfully set environments '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environments(), versionId, workspaceId);
         return Response.noContent().build();
     }
 

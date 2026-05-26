@@ -75,7 +75,7 @@ public interface PromptDAO {
                         'change_description', pv.change_description,
                         'type', pv.type,
                         'version_type', pv.version_type,
-                        'environment', pv.environment,
+                        'environments', (SELECT JSON_ARRAYAGG(pve.environment) FROM prompt_version_envs pve WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL),
                         'tags', pv.tags,
                         'created_at', pv.created_at,
                         'created_by', pv.created_by,
@@ -102,7 +102,7 @@ public interface PromptDAO {
                         'change_description', pv.change_description,
                         'type', pv.type,
                         'version_type', pv.version_type,
-                        'environment', pv.environment,
+                        'environments', (SELECT JSON_ARRAYAGG(pve.environment) FROM prompt_version_envs pve WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL),
                         'tags', pv.tags,
                         'created_at', pv.created_at,
                         'created_by', pv.created_by,
@@ -113,7 +113,7 @@ public interface PromptDAO {
                     WHERE pv.prompt_id = p.id
                     AND pv.workspace_id = p.workspace_id
                     <if(mask_id)> AND pv.id = :mask_id AND pv.version_type = 'mask' <endif>
-                    <if(environment)> AND pv.environment = :environment AND pv.version_type = 'prompt_version' <endif>
+                    <if(environment)> AND EXISTS (SELECT 1 FROM prompt_version_envs pve WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.environment = :environment AND pve.ended_at IS NULL) AND pv.version_type = 'prompt_version' <endif>
                 ) AS requested_version
                 <endif>
             FROM prompts p
@@ -191,7 +191,7 @@ public interface PromptDAO {
                 'change_description', change_description,
                 'type', type,
                 'version_type', version_type,
-                'environment', environment,
+                'environments', (SELECT JSON_ARRAYAGG(pve.environment) FROM prompt_version_envs pve WHERE pve.workspace_id = ranked.workspace_id AND pve.version_id = ranked.id AND pve.ended_at IS NULL),
                 'tags', tags,
                 'created_at', created_at,
                 'created_by', created_by,
@@ -295,7 +295,7 @@ public interface PromptDAO {
                     'change_description', pv.change_description,
                     'type', pv.type,
                     'version_type', pv.version_type,
-                    'environment', pv.environment,
+                    'environments', (SELECT JSON_ARRAYAGG(pve.environment) FROM prompt_version_envs pve WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL),
                     'tags', pv.tags,
                     'created_at', pv.created_at,
                     'created_by', pv.created_by,

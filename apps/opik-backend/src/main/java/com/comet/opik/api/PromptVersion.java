@@ -50,7 +50,7 @@ public record PromptVersion(
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version type discriminator; defaults to prompt_version") PromptVersionType versionType,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
-                PromptVersion.View.Detail.class}) @Nullable @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment,
+                PromptVersion.View.Detail.class}) @Nullable @Size(max = 100, message = "cannot exceed 100 environments") Set<@Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String> environments,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
@@ -102,7 +102,7 @@ public record PromptVersion(
     }
 
     @JsonIgnore
-    @AssertTrue(message = "environment cannot be set on a mask version") public boolean isEnvironmentCompatibleWithVersionType() {
-        return environment == null || versionType() != PromptVersionType.MASK;
+    @AssertTrue(message = "environments cannot be set on a mask version") public boolean isEnvironmentCompatibleWithVersionType() {
+        return (environments == null || environments.isEmpty()) || versionType() != PromptVersionType.MASK;
     }
 }

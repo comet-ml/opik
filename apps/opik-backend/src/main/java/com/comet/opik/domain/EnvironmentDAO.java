@@ -61,6 +61,10 @@ interface EnvironmentDAO {
     @SqlQuery("SELECT COUNT(*) FROM environments WHERE workspace_id = :workspaceId AND name = :name")
     long countByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name);
 
+    @SqlQuery("SELECT name FROM environments WHERE workspace_id = :workspaceId AND name IN (<names>)")
+    Set<String> findExistingNames(@Bind("workspaceId") String workspaceId,
+            @BindList("names") Set<String> names);
+
     @SqlQuery("SELECT COUNT(*) FROM environments WHERE workspace_id = :workspaceId")
     long countByWorkspace(@Bind("workspaceId") String workspaceId);
 
