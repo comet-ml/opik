@@ -5,8 +5,8 @@ from unittest import mock
 import pytest
 
 import opik
-from opik import evaluation, exceptions, url_helpers
-from opik.api_objects import opik_client
+from opik import evaluation, exceptions, rest_api, url_helpers, PromptType
+from opik.api_objects import opik_client, prompt
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.evaluation import (
@@ -369,6 +369,139 @@ def test_evaluate__happyflow(
         EXPECTED_TRACE_TREES, fake_backend.trace_trees
     ):
         assert_equal(expected_trace, actual_trace)
+
+
+def test_evaluate__prompts_are_attached_to_each_trace(fake_backend):
+    """When prompts are passed to `evaluate`, every trace produced by the
+    evaluation run must carry them in `metadata["opik_prompts"]` so the
+    backend can show prompt linkage on each trace (not only on the
+    experiment row)."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                input={"message": "say bye"},
+                reference="bye",
+            ),
+        ]
+    )
+
+    prompts = [
+        prompt.Prompt.from_fern_prompt_version(
+            name="system_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="You are a helpful assistant.",
+                commit="abc123",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+        prompt.Prompt.from_fern_prompt_version(
+            name="user_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="Say what the user asks.",
+                commit="def456",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+    ]
+    expected_prompts_metadata = [p.__internal_api__to_info_dict__() for p in prompts]
+
+    def say_task(item: Dict[str, Any]):
+        if item["input"]["message"] == "say hello":
+            return {"output": "hello"}
+        return {"output": "bye"}
+
+    (
+        mock_experiment,
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ) = create_mock_experiment()
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="experiment-with-prompts",
+            scoring_metrics=[metrics.Equals()],
+            prompts=prompts,
+            task_threads=1,
+        )
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="experiment-with-prompts",
+        experiment_config=None,
+        prompts=prompts,
+        tags=None,
+        dataset_version_id=None,
+        project_name=None,
+    )
+
+    assert len(fake_backend.trace_trees) == 2
+    for actual_trace in fake_backend.trace_trees:
+        assert actual_trace.metadata is not None, (
+            "Trace metadata must not be None when prompts are passed to evaluate"
+        )
+        assert actual_trace.metadata.get("opik_prompts") == expected_prompts_metadata
+
+
+def test_evaluate_prompt__prompt_attached_to_each_trace(fake_backend):
+    """`evaluate_prompt` should also attach the prompt to each generated trace."""
+    MODEL_NAME = "gpt-3.5-turbo"
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+        ]
+    )
+
+    prompt_obj = prompt.Prompt.from_fern_prompt_version(
+        name="single_prompt",
+        prompt_version=rest_api.PromptVersionDetail(
+            template="LLM response: {{question}}",
+            commit="cafe01",
+            type=PromptType.MUSTACHE,
+        ),
+    )
+    expected_prompt_metadata = [prompt_obj.__internal_api__to_info_dict__()]
+
+    (
+        mock_experiment,
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ) = create_mock_experiment()
+    mock_models_factory_get, _ = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get=mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[{"role": "user", "content": "LLM response: {{question}}"}],
+            experiment_name="prompt-experiment",
+            model=MODEL_NAME,
+            prompt=prompt_obj,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+        )
+
+    assert len(fake_backend.trace_trees) == 1
+    actual_trace = fake_backend.trace_trees[0]
+    assert actual_trace.metadata is not None
+    assert actual_trace.metadata.get("opik_prompts") == expected_prompt_metadata
 
 
 def test_evaluate_with_scoring_key_mapping(
