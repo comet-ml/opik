@@ -529,10 +529,10 @@ class TestPromptEnvironment:
         assert "environments" not in create_kwargs
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
-            environment="staging",
+            environments=["staging"],
         )
 
-    def test_create_new_prompt__multiple_environments__calls_set_for_each(
+    def test_create_new_prompt__multiple_environments__single_set_call(
         self, client, mock_rest_client
     ):
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
@@ -550,14 +550,10 @@ class TestPromptEnvironment:
         )
 
         mock_rest_client.prompts.create_prompt.assert_called_once()
-        assert mock_rest_client.prompts.set_prompt_version_environment.call_count == 2
-        call_args_list = (
-            mock_rest_client.prompts.set_prompt_version_environment.call_args_list
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environments=["staging", "production"],
         )
-        forwarded_envs = [call.kwargs["environment"] for call in call_args_list]
-        assert forwarded_envs == ["staging", "production"]
-        for call in call_args_list:
-            assert call.kwargs["version_id"] == "version-id"
 
     def test_update_existing_prompt__environment_differs__set_environment_called(
         self, client, mock_rest_client
@@ -589,7 +585,7 @@ class TestPromptEnvironment:
         mock_rest_client.prompts.create_prompt.assert_not_called()
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
-            environment="production",
+            environments=["production"],
         )
 
     def test_update_existing_prompt__environment_unchanged__set_environment_not_called(
@@ -617,7 +613,7 @@ class TestPromptEnvironment:
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
 
-    def test_update_existing_prompt__environments_partially_differ__calls_set_only_for_new_envs(
+    def test_update_existing_prompt__environments_differ__patches_full_target_set(
         self, client, mock_rest_client
     ):
         existing_version = prompt_version_detail.PromptVersionDetail(
@@ -644,7 +640,7 @@ class TestPromptEnvironment:
         mock_rest_client.prompts.create_prompt.assert_not_called()
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
-            environment="production",
+            environments=["staging", "production"],
         )
 
     def test_get_prompt__forwards_environment_to_retrieve(
@@ -709,7 +705,7 @@ class TestPromptEnvironment:
         assert production.commit == "bbb"
         assert mock_rest_client.prompts.retrieve_prompt_version.call_count == 2
 
-    def test_set_prompt_environment__sets_via_latest_version(self, mock_rest_client):
+    def test_set_prompt_environments__sets_via_latest_version(self, mock_rest_client):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             _make_mock_version()
         )
@@ -717,17 +713,17 @@ class TestPromptEnvironment:
         opik_client = opik_client_module.Opik()
         opik_client._rest_client = mock_rest_client
 
-        opik_client.set_prompt_environment("env-prompt", "staging")
+        opik_client.set_prompt_environments("env-prompt", ["staging"])
 
         mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
         retrieve_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
         assert retrieve_kwargs["name"] == "env-prompt"
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
-            environment="staging",
+            environments=["staging"],
         )
 
-    def test_set_prompt_environment__none_clears(self, mock_rest_client):
+    def test_set_prompt_environments__empty_list_clears(self, mock_rest_client):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             _make_mock_version()
         )
@@ -735,14 +731,14 @@ class TestPromptEnvironment:
         opik_client = opik_client_module.Opik()
         opik_client._rest_client = mock_rest_client
 
-        opik_client.set_prompt_environment("env-prompt", None)
+        opik_client.set_prompt_environments("env-prompt", [])
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
-            environment=None,
+            environments=[],
         )
 
-    def test_set_prompt_environment__forwards_project_name(self, mock_rest_client):
+    def test_set_prompt_environments__multiple_envs_in_one_call(self, mock_rest_client):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             _make_mock_version()
         )
@@ -750,8 +746,40 @@ class TestPromptEnvironment:
         opik_client = opik_client_module.Opik()
         opik_client._rest_client = mock_rest_client
 
-        opik_client.set_prompt_environment(
-            "env-prompt", "staging", project_name="my-project"
+        opik_client.set_prompt_environments("env-prompt", ["staging", "production"])
+
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environments=["staging", "production"],
+        )
+
+    def test_set_prompt_environments__deduplicates_input(self, mock_rest_client):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        opik_client.set_prompt_environments(
+            "env-prompt", ["staging", "staging", "production"]
+        )
+
+        mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
+            version_id="version-id",
+            environments=["staging", "production"],
+        )
+
+    def test_set_prompt_environments__forwards_project_name(self, mock_rest_client):
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+
+        opik_client.set_prompt_environments(
+            "env-prompt", ["staging"], project_name="my-project"
         )
 
         mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
@@ -759,7 +787,7 @@ class TestPromptEnvironment:
         assert retrieve_kwargs["name"] == "env-prompt"
         assert retrieve_kwargs["project_name"] == "my-project"
 
-    def test_set_prompt_environment__forwards_commit(self, mock_rest_client):
+    def test_set_prompt_environments__forwards_commit(self, mock_rest_client):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             _make_mock_version()
         )
@@ -767,7 +795,9 @@ class TestPromptEnvironment:
         opik_client = opik_client_module.Opik()
         opik_client._rest_client = mock_rest_client
 
-        opik_client.set_prompt_environment("env-prompt", "staging", commit="abc12345")
+        opik_client.set_prompt_environments(
+            "env-prompt", ["staging"], commit="abc12345"
+        )
 
         mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
         retrieve_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
@@ -775,10 +805,10 @@ class TestPromptEnvironment:
         assert retrieve_kwargs["commit"] == "abc12345"
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
-            environment="staging",
+            environments=["staging"],
         )
 
-    def test_set_prompt_environment__prompt_not_found__raises_prompt_not_found(
+    def test_set_prompt_environments__prompt_not_found__raises_prompt_not_found(
         self, mock_rest_client
     ):
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = (
@@ -789,11 +819,11 @@ class TestPromptEnvironment:
         opik_client._rest_client = mock_rest_client
 
         with pytest.raises(exceptions.PromptNotFoundError, match="missing-prompt"):
-            opik_client.set_prompt_environment("missing-prompt", "staging")
+            opik_client.set_prompt_environments("missing-prompt", ["staging"])
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
 
-    def test_set_prompt_environment__commit_not_found__raises_prompt_not_found_with_commit(
+    def test_set_prompt_environments__commit_not_found__raises_prompt_not_found_with_commit(
         self, mock_rest_client
     ):
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = (
@@ -804,13 +834,13 @@ class TestPromptEnvironment:
         opik_client._rest_client = mock_rest_client
 
         with pytest.raises(exceptions.PromptNotFoundError, match="deadbeef"):
-            opik_client.set_prompt_environment(
-                "env-prompt", "staging", commit="deadbeef"
+            opik_client.set_prompt_environments(
+                "env-prompt", ["staging"], commit="deadbeef"
             )
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
 
-    def test_set_prompt_environment__environment_not_found__raises_environment_not_found(
+    def test_set_prompt_environments__environment_not_found__raises_environment_not_found(
         self, mock_rest_client
     ):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
@@ -824,9 +854,9 @@ class TestPromptEnvironment:
         opik_client._rest_client = mock_rest_client
 
         with pytest.raises(exceptions.EnvironmentNotFoundError, match="unknown-env"):
-            opik_client.set_prompt_environment("env-prompt", "unknown-env")
+            opik_client.set_prompt_environments("env-prompt", ["unknown-env"])
 
-    def test_set_prompt_environment__mask_version__raises_not_assignable(
+    def test_set_prompt_environments__mask_version__raises_not_assignable(
         self, mock_rest_client
     ):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
@@ -843,9 +873,9 @@ class TestPromptEnvironment:
             exceptions.PromptVersionNotAssignableToEnvironment,
             match="internal-only",
         ):
-            opik_client.set_prompt_environment("env-prompt", "staging")
+            opik_client.set_prompt_environments("env-prompt", ["staging"])
 
-    def test_set_prompt_environment__other_api_error__bubbles_up(
+    def test_set_prompt_environments__other_api_error__bubbles_up(
         self, mock_rest_client
     ):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
@@ -859,9 +889,9 @@ class TestPromptEnvironment:
         opik_client._rest_client = mock_rest_client
 
         with pytest.raises(rest_api_core.ApiError):
-            opik_client.set_prompt_environment("env-prompt", "staging")
+            opik_client.set_prompt_environments("env-prompt", ["staging"])
 
-    def test_set_prompt_environment__invalidates_cache(self, mock_rest_client):
+    def test_set_prompt_environments__invalidates_cache(self, mock_rest_client):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             _make_mock_version()
         )
@@ -885,7 +915,7 @@ class TestPromptEnvironment:
                 ttl_seconds=None,
             )
 
-            opik_client.set_prompt_environment("env-prompt", "production")
+            opik_client.set_prompt_environments("env-prompt", ["production"])
 
             assert (
                 cache.get(("env-prompt", None, resolved_project, "text", "staging"))

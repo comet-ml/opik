@@ -435,7 +435,7 @@ describe("Opik prompt operations", () => {
       );
     });
 
-    it("backfills missing environments via setPromptVersionEnvironment on idempotent path", async () => {
+    it("patches the full target set on idempotent path when envs differ", async () => {
       const mockExistingVersion: OpikApi.PromptVersionDetail = {
         id: "version-id",
         promptId: "prompt-id",
@@ -473,16 +473,11 @@ describe("Opik prompt operations", () => {
         });
 
         expect(createPromptVersionSpy).not.toHaveBeenCalled();
-        // Two new env entries -> two PATCH calls.
-        expect(setEnvSpy).toHaveBeenCalledTimes(2);
+        // Single PATCH carrying the full target set (BE uses REPLACE semantics).
+        expect(setEnvSpy).toHaveBeenCalledTimes(1);
         expect(setEnvSpy).toHaveBeenCalledWith(
           "version-id",
-          { environment: "production" },
-          client.api.requestOptions
-        );
-        expect(setEnvSpy).toHaveBeenCalledWith(
-          "version-id",
-          { environment: "qa" },
+          { environments: ["staging", "production", "qa"] },
           client.api.requestOptions
         );
         expect(result.environments).toContain("staging");
@@ -1291,7 +1286,7 @@ describe("Opik prompt operations", () => {
     });
   });
 
-  describe("setPromptEnvironment error mapping", () => {
+  describe("setPromptEnvironments error mapping", () => {
     const versionResponse: OpikApi.PromptVersionDetail = {
       id: "version-id",
       promptId: "prompt-id",
@@ -1307,9 +1302,9 @@ describe("Opik prompt operations", () => {
       });
 
       await expect(
-        client.setPromptEnvironment({
+        client.setPromptEnvironments({
           name: "missing-prompt",
-          environment: "staging",
+          environments: ["staging"],
         })
       ).rejects.toMatchObject({
         name: "PromptNotFoundError",
@@ -1323,9 +1318,9 @@ describe("Opik prompt operations", () => {
       });
 
       await expect(
-        client.setPromptEnvironment({
+        client.setPromptEnvironments({
           name: "env-prompt",
-          environment: "staging",
+          environments: ["staging"],
           commit: "deadbeef",
         })
       ).rejects.toMatchObject({
@@ -1346,15 +1341,15 @@ describe("Opik prompt operations", () => {
 
       try {
         await expect(
-          client.setPromptEnvironment({
+          client.setPromptEnvironments({
             name: "env-prompt",
-            environment: "unknown-env",
+            environments: ["unknown-env"],
           })
         ).rejects.toThrow(EnvironmentNotFoundError);
         await expect(
-          client.setPromptEnvironment({
+          client.setPromptEnvironments({
             name: "env-prompt",
-            environment: "unknown-env",
+            environments: ["unknown-env"],
           })
         ).rejects.toMatchObject({
           message: expect.stringContaining("unknown-env"),
@@ -1379,15 +1374,15 @@ describe("Opik prompt operations", () => {
 
       try {
         await expect(
-          client.setPromptEnvironment({
+          client.setPromptEnvironments({
             name: "mask-prompt",
-            environment: "staging",
+            environments: ["staging"],
           })
         ).rejects.toThrow(PromptVersionNotAssignableToEnvironmentError);
         await expect(
-          client.setPromptEnvironment({
+          client.setPromptEnvironments({
             name: "mask-prompt",
-            environment: "staging",
+            environments: ["staging"],
           })
         ).rejects.toMatchObject({
           message: expect.stringContaining("internal-only"),
@@ -1413,9 +1408,9 @@ describe("Opik prompt operations", () => {
 
       try {
         await expect(
-          client.setPromptEnvironment({
+          client.setPromptEnvironments({
             name: "env-prompt",
-            environment: "staging",
+            environments: ["staging"],
           })
         ).rejects.toBe(apiError);
         expect(setEnvSpy).toHaveBeenCalledOnce();
@@ -1435,9 +1430,9 @@ describe("Opik prompt operations", () => {
 
       try {
         await expect(
-          client.setPromptEnvironment({
+          client.setPromptEnvironments({
             name: "missing-prompt",
-            environment: "staging",
+            environments: ["staging"],
           })
         ).rejects.toThrow(PromptNotFoundError);
         expect(setEnvSpy).not.toHaveBeenCalled();
