@@ -278,9 +278,9 @@ describe("module-level getOrFetch", () => {
   });
 
   it("reuses the commit slot for the version pin (no extra entry in the key array)", () => {
-    // Key layout is [name, commit_or_version, projectName, templateStructure, maskId].
+    // Key layout is [name, commit_or_version, projectName, templateStructure, environment, maskId].
     const key = buildCacheKey("p", undefined, "project", "text", undefined, "v3");
-    expect(JSON.parse(key)).toHaveLength(5);
+    expect(JSON.parse(key)).toHaveLength(6);
     expect(JSON.parse(key)[1]).toBe("v3");
   });
 
