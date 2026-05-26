@@ -2371,24 +2371,27 @@ class Opik:
             environment=environment,
         )
 
-    def set_prompt_environment(
+    def set_prompt_environments(
         self,
         name: str,
-        environment: Optional[str],
+        environments: List[str],
         *,
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
     ) -> None:
-        """Assign a prompt version to an environment, or clear the assignment.
+        """Replace the full set of environments owned by a prompt version.
 
-        Setting a non-null environment moves ownership: any other version of the same
-        prompt that previously owned the environment is cleared. Passing ``None`` removes
-        the assignment from the resolved version. Existing ``Prompt`` objects already in
-        memory are not mutated — re-fetch with ``client.get_prompt(...)`` to see the change.
+        The provided list becomes the resolved version's complete set of environments.
+        Pass an empty list to clear all environments from the version. Ownership of any
+        environment in the list moves to this version: any other version of the same
+        prompt that previously owned one of them is cleared. Existing ``Prompt`` objects
+        already in memory are not mutated — re-fetch with ``client.get_prompt(...)`` to
+        see the change.
 
         Parameters:
             name: The name of the prompt.
-            environment: Environment registered in the workspace, or ``None`` to clear.
+            environments: Environments to assign. Each must already be registered in the
+                workspace. Pass ``[]`` to clear.
             commit: 8-char short commit hash to target a specific version. Defaults to the
                 latest version.
             project_name: Project the prompt belongs to. Defaults to the active project
@@ -2397,7 +2400,8 @@ class Opik:
         Raises:
             PromptNotFoundError: The prompt name (or the supplied ``commit``) does not exist
                 in the resolved project.
-            EnvironmentNotFoundError: ``environment`` is not registered in the workspace.
+            EnvironmentNotFoundError: One of ``environments`` is not registered in the
+                workspace.
             PromptVersionNotAssignableToEnvironment: The resolved version is internal-only
                 (for example a mask version) and cannot be assigned to an environment;
                 target a regular prompt version instead.
@@ -2420,15 +2424,16 @@ class Opik:
                 ) from e
             raise
 
+        target = list(dict.fromkeys(environments))
         try:
             self._rest_client.prompts.set_prompt_version_environment(
                 version_id=version.id,
-                environment=environment,
+                environments=target,
             )
         except ApiError as e:
             if e.status_code == 404:
                 raise exceptions.EnvironmentNotFoundError(
-                    f"Environment {environment!r} is not registered in this workspace."
+                    f"One or more environments in {target!r} are not registered in this workspace."
                 ) from e
             if e.status_code == 422:
                 raise exceptions.PromptVersionNotAssignableToEnvironment(

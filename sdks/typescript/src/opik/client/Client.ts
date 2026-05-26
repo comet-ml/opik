@@ -1215,34 +1215,27 @@ export class OpikClient {
         versionResponse = latestVersion!;
       }
 
-      // If caller requested environments that the resolved version is not
-      // already a member of (e.g. idempotent path returning an existing
-      // version, or the backend ignored the field on creation), explicitly
-      // set ownership one env at a time (the PATCH endpoint stays singular).
-      if (
-        options.environments !== undefined &&
-        options.environments.length > 0 &&
-        versionResponse.id
-      ) {
-        const existing = new Set(versionResponse.environments ?? []);
-        const toAdd = options.environments.filter((env) => !existing.has(env));
-        if (toAdd.length > 0) {
-          for (const env of toAdd) {
-            await this.api.prompts.setPromptVersionEnvironment(
-              versionResponse.id,
-              { environment: env },
-              this.api.requestOptions
-            );
-          }
-          const merged = [...(versionResponse.environments ?? [])];
-          for (const env of toAdd) {
-            if (!merged.includes(env)) {
-              merged.push(env);
-            }
-          }
+      // If caller requested an environments set that does not match the
+      // resolved version's current set (e.g. idempotent path returning an
+      // existing version, or container-create path where the endpoint does
+      // not accept environments), apply the full target set via PATCH —
+      // backend uses REPLACE semantics, so a single call is sufficient.
+      if (options.environments !== undefined && versionResponse.id) {
+        const target = Array.from(new Set(options.environments));
+        const current = [...(versionResponse.environments ?? [])].sort();
+        const desired = [...target].sort();
+        if (
+          current.length !== desired.length ||
+          current.some((v, i) => v !== desired[i])
+        ) {
+          await this.api.prompts.setPromptVersionEnvironment(
+            versionResponse.id,
+            { environments: target },
+            this.api.requestOptions
+          );
           versionResponse = {
             ...versionResponse,
-            environments: merged,
+            environments: target,
           };
         }
       }
@@ -1788,25 +1781,26 @@ export class OpikClient {
   /**
    * Assigns a prompt version to an environment, or clears the assignment.
    *
-   * Setting a non-null environment moves ownership: any other version of the
-   * same prompt that previously owned the environment is cleared. Pass `null`
-   * to remove the assignment from the resolved version. Existing prompt
-   * objects already in memory are not mutated — re-fetch with
-   * `client.getPrompt(...)` to see the change.
+   * Replace the full set of environments owned by a prompt version. The
+   * provided list becomes the resolved version's complete set of environments.
+   * Pass an empty array to clear all environments. Any other version of the
+   * same prompt that previously owned one of the listed environments is
+   * cleared. Existing prompt objects already in memory are not mutated —
+   * re-fetch with `client.getPrompt(...)` to see the change.
    *
    * @param options.name - Name of the prompt
-   * @param options.environment - Environment registered in the workspace, or `null` to clear
+   * @param options.environments - Environments to assign. Each must already be registered in the workspace. Pass `[]` to clear.
    * @param options.commit - 8-char short commit hash to target a specific version. Defaults to the latest version.
    * @param options.projectName - Project the prompt belongs to. Defaults to the client's project.
    *
    * @throws {PromptNotFoundError} The prompt name (or the supplied `commit`) does not exist in the resolved project.
-   * @throws {EnvironmentNotFoundError} `environment` is not registered in the workspace.
+   * @throws {EnvironmentNotFoundError} One of `environments` is not registered in the workspace.
    * @throws {PromptVersionNotAssignableToEnvironmentError} The resolved version is internal-only (for example a mask version) and cannot be assigned to an environment.
    */
-  public setPromptEnvironment = async (
+  public setPromptEnvironments = async (
     options: {
       name: string;
-      environment: string | null;
+      environments: string[];
       commit?: string;
       projectName?: string;
     },
@@ -1835,17 +1829,18 @@ export class OpikClient {
       throw error;
     }
 
+    const target = Array.from(new Set(options.environments));
     try {
       await this.api.prompts.setPromptVersionEnvironment(
         version.id!,
-        { environment: options.environment ?? undefined },
+        { environments: target },
         this.api.requestOptions,
       );
     } catch (error) {
       if (error instanceof OpikApiError) {
         if (error.statusCode === 404) {
           throw new EnvironmentNotFoundError(
-            `Environment '${options.environment}' is not registered in this workspace.`,
+            `One or more environments in [${target.join(", ")}] are not registered in this workspace.`,
           );
         }
         if (error.statusCode === 422) {

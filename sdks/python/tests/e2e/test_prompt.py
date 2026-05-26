@@ -1543,7 +1543,7 @@ def test_create_prompt__with_two_environments__both_visible(
     assert by_first.commit == by_second.commit
 
 
-def test_set_prompt_environment__adds_to_existing_list(
+def test_set_prompt_environments__replaces_with_full_set(
     opik_client: opik.Opik, environment_name: str, second_environment_name: str
 ):
     _register_env(opik_client, environment_name)
@@ -1558,7 +1558,9 @@ def test_set_prompt_environment__adds_to_existing_list(
     )
     assert environment_name in (prompt.environments or [])
 
-    opik_client.set_prompt_environment(prompt.name, second_environment_name)
+    opik_client.set_prompt_environments(
+        prompt.name, [environment_name, second_environment_name]
+    )
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
@@ -1567,7 +1569,7 @@ def test_set_prompt_environment__adds_to_existing_list(
     assert second_environment_name in envs
 
 
-def test_set_environment__moves_ownership__visible_after_refetch(
+def test_set_environments__moves_ownership__visible_after_refetch(
     opik_client: opik.Opik, environment_name: str, second_environment_name: str
 ):
     _register_env(opik_client, environment_name)
@@ -1582,14 +1584,16 @@ def test_set_environment__moves_ownership__visible_after_refetch(
     )
     assert environment_name in (prompt.environments or [])
 
-    opik_client.set_prompt_environment(prompt.name, second_environment_name)
+    opik_client.set_prompt_environments(prompt.name, [second_environment_name])
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert second_environment_name in (refreshed.environments or [])
+    refreshed_envs = refreshed.environments or []
+    assert second_environment_name in refreshed_envs
+    assert environment_name not in refreshed_envs
 
 
-def test_set_environment__none__clears_ownership(
+def test_set_environments__empty__clears_ownership(
     opik_client: opik.Opik, environment_name: str
 ):
     _register_env(opik_client, environment_name)
@@ -1602,7 +1606,7 @@ def test_set_environment__none__clears_ownership(
         environments=[environment_name],
     )
 
-    opik_client.set_prompt_environment(prompt.name, None)
+    opik_client.set_prompt_environments(prompt.name, [])
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
@@ -1652,7 +1656,9 @@ def test_set_prompt_environment__targets_specific_version(
     v2 = opik_client.create_prompt(name=prompt_name, prompt=second_template)
     assert v2.commit != v1_commit
 
-    opik_client.set_prompt_environment(prompt_name, environment_name, commit=v1_commit)
+    opik_client.set_prompt_environments(
+        prompt_name, [environment_name], commit=v1_commit
+    )
 
     resolved = opik_client.get_prompt(
         name=prompt_name, environment=environment_name, no_cache=True
@@ -1668,8 +1674,8 @@ def test_set_environment__unknown_environment__raises_404(opik_client: opik.Opik
     prompt = opik_client.create_prompt(name=prompt_name, prompt=prompt_template)
 
     with pytest.raises(rest_api_core.ApiError) as exc_info:
-        opik_client.set_prompt_environment(
-            prompt.name, f"missing-env-{_generate_random_suffix()}"
+        opik_client.set_prompt_environments(
+            prompt.name, [f"missing-env-{_generate_random_suffix()}"]
         )
 
     assert exc_info.value.status_code == 404

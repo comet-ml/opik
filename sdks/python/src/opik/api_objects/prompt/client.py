@@ -148,19 +148,15 @@ class PromptClient:
                 tags=tags,
                 environments=environments,
             )
-        elif environments:
-            new_envs = [
-                env
-                for env in environments
-                if env not in (prompt_version.environments or [])
-            ]
-            if new_envs:
-                for env in new_envs:
-                    self._rest_client.prompts.set_prompt_version_environment(
-                        version_id=prompt_version.id,
-                        environment=env,
-                    )
-                prompt_version = _with_environments(prompt_version, environments)
+        elif environments is not None:
+            target = list(dict.fromkeys(environments))
+            current = list(prompt_version.environments or [])
+            if sorted(target) != sorted(current):
+                self._rest_client.prompts.set_prompt_version_environment(
+                    version_id=prompt_version.id,
+                    environments=target,
+                )
+                prompt_version = _with_environments(prompt_version, target)
 
         return prompt_version
 
@@ -209,15 +205,15 @@ class PromptClient:
                     update={"tags": tags}
                 )
             # The create_prompt container endpoint does not accept environments,
-            # so apply each one via the dedicated environment endpoint after creation.
+            # so apply them via the dedicated environment endpoint after creation.
             if environments:
-                for env in environments:
-                    self._rest_client.prompts.set_prompt_version_environment(
-                        version_id=new_prompt_version_detail.id,
-                        environment=env,
-                    )
+                target = list(dict.fromkeys(environments))
+                self._rest_client.prompts.set_prompt_version_environment(
+                    version_id=new_prompt_version_detail.id,
+                    environments=target,
+                )
                 new_prompt_version_detail = _with_environments(
-                    new_prompt_version_detail, environments
+                    new_prompt_version_detail, target
                 )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version

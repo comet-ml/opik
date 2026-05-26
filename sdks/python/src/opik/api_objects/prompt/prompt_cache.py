@@ -76,7 +76,7 @@ class PromptCache:
         """Drop every cached entry for the given prompt name + project scope.
 
         Used after operations that change the env-to-version mapping (such as
-        ``Opik.set_prompt_environment``) so that subsequent
+        ``Opik.set_prompt_environments``) so that subsequent
         ``get_prompt(..., environment=...)`` calls cannot return a stale version.
         """
         with self._lock:

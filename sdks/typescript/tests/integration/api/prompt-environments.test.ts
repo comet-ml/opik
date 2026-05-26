@@ -118,11 +118,11 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(fromProd?.commit).toBe(prompt.commit);
   }, 30000);
 
-  it("setPromptEnvironment accumulates environments on the version", async () => {
+  it("setPromptEnvironments replaces with the full provided set", async () => {
     const ts = Date.now();
     const envA = `staging-${ts}`;
     const envB = `production-${ts}`;
-    const promptName = `env-accumulate-${ts}`;
+    const promptName = `env-replace-${ts}`;
     await ensureEnvironment(envA);
     await ensureEnvironment(envB);
 
@@ -134,9 +134,9 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     createdPromptIds.push(prompt.id!);
     expect(prompt.environments).toContain(envA);
 
-    await client.setPromptEnvironment({
+    await client.setPromptEnvironments({
       name: prompt.name,
-      environment: envB,
+      environments: [envA, envB],
     });
     getGlobalCache().clear();
 
@@ -148,7 +148,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(retrieved?.environments).toContain(envB);
   }, 30000);
 
-  it("moves environment ownership via setPromptEnvironment", async () => {
+  it("moves environment ownership via setPromptEnvironments", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;
     const productionName = `production-${ts}`;
@@ -164,9 +164,9 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     createdPromptIds.push(prompt.id!);
     expect(prompt.environments).toContain(stagingName);
 
-    await client.setPromptEnvironment({
+    await client.setPromptEnvironments({
       name: prompt.name,
-      environment: productionName,
+      environments: [productionName],
     });
     getGlobalCache().clear();
 
@@ -177,6 +177,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(retrieved).not.toBeNull();
     expect(retrieved?.commit).toBe(prompt.commit);
     expect(retrieved?.environments).toContain(productionName);
+    expect(retrieved?.environments).not.toContain(stagingName);
   }, 30000);
 
   it("targets a specific version when commit is provided", async () => {
@@ -199,9 +200,9 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     });
     expect(v2.commit).not.toBe(v1Commit);
 
-    await client.setPromptEnvironment({
+    await client.setPromptEnvironments({
       name: promptName,
-      environment: envName,
+      environments: [envName],
       commit: v1Commit,
     });
     getGlobalCache().clear();
@@ -215,7 +216,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(retrieved?.environments).toContain(envName);
   }, 30000);
 
-  it("clears environment ownership via setPromptEnvironment with null", async () => {
+  it("clears environment ownership via setPromptEnvironments with an empty list", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;
     const promptName = `env-clear-${ts}`;
@@ -229,9 +230,9 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     createdPromptIds.push(prompt.id!);
     expect(prompt.environments).toContain(stagingName);
 
-    await client.setPromptEnvironment({
+    await client.setPromptEnvironments({
       name: prompt.name,
-      environment: null,
+      environments: [],
     });
     getGlobalCache().clear();
 
@@ -242,7 +243,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(retrieved?.environments ?? []).toHaveLength(0);
   }, 30000);
 
-  it("sets environment by prompt name without a prompt instance", async () => {
+  it("sets environments by prompt name without a prompt instance", async () => {
     const ts = Date.now();
     const productionName = `production-${ts}`;
     const promptName = `env-by-name-${ts}`;
@@ -254,9 +255,9 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     });
     createdPromptIds.push(created.id!);
 
-    await client.setPromptEnvironment({
+    await client.setPromptEnvironments({
       name: promptName,
-      environment: productionName,
+      environments: [productionName],
     });
     getGlobalCache().clear();
 
@@ -303,7 +304,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(fromStaging?.commit).toBe(v2.commit);
   }, 30000);
 
-  it("rejects setPromptEnvironment with an unknown environment (404)", async () => {
+  it("rejects setPromptEnvironments with an unknown environment (404)", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;
     const promptName = `env-404-${ts}`;
@@ -317,9 +318,9 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     createdPromptIds.push(prompt.id!);
 
     await expect(
-      client.setPromptEnvironment({
+      client.setPromptEnvironments({
         name: prompt.name,
-        environment: `does-not-exist-${ts}`,
+        environments: [`does-not-exist-${ts}`],
       }),
     ).rejects.toMatchObject({
       statusCode: 404,
