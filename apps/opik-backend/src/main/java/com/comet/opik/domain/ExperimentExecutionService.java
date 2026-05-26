@@ -295,14 +295,17 @@ public class ExperimentExecutionService {
             return Mono.just(empties);
         }
 
+        // findVersionByIds is lenient: missing ids fall through to the buildOpikPromptsArray
+        // skip below, so a stale version id in one variant doesn't strip prompt metadata
+        // from sibling variants.
         return promptService.findVersionByIds(uniqueVersionIds)
                 .map(versionsById -> linksByVariant.stream()
                         .map(links -> buildOpikPromptsArray(links, versionsById))
                         .toList())
                 .onErrorResume(error -> {
                     log.warn(
-                            "Failed to resolve prompt versions for opik_prompts metadata; traces will not be linked to their prompt(s)",
-                            error);
+                            "Failed to resolve prompt versions for opik_prompts metadata; traces will not be linked to their prompt(s) for dataset '{}' (id '{}', versionHash '{}')",
+                            request.datasetName(), request.datasetId(), request.versionHash(), error);
                     return Mono.just(linksByVariant.stream().map(unused -> (ArrayNode) null).toList());
                 });
     }

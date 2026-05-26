@@ -645,14 +645,10 @@ public class ExperimentService {
         Set<UUID> versionIds = getPromptVersionIds(experiment);
 
         return promptService.findVersionByIds(versionIds)
-                .onErrorResume(e -> {
-                    if (e instanceof NotFoundException) {
-                        return Mono
-                                .error(new ClientErrorException("Prompt version not found", Response.Status.CONFLICT));
-                    }
-
-                    return Mono.error(e);
-                });
+                .flatMap(versionsById -> versionsById.size() == versionIds.size()
+                        ? Mono.just(versionsById)
+                        : Mono.error(new ClientErrorException("Prompt version not found",
+                                Response.Status.CONFLICT)));
     }
 
     private Mono<UUID> create(Experiment experiment, UUID id, String name, UUID datasetId,
