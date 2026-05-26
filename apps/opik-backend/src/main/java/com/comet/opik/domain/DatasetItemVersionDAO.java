@@ -3107,10 +3107,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * <p>Returned via {@link com.comet.opik.utils.AsyncUtils#makeMonoContextAware} ({@code
      * Mono.deferContextual}) so SQL build, parameter formatting, and the {@code clickHouseClient.query()}
      * invocation re-run on every subscription, including retry-driven resubscriptions.
-     *
-     * <p>{@link #formatUuidArrayParam} pre-renders array parameters as a ClickHouse array literal
-     * because the v2 client serializes parameter values via {@code String.valueOf(v)} and would
-     * otherwise emit an unquoted {@code [a, b]} that the server rejects.
      */
     private Mono<Long> executeCopyVersionItems(UUID datasetId, UUID sourceVersionId, UUID targetVersionId,
             List<UUID> uuids, Set<UUID> excludedIds, List<DatasetItemFilter> excludeFilters) {
@@ -3127,10 +3123,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             // as HTTP query params — the v2 client puts param values on the request line, which
             // has an ~8KB length limit. The SQL itself is sent in the request body and has no
             // such limit. Safe because UUID.toString() is [0-9a-f-] only — no injection vector.
-            template.add("uuids_literal", formatUuidArrayParam(uuids));
+            template.add("uuids_literal", uuidsToArrayLiteral(uuids));
             if (hasExcludedIds) {
                 template.add("exclude_ids", true);
-                template.add("excluded_ids_literal", formatUuidArrayParam(excludedIds));
+                template.add("excluded_ids_literal", uuidsToArrayLiteral(excludedIds));
             }
             if (hasExcludeFilters) {
                 FilterQueryBuilder.toAnalyticsDbFiltersV2Client(excludeFilters, FilterStrategy.DATASET_ITEM)
@@ -3167,22 +3163,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
-    /**
-     * Renders a {@link UUID} collection as a ClickHouse {@code Array(String)} literal,
-     * e.g. {@code ['8400e29b-41d4-a716-4466-554400000000', ...]}. Safe against SQL injection
-     * because Java's {@link UUID#toString()} is guaranteed to contain only hex and hyphens
-     * (validated at {@link UUID} construction); no other inputs are permitted by the caller
-     * signatures ({@code List<UUID>} / {@code Set<UUID>}).
-     */
-    private static String formatUuidArrayParam(Collection<UUID> ids) {
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
-        for (UUID id : ids) {
-            if (!first) sb.append(',');
-            sb.append('\'').append(id).append('\'');
-            first = false;
-        }
-        return sb.append(']').toString();
+    /** Delegates to the shared {@link FilterQueryBuilder#formatStringArrayLiteral} helper. */
+    private static String uuidsToArrayLiteral(Collection<UUID> ids) {
+        return FilterQueryBuilder.formatStringArrayLiteral(ids.stream().map(UUID::toString).toList());
     }
 
     @Override
