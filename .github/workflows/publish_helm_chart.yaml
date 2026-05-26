@@ -143,8 +143,12 @@ jobs:
             git config user.email "actions@users.noreply.github.com"
             git ls-files -o --exclude-standard -z | xargs -0 -r git add
             git add "${INDEX_FILE}" README.md
-            git commit -m "Release Opik helm chart $VERSION"
-            git push   
+            if git diff --staged --quiet; then
+              echo "::warning title=helm publish::No changes to commit; chart ${VERSION} is already up to date in gh-pages."
+            else
+              git commit -m "Release Opik helm chart $VERSION"
+              git push
+            fi
 
         - name: Summary
           run: |
