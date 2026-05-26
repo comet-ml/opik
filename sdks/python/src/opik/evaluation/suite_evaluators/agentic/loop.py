@@ -142,7 +142,10 @@ def run_agentic_judge(
                 name=tool_name,
                 type="tool",
                 input={"input": arguments},
-                metadata={"call_key": call_key, "round_index": round_index},
+                metadata={
+                    "_agentic_loop_call_key": call_key,
+                    "_agentic_loop_round_index": round_index,
+                },
             ) as span:
                 if call_key in seen_calls:
                     # Same call already executed this loop — short-circuit

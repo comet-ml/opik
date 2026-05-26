@@ -51,11 +51,11 @@ from tests import llm_constants
 _JUDGE_MODEL_PARAMS: List[Tuple[str, List[str]]] = [
     (llm_constants.OPENAI_GPT_4O_MINI, ["_skip_unless_openai_configured"]),
     (
-        f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_HAIKU}",
+        f"{llm_constants.ANTHROPIC_CLAUDE_HAIKU}",
         ["_skip_unless_anthropic_configured"],
     ),
     (
-        f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_HAIKU}",
+        f"{llm_constants.LITELLM_ANTHROPIC_CLAUDE_HAIKU}",
         ["_skip_unless_anthropic_configured", "_force_litellm_path"],
     ),
 ]

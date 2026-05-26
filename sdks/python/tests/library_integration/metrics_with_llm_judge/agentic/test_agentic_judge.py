@@ -270,13 +270,17 @@ class TestAgenticJudgeToolUse:
 
     Pattern in each test:
     1. Pin `OVERVIEW_IO_LIMIT_LADDER` to the 500-char floor.
-    2. Plant a unique marker past 500 chars in a trace or span field.
+    2. Plant a unique marker past 500 chars in a span field. Trace-
+       level input/output are re-inlined verbatim into the user prompt
+       (the `---BEGIN TASK INPUT/OUTPUT---` blocks), so a marker in
+       `trace.input` would be visible without any tool call — span
+       fields are the only place truncation actually hides content.
     3. Ask the judge whether the marker appears in that field.
     4. Assert verdict is True (recovery succeeded) AND the recorder
        captured at least one drill-in call.
     """
 
-    def test_buried_marker_in_trace_input__triggers_read(
+    def test_buried_marker_in_span_input__triggers_read(
         self, judge_model_name, monkeypatch
     ):
         _pin_ladder_to_floor(monkeypatch)
@@ -284,28 +288,35 @@ class TestAgenticJudgeToolUse:
         # Marker placement: ~600 chars of pad before the marker
         # guarantees it sits past the 500-char floor and therefore
         # past the truncation suffix. The truncation suffix the
-        # judge sees explicitly names `read(type='trace', id=...)`
-        # as the recovery call, which `gpt-4o-mini` follows reliably.
+        # judge sees explicitly names `read(type='span', id=...)`
+        # as the recovery call.
         marker = "MARKER-XYZ-987"
-        long_input = ("padding-text " * 50) + marker
-        assert len(long_input) > span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
+        long_span_input = ("padding-text " * 50) + marker
+        assert len(long_span_input) > span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
         trace = _seeding.make_trace(
-            input={"prompt": long_input},
+            input={"question": "answer it"},
             output={"answer": "ok"},
         )
-        ctx = _seeding.build_context(
-            trace,
-            spans=[_seeding.make_span(span_id="s-1", name="answer_step")],
-        )
+        spans = [
+            _seeding.make_span(
+                span_id="s-1",
+                name="answer_step",
+                input={"prompt": long_span_input},
+                output={"answer": "ok"},
+            ),
+        ]
+        ctx = _seeding.build_context(trace, spans=spans)
 
-        assertion = f"The trace input contains the literal token `{marker}`."
+        assertion = (
+            f"The `answer_step` span's input contains the literal token `{marker}`."
+        )
         judge, recorder = _make_recording_agentic_judge([assertion], judge_model_name)
 
         results = judge.score(ctx)
 
         result = _by_name(results, assertion)
-        # Marker is in the un-truncated input → verdict True iff the
-        # judge actually retrieved it.
+        # Marker is in the un-truncated span input → verdict True iff
+        # the judge actually retrieved it.
         assert result.scoring_failed is False
         assert result.value is True
         # Direct evidence of the agentic loop engaged. We don't pin the
@@ -322,12 +333,12 @@ class TestAgenticJudgeToolUse:
             f"expected one of read/scan/search; got {called!r}"
         )
 
-    def test_absent_marker_with_truncated_input__verdict_false_after_lookup(
+    def test_absent_marker_with_truncated_span_input__verdict_false_after_lookup(
         self, judge_model_name, monkeypatch
     ):
         """Negative-case companion to the buried-marker tests.
 
-        The trace input is long enough to be truncated AND deliberately
+        A span's input is long enough to be truncated AND deliberately
         does not contain the asked-about marker — only an unrelated
         token sits past the floor. A trustworthy judge has to look at
         the full content before declaring "absent", because guessing
@@ -349,22 +360,30 @@ class TestAgenticJudgeToolUse:
         unrelated_marker = "OTHER-TOKEN-456"
         # Pad so the unrelated marker sits past the 500-char floor —
         # i.e. it's hidden from the overview just like a real marker
-        # would be. The judge has to recover the full input to confirm
-        # the *absence* of `absent_marker`.
-        long_input = ("padding-text " * 50) + unrelated_marker
-        assert len(long_input) > span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
-        assert absent_marker not in long_input
+        # would be. The judge has to recover the full span input to
+        # confirm the *absence* of `absent_marker`.
+        long_span_input = ("padding-text " * 50) + unrelated_marker
+        assert len(long_span_input) > span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
+        assert absent_marker not in long_span_input
 
         trace = _seeding.make_trace(
-            input={"prompt": long_input},
+            input={"question": "answer it"},
             output={"answer": "ok"},
         )
-        ctx = _seeding.build_context(
-            trace,
-            spans=[_seeding.make_span(span_id="s-1", name="answer_step")],
-        )
+        spans = [
+            _seeding.make_span(
+                span_id="s-1",
+                name="answer_step",
+                input={"prompt": long_span_input},
+                output={"answer": "ok"},
+            ),
+        ]
+        ctx = _seeding.build_context(trace, spans=spans)
 
-        assertion = f"The trace input contains the literal token `{absent_marker}`."
+        assertion = (
+            f"The `answer_step` span's input contains the literal "
+            f"token `{absent_marker}`."
+        )
         judge, recorder = _make_recording_agentic_judge([assertion], judge_model_name)
 
         results = judge.score(ctx)
