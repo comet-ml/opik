@@ -493,7 +493,11 @@ public class DatasetsResource {
     @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = """
             Create/update dataset items based on dataset item id.
             Each item's 'id' field is the stable identifier and upsert key.
-            Provide it to update an existing item, or omit it to create a new one.""", responses = {
+            Provide it to update an existing item, or omit it to create a new one.
+
+            Set 'snapshot' to true to make the new version's row set equal exactly the items in the
+            request payload. Items absent from the payload are absent from the new version (implicit
+            deletion). Requires 'batch_group_id' to be set.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited

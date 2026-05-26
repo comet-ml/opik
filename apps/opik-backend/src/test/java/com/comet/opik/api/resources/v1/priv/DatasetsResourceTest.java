@@ -10879,4 +10879,134 @@ class DatasetsResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("OPIK-6696: snapshot mode on createOrUpdateDatasetItems")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreateOrUpdateDatasetItemsSnapshotMode {
+
+        @Test
+        @DisplayName("when snapshot=true, then new version row set equals payload (removed items are dropped)")
+        void snapshot__newVersionRowSetEqualsPayload__removedItemDropped() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var itemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB, itemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            // Snapshot-mode follow-up: payload omits itemC.
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB))
+                            .batchGroupId(UUID.randomUUID())
+                            .snapshot(true)
+                            .build(),
+                    workspaceName, apiKey);
+
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            assertThat(versions.content()).hasSize(2);
+
+            // versions are sorted newest-first
+            var snapshotVersion = versions.content().getFirst();
+            var snapshotItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, snapshotVersion.versionHash(), apiKey, workspaceName);
+            assertThat(snapshotItems.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemA.id(), itemB.id());
+            assertThat(snapshotVersion.itemsTotal()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("when snapshot=false (default), then unchanged items are carried forward from base version")
+        void snapshot__default__carriesForwardUnchangedItems() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var itemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB, itemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            // Default-mode follow-up: payload omits itemC but default mode carries it forward.
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            assertThat(versions.content()).hasSize(2);
+
+            var defaultVersion = versions.content().getFirst();
+            var defaultItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, defaultVersion.versionHash(), apiKey, workspaceName);
+            assertThat(defaultItems.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemA.id(), itemB.id(), itemC.id());
+        }
+
+        @Test
+        @DisplayName("when snapshot=true on first version (no base), then behaves like createFirstVersion")
+        void snapshot__firstVersion__behavesLikeCreateFirstVersion() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var itemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB))
+                            .batchGroupId(UUID.randomUUID())
+                            .snapshot(true)
+                            .build(),
+                    workspaceName, apiKey);
+
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            assertThat(versions.content()).hasSize(1);
+
+            var v1 = versions.content().getFirst();
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, v1.versionHash(), apiKey, workspaceName);
+            assertThat(v1Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemA.id(), itemB.id());
+            assertThat(v1.itemsTotal()).isEqualTo(2);
+        }
+    }
+
 }

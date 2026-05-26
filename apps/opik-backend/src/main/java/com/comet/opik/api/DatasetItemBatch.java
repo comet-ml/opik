@@ -33,7 +33,9 @@ public record DatasetItemBatch(
                 DatasetItem.View.Write.class}) @Schema(description = "Optional. Associates the batch with a project by ID. Takes precedence over project_name.") UUID projectId,
         @JsonView({DatasetItem.View.Write.class}) @NotNull @Size(min = 1, max = 1000) @Valid List<DatasetItem> items,
         @JsonView({
-                DatasetItem.View.Write.class}) @Schema(description = "Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.") UUID batchGroupId)
+                DatasetItem.View.Write.class}) @Schema(description = "Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.") UUID batchGroupId,
+        @JsonView({
+                DatasetItem.View.Write.class}) @Schema(description = "If true, the new version's row set equals exactly the items in this batch. The server skips the INSERT FROM SELECT that copies unchanged rows from the previous version, avoiding multi-replica read-after-write inconsistency. Items absent from the payload are absent from the new version (deletions implicit). Ignored when batch_group_id is null.") Boolean snapshot)
         implements
             RateEventContainer {
 

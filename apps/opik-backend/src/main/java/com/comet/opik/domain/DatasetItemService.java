@@ -1621,6 +1621,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return validateSpans(workspaceId, normalizedItems)
                     .then(validateTraces(workspaceId, normalizedItems))
                     .then(Mono.defer(() -> {
+                        // OPIK-6696: snapshot mode skips the classification SELECT against the
+                        // destination version (subject to multi-replica read-after-write). All
+                        // payload rows are counted as "added"; callers in snapshot mode are
+                        // expected not to re-submit the same stable id within a batch group.
+                        if (Boolean.TRUE.equals(batch.snapshot())) {
+                            log.info("Inserting into version '{}' in snapshot mode: items='{}'",
+                                    versionId, normalizedItems.size());
+                            return versionDao
+                                    .insertItems(datasetId, versionId, normalizedItems, workspaceId, userName)
+                                    .then(Mono.fromCallable(() -> {
+                                        updateVersionCountsForInsert(versionId, workspaceId,
+                                                normalizedItems.size(), 0, userName);
+                                        return versionService.getVersionById(workspaceId, datasetId, versionId);
+                                    }).subscribeOn(Schedulers.boundedElastic()));
+                        }
+
                         // Get existing item IDs to determine which are new vs updates
                         return versionDao.getItemIdsAndHashes(datasetId, versionId)
                                 .collectList()
@@ -1760,8 +1776,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                     userName);
                         }
 
-                        // Versions exist - apply delta on top of the latest
                         UUID baseVersionId = latestVersion.get().id();
+
+                        // OPIK-6696: snapshot mode skips the INSERT FROM SELECT that copies unchanged
+                        // rows from baseVersionId. The new version's row set equals the payload exactly.
+                        if (Boolean.TRUE.equals(batch.snapshot())) {
+                            return createVersionAsSnapshot(datasetId, baseVersionId, validatedItems, batchGroupId,
+                                    workspaceId, userName);
+                        }
+
+                        // Versions exist - apply delta on top of the latest
                         return createVersionWithDelta(datasetId, baseVersionId, validatedItems, batchGroupId,
                                 workspaceId, userName);
                     }));
@@ -1898,6 +1922,59 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         workspaceId,
                                         userName);
                             });
+                });
+    }
+
+    // OPIK-6696: snapshot mode. The new version's row set equals exactly the payload.
+    // Unlike createVersionWithDelta, this skips:
+    //   - the getItemIdsAndHashes SELECT against baseVersionId (classification)
+    //   - applyDelta's copyUnchangedItems step (the INSERT FROM SELECT that suffers from
+    //     multi-replica read-after-write inconsistency described in OPIK-6601)
+    // Items absent from the payload are absent from the new version (implicit deletion).
+    private Mono<DatasetVersion> createVersionAsSnapshot(UUID datasetId, UUID baseVersionId,
+            List<DatasetItem> items, UUID batchGroupId, String workspaceId, String userName) {
+        log.info("Creating snapshot-mode version for dataset '{}', baseVersion '{}', itemCount '{}'",
+                datasetId, baseVersionId, items.size());
+
+        UUID newVersionId = idGenerator.generateId();
+
+        List<DatasetItem> snapshotItems = items.stream()
+                .map(item -> {
+                    UUID stableId = item.datasetItemId() != null
+                            ? item.datasetItemId()
+                            : (item.id() != null ? item.id() : idGenerator.generateId());
+                    return item.toBuilder()
+                            .datasetItemId(stableId)
+                            .datasetId(datasetId)
+                            .build();
+                })
+                .toList();
+
+        List<UUID> rowIds = generateUuidPool(idGenerator, snapshotItems.size());
+        List<DatasetItem> itemsWithRowIds = withAssignedRowIds(snapshotItems, rowIds);
+
+        return versionDao.insertItems(datasetId, newVersionId, itemsWithRowIds, workspaceId, userName)
+                .flatMap(itemsTotal -> {
+                    log.info("Inserted '{}' snapshot items for dataset '{}', new version '{}'",
+                            itemsTotal, datasetId, newVersionId);
+
+                    String changeDescription = batchGroupId != null
+                            ? "Auto-created from SDK batch operation"
+                            : null;
+
+                    return createVersionFromDelta(
+                            datasetId,
+                            newVersionId,
+                            itemsTotal.intValue(),
+                            baseVersionId,
+                            null, // No tags
+                            changeDescription,
+                            null, // Inherit evaluators from base version
+                            null, // Inherit execution policy from base version
+                            false, // Don't clear execution policy
+                            batchGroupId,
+                            workspaceId,
+                            userName);
                 });
     }
 
