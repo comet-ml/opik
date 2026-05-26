@@ -32,7 +32,7 @@ class Prompt(base_prompt.BasePrompt):
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environment: Optional[str] = None,
+        environments: Optional[List[str]] = None,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -49,7 +49,7 @@ class Prompt(base_prompt.BasePrompt):
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name for the prompt.
-            environment: Optional environment name to own this prompt version.
+            environments: Optional list of environment names that should own this prompt version.
 
         Raises:
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
@@ -71,7 +71,7 @@ class Prompt(base_prompt.BasePrompt):
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
         self._project_name = project_name
-        self._environment = environment
+        self._environments = environments
 
         self._commit: Optional[str] = None
         self._version: Optional[str] = None
@@ -110,7 +110,7 @@ class Prompt(base_prompt.BasePrompt):
                 change_description=self._change_description,
                 tags=self._tags,
                 project_name=self._project_name,
-                environment=self._environment,
+                environments=self._environments,
             )
 
             self._commit = prompt_version.commit
@@ -121,7 +121,7 @@ class Prompt(base_prompt.BasePrompt):
             self._id = prompt_version.id
             self._change_description = prompt_version.change_description
             self._tags = prompt_version.tags
-            self._environment = prompt_version.environment
+            self._environments = prompt_version.environments
             self._synced = True
             return True
         except (rest_api_core.ApiError, httpx.ConnectError, httpx.TimeoutException):
@@ -212,9 +212,9 @@ class Prompt(base_prompt.BasePrompt):
 
     @property
     @override
-    def environment(self) -> Optional[str]:
-        """The environment that currently owns this prompt version, or ``None`` if unowned."""
-        return self._environment
+    def environments(self) -> Optional[List[str]]:
+        """The environments that currently own this prompt version, or ``None`` if unowned."""
+        return copy.copy(self._environments) if self._environments is not None else None
 
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
@@ -309,6 +309,6 @@ class Prompt(base_prompt.BasePrompt):
         prompt._change_description = prompt_version.change_description
         prompt._tags = copy.copy(prompt_version.tags) if prompt_version.tags else []
         prompt._project_name = project_name
-        prompt._environment = prompt_version.environment
+        prompt._environments = prompt_version.environments
         prompt._synced = True
         return prompt

@@ -385,6 +385,114 @@ describe("Opik prompt operations", () => {
       );
     });
 
+    it("creates a prompt with multiple environments", async () => {
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        template: "Hello",
+        type: "mustache",
+        environments: ["staging", "production"],
+        createdAt: new Date("2024-01-01"),
+      };
+
+      const mockPromptData: OpikApi.PromptPublic = {
+        id: "prompt-id",
+        name: "multi-env-prompt",
+      };
+
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({
+          message: "Not found",
+          statusCode: 404,
+        });
+      });
+
+      createPromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      getPromptByIdSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockPromptData)
+      );
+
+      const result = await client.createPrompt({
+        name: "multi-env-prompt",
+        prompt: "Hello",
+        environments: ["staging", "production"],
+      });
+
+      expect(result).toBeInstanceOf(Prompt);
+      expect(result.environments).toContain("staging");
+      expect(result.environments).toContain("production");
+      expect(createPromptVersionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          version: expect.objectContaining({
+            environments: ["staging", "production"],
+          }),
+        }),
+        client.api.requestOptions
+      );
+    });
+
+    it("backfills missing environments via setPromptVersionEnvironment on idempotent path", async () => {
+      const mockExistingVersion: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        template: "Test {{variable}}",
+        type: "mustache",
+        environments: ["staging"],
+        createdAt: new Date("2024-01-01"),
+      };
+
+      const mockPromptData: OpikApi.PromptPublic = {
+        id: "prompt-id",
+        name: "idempotent-env",
+      };
+
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockExistingVersion)
+      );
+
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(undefined as unknown as void)
+        );
+
+      getPromptByIdSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockPromptData)
+      );
+
+      try {
+        const result = await client.createPrompt({
+          name: "idempotent-env",
+          prompt: "Test {{variable}}",
+          environments: ["staging", "production", "qa"],
+        });
+
+        expect(createPromptVersionSpy).not.toHaveBeenCalled();
+        // Two new env entries -> two PATCH calls.
+        expect(setEnvSpy).toHaveBeenCalledTimes(2);
+        expect(setEnvSpy).toHaveBeenCalledWith(
+          "version-id",
+          { environment: "production" },
+          client.api.requestOptions
+        );
+        expect(setEnvSpy).toHaveBeenCalledWith(
+          "version-id",
+          { environment: "qa" },
+          client.api.requestOptions
+        );
+        expect(result.environments).toContain("staging");
+        expect(result.environments).toContain("production");
+        expect(result.environments).toContain("qa");
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
     it("should return unsynced prompt on API error", async () => {
       const apiError = new OpikApiError({
         message: "Server error",

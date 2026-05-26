@@ -23,6 +23,10 @@ def _generate_random_tags(n=2):
     return [_generate_random_tag() for _ in range(n)]
 
 
+def _generate_random_prompt_name():
+    return f"e2e-tests-prompt-{_generate_random_suffix()}"
+
+
 def test_prompt__create__happyflow(
     opik_client: opik.Opik, prompt_name: str, temporary_project_name: str
 ):
@@ -1500,14 +1504,67 @@ def test_create_prompt__with_environment__sets_ownership(
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
-        environment=environment_name,
+        environments=[environment_name],
     )
 
-    assert prompt.environment == environment_name
+    assert environment_name in (prompt.environments or [])
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert refreshed.environment == environment_name
+    assert environment_name in (refreshed.environments or [])
+
+
+def test_create_prompt__with_two_environments__both_visible(
+    opik_client: opik.Opik, environment_name: str, second_environment_name: str
+):
+    _register_env(opik_client, environment_name)
+    _register_env(opik_client, second_environment_name)
+    prompt_name = _generate_random_prompt_name()
+    prompt_template = f"some-prompt-text-{_generate_random_suffix()}"
+
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        environments=[environment_name, second_environment_name],
+    )
+
+    envs = prompt.environments or []
+    assert environment_name in envs
+    assert second_environment_name in envs
+
+    by_first = opik_client.get_prompt(
+        name=prompt_name, environment=environment_name, no_cache=True
+    )
+    by_second = opik_client.get_prompt(
+        name=prompt_name, environment=second_environment_name, no_cache=True
+    )
+    assert by_first is not None
+    assert by_second is not None
+    assert by_first.commit == by_second.commit
+
+
+def test_set_prompt_environment__adds_to_existing_list(
+    opik_client: opik.Opik, environment_name: str, second_environment_name: str
+):
+    _register_env(opik_client, environment_name)
+    _register_env(opik_client, second_environment_name)
+    prompt_name = _generate_random_prompt_name()
+    prompt_template = f"some-prompt-text-{_generate_random_suffix()}"
+
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        environments=[environment_name],
+    )
+    assert environment_name in (prompt.environments or [])
+
+    opik_client.set_prompt_environment(prompt.name, second_environment_name)
+
+    refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
+    assert refreshed is not None
+    envs = refreshed.environments or []
+    assert environment_name in envs
+    assert second_environment_name in envs
 
 
 def test_set_environment__moves_ownership__visible_after_refetch(
@@ -1521,15 +1578,15 @@ def test_set_environment__moves_ownership__visible_after_refetch(
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
-        environment=environment_name,
+        environments=[environment_name],
     )
-    assert prompt.environment == environment_name
+    assert environment_name in (prompt.environments or [])
 
     opik_client.set_prompt_environment(prompt.name, second_environment_name)
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert refreshed.environment == second_environment_name
+    assert second_environment_name in (refreshed.environments or [])
 
 
 def test_set_environment__none__clears_ownership(
@@ -1542,14 +1599,14 @@ def test_set_environment__none__clears_ownership(
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
-        environment=environment_name,
+        environments=[environment_name],
     )
 
     opik_client.set_prompt_environment(prompt.name, None)
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert refreshed.environment is None
+    assert not refreshed.environments
 
 
 def test_get_prompt__by_environment__resolves_to_owning_version(
@@ -1563,7 +1620,7 @@ def test_get_prompt__by_environment__resolves_to_owning_version(
     first_version = opik_client.create_prompt(
         name=prompt_name,
         prompt=first_template,
-        environment=environment_name,
+        environments=[environment_name],
     )
 
     second_version = opik_client.create_prompt(
@@ -1578,7 +1635,7 @@ def test_get_prompt__by_environment__resolves_to_owning_version(
     assert resolved is not None
     assert resolved.commit == first_version.commit
     assert resolved.prompt == first_template
-    assert resolved.environment == environment_name
+    assert environment_name in (resolved.environments or [])
 
 
 def test_set_prompt_environment__targets_specific_version(
@@ -1628,11 +1685,11 @@ def test_create_chat_prompt__with_environment__sets_ownership(
     chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=messages,
-        environment=environment_name,
+        environments=[environment_name],
     )
 
-    assert chat_prompt.environment == environment_name
+    assert environment_name in (chat_prompt.environments or [])
 
     refreshed = opik_client.get_chat_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert refreshed.environment == environment_name
+    assert environment_name in (refreshed.environments or [])

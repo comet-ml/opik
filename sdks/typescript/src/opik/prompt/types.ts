@@ -46,14 +46,14 @@ export interface CommonPromptOptions {
   /** Optional tags for categorization */
   tags?: string[];
   /**
-   * Optional environment to own the newly created prompt version.
+   * Optional environments to own the newly created prompt version.
    *
-   * The environment must already be registered in the workspace, otherwise
-   * the backend rejects the assignment with a 404. Note: setting `environment`
+   * Each environment must already be registered in the workspace, otherwise
+   * the backend rejects the assignment with a 404. Note: setting `environments`
    * is incompatible with mask-type versions and the backend will reject it
    * with a 422 if used on a mask version.
    */
-  environment?: string;
+  environments?: string[];
 }
 
 /**
@@ -86,6 +86,11 @@ export interface GetPromptOptions {
   version?: string;
   /** Optional project name to scope the lookup. */
   projectName?: string;
+  /**
+   * Optional environment name. Resolves to the version currently owned by that
+   * workspace environment. Mutually exclusive with `commit`.
+   */
+  environment?: string;
 }
 
 /**
