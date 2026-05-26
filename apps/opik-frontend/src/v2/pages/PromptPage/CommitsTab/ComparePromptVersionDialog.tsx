@@ -5,10 +5,9 @@ import isEqual from "fast-deep-equal";
 import { Clock, LucideIcon, Sparkles, User } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
-import { Tag } from "@/ui/tag";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
 import { FormFieldModeSelect } from "@/v2/pages-shared/llm/FormFieldCard";
-import ChatMessageCard from "@/v2/pages-shared/llm/ChatMessageCard/ChatMessageCard";
+import { getRoleLabel } from "@/v2/pages-shared/llm/ChatMessageCard/ChatMessageCard";
 import { normalizeChatTemplate, parseChatTemplate } from "@/lib/chatTemplate";
 import { extractMessageContent } from "@/lib/prompt";
 import { PromptVersion } from "@/types/prompts";
@@ -24,17 +23,14 @@ type DiffSide = "base" | "diff";
 type ViewMode = "pretty" | "json";
 type ChatMessage = { role: string; content: unknown };
 
-const TWO_COLUMN_GRID =
-  "grid grid-cols-2 [&>*:first-child]:rounded-r-none [&>*:last-child]:-ml-px [&>*:last-child]:rounded-l-none";
-
 const VIEW_MODE_OPTIONS: Array<{
   value: ViewMode;
   label: string;
   icon?: LucideIcon;
 }> = [
-  { value: "pretty", label: "Pretty", icon: Sparkles },
-  { value: "json", label: "JSON" },
-];
+    { value: "pretty", label: "Pretty", icon: Sparkles },
+    { value: "json", label: "JSON" },
+  ];
 
 const stringifyMetadata = (m: unknown): string => {
   if (m === undefined || m === null) return "";
@@ -46,17 +42,31 @@ const stringifyMetadata = (m: unknown): string => {
   }
 };
 
+const SectionContainer: React.FC<{
+  title: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, actions, children }) => (
+  <div>
+    <div className="mb-2 flex items-center justify-between gap-2 px-1">
+      <span className="comet-body-s text-foreground">{title}</span>
+      {actions}
+    </div>
+    <div className="overflow-hidden rounded-md border border-border bg-background">
+      {children}
+    </div>
+  </div>
+);
+
 const ColumnHeader: React.FC<{ version: PromptVersion; label: string }> = ({
   version,
   label,
 }) => {
   const author = (version as VersionWithMaybeAuthor).created_by;
   return (
-    <div className="flex h-8 items-center justify-between gap-2 border-b bg-soft-background px-3">
+    <div className="flex h-8 min-w-0 items-center justify-between gap-2 bg-soft-background px-3">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="comet-body-s-accented shrink-0 text-muted-slate">
-          {label}
-        </span>
+        <span className="comet-body-xs shrink-0 text-muted-slate">{label}</span>
         <EnvironmentBadge name={version.environment} size="sm" />
         <VersionTagList tags={version.tags ?? []} size="sm" />
       </div>
@@ -76,50 +86,71 @@ const ColumnHeader: React.FC<{ version: PromptVersion; label: string }> = ({
   );
 };
 
-const MessageBlock: React.FC<{
+const HeaderRow: React.FC<{
+  baseVersion: PromptVersion;
+  diffVersion: PromptVersion;
+  baseLabel: string;
+  diffLabel: string;
+}> = ({ baseVersion, diffVersion, baseLabel, diffLabel }) => (
+  <div className="grid grid-cols-2 border-b border-border bg-soft-background">
+    <ColumnHeader version={baseVersion} label={baseLabel} />
+    <ColumnHeader version={diffVersion} label={diffLabel} />
+  </div>
+);
+
+const EmptyPlaceholder: React.FC<{ children?: React.ReactNode }> = ({
+  children,
+}) => (
+  <div className="comet-body-s flex min-h-16 items-center justify-center rounded-md border border-dashed border-border bg-transparent px-3 py-2 text-light-slate">
+    {children}
+  </div>
+);
+
+const MessageCell: React.FC<{
   message: ChatMessage | undefined;
   otherMessage: ChatMessage | undefined;
   side: DiffSide;
 }> = ({ message, otherMessage, side }) => {
   if (!message) {
-    return (
-      <div className="comet-body-xs flex min-h-16 items-center justify-center rounded-md border border-dashed border-border bg-soft-background px-3 py-2 text-muted-slate">
-        {side === "base"
-          ? "Added in the target version"
-          : "Removed in this version"}
-      </div>
-    );
+    return <EmptyPlaceholder />;
   }
 
+  const isRemoved = side === "base" && !otherMessage;
+  const isAdded = side === "diff" && !otherMessage;
   const thisContent = extractMessageContent(message.content);
   const otherContent = otherMessage
     ? extractMessageContent(otherMessage.content)
     : "";
   const baseContent = side === "base" ? thisContent : otherContent;
   const diffContent = side === "base" ? otherContent : thisContent;
-  const rolesDiffer =
-    otherMessage !== undefined && message.role !== otherMessage.role;
 
   return (
-    <ChatMessageCard
-      role={message.role}
-      className="bg-background"
-      badges={
-        <>
-          {rolesDiffer && (
-            <Tag variant="orange" size="sm">
-              Role changed
-            </Tag>
-          )}
-          {!otherMessage && (
-            <Tag variant={side === "base" ? "red" : "green"} size="sm">
-              {side === "base" ? "Removed" : "Added"}
-            </Tag>
-          )}
-        </>
-      }
+    <div
+      className={cn(
+        "flex flex-col gap-1 rounded-md border p-2",
+        isAdded && "border-transparent bg-[var(--tag-green-bg)]",
+        isRemoved && "border-transparent bg-[var(--tag-red-bg)]",
+        !isAdded && !isRemoved && "border-border bg-background",
+      )}
     >
-      <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+      <span
+        className={cn(
+          "comet-body-xs",
+          isAdded && "text-[var(--tag-green-text)]",
+          isRemoved && "text-[var(--tag-red-text)]",
+          !isAdded && !isRemoved && "text-muted-slate",
+        )}
+      >
+        {getRoleLabel(message.role)}
+      </span>
+      <div
+        className={cn(
+          "comet-body-s whitespace-pre-wrap break-words",
+          isAdded && "text-[var(--tag-green-text)]",
+          isRemoved && "text-[var(--tag-red-text)] line-through",
+          !isAdded && !isRemoved && "text-foreground",
+        )}
+      >
         {otherMessage ? (
           <TextDiff
             content1={baseContent}
@@ -131,32 +162,27 @@ const MessageBlock: React.FC<{
           thisContent
         )}
       </div>
-    </ChatMessageCard>
+    </div>
   );
 };
 
-const MetadataColumn: React.FC<{
+const MetadataCell: React.FC<{
+  text: string;
   baseText: string;
   diffText: string;
   side: DiffSide;
-}> = ({ baseText, diffText, side }) => {
-  const text = side === "base" ? baseText : diffText;
+}> = ({ text, baseText, diffText, side }) => {
+  if (!text) {
+    return <EmptyPlaceholder>No metadata</EmptyPlaceholder>;
+  }
   return (
-    <div className="overflow-hidden rounded-md border bg-background">
-      <div className="max-h-[320px] overflow-y-auto p-2">
-        <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-2">
-          {text ? (
-            <TextDiff
-              content1={baseText}
-              content2={diffText}
-              mode="words"
-              side={side}
-            />
-          ) : (
-            <span className="comet-body-xs text-light-slate">No metadata</span>
-          )}
-        </div>
-      </div>
+    <div className="comet-code whitespace-pre-line break-words rounded-md border border-border bg-primary-foreground p-2">
+      <TextDiff
+        content1={baseText}
+        content2={diffText}
+        mode="words"
+        side={side}
+      />
     </div>
   );
 };
@@ -198,250 +224,237 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   initialBaseVersionId,
   initialDiffVersionId,
 }) => {
-  const [baseVersion, setBaseVersion] = useState<PromptVersion | undefined>(
-    last(versions),
-  );
-  const [diffVersion, setDiffVersion] = useState<PromptVersion | undefined>(
-    first(versions),
-  );
-  const [viewMode, setViewMode] = useState<ViewMode>("pretty");
-
-  const baseText = useMemo(
-    () => normalizeChatTemplate(baseVersion?.template || ""),
-    [baseVersion?.template],
-  );
-  const diffText = useMemo(
-    () => normalizeChatTemplate(diffVersion?.template || ""),
-    [diffVersion?.template],
-  );
-
-  const baseChat = useMemo(() => parseChatTemplate(baseText), [baseText]);
-  const diffChat = useMemo(() => parseChatTemplate(diffText), [diffText]);
-  const isChatDiff = baseChat !== null && diffChat !== null;
-
-  const baseMetadataText = useMemo(
-    () => stringifyMetadata(baseVersion?.metadata),
-    [baseVersion?.metadata],
-  );
-  const diffMetadataText = useMemo(
-    () => stringifyMetadata(diffVersion?.metadata),
-    [diffVersion?.metadata],
-  );
-
-  const baseMedia = useMemo(
-    () => parseLLMMessageContent(parsePromptVersionContent(baseVersion)),
-    [baseVersion],
-  );
-  const diffMedia = useMemo(
-    () => parseLLMMessageContent(parsePromptVersionContent(diffVersion)),
-    [diffVersion],
-  );
-  const mediaChanges = useMemo(
-    () =>
-      MEDIA_KINDS.map((kind) => ({
-        kind,
-        base: baseMedia[`${kind}s` as const],
-        diff: diffMedia[`${kind}s` as const],
-        changed: !isEqual(
-          baseMedia[`${kind}s` as const],
-          diffMedia[`${kind}s` as const],
-        ),
-      })),
-    [baseMedia, diffMedia],
-  );
-  const anyMediaChanged = mediaChanges.some((m) => m.changed);
-
-  const versionLabelByCommit = useMemo(() => {
-    const sortedDesc = [...versions].sort((a, b) =>
-      b.created_at.localeCompare(a.created_at),
+    const [baseVersion, setBaseVersion] = useState<PromptVersion | undefined>(
+      last(versions),
     );
-    const total = sortedDesc.length;
-    const map = new Map<string, string>();
-    sortedDesc.forEach((v, idx) => map.set(v.commit, `v${total - idx}`));
-    return map;
-  }, [versions]);
+    const [diffVersion, setDiffVersion] = useState<PromptVersion | undefined>(
+      first(versions),
+    );
+    const [viewMode, setViewMode] = useState<ViewMode>("pretty");
 
-  const versionOptions = useMemo(
-    () =>
-      [...versions]
-        .sort((v1, v2) => v1.created_at.localeCompare(v2.created_at))
-        .map((v) => ({
-          label: versionLabelByCommit.get(v.commit) ?? v.commit,
-          value: v.commit,
-          description: formatDate(v.created_at),
-          tags: v.tags || [],
+    const baseText = useMemo(
+      () => normalizeChatTemplate(baseVersion?.template || ""),
+      [baseVersion?.template],
+    );
+    const diffText = useMemo(
+      () => normalizeChatTemplate(diffVersion?.template || ""),
+      [diffVersion?.template],
+    );
+
+    const baseChat = useMemo(() => parseChatTemplate(baseText), [baseText]);
+    const diffChat = useMemo(() => parseChatTemplate(diffText), [diffText]);
+    const isChatDiff = baseChat !== null && diffChat !== null;
+
+    const baseMetadataText = useMemo(
+      () => stringifyMetadata(baseVersion?.metadata),
+      [baseVersion?.metadata],
+    );
+    const diffMetadataText = useMemo(
+      () => stringifyMetadata(diffVersion?.metadata),
+      [diffVersion?.metadata],
+    );
+
+    const baseMedia = useMemo(
+      () => parseLLMMessageContent(parsePromptVersionContent(baseVersion)),
+      [baseVersion],
+    );
+    const diffMedia = useMemo(
+      () => parseLLMMessageContent(parsePromptVersionContent(diffVersion)),
+      [diffVersion],
+    );
+    const mediaChanges = useMemo(
+      () =>
+        MEDIA_KINDS.map((kind) => ({
+          kind,
+          base: baseMedia[`${kind}s` as const],
+          diff: diffMedia[`${kind}s` as const],
+          changed: !isEqual(
+            baseMedia[`${kind}s` as const],
+            diffMedia[`${kind}s` as const],
+          ),
         })),
-    [versions, versionLabelByCommit],
-  );
+      [baseMedia, diffMedia],
+    );
+    const anyMediaChanged = mediaChanges.some((m) => m.changed);
 
-  // Reset selection and view mode each time the sheet reopens.
-  useEffect(() => {
-    if (!open) return;
-    const requestedBase = initialBaseVersionId
-      ? versions.find((v) => v.id === initialBaseVersionId)
-      : undefined;
-    const requestedDiff = initialDiffVersionId
-      ? versions.find((v) => v.id === initialDiffVersionId)
-      : undefined;
-    setBaseVersion(
-      requestedBase ??
+    const versionLabelByCommit = useMemo(() => {
+      const sortedDesc = [...versions].sort((a, b) =>
+        b.created_at.localeCompare(a.created_at),
+      );
+      const total = sortedDesc.length;
+      const map = new Map<string, string>();
+      sortedDesc.forEach((v, idx) => map.set(v.commit, `v${total - idx}`));
+      return map;
+    }, [versions]);
+
+    const versionOptions = useMemo(
+      () =>
+        [...versions]
+          .sort((v1, v2) => v1.created_at.localeCompare(v2.created_at))
+          .map((v) => ({
+            label: versionLabelByCommit.get(v.commit) ?? v.commit,
+            value: v.commit,
+            description: formatDate(v.created_at),
+            tags: v.tags || [],
+          })),
+      [versions, versionLabelByCommit],
+    );
+
+    // Reset selection and view mode each time the sheet reopens.
+    useEffect(() => {
+      if (!open) return;
+      const requestedBase = initialBaseVersionId
+        ? versions.find((v) => v.id === initialBaseVersionId)
+        : undefined;
+      const requestedDiff = initialDiffVersionId
+        ? versions.find((v) => v.id === initialDiffVersionId)
+        : undefined;
+      setBaseVersion(
+        requestedBase ??
         versions.find((v) => v.commit === first(versionOptions)?.value),
-    );
-    setDiffVersion(
-      requestedDiff ??
+      );
+      setDiffVersion(
+        requestedDiff ??
         versions.find((v) => v.commit === last(versionOptions)?.value),
-    );
-    setViewMode(isChatDiff ? "pretty" : "json");
-  }, [
-    open,
-    versionOptions,
-    versions,
-    initialBaseVersionId,
-    initialDiffVersionId,
-    isChatDiff,
-  ]);
+      );
+      setViewMode(isChatDiff ? "pretty" : "json");
+    }, [
+      open,
+      versionOptions,
+      versions,
+      initialBaseVersionId,
+      initialDiffVersionId,
+      isChatDiff,
+    ]);
 
-  const renderRawColumn = (
-    version: PromptVersion | undefined,
-    side: DiffSide,
-  ) => {
-    if (!version) return null;
-    const label = versionLabelByCommit.get(version.commit) ?? version.commit;
-    return (
-      <div className="overflow-hidden rounded-md border bg-background">
-        <ColumnHeader version={version} label={label} />
-        <div
-          className={cn(
-            "overflow-y-auto bg-background p-2",
-            anyMediaChanged ? "max-h-[520px]" : "max-h-[620px]",
-          )}
-        >
-          <div className="comet-code whitespace-pre-line break-words rounded-md border bg-primary-foreground p-2">
-            <TextDiff
-              content1={baseText}
-              content2={diffText}
-              mode="words"
-              side={side}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderChatColumn = (
-    version: PromptVersion | undefined,
-    side: DiffSide,
-  ) => {
-    if (!version || !baseChat || !diffChat) return null;
-    const label = versionLabelByCommit.get(version.commit) ?? version.commit;
-    const messages = side === "base" ? baseChat : diffChat;
-    const otherMessages = side === "base" ? diffChat : baseChat;
-    const rowCount = Math.max(messages.length, otherMessages.length);
+    const baseLabel = baseVersion
+      ? versionOptions.find((o) => o.value === baseVersion.commit)?.label
+      : "";
+    const diffLabel = diffVersion
+      ? versionOptions.find((o) => o.value === diffVersion.commit)?.label
+      : "";
+    const sheetTitle =
+      baseLabel && diffLabel
+        ? `Compare ${baseLabel} → ${diffLabel}`
+        : "Compare prompts";
 
     return (
-      <div className="overflow-hidden rounded-md border bg-background">
-        <ColumnHeader version={version} label={label} />
-        <div
-          className={cn(
-            "space-y-2 overflow-y-auto bg-background p-2",
-            anyMediaChanged ? "max-h-[520px]" : "max-h-[620px]",
-          )}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full max-w-none flex-col p-0 sm:max-w-[960px]"
+          header={<SheetTopBar variant="form" title={sheetTitle} />}
         >
-          {Array.from({ length: rowCount }).map((_, i) => (
-            <MessageBlock
-              key={i}
-              message={messages[i]}
-              otherMessage={otherMessages[i]}
-              side={side}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  };
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+            <div className="flex flex-col gap-6 pb-2">
+              {baseVersion && diffVersion && (
+                <SectionContainer
+                  title={isChatDiff ? "Chat messages" : "Prompt"}
+                  actions={
+                    isChatDiff && (
+                      <FormFieldModeSelect
+                        value={viewMode}
+                        options={VIEW_MODE_OPTIONS}
+                        onChange={setViewMode}
+                      />
+                    )
+                  }
+                >
+                  <HeaderRow
+                    baseVersion={baseVersion}
+                    diffVersion={diffVersion}
+                    baseLabel={baseLabel ?? ""}
+                    diffLabel={diffLabel ?? ""}
+                  />
+                  {isChatDiff && viewMode === "pretty" ? (
+                    <div className="grid grid-cols-2 gap-2 p-2">
+                      {Array.from({
+                        length: Math.max(
+                          baseChat?.length ?? 0,
+                          diffChat?.length ?? 0,
+                        ),
+                      }).flatMap((_, i) => [
+                        <MessageCell
+                          key={`base-${i}`}
+                          message={baseChat?.[i]}
+                          otherMessage={diffChat?.[i]}
+                          side="base"
+                        />,
+                        <MessageCell
+                          key={`diff-${i}`}
+                          message={diffChat?.[i]}
+                          otherMessage={baseChat?.[i]}
+                          side="diff"
+                        />,
+                      ])}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 p-2">
+                      <div className="comet-code whitespace-pre-line break-words rounded-md border border-border bg-primary-foreground p-2">
+                        <TextDiff
+                          content1={baseText}
+                          content2={diffText}
+                          mode="words"
+                          side="base"
+                        />
+                      </div>
+                      <div className="comet-code whitespace-pre-line break-words rounded-md border border-border bg-primary-foreground p-2">
+                        <TextDiff
+                          content1={baseText}
+                          content2={diffText}
+                          mode="words"
+                          side="diff"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </SectionContainer>
+              )}
 
-  const baseLabel = baseVersion
-    ? versionOptions.find((o) => o.value === baseVersion.commit)?.label
-    : "";
-  const diffLabel = diffVersion
-    ? versionOptions.find((o) => o.value === diffVersion.commit)?.label
-    : "";
-  const sheetTitle =
-    baseLabel && diffLabel
-      ? `Compare ${baseLabel} → ${diffLabel}`
-      : "Compare prompts";
+              {baseVersion && diffVersion && (
+                <SectionContainer title="Metadata">
+                  <HeaderRow
+                    baseVersion={baseVersion}
+                    diffVersion={diffVersion}
+                    baseLabel={baseLabel ?? ""}
+                    diffLabel={diffLabel ?? ""}
+                  />
+                  <div className="grid grid-cols-2 gap-2 p-2">
+                    <MetadataCell
+                      text={baseMetadataText}
+                      baseText={baseMetadataText}
+                      diffText={diffMetadataText}
+                      side="base"
+                    />
+                    <MetadataCell
+                      text={diffMetadataText}
+                      baseText={baseMetadataText}
+                      diffText={diffMetadataText}
+                      side="diff"
+                    />
+                  </div>
+                </SectionContainer>
+              )}
 
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent
-        side="right"
-        className="flex w-full max-w-none flex-col p-0 sm:max-w-[960px]"
-        header={<SheetTopBar variant="form" title={sheetTitle} />}
-      >
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <div className="flex flex-col gap-4 pb-2">
-            {isChatDiff && (
-              <div className="flex items-center justify-start">
-                <FormFieldModeSelect
-                  value={viewMode}
-                  options={VIEW_MODE_OPTIONS}
-                  onChange={setViewMode}
-                />
-              </div>
-            )}
-
-            <div className={TWO_COLUMN_GRID}>
-              {isChatDiff && viewMode === "pretty" ? (
+              {anyMediaChanged && (
                 <>
-                  {renderChatColumn(baseVersion, "base")}
-                  {renderChatColumn(diffVersion, "diff")}
-                </>
-              ) : (
-                <>
-                  {renderRawColumn(baseVersion, "base")}
-                  {renderRawColumn(diffVersion, "diff")}
+                  {mediaChanges
+                    .filter((m) => m.changed)
+                    .map((m) => (
+                      <MediaRow
+                        key={m.kind}
+                        kind={m.kind}
+                        baseItems={m.base}
+                        diffItems={m.diff}
+                      />
+                    ))}
                 </>
               )}
             </div>
-
-            <div>
-              <div className="comet-body-s-accented mb-2 text-foreground">
-                Metadata
-              </div>
-              <div className={TWO_COLUMN_GRID}>
-                <MetadataColumn
-                  baseText={baseMetadataText}
-                  diffText={diffMetadataText}
-                  side="base"
-                />
-                <MetadataColumn
-                  baseText={baseMetadataText}
-                  diffText={diffMetadataText}
-                  side="diff"
-                />
-              </div>
-            </div>
-
-            {anyMediaChanged && (
-              <>
-                {mediaChanges
-                  .filter((m) => m.changed)
-                  .map((m) => (
-                    <MediaRow
-                      key={m.kind}
-                      kind={m.kind}
-                      baseItems={m.base}
-                      diffItems={m.diff}
-                    />
-                  ))}
-              </>
-            )}
           </div>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-};
+        </SheetContent>
+      </Sheet>
+    );
+  };
 
 export default ComparePromptVersionDialog;
