@@ -430,7 +430,7 @@ public class SpanService {
     private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
-                        Project::name,
+                        WorkspaceUtils::stripProjectName,
                         Function.identity(),
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
