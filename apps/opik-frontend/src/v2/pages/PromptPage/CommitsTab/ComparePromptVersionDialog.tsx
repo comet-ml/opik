@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
 import isEqual from "fast-deep-equal";
@@ -10,6 +10,7 @@ import { FormFieldModeSelect } from "@/v2/pages-shared/llm/FormFieldCard";
 import { getRoleLabel } from "@/v2/pages-shared/llm/ChatMessageCard/ChatMessageCard";
 import { normalizeChatTemplate, parseChatTemplate } from "@/lib/chatTemplate";
 import { extractMessageContent } from "@/lib/prompt";
+import { MessageContent } from "@/types/llm";
 import { PromptVersion } from "@/types/prompts";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
@@ -254,13 +255,36 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     [diffVersion?.metadata],
   );
 
+  // Aggregate media across all messages in chat templates — otherwise we'd
+  // only diff the first message's media (the single-content path of
+  // `parsePromptVersionContent`) and miss media added to later messages.
+  const collectMedia = useCallback(
+    (chat: ReturnType<typeof parseChatTemplate>, version?: PromptVersion) => {
+      if (chat) {
+        const merged = {
+          images: [] as string[],
+          videos: [] as string[],
+          audios: [] as string[],
+        };
+        chat.forEach((msg) => {
+          const parsed = parseLLMMessageContent(msg.content as MessageContent);
+          merged.images.push(...parsed.images);
+          merged.videos.push(...parsed.videos);
+          merged.audios.push(...parsed.audios);
+        });
+        return merged;
+      }
+      return parseLLMMessageContent(parsePromptVersionContent(version));
+    },
+    [],
+  );
   const baseMedia = useMemo(
-    () => parseLLMMessageContent(parsePromptVersionContent(baseVersion)),
-    [baseVersion],
+    () => collectMedia(baseChat, baseVersion),
+    [collectMedia, baseChat, baseVersion],
   );
   const diffMedia = useMemo(
-    () => parseLLMMessageContent(parsePromptVersionContent(diffVersion)),
-    [diffVersion],
+    () => collectMedia(diffChat, diffVersion),
+    [collectMedia, diffChat, diffVersion],
   );
   const mediaChanges = useMemo(
     () =>
@@ -334,10 +358,10 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   ]);
 
   const baseLabel = baseVersion
-    ? versionOptions.find((o) => o.value === baseVersion.commit)?.label
+    ? versionLabelByCommit.get(baseVersion.commit) ?? ""
     : "";
   const diffLabel = diffVersion
-    ? versionOptions.find((o) => o.value === diffVersion.commit)?.label
+    ? versionLabelByCommit.get(diffVersion.commit) ?? ""
     : "";
   const sheetTitle =
     baseLabel && diffLabel

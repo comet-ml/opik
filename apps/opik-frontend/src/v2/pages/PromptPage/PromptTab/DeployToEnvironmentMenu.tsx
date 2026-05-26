@@ -62,8 +62,13 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
 
   const environmentOwners = useMemo(() => {
     const map = new Map<string, { version: PromptVersion; index: number }>();
+    // `versions` is newest-first; only keep the first writer per environment so
+    // the "Currently vN" label reflects the newest version assigned to that env,
+    // not whichever historical version was iterated last.
     versions?.forEach((v, index) => {
-      if (v.environment) map.set(v.environment, { version: v, index });
+      if (v.environment && !map.has(v.environment)) {
+        map.set(v.environment, { version: v, index });
+      }
     });
     return map;
   }, [versions]);

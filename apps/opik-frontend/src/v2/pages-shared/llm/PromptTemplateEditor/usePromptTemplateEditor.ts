@@ -115,7 +115,7 @@ export function usePromptTemplateEditor({
 
   const isValid = isChatPrompt
     ? messages.length > 0 && (chatViewMode === "pretty" || isRawJsonValid)
-    : (template?.length ?? 0) > 0;
+    : (template?.trim().length ?? 0) > 0;
 
   const serialize = useCallback(() => {
     if (isChatPrompt) return serializeChatTemplate(messages);
