@@ -1546,6 +1546,7 @@ export class OpikClient {
             projectName: resolvedProjectName,
             ...(options.commit ? { commit: options.commit } : {}),
             ...(options.version ? { versionNumber: options.version } : {}),
+            ...(options.environment ? { environment: options.environment } : {}),
           };
 
           versionData = await this.api.prompts.retrievePromptVersion(

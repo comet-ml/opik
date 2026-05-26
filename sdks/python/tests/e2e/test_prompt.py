@@ -1667,18 +1667,18 @@ def test_set_prompt_environment__targets_specific_version(
     assert resolved.commit == v1_commit
 
 
-def test_set_environment__unknown_environment__raises_404(opik_client: opik.Opik):
+def test_set_environment__unknown_environment__raises_environment_not_found(
+    opik_client: opik.Opik,
+):
     prompt_name = _generate_random_prompt_name()
     prompt_template = f"some-prompt-text-{_generate_random_suffix()}"
 
     prompt = opik_client.create_prompt(name=prompt_name, prompt=prompt_template)
 
-    with pytest.raises(rest_api_core.ApiError) as exc_info:
+    with pytest.raises(opik.exceptions.EnvironmentNotFoundError):
         opik_client.set_prompt_environments(
             prompt.name, [f"missing-env-{_generate_random_suffix()}"]
         )
-
-    assert exc_info.value.status_code == 404
 
 
 def test_create_chat_prompt__with_environment__sets_ownership(

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { Opik } from "@/index";
-import { OpikApiError } from "@/rest_api";
+import { EnvironmentNotFoundError } from "@/prompt/errors";
 import { getGlobalCache } from "@/prompt/promptCache";
 import {
   shouldRunIntegrationTests,
@@ -304,7 +304,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(fromStaging?.commit).toBe(v2.commit);
   }, 30000);
 
-  it("rejects setPromptEnvironments with an unknown environment (404)", async () => {
+  it("rejects setPromptEnvironments with an unknown environment", async () => {
     const ts = Date.now();
     const stagingName = `staging-${ts}`;
     const promptName = `env-404-${ts}`;
@@ -322,8 +322,6 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
         name: prompt.name,
         environments: [`does-not-exist-${ts}`],
       }),
-    ).rejects.toMatchObject({
-      statusCode: 404,
-    } satisfies Partial<OpikApiError>);
+    ).rejects.toBeInstanceOf(EnvironmentNotFoundError);
   }, 30000);
 });
