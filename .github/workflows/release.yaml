@@ -51,6 +51,8 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
+      # Caller-passes ref: build_apps.yml already exposes a ref input (defaults to inputs.ref || github.ref).
+      # TS SDK workflows in OPIK-6627 used callee-derives because they lacked one. See OPIK-6633.
       ref: refs/tags/${{needs.set-version.outputs.version}}
 
   release-sdk:
