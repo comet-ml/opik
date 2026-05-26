@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS report_preferences (
     workspace_name VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    schedule_time_utc TIME NOT NULL,
+    schedule_time TIME NOT NULL,
+    custom_prompt TEXT NULL,
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     CONSTRAINT report_preferences_pk PRIMARY KEY (workspace_id, project_id)
