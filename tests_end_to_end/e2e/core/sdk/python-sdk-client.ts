@@ -14,6 +14,28 @@ export interface PythonSdkClient {
     items?: Array<Record<string, unknown>>;
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  evaluateExperiment(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    items: Array<Record<string, unknown>>;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    experiment_name: string;
+    dataset_id: string;
+    item_count: number;
+    scored_item_count: number;
+    scores: Array<{
+      dataset_item_id: string;
+      input: string;
+      expected_output: string;
+      task_output: string;
+      score_name: string;
+      score_value: number;
+    }>;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -91,6 +113,23 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async evaluateExperiment(args) {
+      return request<{
+        experiment_id: string;
+        experiment_name: string;
+        dataset_id: string;
+        item_count: number;
+        scored_item_count: number;
+        scores: Array<{
+          dataset_item_id: string;
+          input: string;
+          expected_output: string;
+          task_output: string;
+          score_name: string;
+          score_value: number;
+        }>;
+      }>('POST', '/experiments/evaluate', args);
     },
   };
 }
