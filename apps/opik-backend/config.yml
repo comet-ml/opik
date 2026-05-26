@@ -1376,6 +1376,27 @@ datasetVersioningMigration:
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
 
+# Dataset Versioning runtime configuration (OPIK-6674).
+# Tunes the application-side retry guard around the INSERT...SELECT operations that
+# materialise new dataset versions in ClickHouse (COPY_VERSION_ITEMS / EDIT_ITEM_VIA_SELECT_INSERT).
+# If the SELECT lands on a stale replica it can return 0 rows; without this guard the
+# new version row would be silently committed with truncated items_total.
+datasetVersioning:
+  zeroRowsRetry:
+    # Default: 3
+    # Description: Number of retry attempts when an INSERT...SELECT writes 0 rows
+    # while the input set was non-empty. Total call count = maxAttempts + 1 (initial + retries).
+    # Set to 0 to disable retries (the guard still surfaces the failure as an exception).
+    maxAttempts: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_ATTEMPTS:-3}
+    # Default: 100
+    # Description: Minimum backoff between retries, in milliseconds. Actual delay
+    # grows exponentially from this value up to maxBackoffMillis.
+    minBackoffMillis: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MIN_BACKOFF_MILLIS:-100}
+    # Default: 1000
+    # Description: Maximum backoff between retries, in milliseconds. Caps the
+    # exponential growth of the per-attempt delay.
+    maxBackoffMillis: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_BACKOFF_MILLIS:-1000}
+
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).
 # Runs as a recurring job, processing workspaces in batches.

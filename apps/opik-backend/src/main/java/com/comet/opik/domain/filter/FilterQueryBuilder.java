@@ -860,6 +860,17 @@ public class FilterQueryBuilder {
                 : Optional.of("(%s)".formatted(analyticsDbFilters));
     }
 
+    /**
+     * V2-client entry point that mirrors {@link #toAnalyticsDbFilters} but emits placeholders
+     * in the v2 ClickHouse client's {@code {name:Type}} form instead of the r2dbc {@code :name}
+     * form. Pair with {@link #bindV2Client} for the matching parameter binding.
+     */
+    public static Optional<String> toAnalyticsDbFiltersV2Client(
+            @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
+        return toAnalyticsDbFilters(filters, filterStrategy)
+                .map(sql -> rewritePlaceholdersForV2Client(sql, filters));
+    }
+
     private static Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
@@ -1033,6 +1044,43 @@ public class FilterQueryBuilder {
             @NonNull Statement statement,
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy) {
+        bindUsing(statement::bind, filters, filterStrategy);
+        return statement;
+    }
+
+    /**
+     * V2-client entry point: binds the same filter parameters as
+     * {@link #bind(Statement, List, FilterStrategy)} into a {@code Map<String, Object>}
+     * suitable for the v2 ClickHouse client's {@code query(sql, params, settings)} API.
+     *
+     * <p>Multi-value operator values are pre-rendered as a ClickHouse array literal string
+     * (e.g. {@code ['a','b']}) because the v2 client serialises Map values via
+     * {@code String.valueOf}, which would otherwise emit an unquoted Java array {@code [a, b]}.
+     *
+     * <p>Pair with {@link #toAnalyticsDbFiltersV2Client} for the matching SQL fragment.
+     */
+    public static void bindV2Client(
+            @NonNull Map<String, Object> params,
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy) {
+        bindUsing((name, value) -> {
+            if (value instanceof String[] arr) {
+                params.put(name, formatStringArrayLiteral(arr));
+            } else {
+                params.put(name, value);
+            }
+        }, filters, filterStrategy);
+    }
+
+    /**
+     * Core binding logic shared by the r2dbc {@link Statement} and the v2-client
+     * {@code Map<String, Object>} entry points above. Iterates filters and emits param
+     * (name, value) pairs through the supplied {@code binder}.
+     */
+    private static void bindUsing(
+            @NonNull java.util.function.BiConsumer<String, Object> binder,
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy) {
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
             if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
@@ -1048,20 +1096,20 @@ public class FilterQueryBuilder {
                         String jsonKey = fieldName.substring(firstDot + 1);
                         String jsonPath = JSONPATH_ROOT + "." + jsonKey;
 
-                        statement = statement.bind("dynamicJsonPath%d".formatted(i), jsonPath);
+                        binder.accept("dynamicJsonPath%d".formatted(i), jsonPath);
                     } else if (filterStrategy == FilterStrategy.DATASET_ITEM && fieldName.contains(".")) {
                         // For DATASET_ITEM, fields like "data.expected_answer" map to data['expected_answer']
                         // Extract the key name (the part after the first dot) and bind it
                         int firstDot = fieldName.indexOf('.');
                         String keyName = fieldName.substring(firstDot + 1);
 
-                        statement = statement.bind("dynamicField%d".formatted(i), keyName);
+                        binder.accept("dynamicField%d".formatted(i), keyName);
                     } else if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
                         var jsonPath = getStateSQLJsonPath(fieldName);
-                        statement = statement.bind("dynamicJsonPath%d".formatted(i), jsonPath);
+                        binder.accept("dynamicJsonPath%d".formatted(i), jsonPath);
                     } else {
                         // Default dynamic field binding for other strategies
-                        statement = statement.bind("dynamicField%d".formatted(i), fieldName);
+                        binder.accept("dynamicField%d".formatted(i), fieldName);
                     }
                 }
 
@@ -1070,24 +1118,78 @@ public class FilterQueryBuilder {
                         // Comma-separated values for ENUM IN/NOT_IN; bind as String[].
                         // Trim and drop empty tokens defensively against stray whitespace
                         // or trailing commas in client input.
-                        statement.bind("filter%d".formatted(i),
+                        binder.accept("filter%d".formatted(i),
                                 Arrays.stream(filter.value().split(","))
                                         .map(String::trim)
                                         .filter(StringUtils::isNotEmpty)
                                         .toArray(String[]::new));
                     } else {
-                        statement.bind("filter%d".formatted(i), filter.value());
+                        binder.accept("filter%d".formatted(i), filter.value());
                     }
                 }
 
                 if (StringUtils.isNotBlank(filter.key())
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
                     var key = getKey(filter);
-                    statement = statement.bind("filterKey%d".formatted(i), key);
+                    binder.accept("filterKey%d".formatted(i), key);
                 }
             }
         }
-        return statement;
+    }
+
+    /**
+     * Rewrites the r2dbc-style {@code :name} placeholders emitted by
+     * {@link #toAnalyticsDbFilters} into the v2 ClickHouse client's {@code {name:Type}}
+     * form. Multi-value operators ({@code IN}, {@code NOT_IN}) are typed as
+     * {@code Array(String)}; everything else as {@code String}.
+     *
+     * <p>Iteration order goes from the highest filter index to the lowest so that
+     * substring overlaps like {@code :filter1} inside {@code :filter12} resolve to the
+     * longer name first.
+     *
+     * <p>Package-private: {@link #toAnalyticsDbFiltersV2Client} is the public entry point
+     * that bundles this rewrite with the SQL generation.
+     *
+     * @param sql     SQL fragment containing {@code :name} placeholders
+     * @param filters filters that were used to build {@code sql}; their order determines
+     *                the param indices ({@code :filter0}, {@code :filter1}, …)
+     */
+    static String rewritePlaceholdersForV2Client(@NonNull String sql, @NonNull List<? extends Filter> filters) {
+        String out = sql;
+        for (int i = filters.size() - 1; i >= 0; i--) {
+            Filter filter = filters.get(i);
+            String filterType = Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())
+                    ? "Array(String)"
+                    : "String";
+            out = out.replace(":dynamicJsonPath" + i, "{dynamicJsonPath" + i + ":String}");
+            out = out.replace(":dynamicField" + i, "{dynamicField" + i + ":String}");
+            out = out.replace(":filterKey" + i, "{filterKey" + i + ":String}");
+            out = out.replace(":filter" + i, "{filter" + i + ":" + filterType + "}");
+        }
+        return out;
+    }
+
+    /**
+     * Renders an array of strings as a ClickHouse array literal, e.g. {@code ['a','b']}.
+     * Use when binding an {@code Array(String)} parameter to the v2 ClickHouse client, which
+     * serialises Map values via {@code String.valueOf} and would otherwise emit an unquoted
+     * Java array {@code [a, b]} that the server rejects.
+     *
+     * <p>SQL-injection hardening: ClickHouse string literals accept BOTH {@code ''} and
+     * {@code \'} as escape sequences for a single quote, plus C-style backslash escapes for
+     * other characters. So a value containing {@code \'} would otherwise close the string and
+     * inject arbitrary SQL. To make all input opaque to the parser we escape backslashes first
+     * (doubling them) and then single quotes (also doubling). Order matters: escaping the
+     * quote first would introduce {@code ''} pairs that then get backslash-mangled.
+     */
+    public static String formatStringArrayLiteral(String[] values) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) sb.append(',');
+            String escaped = values[i].replace("\\", "\\\\").replace("'", "''");
+            sb.append('\'').append(escaped).append('\'');
+        }
+        return sb.append(']').toString();
     }
 
     /**
