@@ -36,6 +36,34 @@ export interface PythonSdkClient {
       score_value: number;
     }>;
   }>;
+  createTestSuite(args: {
+    name: string;
+    project_name: string;
+    description?: string;
+    global_assertions?: string[];
+    runs_per_item?: number;
+    pass_threshold?: number;
+    items?: Array<{
+      data: Record<string, unknown>;
+      assertions?: string[];
+      description?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  runTestSuite(args: {
+    suite_name: string;
+    task_output: string;
+    experiment_name: string;
+    judge_model?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string | null;
+    experiment_name: string | null;
+    pass_rate: number | null;
+    items_passed: number;
+    items_failed: number;
+    items_total: number;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -130,6 +158,19 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           score_value: number;
         }>;
       }>('POST', '/experiments/evaluate', args);
+    },
+    async createTestSuite(args) {
+      return request<{ id: string; name: string }>('POST', '/test-suites', args);
+    },
+    async runTestSuite(args) {
+      return request<{
+        experiment_id: string | null;
+        experiment_name: string | null;
+        pass_rate: number | null;
+        items_passed: number;
+        items_failed: number;
+        items_total: number;
+      }>('POST', '/test-suites/run', args);
     },
   };
 }
