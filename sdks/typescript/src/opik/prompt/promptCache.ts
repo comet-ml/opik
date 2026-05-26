@@ -115,6 +115,24 @@ export class PromptCache {
     }
   }
 
+  /**
+   * Drop every cached entry for the given prompt name + project scope.
+   *
+   * Used after operations that change the environment-to-version mapping (such
+   * as `setPromptEnvironments` or assigning environments during `createPrompt`)
+   * so that subsequent `getPrompt({ name, environment })` calls cannot return a
+   * stale version.
+   */
+  invalidateForPrompt(name: string, projectName: string | undefined): void {
+    const scope = projectName ?? "";
+    for (const key of this.entries.keys()) {
+      const [keyName, , keyProject] = JSON.parse(key) as string[];
+      if (keyName === name && keyProject === scope) {
+        this.entries.delete(key);
+      }
+    }
+  }
+
   clear(): void {
     this.stopRefreshTimer();
     this.entries.clear();
