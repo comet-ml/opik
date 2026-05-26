@@ -2216,6 +2216,8 @@ class Opik:
             project_name=project_name,
             environments=environments,
         )
+        if environments:
+            prompt_cache.invalidate_for_prompt(name=name, project_name=project_name)
         return prompt_module.Prompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
         )
@@ -2277,6 +2279,8 @@ class Opik:
             project_name=project_name,
             environments=environments,
         )
+        if environments:
+            prompt_cache.invalidate_for_prompt(name=name, project_name=project_name)
         return prompt_module.ChatPrompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
         )

@@ -1237,6 +1237,7 @@ export class OpikClient {
             ...versionResponse,
             environments: target,
           };
+          getGlobalCache().invalidateForPrompt(name, projectName);
         }
       }
 
@@ -1852,6 +1853,11 @@ export class OpikClient {
       }
       throw error;
     }
+
+    getGlobalCache().invalidateForPrompt(
+      options.name,
+      this.resolveProjectName(options.projectName),
+    );
   };
 
   /**
