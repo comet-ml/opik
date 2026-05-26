@@ -1486,6 +1486,82 @@ class TestVersionReplayUnit:
         ]
         assert bases == ["tgt-v1", "tgt-v2"]
 
+    def test_replay__forwards_copy_from_coords_pointing_at_source_versions(
+        self,
+    ) -> None:
+        # OPIK-6696/6697: each post-v1 apply must carry copy_from_dataset_id +
+        # copy_from_version_id pointing at the corresponding source version.
+        # That's what redirects the BE's carry-forward COPY away from the
+        # destination's just-minted prior version (multi-replica lag exposed)
+        # onto the stable, fully-replicated source v_i. Pin per-call coords so
+        # a regression on the chaining (e.g. always sending source v1, or
+        # mixing dest/source ids) trips here.
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1"),
+                _SourceVersion(id="src-v2", version_hash="hv2"),
+                _SourceVersion(id="src-v3", version_hash="hv3"),
+            ],
+            items_per_version={
+                "hv1": [_ds_item("a", x=1)],
+                "hv2": [_ds_item("a", x=1), _ds_item("b", y=2)],
+                "hv3": [_ds_item("a", x=1), _ds_item("b", y=2), _ds_item("c", z=3)],
+                "tgt-h1": [_ds_item("tgt-a", x=1)],
+                "tgt-h2": [_ds_item("tgt-a", x=1), _ds_item("tgt-b", y=2)],
+                "tgt-h3": [
+                    _ds_item("tgt-a", x=1),
+                    _ds_item("tgt-b", y=2),
+                    _ds_item("tgt-c", z=3),
+                ],
+            },
+            applied_versions=[
+                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
+                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
+                _AppliedVersion(id="tgt-v3", version_hash="tgt-h3"),
+            ],
+        )
+
+        replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+        )
+
+        # v1's create_or_update_dataset_items does NOT (and cannot, in the
+        # current BE shape) carry copy_from coords — v1 routes through
+        # createFirstVersion which is INSERT-only with no destination
+        # read-after-write surface.
+        v1_create_kwargs = (
+            rest_client.datasets.create_or_update_dataset_items.call_args.kwargs
+        )
+        assert "copy_from_dataset_id" not in v1_create_kwargs
+        assert "copy_from_version_id" not in v1_create_kwargs
+
+        # Each apply_dataset_item_changes call (v2, v3) must point copy_from
+        # at THIS version's source coords, not v1's. The pair is set together
+        # (BE rejects partial pairs with 400) and both must point to the
+        # source dataset.
+        apply_calls = rest_client.datasets.apply_dataset_item_changes.call_args_list
+        assert len(apply_calls) == 2
+        copy_from_pairs = [
+            (
+                call.kwargs["request"]["copy_from_dataset_id"],
+                call.kwargs["request"]["copy_from_version_id"],
+            )
+            for call in apply_calls
+        ]
+        assert copy_from_pairs == [
+            ("src-id", "src-v2"),
+            ("src-id", "src-v3"),
+        ]
+
 
 class TestVersionReplayE2ECli:
     """End-to-end Click smoke test: drives the full executor plumbing

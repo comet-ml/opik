@@ -1833,6 +1833,12 @@ paths:
         - Returns 409 Conflict if baseVersion is stale and override is not set
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body
+        to read carry-forward rows (and the edit-via-SELECT-INSERT source rows) from the supplied
+        (dataset, version) pair instead of the destination's prior version. This avoids the
+        multi-replica read-after-write window when chaining version writes against a destination that
+        may not have replicated yet. When the fields are null, the existing behavior applies.
       operationId: applyDatasetItemChanges
       parameters:
       - name: id
@@ -1987,6 +1993,12 @@ paths:
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward
+        rows from the supplied (dataset, version) pair instead of the destination's prior version.
+        This avoids the multi-replica read-after-write window when chaining version writes against a
+        destination that may not have replicated yet. When the fields are null, the existing behavior
+        applies (carry-forward reads from the destination's prior version).
       operationId: createOrUpdateDatasetItems
       requestBody:
         content:
@@ -9894,6 +9906,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9903,10 +9919,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10070,9 +10082,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -10431,6 +10443,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10440,10 +10456,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10520,9 +10532,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10786,6 +10798,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10795,10 +10811,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10980,9 +10992,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -11237,6 +11249,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -11246,10 +11262,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -11331,6 +11343,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -11340,10 +11356,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -12445,6 +12457,21 @@ components:
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
           format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "OPIK-6696. Optional. Dataset to read carry-forward rows from\
+            \ when materializing the new version. Required together with copy_from_version_id.\
+            \ When both are set, the INSERT FROM SELECT that copies unchanged rows\
+            \ reads from this (dataset, version) pair instead of the destination dataset's\
+            \ prior version, avoiding the multi-replica read-after-write window. When\
+            \ null, the existing behavior applies (reads from the destination's prior\
+            \ version)."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: OPIK-6696. Optional. Version within copy_from_dataset_id to
+            read carry-forward rows from. Required together with copy_from_dataset_id.
+          format: uuid
     ExperimentItem:
       required:
       - dataset_item_id
@@ -12660,6 +12687,21 @@ components:
           description: "Optional batch group ID to group multiple batches into a single\
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
+          format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "OPIK-6696. Optional. Dataset to read carry-forward rows from\
+            \ when materializing the new version. Required together with copy_from_version_id.\
+            \ When both are set, the INSERT FROM SELECT that copies unchanged rows\
+            \ reads from this (dataset, version) pair instead of the destination dataset's\
+            \ prior version, avoiding the multi-replica read-after-write window. When\
+            \ null, the existing behavior applies (reads from the destination's prior\
+            \ version)."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: OPIK-6696. Optional. Version within copy_from_dataset_id to
+            read carry-forward rows from. Required together with copy_from_dataset_id.
           format: uuid
     DatasetItem_Write:
       required:
@@ -17615,10 +17657,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -18226,10 +18268,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -18375,10 +18417,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -18483,10 +18525,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         project_id:
           type: string
           description: Project ID. Takes precedence over project_name when both are
@@ -18522,10 +18564,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -19010,10 +19052,10 @@ components:
           minimum: 5
           type: integer
           format: int32
-        v2WorkspaceAllowlist:
+        v1WorkspaceAllowlist:
           type: string
           writeOnly: true
-        v1WorkspaceAllowlist:
+        v2WorkspaceAllowlist:
           type: string
           writeOnly: true
     SpanBatchUpdate:

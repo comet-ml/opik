@@ -197,6 +197,7 @@ def replay_all_versions(
                 dest_dataset_id=dest_dataset_id,
                 dest_name=dest_name,
                 dest_project_name=dest_project_name,
+                source_dataset_id=source_dataset_id,
                 source_items=curr_items_by_id,
                 source_version=source_version,
             )
@@ -216,6 +217,8 @@ def replay_all_versions(
                 dest_name=dest_name,
                 dest_project_name=dest_project_name,
                 base_version_id=base_version_id,
+                source_dataset_id=source_dataset_id,
+                source_version_id=source_version.id,
                 delta=delta,
                 change_description=source_version.change_description,
                 item_id_remap=result.item_id_remap,
@@ -272,6 +275,7 @@ def _replay_first_version(
     dest_dataset_id: str,
     dest_name: str,
     dest_project_name: str,
+    source_dataset_id: str,
     source_items: Dict[str, _SourceItem],
     source_version: dataset_version_public.DatasetVersionPublic,
 ) -> tuple[str, Dict[str, List[str]], "VersionDelta"]:
@@ -311,6 +315,8 @@ def _replay_first_version(
                 dest_dataset_id=dest_dataset_id,
                 dest_name=dest_name,
                 dest_project_name=dest_project_name,
+                source_dataset_id=source_dataset_id,
+                source_version_id=source_version.id,
                 adds=delta.adds,
                 change_description=source_version.change_description,
                 suite_evaluators=source_version.evaluators,
@@ -341,6 +347,8 @@ def _create_first_version_with_items(
     dest_dataset_id: str,
     dest_name: str,
     dest_project_name: str,
+    source_dataset_id: str,
+    source_version_id: Optional[str],
     adds: List[dataset_item_public.DatasetItemPublic],
     change_description: Optional[str],
     suite_evaluators: Optional[List[evaluator_item_public.EvaluatorItemPublic]],
@@ -453,6 +461,15 @@ def _create_first_version_with_items(
             request["tags"] = list(user_tags)
         if metadata is not None:
             request["metadata"] = dict(metadata)
+        # OPIK-6696: point the BE's carry-forward COPY at source v1 instead of
+        # the destination's just-minted v1. This zero-content follow-up still
+        # triggers a full COPY of dest v1, which is multi-replica-lag-exposed
+        # since we wrote dest v1 moments ago. Source v1 is stable and contains
+        # the same rows. Source coords are gated to both-or-neither (BE rejects
+        # partial pairs with 400).
+        if source_version_id is not None:
+            request["copy_from_dataset_id"] = source_dataset_id
+            request["copy_from_version_id"] = source_version_id
         suite_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: rest_client.datasets.apply_dataset_item_changes(
                 id=dest_dataset_id, request=request, override=False
@@ -756,6 +773,8 @@ def _apply_delta_and_collect_new_ids(
     dest_name: str,
     dest_project_name: str,
     base_version_id: str,
+    source_dataset_id: str,
+    source_version_id: Optional[str],
     delta: VersionDelta,
     change_description: Optional[str],
     item_id_remap: Dict[str, str],
@@ -840,6 +859,20 @@ def _apply_delta_and_collect_new_ids(
         request["tags"] = list(user_tags)
     if metadata is not None:
         request["metadata"] = dict(metadata)
+    # OPIK-6696: point the BE's carry-forward COPY (and the supporting reads:
+    # pool sizing, edit-via-SELECT-INSERT) at source v_i instead of the
+    # destination's just-minted v_(i-1). This is what eliminates the multi-
+    # replica read-after-write window in OPIK-6674: source v_i has been
+    # committed long ago and is fully replicated, while the destination's
+    # prior version was written milliseconds earlier in the chained replay
+    # and may not yet be visible on the replica serving the SELECT. Source
+    # coords are gated to both-or-neither (BE rejects partial pairs with
+    # 400); if the source version was streamed without an id we fall back
+    # to today's destination-side read and accept the lag exposure for
+    # that single call.
+    if source_version_id is not None:
+        request["copy_from_dataset_id"] = source_dataset_id
+        request["copy_from_version_id"] = source_version_id
 
     new_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
         lambda: rest_client.datasets.apply_dataset_item_changes(

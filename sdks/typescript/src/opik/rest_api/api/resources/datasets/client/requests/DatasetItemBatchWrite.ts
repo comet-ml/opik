@@ -25,4 +25,8 @@ export interface DatasetItemBatchWrite {
     items: OpikApi.DatasetItemWrite[];
     /** Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one. */
     batchGroupId?: string;
+    /** OPIK-6696. Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When both are set, the INSERT FROM SELECT that copies unchanged rows reads from this (dataset, version) pair instead of the destination dataset's prior version, avoiding the multi-replica read-after-write window. When null, the existing behavior applies (reads from the destination's prior version). */
+    copyFromDatasetId?: string;
+    /** OPIK-6696. Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id. */
+    copyFromVersionId?: string;
 }
