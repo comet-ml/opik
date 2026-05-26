@@ -1,6 +1,7 @@
 import React from "react";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
+import { trimValue } from "@/shared/filter-chips/lib/helpers";
 import {
   PseudoSearchChipDefinition,
   PseudoSearchChipValue,
@@ -22,7 +23,7 @@ const PseudoSearchChipPopoverContent: React.FC<
   const handleChange = (
     raw: string | number | readonly string[] | undefined,
   ) => {
-    const trimmed = String(raw ?? "").trim();
+    const trimmed = trimValue(raw);
     if (trimmed === "") onClear();
     else onApply({ value: trimmed });
   };
@@ -30,7 +31,7 @@ const PseudoSearchChipPopoverContent: React.FC<
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      const trimmed = event.currentTarget.value.trim();
+      const trimmed = trimValue(event.currentTarget.value);
       if (trimmed === "") onClear();
       else onApply({ value: trimmed });
       onCommit?.();

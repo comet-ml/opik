@@ -17,6 +17,7 @@ import {
   dropMany,
   FromFiltersResult,
 } from "@/shared/filter-chips/lib/sanitizeFilters.types";
+import { toNumber } from "@/shared/filter-chips/lib/helpers";
 
 const SUPPORTED_OPERATORS: ReadonlySet<FilterOperator> = new Set([
   "=",
@@ -25,14 +26,6 @@ const SUPPORTED_OPERATORS: ReadonlySet<FilterOperator> = new Set([
   "<",
   "<=",
 ]);
-
-export const toNumber = (raw: Filter["value"]): number | null => {
-  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
-  const s = raw.trim();
-  if (s === "") return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-};
 
 const tightest = (
   rows: Filter[],

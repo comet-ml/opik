@@ -8,9 +8,7 @@ import {
   dropMany,
   FromFiltersResult,
 } from "@/shared/filter-chips/lib/sanitizeFilters.types";
-
-const trimValue = (raw: Filter["value"] | undefined | null): string =>
-  String(raw ?? "").trim();
+import { trimValue } from "@/shared/filter-chips/lib/helpers";
 
 export const isPseudoSearchApplied = (
   value: PseudoSearchChipValue | undefined,
