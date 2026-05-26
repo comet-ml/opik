@@ -187,11 +187,20 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       try {
         version = await fetchPromptVersion({ versionId: effectiveVersionId });
       } catch {
-        version = activeVersion;
+        // Refetch failed — bail rather than ship stale `activeVersion`
+        // (placeholder from the previously-selected version) into the
+        // playground, which would silently load wrong content.
+        return;
       }
     }
     loadPrompt({ prompt, version });
-  }, [loadPrompt, prompt, activeVersion, effectiveVersionId, fetchPromptVersion]);
+  }, [
+    loadPrompt,
+    prompt,
+    activeVersion,
+    effectiveVersionId,
+    fetchPromptVersion,
+  ]);
 
   const handleOpenInPlaygroundClick = useCallback(() => {
     if (isPlaygroundEmpty) {
@@ -206,10 +215,14 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     setOpenCompare(true);
   }, []);
 
+  // Gate skeleton on in-flight fetches only — once they settle, render even
+  // if `activeVersion` is undefined (e.g. version fetch 404'd) so the page
+  // doesn't get stuck on the skeleton; downstream sections handle the missing
+  // version by falling back to `prompt.latest_version` or rendering empty.
   const isInitialLoading =
     !prompt ||
     isVersionsLoading ||
-    (!!effectiveVersionId && (isActiveVersionLoading || !activeVersion));
+    (!!effectiveVersionId && isActiveVersionLoading);
 
   if (isInitialLoading) {
     return (

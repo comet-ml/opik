@@ -13,6 +13,7 @@ import usePromptById from "@/api/prompts/usePromptById";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
+import usePromptVersionsWithLabels from "@/v2/pages-shared/version-history/usePromptVersionsWithLabels";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
 import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
@@ -169,6 +170,10 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         filterByTemplateStructure={filterByTemplateStructure}
         onSelect={({ promptId }) => onValueChange(promptId)}
         onOpenChange={onOpenChangeHandler}
+        // Compact mode only forwards promptId to its callers, so we hide the
+        // version submenu — otherwise version picks would be silently dropped
+        // and the latest version would load instead.
+        enableVersionSelect={false}
         trigger={
           <div>
             <TooltipWrapper content="Load prompt">
@@ -254,12 +259,21 @@ const CompactLoadedPrompt: React.FC<CompactLoadedPromptProps> = ({
     data?.version_count,
   );
 
+  // Look up the selected version's tags so the stage badge reflects what's
+  // actually loaded; otherwise we'd show `latest_version.tags` for older picks.
+  const { getDescriptor } = usePromptVersionsWithLabels(promptId, {
+    enabled: Boolean(versionId),
+  });
+  const selectedVersionTags = versionId
+    ? getDescriptor(versionId)?.version.tags
+    : undefined;
+
   return (
     <LoadedPromptDisplay
       name={displayName}
       templateStructure={data?.template_structure}
       versionLabel={versionLabel}
-      versionTags={data?.latest_version?.tags}
+      versionTags={selectedVersionTags ?? data?.latest_version?.tags}
       hasUnsavedChanges={hasUnsavedChanges}
       onClear={onClear}
     />

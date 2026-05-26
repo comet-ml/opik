@@ -31,6 +31,13 @@ type PromptLibraryMenuProps = {
   onSelect: (selection: PromptLibrarySelection) => void;
   onOpenChange?: (open: boolean) => void;
   trigger: ReactElement;
+  /**
+   * When false, the version-submenu hovercard is hidden and rows always
+   * select the latest version. Use this from callers that can't forward the
+   * picked `versionId` through their state (e.g. compact PromptsSelectBox),
+   * to avoid silently dropping the user's version pick.
+   */
+  enableVersionSelect?: boolean;
 };
 
 const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
@@ -39,6 +46,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
   onSelect,
   onOpenChange,
   trigger,
+  enableVersionSelect = true,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -117,6 +125,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
                 key={prompt.id}
                 prompt={prompt}
                 onSelect={handleSelect}
+                enableVersionSelect={enableVersionSelect}
               />
             ))
           )}
@@ -129,14 +138,44 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
 type PromptRowProps = {
   prompt: Prompt;
   onSelect: (selection: PromptLibrarySelection) => void;
+  enableVersionSelect: boolean;
 };
 
-const PromptRow: React.FC<PromptRowProps> = ({ prompt, onSelect }) => {
+const PromptRow: React.FC<PromptRowProps> = ({
+  prompt,
+  onSelect,
+  enableVersionSelect,
+}) => {
   const [hoverOpen, setHoverOpen] = useState(false);
 
   const latestStage = pickHighestStage(prompt.latest_version?.tags);
   const latestLabel =
     prompt.version_count > 0 ? `v${prompt.version_count}` : "";
+
+  const row = (
+    <div
+      role="button"
+      tabIndex={0}
+      className="comet-body-s flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-primary-foreground"
+      onClick={() => onSelect({ promptId: prompt.id })}
+    >
+      <span className="truncate">{prompt.name}</span>
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {latestLabel && (
+          <span className="comet-body-xs flex items-center gap-0.5 text-light-slate">
+            <GitCommitVertical className="size-3.5 shrink-0" />
+            {latestLabel}
+          </span>
+        )}
+        {latestStage && <StageTag value={latestStage} size="xs" />}
+        {enableVersionSelect && (
+          <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
+        )}
+      </div>
+    </div>
+  );
+
+  if (!enableVersionSelect) return row;
 
   return (
     <HoverCard
@@ -145,26 +184,7 @@ const PromptRow: React.FC<PromptRowProps> = ({ prompt, onSelect }) => {
       open={hoverOpen}
       onOpenChange={setHoverOpen}
     >
-      <HoverCardTrigger asChild>
-        <div
-          role="button"
-          tabIndex={0}
-          className="comet-body-s flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-primary-foreground"
-          onClick={() => onSelect({ promptId: prompt.id })}
-        >
-          <span className="truncate">{prompt.name}</span>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            {latestLabel && (
-              <span className="comet-body-xs flex items-center gap-0.5 text-light-slate">
-                <GitCommitVertical className="size-3.5 shrink-0" />
-                {latestLabel}
-              </span>
-            )}
-            {latestStage && <StageTag value={latestStage} size="xs" />}
-            <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
-          </div>
-        </div>
-      </HoverCardTrigger>
+      <HoverCardTrigger asChild>{row}</HoverCardTrigger>
       <HoverCardContent
         side="left"
         align="start"

@@ -61,9 +61,9 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   );
 
   const environmentOwners = useMemo(() => {
-    const map = new Map<string, PromptVersion>();
-    versions?.forEach((v) => {
-      if (v.environment) map.set(v.environment, v);
+    const map = new Map<string, { version: PromptVersion; index: number }>();
+    versions?.forEach((v, index) => {
+      if (v.environment) map.set(v.environment, { version: v, index });
     });
     return map;
   }, [versions]);
@@ -137,12 +137,9 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
         ) : (
           environments.map((env) => {
             const owner = environmentOwners.get(env.name);
-            const ownerIdx = owner
-              ? versions?.findIndex((v) => v.id === owner.id) ?? -1
-              : -1;
             const ownerLabel =
-              ownerIdx >= 0 && totalVersions > 0
-                ? `v${totalVersions - ownerIdx}`
+              owner && totalVersions > 0
+                ? `v${totalVersions - owner.index}`
                 : "";
             const isActiveHere = activeEnvironment === env.name;
             return (
