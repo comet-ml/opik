@@ -495,9 +495,11 @@ public class DatasetsResource {
             Each item's 'id' field is the stable identifier and upsert key.
             Provide it to update an existing item, or omit it to create a new one.
 
-            Set 'snapshot' to true to make the new version's row set equal exactly the items in the
-            request payload. Items absent from the payload are absent from the new version (implicit
-            deletion). Requires 'batch_group_id' to be set.""", responses = {
+            OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward
+            rows from the supplied (dataset, version) pair instead of the destination's prior version.
+            This avoids the multi-replica read-after-write window when chaining version writes against a
+            destination that may not have replicated yet. When the fields are null, the existing behavior
+            applies (carry-forward reads from the destination's prior version).""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited
@@ -625,6 +627,12 @@ public class DatasetsResource {
             - Returns 409 Conflict if baseVersion is stale and override is not set
 
             Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+            OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body
+            to read carry-forward rows (and the edit-via-SELECT-INSERT source rows) from the supplied
+            (dataset, version) pair instead of the destination's prior version. This avoids the
+            multi-replica read-after-write window when chaining version writes against a destination that
+            may not have replicated yet. When the fields are null, the existing behavior applies.
             """, responses = {
             @ApiResponse(responseCode = "201", description = "Version created successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),

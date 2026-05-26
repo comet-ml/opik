@@ -35,7 +35,9 @@ public record DatasetItemBatch(
         @JsonView({
                 DatasetItem.View.Write.class}) @Schema(description = "Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.") UUID batchGroupId,
         @JsonView({
-                DatasetItem.View.Write.class}) @Schema(description = "If true, the new version's row set equals exactly the items in this batch. The server skips the INSERT FROM SELECT that copies unchanged rows from the previous version, avoiding multi-replica read-after-write inconsistency. Items absent from the payload are absent from the new version (deletions implicit). Ignored when batch_group_id is null.") Boolean snapshot)
+                DatasetItem.View.Write.class}) @Schema(description = "OPIK-6696. Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When both are set, the INSERT FROM SELECT that copies unchanged rows reads from this (dataset, version) pair instead of the destination dataset's prior version, avoiding the multi-replica read-after-write window. When null, the existing behavior applies (reads from the destination's prior version).") UUID copyFromDatasetId,
+        @JsonView({
+                DatasetItem.View.Write.class}) @Schema(description = "OPIK-6696. Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.") UUID copyFromVersionId)
         implements
             RateEventContainer {
 
