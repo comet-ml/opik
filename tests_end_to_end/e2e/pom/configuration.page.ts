@@ -44,8 +44,21 @@ export class ConfigurationPage {
     await this.page.getByTestId('ai-providers-tabpanel').waitFor({ state: 'visible' });
   }
 
-  /** Read the configured providers by inspecting `data-provider` attributes on row cells. */
+  /**
+   * Read the configured providers by inspecting `data-provider` attributes on
+   * row cells. The tabpanel arrives visible before its row list resolves; if
+   * we count rows before either a real row OR the empty-state marker has
+   * rendered, we'd report "no providers" for a populated table and the
+   * caller's idempotency check would fail. Wait for the table to settle first.
+   */
   async listConfiguredProviders(): Promise<string[]> {
+    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
+    const firstRowCell = this.page.getByTestId('ai-provider-row-cell').first();
+    const emptyState = tabpanel.getByText('No AI providers yet');
+    await Promise.race([
+      firstRowCell.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
+      emptyState.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
+    ]);
     const cells = this.page.getByTestId('ai-provider-row-cell');
     const count = await cells.count();
     const providers: string[] = [];
