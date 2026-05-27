@@ -63,137 +63,80 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     }
   };
 
-  it("creates a prompt with an initial environment", async () => {
-    const ts = Date.now();
-    const stagingName = `staging-${ts}`;
-    const promptName = `env-create-${ts}`;
-    await ensureEnvironment(stagingName);
-
-    const prompt = await client.createPrompt({
-      name: promptName,
-      prompt: "Hello {{name}}",
-      environments: [stagingName],
-    });
-    createdPromptIds.push(prompt.id!);
-
-    expect(prompt.environments).toContain(stagingName);
-
-    const retrieved = await client.getPrompt({
-      name: promptName,
-      environment: stagingName,
-    });
-    expect(retrieved).not.toBeNull();
-    expect(retrieved?.commit).toBe(prompt.commit);
-    expect(retrieved?.environments).toContain(stagingName);
-  }, 30000);
-
-  it("creates a prompt with two environments", async () => {
-    const ts = Date.now();
-    const stagingName = `staging-${ts}`;
-    const productionName = `production-${ts}`;
-    const promptName = `env-multi-${ts}`;
-    await ensureEnvironment(stagingName);
-    await ensureEnvironment(productionName);
-
-    const prompt = await client.createPrompt({
-      name: promptName,
-      prompt: "Hello {{name}}",
-      environments: [stagingName, productionName],
-    });
-    createdPromptIds.push(prompt.id!);
-
-    expect(prompt.environments).toContain(stagingName);
-    expect(prompt.environments).toContain(productionName);
-
-    const fromStaging = await client.getPrompt({
-      name: promptName,
-      environment: stagingName,
-    });
-    expect(fromStaging?.commit).toBe(prompt.commit);
-
-    const fromProd = await client.getPrompt({
-      name: promptName,
-      environment: productionName,
-    });
-    expect(fromProd?.commit).toBe(prompt.commit);
-  }, 30000);
-
-  it("setPromptEnvironments replaces with the full provided set", async () => {
+  it("lifecycle: create with one env → expand to two → move → clear", async () => {
     const ts = Date.now();
     const envA = `staging-${ts}`;
     const envB = `production-${ts}`;
-    const promptName = `env-replace-${ts}`;
+    const promptName = `env-lifecycle-${ts}`;
     await ensureEnvironment(envA);
     await ensureEnvironment(envB);
 
-    const prompt = await client.createPrompt({
-      name: promptName,
-      prompt: "Hello {{name}}",
-      environments: [envA],
-    });
-    createdPromptIds.push(prompt.id!);
-    expect(prompt.environments).toContain(envA);
-
-    await client.setPromptEnvironments({
-      name: prompt.name,
-      environments: [envA, envB],
-    });
-    getGlobalCache().clear();
-
-    const retrieved = await client.getPrompt({
-      name: promptName,
-    });
-    expect(retrieved).not.toBeNull();
-    expect(retrieved?.environments).toContain(envA);
-    expect(retrieved?.environments).toContain(envB);
-  }, 30000);
-
-  it("moves environment ownership via setPromptEnvironments", async () => {
-    const ts = Date.now();
-    const stagingName = `staging-${ts}`;
-    const productionName = `production-${ts}`;
-    const promptName = `env-move-${ts}`;
-    await ensureEnvironment(stagingName);
-    await ensureEnvironment(productionName);
-
-    const prompt = await client.createPrompt({
+    // Step 1: create v1 pinned to envA; a newer v2 exists without any env.
+    // Fetching by environment must resolve to v1, not the latest.
+    const v1 = await client.createPrompt({
       name: promptName,
       prompt: "v1 {{x}}",
-      environments: [stagingName],
+      environments: [envA],
     });
-    createdPromptIds.push(prompt.id!);
-    expect(prompt.environments).toContain(stagingName);
+    createdPromptIds.push(v1.id!);
+    const v2 = await client.createPrompt({
+      name: promptName,
+      prompt: "v2 {{x}}",
+    });
+    expect(v2.commit).not.toBe(v1.commit);
 
+    const resolvedByEnvA = await client.getPrompt({
+      name: promptName,
+      environment: envA,
+    });
+    expect(resolvedByEnvA).not.toBeNull();
+    expect(resolvedByEnvA?.commit).toBe(v1.commit);
+    expect(resolvedByEnvA?.environments).toContain(envA);
+
+    // Step 2: expand to both envs on v1's commit.
     await client.setPromptEnvironments({
-      name: prompt.name,
-      environments: [productionName],
+      name: promptName,
+      environments: [envA, envB],
+      commit: v1.commit,
     });
     getGlobalCache().clear();
 
-    const retrieved = await client.getPrompt({
-      name: promptName,
-      environment: productionName,
-    });
-    expect(retrieved).not.toBeNull();
-    expect(retrieved?.commit).toBe(prompt.commit);
-    expect(retrieved?.environments).toContain(productionName);
-    expect(retrieved?.environments).not.toContain(stagingName);
+    const fromA = await client.getPrompt({ name: promptName, environment: envA });
+    const fromB = await client.getPrompt({ name: promptName, environment: envB });
+    expect(fromA).not.toBeNull();
+    expect(fromB).not.toBeNull();
+    expect(fromA?.commit).toBe(v1.commit);
+    expect(fromB?.commit).toBe(v1.commit);
+    expect(fromA?.environments).toContain(envA);
+    expect(fromA?.environments).toContain(envB);
+
+    // Step 3: move ownership exclusively to envB.
+    await client.setPromptEnvironments({ name: promptName, environments: [envB] });
+    getGlobalCache().clear();
+
+    const afterMove = await client.getPrompt({ name: promptName });
+    expect(afterMove).not.toBeNull();
+    expect(afterMove?.environments).toContain(envB);
+    expect(afterMove?.environments).not.toContain(envA);
+
+    // Step 4: clear all environments.
+    await client.setPromptEnvironments({ name: promptName, environments: [] });
+    getGlobalCache().clear();
+
+    const afterClear = await client.getPrompt({ name: promptName });
+    expect(afterClear).not.toBeNull();
+    expect(afterClear?.environments ?? []).toHaveLength(0);
   }, 30000);
 
-  it("targets a specific version when commit is provided", async () => {
+  it("set with explicit commit pins the env to that version", async () => {
     const ts = Date.now();
     const envName = `staging-${ts}`;
     const promptName = `env-commit-${ts}`;
     await ensureEnvironment(envName);
 
-    const v1 = await client.createPrompt({
-      name: promptName,
-      prompt: "v1 {{x}}",
-    });
+    const v1 = await client.createPrompt({ name: promptName, prompt: "v1 {{x}}" });
     createdPromptIds.push(v1.id!);
     const v1Commit = v1.commit!;
-    expect(v1Commit).toBeTruthy();
-
     const v2 = await client.createPrompt({
       name: promptName,
       prompt: "different template {{x}}",
@@ -207,114 +150,45 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     });
     getGlobalCache().clear();
 
-    const retrieved = await client.getPrompt({
-      name: promptName,
-      environment: envName,
-    });
+    const retrieved = await client.getPrompt({ name: promptName, environment: envName });
     expect(retrieved).not.toBeNull();
     expect(retrieved?.commit).toBe(v1Commit);
+    expect(retrieved?.prompt).toBe("v1 {{x}}");
     expect(retrieved?.environments).toContain(envName);
   }, 30000);
 
-  it("clears environment ownership via setPromptEnvironments with an empty list", async () => {
+  it("each environment resolves to its own pinned version", async () => {
     const ts = Date.now();
-    const stagingName = `staging-${ts}`;
-    const promptName = `env-clear-${ts}`;
-    await ensureEnvironment(stagingName);
-
-    const prompt = await client.createPrompt({
-      name: promptName,
-      prompt: "v1 {{x}}",
-      environments: [stagingName],
-    });
-    createdPromptIds.push(prompt.id!);
-    expect(prompt.environments).toContain(stagingName);
-
-    await client.setPromptEnvironments({
-      name: prompt.name,
-      environments: [],
-    });
-    getGlobalCache().clear();
-
-    const retrieved = await client.getPrompt({
-      name: promptName,
-    });
-    expect(retrieved).not.toBeNull();
-    expect(retrieved?.environments ?? []).toHaveLength(0);
-  }, 30000);
-
-  it("sets environments by prompt name without a prompt instance", async () => {
-    const ts = Date.now();
-    const productionName = `production-${ts}`;
-    const promptName = `env-by-name-${ts}`;
-    await ensureEnvironment(productionName);
-
-    const created = await client.createPrompt({
-      name: promptName,
-      prompt: "v1 {{x}}",
-    });
-    createdPromptIds.push(created.id!);
-
-    await client.setPromptEnvironments({
-      name: promptName,
-      environments: [productionName],
-    });
-    getGlobalCache().clear();
-
-    const retrieved = await client.getPrompt({
-      name: promptName,
-      environment: productionName,
-    });
-    expect(retrieved).not.toBeNull();
-    expect(retrieved?.commit).toBe(created.commit);
-    expect(retrieved?.environments).toContain(productionName);
-  }, 30000);
-
-  it("retrieves the correct version by environment", async () => {
-    const ts = Date.now();
-    const stagingName = `staging-${ts}`;
-    const productionName = `production-${ts}`;
+    const envProd = `production-${ts}`;
+    const envStaging = `staging-${ts}`;
     const promptName = `env-get-${ts}`;
-    await ensureEnvironment(stagingName);
-    await ensureEnvironment(productionName);
+    await ensureEnvironment(envProd);
+    await ensureEnvironment(envStaging);
 
     const v1 = await client.createPrompt({
       name: promptName,
       prompt: "v1 {{x}}",
-      environments: [productionName],
+      environments: [envProd],
     });
     createdPromptIds.push(v1.id!);
-
     const v2 = await client.createPrompt({
       name: promptName,
       prompt: "v2 {{x}}",
-      environments: [stagingName],
+      environments: [envStaging],
     });
 
-    const fromProd = await client.getPrompt({
-      name: promptName,
-      environment: productionName,
-    });
+    const fromProd = await client.getPrompt({ name: promptName, environment: envProd });
     expect(fromProd?.commit).toBe(v1.commit);
 
-    const fromStaging = await client.getPrompt({
-      name: promptName,
-      environment: stagingName,
-    });
+    const fromStaging = await client.getPrompt({ name: promptName, environment: envStaging });
     expect(fromStaging?.commit).toBe(v2.commit);
   }, 30000);
 
   it("rejects setPromptEnvironments with an unknown environment", async () => {
     const ts = Date.now();
-    const stagingName = `staging-${ts}`;
     const promptName = `env-404-${ts}`;
-    await ensureEnvironment(stagingName);
 
-    const prompt = await client.createPrompt({
-      name: promptName,
-      prompt: "v1",
-      environments: [stagingName],
-    });
+    const prompt = await client.createPrompt({ name: promptName, prompt: "v1" });
     createdPromptIds.push(prompt.id!);
 
     await expect(
