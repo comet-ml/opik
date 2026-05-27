@@ -96,6 +96,82 @@ async function sweepOrphans(apiKey: string | null): Promise<void> {
   }
 }
 
+/**
+ * Mark the WelcomeWizard ("Welcome to Opik 🚀" first-run survey) as completed
+ * via the REST API. On a fresh OSS deploy the wizard renders a modal overlay
+ * that intercepts pointer events on every page until dismissed. Dismissing
+ * it programmatically here means every test starts against a clean page;
+ * doing it inside each test would couple test logic to first-run UX.
+ *
+ * The POST is idempotent — calling it on a workspace where the wizard is
+ * already completed is a 204 no-op.
+ */
+async function dismissWelcomeWizard(env: EnvConfig): Promise<void> {
+  try {
+    const url = `${env.apiBaseUrl}/v1/private/welcome-wizard`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Comet-Workspace': env.workspace,
+    };
+    if (env.apiKey) headers['Authorization'] = env.apiKey;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ role: 'engineer', integrations: [] }),
+    });
+    if (!res.ok && res.status !== 204) {
+      console.warn(`[global-setup] welcome-wizard dismiss returned ${res.status}`);
+      return;
+    }
+    console.log('[global-setup] welcome wizard dismissed');
+  } catch (err) {
+    console.warn('[global-setup] could not dismiss welcome wizard:', err);
+  }
+}
+
+/**
+ * The 2.0 E2E suite targets the v2 SPA. Workspaces (fresh accounts on staging,
+ * the default OSS workspace) are flagged v1 by `/workspaces/versions` — the
+ * FE's WorkspaceVersionGate would then mount the V1App, which is missing 2.0
+ * routes like `/projects/<id>/online-evaluation` and renders "Not Found".
+ *
+ * The Gate honors a localStorage override key (`opik-version-override`) before
+ * consulting the API. We write that key into the storage state file so it's
+ * present on every page load in the suite, side-stepping the v1 fallback
+ * without depending on workspace-side flag flips.
+ *
+ * Works for both auth-bearing deployments (extends the existing auth state)
+ * and OSS deployments (creates a minimal storage-state file from scratch).
+ */
+async function injectV2OverrideIntoStorageState(env: EnvConfig): Promise<void> {
+  try {
+    const origin = new URL(env.baseUrl).origin;
+    let state: {
+      cookies?: unknown[];
+      origins?: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
+    };
+    try {
+      const raw = await fs.readFile(AUTH_STATE_FILE, 'utf-8');
+      state = JSON.parse(raw);
+    } catch {
+      state = { cookies: [], origins: [] };
+    }
+    const origins = state.origins ?? [];
+    let entry = origins.find((o) => o.origin === origin);
+    if (!entry) {
+      entry = { origin, localStorage: [] };
+      origins.push(entry);
+    }
+    entry.localStorage = entry.localStorage.filter((kv) => kv.name !== 'opik-version-override');
+    entry.localStorage.push({ name: 'opik-version-override', value: 'v2' });
+    state.origins = origins;
+    await fs.writeFile(AUTH_STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
+    console.log('[global-setup] injected opik-version-override=v2 into auth state');
+  } catch (err) {
+    console.warn('[global-setup] could not inject v2 override into storage state:', err);
+  }
+}
+
 async function authenticateAndPersist(env: EnvConfig): Promise<void> {
   // OSS deployments have no auth wall — skip.
   if (env.deployment === 'oss') {
@@ -198,8 +274,10 @@ async function globalSetup() {
   await authenticateAndPersist(env);
 
   // After auth, env.apiKey may be stale (we just set process.env.OPIK_API_KEY).
-  // Reload to pick up the minted key for the sweep.
+  // Reload to pick up the minted key for the sweep + downstream calls.
   const finalEnv = loadEnvConfig();
+  await injectV2OverrideIntoStorageState(finalEnv);
+  await dismissWelcomeWizard(finalEnv);
   await sweepOrphans(finalEnv.apiKey);
 }
 
