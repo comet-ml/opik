@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import get from "lodash/get";
+import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 type UsePromptDeleteMutationParams = {
   promptId: string;
@@ -16,16 +17,10 @@ const usePromptDeleteMutation = () => {
       const { data } = await api.delete(PROMPTS_REST_ENDPOINT + promptId);
       return data;
     },
-    onError: (error) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
-
+    onError: (error: AxiosError) => {
       toast({
         title: "Error",
-        description: message,
+        description: getApiErrorMessage(error),
         variant: "destructive",
       });
     },

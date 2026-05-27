@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/ui/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 type UseSetPromptVersionEnvironmentMutationParams = {
   versionId: string;
@@ -26,13 +26,12 @@ const useSetPromptVersionEnvironmentMutation = () => {
       );
     },
     onError: (error: AxiosError) => {
-      const message =
-        get(error, ["response", "data", "message"], error.message) ??
-        "An unknown error occurred while updating the prompt environment. Please try again.";
-
       toast({
         title: "Error",
-        description: message,
+        description: getApiErrorMessage(
+          error,
+          "An unknown error occurred while updating the prompt environment. Please try again.",
+        ),
         variant: "destructive",
       });
     },
