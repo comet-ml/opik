@@ -24,6 +24,7 @@ import {
 } from "@/lib/modelCapabilities";
 import {
   hasImagesInContent,
+  getAllTemplateStringsFromContent,
   getTextFromMessageContent,
   hasVideosInContent,
 } from "@/lib/llm";
@@ -478,6 +479,61 @@ const convertProviderToLLMMessages = (
     id: generateRandomString(),
   }));
 
+const MUSTACHE_REGEX = /\{\{(.*?)\}\}/g;
+
+const extractMustacheVariables = (messages: LLMMessage[]): string[] => {
+  const vars = new Set<string>();
+  for (const msg of messages) {
+    for (const str of getAllTemplateStringsFromContent(msg.content)) {
+      let match;
+      while ((match = MUSTACHE_REGEX.exec(str)) !== null) {
+        vars.add(match[1].trim());
+      }
+    }
+  }
+  return Array.from(vars);
+};
+
+const inlineVariableMappings = (
+  messages: LLMMessage[],
+  variables: Record<string, string>,
+): LLMMessage[] => {
+  const hasNonIdentity = Object.entries(variables).some(
+    ([key, value]) => key !== value,
+  );
+  if (!hasNonIdentity) return messages;
+
+  return messages.map((msg) => {
+    if (typeof msg.content === "string") {
+      let content = msg.content;
+      for (const [key, value] of Object.entries(variables)) {
+        if (key !== value) {
+          content = content.replaceAll(`{{${key}}}`, `{{${value}}}`);
+        }
+      }
+      return { ...msg, content };
+    }
+    if (Array.isArray(msg.content)) {
+      return {
+        ...msg,
+        content: msg.content.map((part) => {
+          if (part.type === "text") {
+            let text = part.text;
+            for (const [key, value] of Object.entries(variables)) {
+              if (key !== value) {
+                text = text.replaceAll(`{{${key}}}`, `{{${value}}}`);
+              }
+            }
+            return { ...part, text };
+          }
+          return part;
+        }),
+      };
+    }
+    return msg;
+  });
+};
+
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   const model = data.model?.name ?? "";
   const rawConfig = {
@@ -495,12 +551,17 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
         ) as COMPOSED_PROVIDER_TYPE,
       }) ?? rawConfig
     : rawConfig;
+  const messages = convertProviderToLLMMessages(data.messages);
+  const variables = data.variables ?? {};
+  const inlinedMessages = inlineVariableMappings(messages, variables);
+  const inlinedVars = extractMustacheVariables(inlinedMessages);
+
   return {
     model,
     config,
     template: LLM_JUDGE.custom,
-    messages: convertProviderToLLMMessages(data.messages),
-    variables: data.variables ?? {},
+    messages: inlinedMessages,
+    variables: Object.fromEntries(inlinedVars.map((v) => [v, v])),
     schema: data.schema,
   };
 };
@@ -528,10 +589,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.custom_parameters = custom_parameters;
   }
 
+  const vars = extractMustacheVariables(data.messages);
+
   return {
     model,
     messages: convertLLMToProviderMessages(data.messages),
-    variables: data.variables,
+    variables: Object.fromEntries(vars.map((v) => [v, v])),
     schema: data.schema,
   };
 };
