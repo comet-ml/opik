@@ -16,7 +16,7 @@ export const codeMirrorPromptTheme = EditorView.theme({
     outline: "none",
   },
   ".cm-line": {
-    "padding-left": 0,
+    "padding-left": "2px",
   },
   ".cm-scroller": {
     fontFamily: "inherit",

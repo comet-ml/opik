@@ -24,6 +24,7 @@ import {
 } from "@/lib/modelCapabilities";
 import {
   hasImagesInContent,
+  getAllTemplateStringsFromContent,
   getTextFromMessageContent,
   hasVideosInContent,
 } from "@/lib/llm";
@@ -176,7 +177,6 @@ const LLMJudgeBaseSchema = z.object({
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
-  parsingVariablesError: z.boolean().optional(),
   schema: z
     .array(
       z.object({
@@ -205,19 +205,7 @@ const LLMJudgeBaseSchema = z.object({
 });
 
 export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
-  variables: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      // Allow the standard JSONPath form (input/output/metadata.[...]) OR a reserved
-      // bare sentinel like `spans` — see RESERVED_TRACE_EVALUATOR_VARIABLES. The
-      // backend's OnlineScoringEngine substitutes the sentinel with the JSON-
-      // serialized spans list at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
-        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
-      }),
-  ),
+  variables: z.record(z.string(), z.string()).optional().default({}),
 }).superRefine((data, ctx) => {
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
@@ -260,15 +248,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 });
 
 export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
-  variables: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-      }),
-  ),
+  variables: z.record(z.string(), z.string()).optional().default({}),
 }).superRefine((data, ctx) => {
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
@@ -311,7 +291,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
 });
 
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
-  variables: z.record(z.string(), z.string()),
+  variables: z.record(z.string(), z.string()).optional().default({}),
 }).superRefine((data, ctx) => {
   const contextCount = data.messages.filter((m) => {
     const content = getTextFromMessageContent(m.content);
@@ -499,6 +479,61 @@ const convertProviderToLLMMessages = (
     id: generateRandomString(),
   }));
 
+const MUSTACHE_REGEX = /\{\{(.*?)\}\}/g;
+
+const extractMustacheVariables = (messages: LLMMessage[]): string[] => {
+  const vars = new Set<string>();
+  for (const msg of messages) {
+    for (const str of getAllTemplateStringsFromContent(msg.content)) {
+      let match;
+      while ((match = MUSTACHE_REGEX.exec(str)) !== null) {
+        vars.add(match[1].trim());
+      }
+    }
+  }
+  return Array.from(vars);
+};
+
+const inlineVariableMappings = (
+  messages: LLMMessage[],
+  variables: Record<string, string>,
+): LLMMessage[] => {
+  const hasNonIdentity = Object.entries(variables).some(
+    ([key, value]) => key !== value,
+  );
+  if (!hasNonIdentity) return messages;
+
+  return messages.map((msg) => {
+    if (typeof msg.content === "string") {
+      let content = msg.content;
+      for (const [key, value] of Object.entries(variables)) {
+        if (key !== value) {
+          content = content.replaceAll(`{{${key}}}`, `{{${value}}}`);
+        }
+      }
+      return { ...msg, content };
+    }
+    if (Array.isArray(msg.content)) {
+      return {
+        ...msg,
+        content: msg.content.map((part) => {
+          if (part.type === "text") {
+            let text = part.text;
+            for (const [key, value] of Object.entries(variables)) {
+              if (key !== value) {
+                text = text.replaceAll(`{{${key}}}`, `{{${value}}}`);
+              }
+            }
+            return { ...part, text };
+          }
+          return part;
+        }),
+      };
+    }
+    return msg;
+  });
+};
+
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   const model = data.model?.name ?? "";
   const rawConfig = {
@@ -516,13 +551,17 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
         ) as COMPOSED_PROVIDER_TYPE,
       }) ?? rawConfig
     : rawConfig;
+  const messages = convertProviderToLLMMessages(data.messages);
+  const variables = data.variables ?? {};
+  const inlinedMessages = inlineVariableMappings(messages, variables);
+  const inlinedVars = extractMustacheVariables(inlinedMessages);
+
   return {
     model,
     config,
     template: LLM_JUDGE.custom,
-    messages: convertProviderToLLMMessages(data.messages),
-    variables: data.variables ?? {},
-    parsingVariablesError: false,
+    messages: inlinedMessages,
+    variables: Object.fromEntries(inlinedVars.map((v) => [v, v])),
     schema: data.schema,
   };
 };
@@ -550,10 +589,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.custom_parameters = custom_parameters;
   }
 
+  const vars = extractMustacheVariables(data.messages);
+
   return {
     model,
     messages: convertLLMToProviderMessages(data.messages),
-    variables: data.variables,
+    variables: Object.fromEntries(vars.map((v) => [v, v])),
     schema: data.schema,
   };
 };
