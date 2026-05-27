@@ -114,9 +114,12 @@ All snippets below assume a client:
 
 ### Experiments
 
+An experiment — and **every trace, span, and feedback score it produces** — always lands in the **same project as the dataset it runs against**. You don't scope an experiment separately: put the dataset in the project you want, and each run of it follows. This holds whether you call `opik.evaluate(...)` or create the experiment directly.
+
 <Tabs>
   <Tab title="Python">
     ```python
+    # project_name must be the dataset's project — the experiment and its data land there
     client.create_experiment(dataset_name="qa-pairs", name="run-1", project_name="my-agent")
     ```
   </Tab>
@@ -125,17 +128,11 @@ All snippets below assume a client:
     await client.createExperiment({
       datasetName: "qa-pairs",
       name: "run-1",
-      projectName: "my-agent",
+      projectName: "my-agent", // the dataset's project
     });
     ```
   </Tab>
 </Tabs>
-
-<Tip>
-  When you run an evaluation with `opik.evaluate(...)`, the experiment is created in its
-  dataset's project automatically — create the dataset in the right project and the
-  experiment follows it.
-</Tip>
 
 ### Optimizations
 
