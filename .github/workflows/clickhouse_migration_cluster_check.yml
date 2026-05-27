@@ -54,21 +54,23 @@ jobs:
           
           if [ -n "$CHANGED_FILES" ]; then
             echo "📄 Found ClickHouse migration files to validate:"
+            # shellcheck disable=SC2086 # intentional word-split on newlines in CHANGED_FILES
             printf '%s\n' $CHANGED_FILES | while read -r file; do
               [ -n "$file" ] && echo "   - $file"
             done
-            
+
             # Save the files to environment variable for next step
-            echo "MIGRATION_FILES<<EOF" >> $GITHUB_ENV
+            echo "MIGRATION_FILES<<EOF" >> "$GITHUB_ENV"
+            # shellcheck disable=SC2086 # intentional word-split on newlines in CHANGED_FILES
             printf '%s\n' $CHANGED_FILES | while read -r file; do
-              [ -n "$file" ] && echo "$file" >> $GITHUB_ENV
+              [ -n "$file" ] && echo "$file" >> "$GITHUB_ENV"
             done
-            echo "EOF" >> $GITHUB_ENV
-            echo "HAS_MIGRATION_FILES=true" >> $GITHUB_ENV
+            echo "EOF" >> "$GITHUB_ENV"
+            echo "HAS_MIGRATION_FILES=true" >> "$GITHUB_ENV"
           else
             echo "📋 No ClickHouse migration files were added or modified."
             echo "✅ No validation needed."
-            echo "HAS_MIGRATION_FILES=false" >> $GITHUB_ENV
+            echo "HAS_MIGRATION_FILES=false" >> "$GITHUB_ENV"
           fi
 
       - name: Validate ClickHouse migrations have ON CLUSTER clause

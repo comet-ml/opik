@@ -12,6 +12,7 @@ import AgentConfigurationEditView, {
 } from "./AgentConfigurationEditView";
 import ExpandAllToggle from "./fields/ExpandAllToggle";
 import { useFieldsCollapse } from "./fields/useFieldsCollapse";
+import { PROMPT_SAVE_NEW_VERSION_TOOLTIP } from "@/constants/prompts";
 
 type AgentConfigurationEditPanelProps = {
   open: boolean;
@@ -151,7 +152,7 @@ const AgentConfigurationEditPanel: React.FC<
               state.isEmpty
             }
           >
-            {state.isSaving ? "Saving…" : "Save as new version"}
+            {state.isSaving ? "Saving…" : PROMPT_SAVE_NEW_VERSION_TOOLTIP}
           </Button>
         </div>
       </SheetContent>
