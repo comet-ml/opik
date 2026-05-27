@@ -10879,4 +10879,232 @@ class DatasetsResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("OPIK-6696: copy_from_dataset_id + copy_from_version_id on PUT /items and POST /items/changes")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CopyFromSourceVersion {
+
+        @Test
+        @DisplayName("createOrUpdateDatasetItems: when copy_from points at a separate source dataset's version, unchanged rows are copied from there (not destination)")
+        void createOrUpdate__copyFromSource__unchangedRowsCopiedFromSource() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Build the "source" dataset as a stable upstream (analog of source v_i in migrate replay)
+            var sourceDataset = buildDataset();
+            var sourceDatasetId = createAndAssert(sourceDataset, apiKey, workspaceName);
+
+            var sourceItemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(sourceDataset.name())
+                            .items(List.of(sourceItemA, sourceItemB, sourceItemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+            var sourceVersionId = datasetResourceClient.listVersions(sourceDatasetId, apiKey, workspaceName)
+                    .content().getFirst().id();
+
+            // Build the destination dataset and seed v1 with just one item (analog of dest v_(i-1)).
+            var destDataset = buildDataset();
+            var destDatasetId = createAndAssert(destDataset, apiKey, workspaceName);
+            var destSeedItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(destDataset.name())
+                            .items(List.of(destSeedItem))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            // OPIK-6696: submit a tiny "delta" payload to destination v_2, with copy_from pointing at
+            // the source dataset's version. The COPY of unchanged rows reads from the source, so the
+            // resulting destination v_2 should contain (delta) ∪ (source minus delta IDs).
+            var deltaItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(destDataset.name())
+                            .items(List.of(deltaItem))
+                            .batchGroupId(UUID.randomUUID())
+                            .copyFromDatasetId(sourceDatasetId)
+                            .copyFromVersionId(sourceVersionId)
+                            .build(),
+                    workspaceName, apiKey);
+
+            var destVersions = datasetResourceClient.listVersions(destDatasetId, apiKey, workspaceName);
+            assertThat(destVersions.content()).hasSize(2);
+
+            // newest-first → v2
+            var destV2 = destVersions.content().getFirst();
+            var destV2Items = datasetResourceClient.getDatasetItems(
+                    destDatasetId, 1, 100, destV2.versionHash(), apiKey, workspaceName);
+            assertThat(destV2Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(
+                            deltaItem.id(),
+                            sourceItemA.id(), sourceItemB.id(), sourceItemC.id());
+        }
+
+        @Test
+        @DisplayName("createOrUpdateDatasetItems: when copy_from is null, unchanged rows carry forward from destination prior version (regression)")
+        void createOrUpdate__noCopyFrom__carriesForwardFromDestination() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var itemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var itemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var v2 = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content().getFirst();
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, v2.versionHash(), apiKey, workspaceName);
+            assertThat(v2Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemA.id(), itemB.id(), itemC.id());
+        }
+
+        @Test
+        @DisplayName("applyDatasetItemChanges: when copy_from points at a source version, COPY + edit-via-SELECT-INSERT both read from there")
+        void applyChanges__copyFromSource__readsFromSource() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Source dataset: stable v1 with {A, B, C}.
+            var sourceDataset = buildDataset();
+            var sourceDatasetId = createAndAssert(sourceDataset, apiKey, workspaceName);
+            var sourceItemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(sourceDataset.name())
+                            .items(List.of(sourceItemA, sourceItemB, sourceItemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+            var sourceVersionId = datasetResourceClient.listVersions(sourceDatasetId, apiKey, workspaceName)
+                    .content().getFirst().id();
+
+            // Destination: empty (no prior version). First call mirrors source v1 via applyDatasetItemChanges,
+            // but with copy_from coords pointing at source. Result should be {A, B, C} in the destination.
+            var destDataset = buildDataset();
+            var destDatasetId = createAndAssert(destDataset, apiKey, workspaceName);
+
+            // Seed destination v1 with one row, so we have a base version on the destination side that
+            // applyDatasetItemChanges can chain onto.
+            var destSeed = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(destDataset.name())
+                            .items(List.of(destSeed))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+            var destV1Id = datasetResourceClient.listVersions(destDatasetId, apiKey, workspaceName)
+                    .content().getFirst().id();
+
+            // Apply delta: delete the seed item, add one new "delta" item, copy unchanged from source.
+            var deltaItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId)
+                    .build();
+            var changes = com.comet.opik.api.DatasetItemChanges.builder()
+                    .baseVersion(destV1Id)
+                    .addedItems(List.of(deltaItem))
+                    .deletedIds(Set.of(destSeed.id()))
+                    .copyFromDatasetId(sourceDatasetId)
+                    .copyFromVersionId(sourceVersionId)
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(destDatasetId, changes, false, apiKey, workspaceName);
+
+            var destV2 = datasetResourceClient.listVersions(destDatasetId, apiKey, workspaceName).content().getFirst();
+            var destV2Items = datasetResourceClient.getDatasetItems(
+                    destDatasetId, 1, 100, destV2.versionHash(), apiKey, workspaceName);
+
+            // applyDatasetItemChanges' prepareAddedItems regenerates the stable ID for added items, so
+            // we can't predict the delta item's final id. Assert: the destination contains source's
+            // three items (carry-forward from source COPY worked) plus exactly one extra (the new
+            // delta); destSeed was deleted; the COPY did NOT read from destination v_1 (it would have
+            // returned destSeed instead of source's items).
+            assertThat(destV2Items.content())
+                    .extracting(DatasetItem::id)
+                    .contains(sourceItemA.id(), sourceItemB.id(), sourceItemC.id())
+                    .doesNotContain(destSeed.id())
+                    .hasSize(4);
+        }
+
+        @Test
+        @DisplayName("createOrUpdateDatasetItems: when copy_from points at a non-existent version, returns 404 instead of silently writing an empty version")
+        void createOrUpdate__copyFromMissingVersion__returns404() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Seed v1 so the codepath reaches createVersionWithDelta (not createFirstVersion).
+            var seedItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(seedItem))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var deltaItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var bogusVersionId = UUID.randomUUID();
+
+            try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .put(jakarta.ws.rs.client.Entity.json(
+                            DatasetItemBatch.builder()
+                                    .datasetName(dataset.name())
+                                    .items(List.of(deltaItem))
+                                    .batchGroupId(UUID.randomUUID())
+                                    .copyFromDatasetId(datasetId)
+                                    .copyFromVersionId(bogusVersionId)
+                                    .build()))) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+    }
+
 }
