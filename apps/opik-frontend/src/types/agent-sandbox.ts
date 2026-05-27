@@ -47,6 +47,5 @@ export interface CreateLocalRunnerJobRequest {
   agent_name: string;
   inputs: Record<string, unknown>;
   project_id: string;
-  mask_id?: string;
-  blueprint_name?: string;
+  prompt_masks?: Record<string, string>;
 }

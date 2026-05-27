@@ -42,8 +42,8 @@ const runExperimentExecution = async ({
         prompt.model,
         prompt.configs as Record<string, unknown>,
       ),
-      prompt_versions: prompt.loadedChatPromptId
-        ? [{ id: prompt.loadedChatPromptId }]
+      prompt_versions: prompt.loadedChatPromptVersionId
+        ? [{ id: prompt.loadedChatPromptVersionId }]
         : undefined,
     };
   });

@@ -4,8 +4,7 @@ import { Play } from "lucide-react";
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
-import { parsePromptVersionContent } from "@/lib/llm";
+import useLoadPromptIntoPlayground from "@/v2/pages-shared/playground/useLoadPromptIntoPlayground";
 
 type TryInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
@@ -28,19 +27,13 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
 
-  const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
-    useLoadPlayground();
+  const { loadPrompt, isPlaygroundEmpty, isPendingProviderKeys } =
+    useLoadPromptIntoPlayground();
 
   const handleLoadPlayground = useCallback(() => {
-    loadPlayground({
-      promptContent: parsePromptVersionContent(
-        activeVersion ?? prompt?.latest_version,
-      ),
-      promptId: prompt?.id,
-      promptVersionId: activeVersion?.id ?? prompt?.latest_version?.id,
-      templateStructure: prompt?.template_structure,
-    });
-  }, [loadPlayground, prompt, activeVersion]);
+    if (!prompt) return;
+    loadPrompt({ prompt, version: activeVersion });
+  }, [loadPrompt, prompt, activeVersion]);
 
   return (
     <>

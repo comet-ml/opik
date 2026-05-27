@@ -8,6 +8,7 @@ import {
   PromptVersion,
   PROMPT_TEMPLATE_STRUCTURE,
   PROMPT_TYPE,
+  PROMPT_VERSION_TYPE,
 } from "@/types/prompts";
 
 type UseCreatePromptVersionMutationParams = {
@@ -17,6 +18,7 @@ type UseCreatePromptVersionMutationParams = {
   changeDescription?: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   type?: PROMPT_TYPE;
+  versionType?: PROMPT_VERSION_TYPE;
   excludeBlueprintUpdateForProjects?: string[];
   projectId?: string;
   onSuccess: (promptVersion: PromptVersion) => void;
@@ -34,6 +36,7 @@ const useCreatePromptVersionMutation = () => {
       changeDescription,
       templateStructure,
       type,
+      versionType,
       excludeBlueprintUpdateForProjects,
       projectId,
     }: UseCreatePromptVersionMutationParams) => {
@@ -44,6 +47,7 @@ const useCreatePromptVersionMutation = () => {
           ...(metadata && { metadata }),
           ...(changeDescription && { change_description: changeDescription }),
           ...(type && { type }),
+          ...(versionType && { version_type: versionType }),
         },
         ...(templateStructure && { template_structure: templateStructure }),
         ...(excludeBlueprintUpdateForProjects?.length && {
