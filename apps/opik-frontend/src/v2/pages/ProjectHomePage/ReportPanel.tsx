@@ -1,7 +1,4 @@
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
-import rehypeRaw from "rehype-raw";
+import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import { ChevronsRight, Lightbulb } from "lucide-react";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import { OllieReport, RecommendedAction } from "@/types/ollie-reports";
@@ -63,13 +60,9 @@ export default function ReportPanel({
         )}
 
         {report?.content ? (
-          <ReactMarkdown
-            className="comet-markdown prose prose-sm dark:prose-invert"
-            remarkPlugins={[remarkBreaks, remarkGfm]}
-            rehypePlugins={[rehypeRaw]}
-          >
+          <MarkdownPreview className="prose-sm">
             {report.content}
-          </ReactMarkdown>
+          </MarkdownPreview>
         ) : (
           <p className="text-sm text-muted-foreground">No content available.</p>
         )}

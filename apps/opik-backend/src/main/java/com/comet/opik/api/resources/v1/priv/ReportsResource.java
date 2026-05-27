@@ -104,8 +104,8 @@ public class ReportsResource {
 
     @GET
     @Path("/preferences")
-    @Operation(operationId = "getReportPreference", summary = "Get report preferences", description = "Returns report preferences for a project. Returns defaults if none have been set.", responses = {
-            @ApiResponse(responseCode = "200", description = "Report preferences", content = @Content(schema = @Schema(implementation = ReportPreference.class)))
+    @Operation(operationId = "getReportPreference", summary = "Get report preferences", description = "Returns report preferences for a project, or null if none have been set.", responses = {
+            @ApiResponse(responseCode = "200", description = "Report preferences or null", content = @Content(schema = @Schema(implementation = ReportPreference.class)))
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response getPreference(@PathParam("projectId") UUID projectId) {

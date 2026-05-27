@@ -30,14 +30,13 @@ public class OrchestratorClient {
         this.config = config;
     }
 
+    public boolean isEnabled() {
+        return StringUtils.isNotBlank(config.getUrl());
+    }
+
     public void triggerReportGeneration(@NonNull String reportId, @NonNull String projectId,
             @NonNull String projectName, @NonNull String workspaceName,
             String customPrompt, @NonNull Runnable onFailure) {
-        if (StringUtils.isBlank(config.getUrl())) {
-            log.warn("Report generation URL not configured, skipping report '{}'", reportId);
-            onFailure.run();
-            return;
-        }
 
         var payload = new HashMap<>(Map.of(
                 "report_id", reportId,
