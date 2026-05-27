@@ -36,7 +36,7 @@ class PromptVersion(UniversalBaseModel):
     version type discriminator; defaults to prompt_version
     """
 
-    environment: typing.Optional[str] = None
+    environments: typing.Optional[typing.List[str]] = None
     change_description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     variables: typing.Optional[typing.List[str]] = None

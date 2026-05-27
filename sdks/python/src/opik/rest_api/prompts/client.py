@@ -669,7 +669,7 @@ class PromptsClient:
         self,
         version_id: str,
         *,
-        environment: typing.Optional[str] = OMIT,
+        environments: typing.Sequence[str],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -683,7 +683,7 @@ class PromptsClient:
         ----------
         version_id : str
 
-        environment : typing.Optional[str]
+        environments : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -696,10 +696,10 @@ class PromptsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.prompts.set_prompt_version_environment(version_id='versionId', )
+        client.prompts.set_prompt_version_environment(version_id='versionId', environments=['environments'], )
         """
         _response = self._raw_client.set_prompt_version_environment(
-            version_id, environment=environment, request_options=request_options
+            version_id, environments=environments, request_options=request_options
         )
         return _response.data
 
@@ -1403,7 +1403,7 @@ class AsyncPromptsClient:
         self,
         version_id: str,
         *,
-        environment: typing.Optional[str] = OMIT,
+        environments: typing.Sequence[str],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1417,7 +1417,7 @@ class AsyncPromptsClient:
         ----------
         version_id : str
 
-        environment : typing.Optional[str]
+        environments : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1432,10 +1432,10 @@ class AsyncPromptsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.prompts.set_prompt_version_environment(version_id='versionId', )
+            await client.prompts.set_prompt_version_environment(version_id='versionId', environments=['environments'], )
         asyncio.run(main())
         """
         _response = await self._raw_client.set_prompt_version_environment(
-            version_id, environment=environment, request_options=request_options
+            version_id, environments=environments, request_options=request_options
         )
         return _response.data

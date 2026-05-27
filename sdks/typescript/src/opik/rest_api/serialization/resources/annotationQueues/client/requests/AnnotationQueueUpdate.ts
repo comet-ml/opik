@@ -16,6 +16,7 @@ export const AnnotationQueueUpdate: core.serialization.Schema<
         "feedback_definition_names",
         core.serialization.list(core.serialization.string()).optional(),
     ),
+    annotatorsPerItem: core.serialization.property("annotators_per_item", core.serialization.number().optional()),
 });
 
 export declare namespace AnnotationQueueUpdate {
@@ -25,5 +26,6 @@ export declare namespace AnnotationQueueUpdate {
         instructions?: string | null;
         comments_enabled?: boolean | null;
         feedback_definition_names?: string[] | null;
+        annotators_per_item?: number | null;
     }
 }
