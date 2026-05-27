@@ -24,6 +24,11 @@ export default defineConfig({
     ['line'],
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['json', { outputFile: 'test-results/results.json' }],
+    ['allure-playwright', {
+      outputFolder: process.env.ALLURE_RESULTS || 'allure-results',
+      detail: true,
+      suiteTitle: true,
+    }],
   ],
   use: {
     baseURL: env.baseUrl,
