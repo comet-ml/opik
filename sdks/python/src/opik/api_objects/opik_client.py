@@ -2399,9 +2399,6 @@ class Opik:
                 in the resolved project.
             EnvironmentNotFoundError: One of ``environments`` is not registered in the
                 workspace.
-            PromptVersionNotAssignableToEnvironment: The resolved version is internal-only
-                (for example a mask version) and cannot be assigned to an environment;
-                target a regular prompt version instead.
         """
         resolved_project_name = self._resolve_project_name(project_name)
         try:
@@ -2431,12 +2428,6 @@ class Opik:
             if e.status_code == 404:
                 raise exceptions.EnvironmentNotFoundError(
                     f"One or more environments in {target!r} are not registered in this workspace."
-                ) from e
-            if e.status_code == 422:
-                raise exceptions.PromptVersionNotAssignableToEnvironment(
-                    f"Prompt {name!r} (commit {version.commit!r}) is an internal-only "
-                    "version and cannot be assigned to an environment. Target a regular "
-                    "prompt version instead."
                 ) from e
             raise
 
