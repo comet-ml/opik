@@ -68,6 +68,11 @@ class RawDatasetsClient:
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
 
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
+
         Parameters
         ----------
         id : str
@@ -374,12 +379,18 @@ class RawDatasetsClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
+        copy_from_dataset_id: typing.Optional[str] = OMIT,
+        copy_from_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -400,6 +411,12 @@ class RawDatasetsClient:
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
+        copy_from_dataset_id : typing.Optional[str]
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
+
+        copy_from_version_id : typing.Optional[str]
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -419,6 +436,8 @@ class RawDatasetsClient:
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
                 "batch_group_id": batch_group_id,
+                "copy_from_dataset_id": copy_from_dataset_id,
+                "copy_from_version_id": copy_from_version_id,
             },
             headers={
                 "content-type": "application/json",
@@ -2148,6 +2167,11 @@ class AsyncRawDatasetsClient:
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
 
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
+
         Parameters
         ----------
         id : str
@@ -2454,12 +2478,18 @@ class AsyncRawDatasetsClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
+        copy_from_dataset_id: typing.Optional[str] = OMIT,
+        copy_from_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -2480,6 +2510,12 @@ class AsyncRawDatasetsClient:
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
+        copy_from_dataset_id : typing.Optional[str]
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
+
+        copy_from_version_id : typing.Optional[str]
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2499,6 +2535,8 @@ class AsyncRawDatasetsClient:
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
                 "batch_group_id": batch_group_id,
+                "copy_from_dataset_id": copy_from_dataset_id,
+                "copy_from_version_id": copy_from_version_id,
             },
             headers={
                 "content-type": "application/json",
