@@ -1844,7 +1844,9 @@ export class OpikClient {
       );
     } catch (error) {
       if (error instanceof OpikApiError) {
-        if (error.statusCode === 404) {
+        // The backend reports unknown environments as 404 (not found) or 409
+        // (conflict, when the name collides with the workspace registry check).
+        if (error.statusCode === 404 || error.statusCode === 409) {
           throw new EnvironmentNotFoundError(
             `One or more environments in [${target.join(", ")}] are not registered in this workspace.`,
           );

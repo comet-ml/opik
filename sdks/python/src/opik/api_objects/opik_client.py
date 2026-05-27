@@ -2432,7 +2432,9 @@ class Opik:
                 environments=target,
             )
         except ApiError as e:
-            if e.status_code == 404:
+            # The backend reports unknown environments as 404 (not found) or 409
+            # (conflict, when the name collides with the workspace registry check).
+            if e.status_code in (404, 409):
                 raise exceptions.EnvironmentNotFoundError(
                     f"One or more environments in {target!r} are not registered in this workspace."
                 ) from e
