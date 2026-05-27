@@ -47,7 +47,9 @@ Upgrade to the Opik SDK **2.0 or later**:
   </Tab>
 </Tabs>
 
-The main change is to **pass the project to the method you're calling**. The create and search methods for datasets, prompts, and experiments all take a `project_name` argument. If you don't pass it, Opik uses the project from your environment (`OPIK_PROJECT_NAME`) or config, falling back to `Default Project`.
+The main change is to **pass the project to the methods you call**. The dataset, prompt, experiment, and optimization APIs all take a `project_name` (`projectName` in TypeScript). Omit it and Opik uses the project from the `OPIK_PROJECT_NAME` environment variable or your config, falling back to `Default Project`.
+
+All snippets below assume a client:
 
 <Tabs>
   <Tab title="Python">
@@ -55,38 +57,99 @@ The main change is to **pass the project to the method you're calling**. The cre
     import opik
 
     client = opik.Opik()
-
-    # Pass the project to each call
-    dataset = client.create_dataset(name="qa-pairs", project_name="my-agent")
-    prompt = client.create_prompt(
-        name="assistant-prompt",
-        prompt="Answer: {{question}}",
-        project_name="my-agent",
-    )
     ```
-
-    Omit `project_name` and Opik falls back to the `OPIK_PROJECT_NAME` environment
-    variable (or your `~/.opik.config`), and finally to `Default Project`.
   </Tab>
   <Tab title="TypeScript">
     ```typescript
     import { Opik } from "opik";
 
     const client = new Opik();
+    ```
+  </Tab>
+</Tabs>
 
-    // Pass the project to each call
-    const dataset = await client.getOrCreateDataset("qa-pairs", "QA pairs", "my-agent");
-    const prompt = await client.createPrompt({
-      name: "assistant-prompt",
+### Datasets
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    client.create_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_or_create_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_datasets(project_name="my-agent")
+    client.delete_dataset(name="qa-pairs", project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createDataset("qa-pairs", "QA pairs", "my-agent");
+    await client.getDataset("qa-pairs", "my-agent");
+    await client.getOrCreateDataset("qa-pairs", "QA pairs", "my-agent");
+    await client.getDatasets(100, "my-agent");
+    await client.deleteDataset("qa-pairs", "my-agent");
+    ```
+  </Tab>
+</Tabs>
+
+### Prompts
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    client.create_prompt(name="assistant", prompt="Answer: {{question}}", project_name="my-agent")
+    client.get_prompt(name="assistant", project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createPrompt({
+      name: "assistant",
       prompt: "Answer: {{question}}",
       projectName: "my-agent",
     });
+    await client.getPrompt({ name: "assistant", projectName: "my-agent" });
     ```
-
-    Omit the project and Opik falls back to the `OPIK_PROJECT_NAME` environment variable
-    (or your config), and finally to `Default Project`.
   </Tab>
 </Tabs>
+
+### Experiments
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    client.create_experiment(dataset_name="qa-pairs", name="run-1", project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createExperiment({
+      datasetName: "qa-pairs",
+      name: "run-1",
+      projectName: "my-agent",
+    });
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  When you run an evaluation with `opik.evaluate(...)`, the experiment is created in its
+  dataset's project automatically — create the dataset in the right project and the
+  experiment follows it.
+</Tip>
+
+### Optimizations
+
+Optimizations are available in the Python SDK:
+
+```python
+client.create_optimization(
+    dataset_name="qa-pairs",
+    objective_name="accuracy",
+    project_name="my-agent",
+)
+```
+
+If you use the Opik Optimizer, pass `project_name` to `optimize_prompt(...)` so its runs land in the right project.
 
 ## Where your existing data lands
 
