@@ -2,8 +2,10 @@
 
 /**
  * @example
- *     {}
+ *     {
+ *         environments: ["environments"]
+ *     }
  */
 export interface PromptVersionEnvironmentUpdate {
-    environment?: string;
+    environments: string[];
 }

@@ -14,4 +14,5 @@ export interface AnnotationQueueWrite {
     scope: OpikApi.AnnotationQueueWriteScope;
     commentsEnabled?: boolean;
     feedbackDefinitionNames?: string[];
+    annotatorsPerItem?: number;
 }
