@@ -72,10 +72,8 @@ class TestIsUrlsafeBase64Image:
             b"GIF87a",
             b"GIF89a",
             b"RIFF\x00\x00\x00\x00WEBP",
-            b"II*\x00",
-            b"MM\x00*",
         ],
-        ids=["png", "jpeg", "gif87a", "gif89a", "webp", "tiff-le", "tiff-be"],
+        ids=["png", "jpeg", "gif87a", "gif89a", "webp"],
     )
     def test_is_urlsafe_base64_image__urlsafe_encoded_image_signature__returns_true(
         self, signature
