@@ -209,8 +209,10 @@ def test_update_environment__colour_on_custom_env_is_allowed():
     with (
         patch.object(client, "_find_environment_by_name", return_value=fake_env),
         patch.object(
-            client._rest_client.environments, "update_environment", return_value=None
-        ),
+            client._rest_client.environments,
+            "update_environment",
+            return_value=None,
+        ) as mock_update,
         patch.object(
             client._rest_client.environments,
             "get_environment_by_id",
@@ -219,6 +221,8 @@ def test_update_environment__colour_on_custom_env_is_allowed():
     ):
         result = client.update_environment("my-custom-env", color="#123456")
         assert result == fake_env
+        mock_update.assert_called_once()
+        assert mock_update.call_args.kwargs.get("color") == "#123456"
 
 
 def test_create_environment__conflict_raises_environment_already_exists():
