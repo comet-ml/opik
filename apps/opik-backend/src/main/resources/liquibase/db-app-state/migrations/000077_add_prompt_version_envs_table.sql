@@ -19,3 +19,7 @@ CREATE TABLE prompt_version_envs (
 
 ALTER TABLE prompt_versions DROP INDEX idx_prompt_versions_workspace_prompt_environment;
 ALTER TABLE prompt_versions DROP COLUMN environment;
+
+--rollback DROP TABLE prompt_version_envs;
+--rollback ALTER TABLE prompt_versions ADD COLUMN environment VARCHAR(150) NULL;
+--rollback CREATE UNIQUE INDEX idx_prompt_versions_workspace_prompt_environment ON prompt_versions (workspace_id, prompt_id, environment);

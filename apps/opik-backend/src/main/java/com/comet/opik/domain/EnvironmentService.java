@@ -203,12 +203,12 @@ class EnvironmentServiceImpl implements EnvironmentService {
     }
 
     @Override
-    public Set<String> findExistingNames(@NonNull Set<String> names, @NonNull String workspaceId) {
+    public Set<String> findExistingNames(Set<String> names, @NonNull String workspaceId) {
         if (CollectionUtils.isEmpty(names)) {
             return Set.of();
         }
         return template.inTransaction(READ_ONLY, handle -> handle.attach(EnvironmentDAO.class)
-                .findExistingNames(workspaceId, names));
+                .findNames(workspaceId, names));
     }
 
     private void trackEnvironmentCreatedEvent(Environment environment, String workspaceId, String userName,

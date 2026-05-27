@@ -4,6 +4,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -77,7 +78,7 @@ interface PromptVersionDAO {
 
     default void saveEnvironments(List<UUID> ids, String workspaceId, UUID promptId, UUID versionId,
             Set<String> environments, String createdBy) {
-        if (environments == null || environments.isEmpty()) {
+        if (CollectionUtils.isEmpty(environments)) {
             return;
         }
         saveEnvironments(ids, workspaceId, promptId, versionId, List.copyOf(environments), createdBy);
@@ -85,39 +86,52 @@ interface PromptVersionDAO {
 
     @SqlQuery("""
             SELECT environment FROM prompt_version_envs
-            WHERE workspace_id = :workspace_id AND version_id = :version_id AND ended_at IS NULL
+            WHERE workspace_id = :workspace_id
+            <if(version_id)> AND version_id = :version_id <endif>
+            <if(prompt_id)> AND prompt_id = :prompt_id <endif>
+            <if(environments)> AND environment IN (<environments>) <endif>
+            AND ended_at IS NULL
             """)
-    Set<String> findVersionEnvironments(@Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId);
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Set<String> findActiveEnvironments(
+            @Bind("workspace_id") String workspaceId,
+            @Define("version_id") @Bind("version_id") UUID versionId,
+            @Define("prompt_id") @Bind("prompt_id") UUID promptId,
+            @Define("environments") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "environments") Set<String> environments);
+
+    default Set<String> findVersionEnvironments(UUID versionId, String workspaceId) {
+        return findActiveEnvironments(workspaceId, versionId, null, null);
+    }
+
+    default Set<String> findTakenEnvironments(UUID promptId, String workspaceId, Set<String> environments) {
+        return findActiveEnvironments(workspaceId, null, promptId, environments);
+    }
 
     @SqlUpdate("""
             UPDATE prompt_version_envs
             SET ended_at = CURRENT_TIMESTAMP(6)
-            WHERE workspace_id = :workspace_id AND version_id = :version_id AND ended_at IS NULL
+            WHERE workspace_id = :workspace_id
+            <if(version_id)> AND version_id = :version_id <endif>
+            <if(prompt_id)> AND prompt_id = :prompt_id <endif>
+            <if(environments)> AND environment IN (<environments>) <endif>
+            AND ended_at IS NULL
             """)
-    void closeVersionEnvironments(@Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId);
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    void closeEnvironmentAssignments(
+            @Bind("workspace_id") String workspaceId,
+            @Define("version_id") @Bind("version_id") UUID versionId,
+            @Define("prompt_id") @Bind("prompt_id") UUID promptId,
+            @Define("environments") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "environments") Set<String> environments);
 
-    @SqlUpdate("""
-            UPDATE prompt_version_envs
-            SET ended_at = CURRENT_TIMESTAMP(6)
-            WHERE workspace_id = :workspace_id AND version_id = :version_id AND environment IN (<environments>) AND ended_at IS NULL
-            """)
-    void closeVersionEnvironmentsForNames(@Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId,
-            @BindList("environments") Set<String> environments);
+    default void closeVersionEnvironmentsForNames(UUID versionId, String workspaceId, Set<String> environments) {
+        closeEnvironmentAssignments(workspaceId, versionId, null, environments);
+    }
 
-    @SqlUpdate("""
-            UPDATE prompt_version_envs
-            SET ended_at = CURRENT_TIMESTAMP(6)
-            WHERE workspace_id = :workspace_id AND prompt_id = :prompt_id AND environment IN (<environments>) AND ended_at IS NULL
-            """)
-    void closeEnvOwnershipsForPrompt(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId,
-            @BindList("environments") Set<String> environments);
-
-    @SqlQuery("""
-            SELECT environment FROM prompt_version_envs
-            WHERE workspace_id = :workspace_id AND prompt_id = :prompt_id AND environment IN (<environments>) AND ended_at IS NULL
-            """)
-    Set<String> findTakenEnvironments(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId,
-            @BindList("environments") Set<String> environments);
+    default void closeEnvOwnershipsForPrompt(UUID promptId, String workspaceId, Set<String> environments) {
+        closeEnvironmentAssignments(workspaceId, null, promptId, environments);
+    }
 
     @SqlQuery("""
             WITH paginated AS (
@@ -215,26 +229,30 @@ interface PromptVersionDAO {
                 (SELECT JSON_ARRAYAGG(pve.environment) FROM prompt_version_envs pve WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL) AS environments
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
-            WHERE pv.prompt_id = :prompt_id AND pv.commit = :commit AND pv.workspace_id = :workspace_id
+            <if(environment)>
+            INNER JOIN prompt_version_envs pve ON pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.environment = :environment AND pve.ended_at IS NULL
+            <endif>
+            WHERE pv.prompt_id = :prompt_id AND pv.workspace_id = :workspace_id
             AND pv.version_type = 'prompt_version'
+            <if(commit)> AND pv.commit = :commit <endif>
+            <if(version_number)> AND pv.version_number = :version_number <endif>
             """)
-    PromptVersion findByCommit(@Bind("prompt_id") UUID promptId, @Bind("commit") String commit,
-            @Bind("workspace_id") String workspaceId);
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    PromptVersion findSingleVersion(
+            @Bind("prompt_id") UUID promptId,
+            @Bind("workspace_id") String workspaceId,
+            @Define("commit") @Bind("commit") String commit,
+            @Define("version_number") @Bind("version_number") String versionNumber,
+            @Define("environment") @Bind("environment") String environment);
 
-    @SqlQuery("""
-            SELECT pv.*,
-                p.template_structure,
-                (SELECT JSON_ARRAYAGG(pve.environment) FROM prompt_version_envs pve WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL) AS environments
-            FROM prompt_versions pv
-            INNER JOIN prompts p ON pv.prompt_id = p.id
-            WHERE pv.prompt_id = :prompt_id
-            AND pv.version_number = :version_number
-            AND pv.workspace_id = :workspace_id
-            AND pv.version_type = 'prompt_version'
-            """)
-    PromptVersion findByVersionNumber(@Bind("prompt_id") UUID promptId,
-            @Bind("version_number") String versionNumber,
-            @Bind("workspace_id") String workspaceId);
+    default PromptVersion findByCommit(UUID promptId, String commit, String workspaceId) {
+        return findSingleVersion(promptId, workspaceId, commit, null, null);
+    }
+
+    default PromptVersion findByVersionNumber(UUID promptId, String versionNumber, String workspaceId) {
+        return findSingleVersion(promptId, workspaceId, null, versionNumber, null);
+    }
 
     @SqlQuery("""
             SELECT COALESCE(MAX(CAST(SUBSTRING(version_number, 2) AS UNSIGNED)), 0)
@@ -295,18 +313,9 @@ interface PromptVersionDAO {
     @SqlUpdate("DELETE FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id")
     int deleteByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);
 
-    @SqlQuery("""
-            SELECT pv.*,
-                p.template_structure,
-                (SELECT JSON_ARRAYAGG(pve2.environment) FROM prompt_version_envs pve2 WHERE pve2.workspace_id = pv.workspace_id AND pve2.version_id = pv.id AND pve2.ended_at IS NULL) AS environments
-            FROM prompt_versions pv
-            INNER JOIN prompts p ON pv.prompt_id = p.id
-            INNER JOIN prompt_version_envs pve ON pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id
-            WHERE pv.prompt_id = :prompt_id AND pve.environment = :environment AND pv.workspace_id = :workspace_id
-            AND pv.version_type = 'prompt_version' AND pve.ended_at IS NULL
-            """)
-    PromptVersion findByEnvironment(@Bind("prompt_id") UUID promptId, @Bind("environment") String environment,
-            @Bind("workspace_id") String workspaceId);
+    default PromptVersion findByEnvironment(UUID promptId, String environment, String workspaceId) {
+        return findSingleVersion(promptId, workspaceId, null, null, environment);
+    }
 
     @SqlQuery("""
             SELECT pv.id, pv.commit, p.name AS prompt_name

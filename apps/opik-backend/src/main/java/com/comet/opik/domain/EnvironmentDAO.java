@@ -68,10 +68,6 @@ interface EnvironmentDAO {
         return findNames(workspaceId, null);
     }
 
-    default Set<String> findExistingNames(String workspaceId, Set<String> names) {
-        return findNames(workspaceId, names);
-    }
-
     @SqlQuery("SELECT COUNT(*) FROM environments WHERE workspace_id = :workspaceId AND name = :name")
     long countByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name);
 
