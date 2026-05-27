@@ -22,6 +22,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.api.validation.DatasetItemBatchValidator;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -1370,10 +1371,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Applying delta changes for dataset '{}', baseVersion '{}', override '{}'",
                     datasetId, changes.baseVersion(), override);
 
-            // OPIK-6696: copy_from_dataset_id and copy_from_version_id must be set together.
-            if ((changes.copyFromDatasetId() == null) != (changes.copyFromVersionId() == null)) {
-                return Mono.error(new BadRequestException(
-                        "copy_from_dataset_id and copy_from_version_id must be provided together"));
+            // OPIK-6696: copy_from_dataset_id and copy_from_version_id must be set together. Shares the
+            // rule and error text with DatasetItemBatchValidator (the DatasetItemBatch endpoint).
+            if (!DatasetItemBatchValidator.isCopyFromPairConsistent(changes.copyFromDatasetId(),
+                    changes.copyFromVersionId())) {
+                return Mono.error(new BadRequestException(DatasetItemBatchValidator.COPY_FROM_PAIR_MESSAGE));
             }
 
             // Verify dataset exists (using explicit workspaceId since we're in reactive context)
@@ -1449,19 +1451,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
             // caller supplied instead of the destination's just-minted prior version. For migrate
             // this is source v_i — stable and fully replicated, avoiding the multi-replica
             // read-after-write window.
-            UUID copyDatasetId = changes.copyFromDatasetId() != null ? changes.copyFromDatasetId() : datasetId;
-            UUID copyVersionId = changes.copyFromVersionId() != null ? changes.copyFromVersionId() : baseVersionId;
-
-            // Validate caller-supplied copy-from coords resolve to a real (workspace-scoped) version
-            // on the named dataset. Without this, a bogus or cross-workspace pair would silently
-            // produce a new version with zero carry-forwards instead of returning an error.
-            if (changes.copyFromDatasetId() != null) {
-                DatasetVersion sourceVersion = versionService.getVersionById(workspaceId, copyDatasetId, copyVersionId);
-                if (!sourceVersion.datasetId().equals(copyDatasetId)) {
-                    return Mono.error(new NotFoundException(
-                            "Version '%s' does not belong to dataset '%s'".formatted(copyVersionId, copyDatasetId)));
-                }
-            }
+            CopyFromCoordinates copyFrom = resolveAndValidateCopyFrom(workspaceId, changes.copyFromDatasetId(),
+                    changes.copyFromVersionId(), datasetId, baseVersionId);
+            UUID copyDatasetId = copyFrom.datasetId();
+            UUID copyVersionId = copyFrom.versionId();
 
             // OPIK-6390: size the unchanged-UUID pool from a live ClickHouse count instead of the
             // MySQL items_total, which can drift below the actual row count and silently truncate
@@ -1846,6 +1839,30 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 });
     }
 
+    private record CopyFromCoordinates(UUID datasetId, UUID versionId) {
+    }
+
+    // OPIK-6696: resolves the source the carry-forward COPY (and supporting reads) runs against — the
+    // caller-supplied (dataset, version) pair when provided, otherwise the destination's prior version.
+    // When the caller supplies coordinates, validates they resolve to a real workspace-scoped version on
+    // the named dataset, throwing NotFound otherwise — without this a bogus or cross-workspace pair would
+    // silently produce a version with all incoming items classified as adds and zero carry-forwards.
+    private CopyFromCoordinates resolveAndValidateCopyFrom(String workspaceId, UUID copyFromDatasetId,
+            UUID copyFromVersionId, UUID fallbackDatasetId, UUID fallbackVersionId) {
+
+        if (copyFromDatasetId == null) {
+            return new CopyFromCoordinates(fallbackDatasetId, fallbackVersionId);
+        }
+
+        DatasetVersion sourceVersion = versionService.getVersionById(workspaceId, copyFromDatasetId,
+                copyFromVersionId);
+        if (!sourceVersion.datasetId().equals(copyFromDatasetId)) {
+            throw new NotFoundException(
+                    "Version '%s' does not belong to dataset '%s'".formatted(copyFromVersionId, copyFromDatasetId));
+        }
+        return new CopyFromCoordinates(copyFromDatasetId, copyFromVersionId);
+    }
+
     private Mono<DatasetVersion> createVersionWithDelta(UUID datasetId, UUID baseVersionId,
             List<DatasetItem> items, UUID batchGroupId, String workspaceId, String userName,
             UUID copyFromDatasetId, UUID copyFromVersionId) {
@@ -1854,20 +1871,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // classification SELECT both read from that (dataset, version) pair instead of the
         // destination's just-minted prior version. For migrate this is source v_i — stable, fully
         // replicated, free of the multi-replica read-after-write window.
-        UUID copyDatasetId = copyFromDatasetId != null ? copyFromDatasetId : datasetId;
-        UUID copyVersionId = copyFromVersionId != null ? copyFromVersionId : baseVersionId;
-
-        // Validate caller-supplied copy-from coords resolve to a real (workspace-scoped) version
-        // on the named dataset. Without this, a bogus or cross-workspace pair would silently produce
-        // a new version with all incoming items classified as adds (the classification SELECT would
-        // return empty) and no carry-forwards (the COPY would also return empty).
-        if (copyFromDatasetId != null) {
-            DatasetVersion sourceVersion = versionService.getVersionById(workspaceId, copyDatasetId, copyVersionId);
-            if (!sourceVersion.datasetId().equals(copyDatasetId)) {
-                return Mono.error(new NotFoundException(
-                        "Version '%s' does not belong to dataset '%s'".formatted(copyVersionId, copyDatasetId)));
-            }
-        }
+        CopyFromCoordinates copyFrom = resolveAndValidateCopyFrom(workspaceId, copyFromDatasetId, copyFromVersionId,
+                datasetId, baseVersionId);
+        UUID copyDatasetId = copyFrom.datasetId();
+        UUID copyVersionId = copyFrom.versionId();
 
         log.info(
                 "Creating version with delta for dataset '{}', baseVersion '{}', itemCount '{}', copyFromDatasetId '{}', copyFromVersionId '{}'",

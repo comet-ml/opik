@@ -488,9 +488,11 @@ public class DatasetsResource {
         }
     }
 
-    // OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward read source to a
-    // specific (dataset, version) pair, avoiding the multi-replica read-after-write window when
-    // chaining version writes against a destination that may not have replicated yet.
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward read source to a
+     * specific (dataset, version) pair, avoiding the multi-replica read-after-write window when
+     * chaining version writes against a destination that may not have replicated yet.
+     */
     @PUT
     @Path("/items")
     @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = """
@@ -617,9 +619,11 @@ public class DatasetsResource {
         return Response.status(Response.Status.ACCEPTED).build();
     }
 
-    // OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward (and edit-via-SELECT-INSERT)
-    // read source to a specific (dataset, version) pair, avoiding the multi-replica read-after-write window
-    // when chaining version writes against a destination that may not have replicated yet.
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward (and edit-via-SELECT-INSERT)
+     * read source to a specific (dataset, version) pair, avoiding the multi-replica read-after-write window
+     * when chaining version writes against a destination that may not have replicated yet.
+     */
     @POST
     @Path("/{id}/items/changes")
     @Operation(operationId = "applyDatasetItemChanges", summary = "Apply changes to dataset items", description = """
