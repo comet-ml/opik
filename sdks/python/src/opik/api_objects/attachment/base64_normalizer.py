@@ -17,17 +17,10 @@ import binascii
 import re
 from typing import Any
 
+from . import decoder_helpers
+
 _URLSAFE_BASE64_RE = re.compile(r"[A-Za-z0-9_-]+={0,2}")
 _MIN_BASE64_IMAGE_LENGTH = 24
-_IMAGE_HEADER_SIGNATURES = (
-    b"\x89PNG\r\n\x1a\n",
-    b"\xff\xd8\xff",
-    b"GIF87a",
-    b"GIF89a",
-    b"RIFF",
-    b"II*\x00",
-    b"MM\x00*",
-)
 
 
 def normalize_urlsafe_base64_images_in_place(node: Any) -> None:
@@ -69,7 +62,7 @@ def is_urlsafe_base64_image(value: str) -> bool:
         decoded = base64.urlsafe_b64decode(head)
     except (binascii.Error, ValueError):
         return False
-    return any(decoded.startswith(sig) for sig in _IMAGE_HEADER_SIGNATURES)
+    return decoder_helpers.detect_image_mime_type_from_header(decoded) is not None
 
 
 def urlsafe_to_standard_base64(value: str) -> str:
