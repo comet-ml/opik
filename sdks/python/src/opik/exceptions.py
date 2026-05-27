@@ -199,6 +199,12 @@ class EnvironmentAlreadyExists(OpikException):
     pass
 
 
+class EnvironmentColorUpdateNotAllowed(OpikException):
+    """Raised when trying to change the colour of a built-in environment."""
+
+    pass
+
+
 class LLMJudgeParseError(OpikException):
     """Raised when LLMJudge output fails validation.
 

@@ -1137,6 +1137,8 @@ class Opik:
         page = self._rest_client.environments.find_environments()
         return list(page.content or [])
 
+    _BUILTIN_ENVIRONMENT_NAMES = frozenset({"production", "staging", "development"})
+
     def update_environment(
         self,
         name: str,
@@ -1147,6 +1149,11 @@ class Opik:
 
         Returns the updated environment.
         """
+        if color is not None and name in self._BUILTIN_ENVIRONMENT_NAMES:
+            raise exceptions.EnvironmentColorUpdateNotAllowed(
+                f"Cannot change the colour of the built-in environment {name!r}. "
+                "Colour updates are not allowed for 'production', 'staging', or 'development'."
+            )
         existing = self._find_environment_by_name(name)
         if existing is None:
             raise exceptions.OpikException(f"No environment found with name {name!r}.")

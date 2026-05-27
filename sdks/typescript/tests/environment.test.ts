@@ -10,7 +10,10 @@
  * - Back-compat: traces without `environment` still serialize fine.
  */
 import { Opik } from "opik";
-import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
+import {
+  EnvironmentAlreadyExistsError,
+  EnvironmentColorUpdateNotAllowedError,
+} from "@/errors/environment/errors";
 import { OpikApiError } from "@/rest_api";
 import {
   _resetTrackOpikClientCache,
@@ -125,6 +128,61 @@ describe("environment feature", () => {
       expect(warnSpy).toHaveBeenCalledOnce();
       expect(warnSpy.mock.calls[0][0]).toContain("staging");
       expect(warnSpy.mock.calls[0][0]).toContain("production");
+    });
+  });
+
+  describe("updateEnvironment", () => {
+    it.each(["production", "staging", "development"])(
+      "throws EnvironmentColorUpdateNotAllowedError when changing colour of %s",
+      async (envName) => {
+        const client = new Opik();
+        await expect(
+          client.updateEnvironment(envName, { color: "#ff0000" })
+        ).rejects.toThrow(EnvironmentColorUpdateNotAllowedError);
+        await expect(
+          client.updateEnvironment(envName, { color: "#ff0000" })
+        ).rejects.toThrow(envName);
+      }
+    );
+
+    it("does not throw when updating description only on a built-in environment", async () => {
+      const client = new Opik();
+      const fakeEnv = { id: "abc", name: "production" };
+      vi.spyOn(client.api.environments, "findEnvironments").mockResolvedValue({
+        content: [fakeEnv],
+      } as never);
+      vi.spyOn(
+        client.api.environments,
+        "updateEnvironment"
+      ).mockResolvedValue(undefined as never);
+      vi.spyOn(
+        client.api.environments,
+        "getEnvironmentById"
+      ).mockResolvedValue(fakeEnv as never);
+
+      await expect(
+        client.updateEnvironment("production", { description: "updated" })
+      ).resolves.toEqual(fakeEnv);
+    });
+
+    it("allows colour update on a custom (non-built-in) environment", async () => {
+      const client = new Opik();
+      const fakeEnv = { id: "xyz", name: "my-custom-env" };
+      vi.spyOn(client.api.environments, "findEnvironments").mockResolvedValue({
+        content: [fakeEnv],
+      } as never);
+      vi.spyOn(
+        client.api.environments,
+        "updateEnvironment"
+      ).mockResolvedValue(undefined as never);
+      vi.spyOn(
+        client.api.environments,
+        "getEnvironmentById"
+      ).mockResolvedValue(fakeEnv as never);
+
+      await expect(
+        client.updateEnvironment("my-custom-env", { color: "#123456" })
+      ).resolves.toEqual(fakeEnv);
     });
   });
 

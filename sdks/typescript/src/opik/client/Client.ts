@@ -70,7 +70,10 @@ import {
 import { trackStorage, getTrackContext } from "@/decorators/track";
 import { UpdateService } from "@/tracer/UpdateService";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
-import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
+import {
+  EnvironmentAlreadyExistsError,
+  EnvironmentColorUpdateNotAllowedError,
+} from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
@@ -2053,10 +2056,22 @@ export class OpikClient {
     return page.content ?? [];
   };
 
+  private static readonly BUILTIN_ENVIRONMENT_NAMES = new Set([
+    "production",
+    "staging",
+    "development",
+  ]);
+
   public updateEnvironment = async (
     name: string,
     options?: { description?: string; color?: string }
   ): Promise<OpikApi.EnvironmentPublic> => {
+    if (
+      options?.color !== undefined &&
+      OpikClient.BUILTIN_ENVIRONMENT_NAMES.has(name)
+    ) {
+      throw new EnvironmentColorUpdateNotAllowedError(name);
+    }
     const existing = await this._findEnvironmentByName(name, true);
     await this.api.environments.updateEnvironment(existing!.id!, {
       description: options?.description,
