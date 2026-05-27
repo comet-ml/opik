@@ -25,6 +25,7 @@ import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -43,9 +44,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.retry.Retry;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
@@ -2537,6 +2536,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code ClickHouse/clickhouse-java#2860}.
      */
     private final @NonNull Client clickHouseClient;
+    private final @NonNull ZeroRowsRetryPolicy zeroRowsRetryPolicy;
 
     @Override
     @WithSpan
@@ -3023,56 +3023,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
-    // OPIK-6674: zero-rows retry guard for INSERT...SELECT on dataset_item_versions.
-    // The COPY/EDIT paths can return 0 rows written when the SELECT runs against a
-    // ClickHouse replica that doesn't yet have the source version's parts visible
-    // (cross-replica race under async_insert + no quorum). Retrying with backoff
-    // lets the load balancer rotate to another replica and/or gives replication
-    // time to catch up. After the retries are exhausted we surface a typed
-    // exception instead of silently committing a truncated version.
-    //
-    // All knobs (maxAttempts, minBackoffMillis, maxBackoffMillis) are configurable
-    // via OpikConfiguration.datasetVersioning.zeroRowsRetry.
-    public static class ZeroRowsWrittenException extends RuntimeException {
-        public ZeroRowsWrittenException(String message) {
-            super(message);
-        }
-    }
-
-    /**
-     * Reverses {@link FilterUtils#generateUuidPool}'s sizing (count × UUID_POOL_MULTIPLIER, floor 1)
-     * to recover the expected row count. A pool size ≤ 1 corresponds to count 0 (the floor kicked in).
-     */
-    private static int expectedRowsFromPool(List<UUID> pool) {
-        return pool.size() <= 1 ? 0 : pool.size() / FilterUtils.UUID_POOL_MULTIPLIER;
-    }
-
-    private Mono<Long> retryIfZeroRows(Mono<Long> operation, long expectedRows, String operationLabel) {
-        if (expectedRows <= 0L) {
-            return operation;
-        }
-        var retryCfg = config.getDatasetVersioning().getZeroRowsRetry();
-        int maxAttempts = retryCfg.getMaxAttempts();
-        Duration minBackoff = Duration.ofMillis(retryCfg.getMinBackoffMillis());
-        Duration maxBackoff = Duration.ofMillis(retryCfg.getMaxBackoffMillis());
-        return operation
-                .flatMap(actual -> {
-                    if (actual == 0L) {
-                        return Mono.error(new ZeroRowsWrittenException(
-                                "%s returned 0 rows; expected %s".formatted(operationLabel, expectedRows)));
-                    }
-                    return Mono.just(actual);
-                })
-                .retryWhen(Retry
-                        .backoff(maxAttempts, minBackoff)
-                        .maxBackoff(maxBackoff)
-                        .filter(ZeroRowsWrittenException.class::isInstance)
-                        .doBeforeRetry(rs -> log.warn(
-                                "[{}] returned 0 rows; retrying (attempt {}/{})",
-                                operationLabel, rs.totalRetries() + 1, maxAttempts))
-                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
-    }
-
     /**
      * Copies items from a source version into a target version via {@code INSERT ... SELECT}.
      *
@@ -3080,7 +3030,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * authoritative {@code written_rows} from the server, not an interim progress reading
      * (see OPIK-6674 and {@code ClickHouse/clickhouse-java#2860}).
      *
-     * <p>The result is wrapped in {@link #retryIfZeroRows} so that a 0-row outcome with a
+     * <p>The result is wrapped in {@link ZeroRowsRetryPolicy} so that a 0-row outcome with a
      * non-empty input set is retried with backoff before being surfaced as an error.
      */
     @Override
@@ -3093,10 +3043,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 sourceVersionId, targetVersionId, datasetId,
                 excludeFilters != null ? excludeFilters.size() : 0, uuids.size());
 
-        return retryIfZeroRows(
+        return zeroRowsRetryPolicy.retryOnZeroRows(
                 executeCopyVersionItems(datasetId, sourceVersionId, targetVersionId, uuids,
                         null /* excludedIds */, excludeFilters),
-                expectedRowsFromPool(uuids), "copyVersionItems");
+                FilterUtils.expectedRowsFromPool(uuids), "copyVersionItems");
     }
 
     /**
@@ -3141,7 +3091,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             params.put("workspace_id", workspaceId);
             params.put("user_name", userName);
             if (hasExcludeFilters) {
-                FilterQueryBuilder.bindV2Client(params, excludeFilters, FilterStrategy.DATASET_ITEM);
+                FilterQueryBuilder.populateV2ClientParams(params, excludeFilters, FilterStrategy.DATASET_ITEM);
             }
 
             QuerySettings settings = new QuerySettings()
@@ -3217,7 +3167,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Edits a batch of dataset items by INSERTing a new row per item via {@code INSERT ... SELECT}.
      *
      * <p>Each item runs against the v2 ClickHouse client (OPIK-6674) so {@code getWrittenRows()}
-     * reflects the authoritative server count. The actual sum is fed to {@link #retryIfZeroRows};
+     * reflects the authoritative server count. The actual sum is fed to {@link ZeroRowsRetryPolicy};
      * on success we still report {@code itemCount} to preserve the original API contract.
      *
      * <p>Retries re-insert the same rows with the same {@code newRowIds}; ReplacingMergeTree
@@ -3235,7 +3185,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         long itemCount = editedItems.size();
 
-        return retryIfZeroRows(
+        return zeroRowsRetryPolicy.retryOnZeroRows(
                 executeEditItemsViaSelectInsert(datasetId, baseVersionId, newVersionId, editedItems, newRowIds),
                 itemCount, "editItemsViaSelectInsert")
                 .map(actualSum -> itemCount);
@@ -3339,7 +3289,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName));
 
-        return retryIfZeroRows(copy, expectedRowsFromPool(uuids), "copyUnchangedItems");
+        return zeroRowsRetryPolicy.retryOnZeroRows(copy, FilterUtils.expectedRowsFromPool(uuids),
+                "copyUnchangedItems");
     }
 
     @Override

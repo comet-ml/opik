@@ -1388,14 +1388,14 @@ datasetVersioning:
     # while the input set was non-empty. Total call count = maxAttempts + 1 (initial + retries).
     # Set to 0 to disable retries (the guard still surfaces the failure as an exception).
     maxAttempts: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_ATTEMPTS:-3}
-    # Default: 100
-    # Description: Minimum backoff between retries, in milliseconds. Actual delay
-    # grows exponentially from this value up to maxBackoffMillis.
-    minBackoffMillis: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MIN_BACKOFF_MILLIS:-100}
-    # Default: 1000
-    # Description: Maximum backoff between retries, in milliseconds. Caps the
-    # exponential growth of the per-attempt delay.
-    maxBackoffMillis: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_BACKOFF_MILLIS:-1000}
+    # Default: 100ms
+    # Description: Minimum backoff between retries. Actual delay grows exponentially
+    # from this value up to maxBackoff.
+    minBackoff: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MIN_BACKOFF:-100ms}
+    # Default: 1s
+    # Description: Maximum backoff between retries. Caps the exponential growth of
+    # the per-attempt delay.
+    maxBackoff: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_BACKOFF:-1s}
 
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).

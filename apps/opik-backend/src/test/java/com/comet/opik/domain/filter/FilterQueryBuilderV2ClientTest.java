@@ -12,12 +12,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for the v2-client entry points on {@link FilterQueryBuilder}:
  * {@link FilterQueryBuilder#toAnalyticsDbFiltersV2Client} and
- * {@link FilterQueryBuilder#bindV2Client}.
+ * {@link FilterQueryBuilder#populateV2ClientParams}.
  *
  * <p>Together these enable {@code com.clickhouse.client.api.Client#query(sql, params, settings)}
  * to consume the same filter expressions built for the r2dbc driver, with v2 {@code {name:Type}}
@@ -139,8 +138,8 @@ class FilterQueryBuilderV2ClientTest {
     }
 
     @Nested
-    @DisplayName("bindV2Client")
-    class BindV2Client {
+    @DisplayName("populateV2ClientParams")
+    class PopulateV2ClientParams {
 
         @Test
         @DisplayName("Single-value filter binds the raw value")
@@ -148,7 +147,7 @@ class FilterQueryBuilderV2ClientTest {
             var filter = new DatasetItemFilter(DatasetItemField.SOURCE, Operator.EQUAL, null, "manual");
             Map<String, Object> params = new HashMap<>();
 
-            FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
+            FilterQueryBuilder.populateV2ClientParams(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
             assertThat(params).containsEntry("filter0", "manual");
         }
@@ -159,7 +158,7 @@ class FilterQueryBuilderV2ClientTest {
             var filter = new DatasetItemFilter(DatasetItemField.SOURCE, Operator.IN, null, "manual,sdk,unknown");
             Map<String, Object> params = new HashMap<>();
 
-            FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
+            FilterQueryBuilder.populateV2ClientParams(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
             // The v2 client serialises map values via String.valueOf; we must emit a CH literal
             // ourselves so we don't end up with the unquoted Java array form [manual, sdk, unknown].
@@ -172,7 +171,7 @@ class FilterQueryBuilderV2ClientTest {
             var filter = new DatasetItemFilter(DatasetItemField.SOURCE, Operator.IN, null, " manual , , sdk,");
             Map<String, Object> params = new HashMap<>();
 
-            FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
+            FilterQueryBuilder.populateV2ClientParams(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
             assertThat(params).containsEntry("filter0", "['manual','sdk']");
         }
@@ -185,7 +184,7 @@ class FilterQueryBuilderV2ClientTest {
             var filter = new DatasetItemFilter(DatasetItemField.SOURCE, Operator.IN, null, malicious);
             Map<String, Object> params = new HashMap<>();
 
-            FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
+            FilterQueryBuilder.populateV2ClientParams(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
             // ClickHouseUtil escapes ' as \' (C-style). The resulting literal stays inside a
             // single-element array — no SQL escape.
@@ -202,7 +201,7 @@ class FilterQueryBuilderV2ClientTest {
             var filter = new DatasetItemFilter(DatasetItemField.SOURCE, Operator.IN, null, malicious);
             Map<String, Object> params = new HashMap<>();
 
-            FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
+            FilterQueryBuilder.populateV2ClientParams(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
             // Backslash → \\, quote → \' — the whole payload stays a single element.
             assertThat(params).containsEntry("filter0", "['x\\\\\\';DROP;--']");
@@ -215,18 +214,6 @@ class FilterQueryBuilderV2ClientTest {
         }
 
         @Test
-        @DisplayName("formatStringArrayLiteral: null element is rejected with a clear message")
-        void formatStringArrayLiteral__nullElement__throwsNpe() {
-            var values = new java.util.ArrayList<String>();
-            values.add("ok");
-            values.add(null);
-
-            assertThatThrownBy(() -> FilterQueryBuilder.formatStringArrayLiteral(values))
-                    .isInstanceOf(NullPointerException.class)
-                    .hasMessageContaining("must not be null");
-        }
-
-        @Test
         @DisplayName("Operators with no value (e.g. IS_EMPTY) do not bind a filter param")
         void bind__noValueOperator__noFilterParam() {
             // IS_EMPTY/IS_NOT_EMPTY don't consume the value, but the DTO requires a non-null
@@ -234,7 +221,7 @@ class FilterQueryBuilderV2ClientTest {
             var filter = new DatasetItemFilter(DatasetItemField.SOURCE, Operator.IS_EMPTY, null, "");
             Map<String, Object> params = new HashMap<>();
 
-            FilterQueryBuilder.bindV2Client(params, List.of(filter), FilterStrategy.DATASET_ITEM);
+            FilterQueryBuilder.populateV2ClientParams(params, List.of(filter), FilterStrategy.DATASET_ITEM);
 
             assertThat(params).doesNotContainKey("filter0");
         }

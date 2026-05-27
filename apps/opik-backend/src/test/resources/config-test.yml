@@ -740,16 +740,9 @@ datasetVersioningMigration:
 # (async_insert_busy_timeout_max_ms=60) while keeping tests reasonably fast.
 datasetVersioning:
   zeroRowsRetry:
-    # Default: 3
-    # Description: Number of retry attempts when an INSERT...SELECT writes 0 rows
-    # while the input set was non-empty.
     maxAttempts: 3
-    # Default: 100
-    # Description: Minimum backoff between retries, in milliseconds.
-    minBackoffMillis: 100
-    # Default: 1000
-    # Description: Maximum backoff between retries, in milliseconds.
-    maxBackoffMillis: 500
+    minBackoff: 100ms
+    maxBackoff: 500ms
 
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).

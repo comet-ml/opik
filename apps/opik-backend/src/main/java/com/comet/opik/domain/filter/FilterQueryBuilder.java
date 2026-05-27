@@ -19,6 +19,7 @@ import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.sorting.SortingField;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
@@ -34,10 +35,10 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.filter.Operator.NO_VALUE_OPERATORS;
@@ -866,7 +867,7 @@ public class FilterQueryBuilder {
     /**
      * V2-client entry point that mirrors {@link #toAnalyticsDbFilters} but emits placeholders
      * in the v2 ClickHouse client's {@code {name:Type}} form instead of the r2dbc {@code :name}
-     * form. Pair with {@link #bindV2Client} for the matching parameter binding.
+     * form. Pair with {@link #populateV2ClientParams} for the matching parameter binding.
      */
     public static Optional<String> toAnalyticsDbFiltersV2Client(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
@@ -1052,9 +1053,10 @@ public class FilterQueryBuilder {
     }
 
     /**
-     * V2-client entry point: binds the same filter parameters as
-     * {@link #bind(Statement, List, FilterStrategy)} into a {@code Map<String, Object>}
-     * suitable for the v2 ClickHouse client's {@code query(sql, params, settings)} API.
+     * V2-client entry point: produces the same filter parameters as
+     * {@link #bind(Statement, List, FilterStrategy)} but populates a {@code Map<String, Object>}
+     * for the v2 ClickHouse client's {@code query(sql, params, settings)} API instead of binding
+     * to a {@link Statement}.
      *
      * <p>Multi-value operator values are pre-rendered as a ClickHouse array literal string
      * (e.g. {@code ['a','b']}) because the v2 client serialises Map values via
@@ -1062,7 +1064,7 @@ public class FilterQueryBuilder {
      *
      * <p>Pair with {@link #toAnalyticsDbFiltersV2Client} for the matching SQL fragment.
      */
-    public static void bindV2Client(
+    public static void populateV2ClientParams(
             @NonNull Map<String, Object> params,
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy) {
@@ -1081,7 +1083,7 @@ public class FilterQueryBuilder {
      * (name, value) pairs through the supplied {@code binder}.
      */
     private static void bindUsing(
-            @NonNull java.util.function.BiConsumer<String, Object> binder,
+            @NonNull BiConsumer<String, Object> binder,
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy) {
         for (var i = 0; i < filters.size(); i++) {
@@ -1150,13 +1152,14 @@ public class FilterQueryBuilder {
      * substring overlaps like {@code :filter1} inside {@code :filter12} resolve to the
      * longer name first.
      *
-     * <p>Package-private: {@link #toAnalyticsDbFiltersV2Client} is the public entry point
-     * that bundles this rewrite with the SQL generation.
+     * <p>{@link #toAnalyticsDbFiltersV2Client} is the public entry point that bundles this
+     * rewrite with the SQL generation; this method is exposed only for direct unit testing.
      *
      * @param sql     SQL fragment containing {@code :name} placeholders
      * @param filters filters that were used to build {@code sql}; their order determines
      *                the param indices ({@code :filter0}, {@code :filter1}, …)
      */
+    @VisibleForTesting
     static String rewritePlaceholdersForV2Client(@NonNull String sql, @NonNull List<? extends Filter> filters) {
         String out = sql;
         for (int i = filters.size() - 1; i >= 0; i--) {
@@ -1183,18 +1186,12 @@ public class FilterQueryBuilder {
      * (backslash, single-quote, backtick, newline, tab, etc.). This closes injection vectors
      * like {@code x';DROP TABLE...} and {@code x\';...} by emitting {@code \'} and {@code \\}.
      *
-     * @throws NullPointerException if {@code values} is null or contains a null element
+     * @throws NullPointerException if {@code values} is null
      */
-    public static String formatStringArrayLiteral(@NonNull Collection<String> values) {
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
-        for (String v : values) {
-            Objects.requireNonNull(v, "ClickHouse Array(String) literal element must not be null");
-            if (!first) sb.append(',');
-            first = false;
-            sb.append('\'').append(ClickHouseUtil.escape(v)).append('\'');
-        }
-        return sb.append(']').toString();
+    public static String formatStringArrayLiteral(@NonNull Collection<@NonNull String> values) {
+        return values.stream()
+                .map(value -> "'" + ClickHouseUtil.escape(value) + "'")
+                .collect(Collectors.joining(",", "[", "]"));
     }
 
     /**
