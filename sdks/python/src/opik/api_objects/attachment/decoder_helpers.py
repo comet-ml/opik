@@ -57,8 +57,6 @@ _IMAGE_HEADER_SIGNATURES = (
     (b"\xff\xd8\xff", "image/jpeg"),
     (b"GIF87a", "image/gif"),
     (b"GIF89a", "image/gif"),
-    (b"II*\x00", "image/tiff"),
-    (b"MM\x00*", "image/tiff"),
 )
 
 
