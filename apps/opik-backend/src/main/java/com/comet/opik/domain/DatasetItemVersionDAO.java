@@ -1822,6 +1822,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     SETTINGS short_circuit_function_evaluation = 'force_enable'
                     """;
 
+    // OPIK-6696: the inserted rows carry :targetDatasetId, not the source's dataset_id. This supports
+    // cross-dataset edit-via-SELECT-INSERT where the read source (:sourceDatasetId) differs from the
+    // destination dataset.
     private static final String EDIT_ITEM_VIA_SELECT_INSERT = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -1850,7 +1853,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             SELECT
                 :newId as id,
                 src.dataset_item_id,
-                -- OPIK-6696: target dataset_id, not source's (cross-dataset edit-via-SELECT-INSERT)
                 :targetDatasetId as dataset_id,
                 :newVersionId as dataset_version_id,
                 <if(data)> mapFromArrays(:data_keys, :data_values) <else> src.data <endif> as data,
@@ -1903,6 +1905,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     //     and items disappeared silently. The fallback UUIDv7 preserves insert atomicity at the
     //     cost of putting overflowing rows ahead of added/edited rows in id-desc order — a
     //     visible-but-non-destructive degradation only reached if the pool is undersized.
+    //
+    // OPIK-6696:
+    //   - the inserted rows carry :targetDatasetId, not the source's dataset_id. When
+    //     copy_from_dataset_id differs from the destination, the read source is a different dataset
+    //     (e.g. migrate replay reads from the source workspace's dataset and writes into the
+    //     destination workspace's dataset), so the inserted rows must carry the destination dataset_id.
     private static final String COPY_VERSION_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -1933,10 +1941,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                    arrayElement(:uuids, src.rn),
                    toString(generateUUIDv7())) AS id,
                 src.dataset_item_id,
-                -- OPIK-6696: target dataset_id, not source's. When copy_from_dataset_id differs from
-                -- the destination, the read source is a different dataset (e.g. migrate replay reads
-                -- from the source workspace's dataset and writes into the destination workspace's
-                -- dataset). The inserted rows must carry the destination dataset_id.
                 :targetDatasetId as dataset_id,
                 :targetVersionId as dataset_version_id,
                 src.data,

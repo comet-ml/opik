@@ -44,9 +44,12 @@ public record DatasetItemChanges(
 
         @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "When true, clears the version-level execution policy (removes inherited policy from base version)") Boolean clearExecutionPolicy,
 
-        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "OPIK-6696. Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When both are set, the INSERT FROM SELECT that copies unchanged rows reads from this (dataset, version) pair instead of the destination dataset's prior version, avoiding the multi-replica read-after-write window. When null, the existing behavior applies (reads from the destination's prior version).") UUID copyFromDatasetId,
+        // OPIK-6696: when both copy_from_* coordinates are set, the INSERT FROM SELECT that copies
+        // unchanged rows reads from this (dataset, version) pair instead of the destination dataset's
+        // prior version, avoiding the multi-replica read-after-write window.
+        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.") UUID copyFromDatasetId,
 
-        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "OPIK-6696. Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.") UUID copyFromVersionId) {
+        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.") UUID copyFromVersionId) {
 
     public static class View {
         public static class Write {
