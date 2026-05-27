@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as utils from "@/lib/utils";
 import {
+  extractWrappedAttachmentPlaceholder,
+  isBackendAttachmentPlaceholder,
   isImageBase64String,
   isImageContent,
   processInputData,
@@ -878,5 +880,58 @@ describe("Audio content extraction", () => {
     expect(result.media).toHaveLength(1);
     expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
     expect(result.media[0].url).toContain("data:image/webp");
+  });
+});
+
+describe("extractWrappedAttachmentPlaceholder", () => {
+  it("should recover the bare placeholder from a wrapped data URI", () => {
+    expect(
+      extractWrappedAttachmentPlaceholder(
+        "data:image/jpeg;base64,[input-attachment-91191840-1779213979772-sdk.jpg]",
+      ),
+    ).toBe("[input-attachment-91191840-1779213979772-sdk.jpg]");
+  });
+
+  it.each([
+    ["data:audio/wav;base64,[output-attachment-1-2-sdk.wav]"],
+    ["data:application/pdf;base64,[metadata-attachment-3-4-sdk.pdf]"],
+  ])("should recover the placeholder regardless of mime type (%s)", (value) => {
+    expect(extractWrappedAttachmentPlaceholder(value)).not.toBeNull();
+  });
+
+  it("should return null for a bare placeholder (no prefix to strip)", () => {
+    expect(
+      extractWrappedAttachmentPlaceholder("[input-attachment-1-2-sdk.jpg]"),
+    ).toBeNull();
+  });
+
+  it("should return null for a genuine base64 data URI", () => {
+    expect(
+      extractWrappedAttachmentPlaceholder("data:image/png;base64,iVBORw0KGgo"),
+    ).toBeNull();
+  });
+
+  it("should not match when extra characters surround the placeholder", () => {
+    expect(
+      extractWrappedAttachmentPlaceholder(
+        "prefix data:image/jpeg;base64,[input-attachment-1-2-sdk.jpg] suffix",
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("isBackendAttachmentPlaceholder", () => {
+  it("should accept a bare backend placeholder", () => {
+    expect(
+      isBackendAttachmentPlaceholder("[input-attachment-1-2-sdk.jpg]"),
+    ).toBe(true);
+  });
+
+  it("should reject a placeholder still wrapped in a data URI prefix", () => {
+    expect(
+      isBackendAttachmentPlaceholder(
+        "data:image/jpeg;base64,[input-attachment-1-2-sdk.jpg]",
+      ),
+    ).toBe(false);
   });
 });

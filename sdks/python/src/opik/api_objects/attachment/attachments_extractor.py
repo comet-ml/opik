@@ -33,12 +33,15 @@ class AttachmentsExtractor:
         self.decoder = decoder_base64.Base64AttachmentDecoder()
 
         # Pattern to match base64 strings (can be embedded in text)
-        # Requires at least min_attachment_size characters to reduce false positives
+        # Requires at least min_attachment_size characters to reduce false positives.
+        # An optional `data:<mime>;base64,` prefix is matched too so that data URIs
+        # (e.g. OpenAI/LangChain image_url.url) are replaced whole, not just their payload.
         min_base64_groups = int(min_attachment_size / 4)
         BASE64_PATTERN = (
-            r"(?:[A-Za-z0-9+/]{4}){"
+            r"(?P<prefix>data:[^,]*;base64,)?"
+            r"(?P<base64>(?:[A-Za-z0-9+/]{4}){"
             + str(min_base64_groups)
-            + ",}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"
+            + r",}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)"
         )
         self.pattern = re.compile(BASE64_PATTERN)
 
@@ -158,12 +161,14 @@ class AttachmentsExtractor:
         attachments: List[attachment.Attachment] = []
         sanitized_data = data
         for match in self.pattern.finditer(data):
-            to_decode = match.group()
+            to_decode = match.group("base64")
             decoded_attachment = self.decoder.decode(to_decode, context)
             if decoded_attachment is not None:
                 attachments.append(decoded_attachment)
+                # Replace the whole match (including any `data:<mime>;base64,` prefix)
+                # so the sanitized value is a bare placeholder the frontend can resolve.
                 sanitized_data = sanitized_data.replace(
-                    to_decode, f"[{decoded_attachment.file_name}]"
+                    match.group(), f"[{decoded_attachment.file_name}]"
                 )
 
         return ExtractionResult(attachments=attachments, sanitized_data=sanitized_data)

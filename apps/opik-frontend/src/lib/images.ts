@@ -11,15 +11,38 @@ import {
 } from "@/types/attachments";
 import { safelyParseJSON } from "@/lib/utils";
 
+const BACKEND_ATTACHMENT_PLACEHOLDER_SOURCE =
+  "\\[(?:input|output|metadata)-attachment-\\d+-\\d+(?:-[a-zA-Z0-9]+)?\\.\\w+\\]";
+
 /**
  * Check if a string is a backend attachment placeholder pattern.
  * Matches patterns like "[input-attachment-1-1768916401606.wav]",
  * "[output-attachment-1-xxx.wav]", or "[output-attachment-2-9876543210-sdk.json]"
  */
 export const isBackendAttachmentPlaceholder = (value: string): boolean => {
-  return /^\[(input|output|metadata)-attachment-\d+-\d+(?:-[a-zA-Z0-9]+)?\.\w+\]$/.test(
-    value,
+  return new RegExp(`^${BACKEND_ATTACHMENT_PLACEHOLDER_SOURCE}$`).test(value);
+};
+
+/**
+ * Recovers an attachment placeholder that was left wrapped in a
+ * "data:<mime>;base64,[...]" prefix by older SDKs (OPIK-6608). Returns the bare
+ * placeholder (e.g. "[input-attachment-1-2-sdk.jpg]") or null when the value is
+ * not such a wrapped placeholder.
+ *
+ * This pattern exists only to render data that was already logged in the wrong
+ * format: the SDK fix sanitizes new traces to a bare placeholder, but traces
+ * ingested before that fix keep the malformed prefix and cannot be re-written,
+ * so the frontend strips the prefix at read time to resolve them.
+ */
+export const extractWrappedAttachmentPlaceholder = (
+  value: string,
+): string | null => {
+  const match = value.match(
+    new RegExp(
+      `^data:[^,]*;base64,(${BACKEND_ATTACHMENT_PLACEHOLDER_SOURCE})$`,
+    ),
   );
+  return match ? match[1] : null;
 };
 
 /**

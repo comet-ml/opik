@@ -895,3 +895,73 @@ def test_extract_and_replace_top_level_list(extractor, files_to_remove):
     # Verify the list structure is preserved
     assert len(data) == 4
     assert isinstance(data[3], dict)
+
+
+def test_extract_and_replace_data_uri_strips_prefix(extractor, files_to_remove):
+    """Base64 embedded in a data URI is replaced whole, leaving a bare placeholder.
+
+    Regression test for OPIK-6608: the `data:<mime>;base64,` prefix must not survive
+    in the sanitized value, otherwise the frontend cannot resolve the placeholder.
+    """
+    data = {"image": f"data:image/jpeg;base64,{constants.JPEG_BASE64}"}
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="span",
+        entity_id="span-data-uri",
+        context="input",
+        project_name="test",
+    )
+
+    assert len(result) == 1
+    files_to_remove.append(result[0].attachment_data.data)
+    assert result[0].attachment_data.content_type == "image/jpeg"
+
+    assert "data:" not in data["image"]
+    assert constants.JPEG_BASE64 not in data["image"]
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data["image"])) is True
+    assert data["image"] == f"[{result[0].attachment_data.file_name}]"
+
+
+def test_extract_and_replace_langchain_image_url_data_uri(extractor, files_to_remove):
+    """Reproduces the LangChain/OpenAI image_url.url shape from OPIK-6608."""
+    data = {
+        "messages": [
+            {
+                "content": [
+                    {"type": "text", "text": "What is this?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{constants.JPEG_BASE64}",
+                            "detail": "auto",
+                        },
+                    },
+                ]
+            }
+        ]
+    }
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="span",
+        entity_id="span-langchain",
+        context="input",
+        project_name="test",
+    )
+
+    assert len(result) == 1
+    files_to_remove.append(result[0].attachment_data.data)
+
+    url = data["messages"][0]["content"][1]["image_url"]["url"]
+    assert "data:" not in url
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(url)) is True
+
+    # Surrounding fields are untouched.
+    assert data["messages"][0]["content"][1]["image_url"]["detail"] == "auto"
+    assert data["messages"][0]["content"][0] == {
+        "type": "text",
+        "text": "What is this?",
+    }
