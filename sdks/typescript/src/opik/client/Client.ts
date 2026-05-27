@@ -39,7 +39,6 @@ import {
   EnvironmentNotFoundError,
   PromptNotFoundError,
   PromptTemplateStructureMismatch,
-  PromptVersionNotAssignableToEnvironmentError,
 } from "@/prompt/errors";
 import {
   fetchLatestPromptVersion,
@@ -1794,7 +1793,6 @@ export class OpikClient {
    *
    * @throws {PromptNotFoundError} The prompt name (or the supplied `commit`) does not exist in the resolved project.
    * @throws {EnvironmentNotFoundError} One of `environments` is not registered in the workspace.
-   * @throws {PromptVersionNotAssignableToEnvironmentError} The resolved version is internal-only (for example a mask version) and cannot be assigned to an environment.
    */
   public setPromptEnvironments = async (
     options: {
@@ -1842,12 +1840,7 @@ export class OpikClient {
             `One or more environments in [${target.join(", ")}] are not registered in this workspace.`,
           );
         }
-        if (error.statusCode === 422) {
-          throw new PromptVersionNotAssignableToEnvironmentError(
-            `Prompt '${options.name}' (commit '${version.commit}') is an internal-only version and cannot be assigned to an environment. Target a regular prompt version instead.`,
-          );
-        }
-      }
+}
       throw error;
     }
 
