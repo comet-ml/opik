@@ -47,7 +47,7 @@ Upgrade to the Opik SDK **2.0 or later**:
   </Tab>
 </Tabs>
 
-The main change is to **pass the project to the methods you call**. The dataset, prompt, experiment, and optimization APIs all take a `project_name` (`projectName` in TypeScript). Omit it and Opik uses the project from the `OPIK_PROJECT_NAME` environment variable or your config, falling back to `Default Project`.
+The main change is to **pass the project to the methods you call**. The dataset, prompt, and experiment APIs all take a `project_name` (`projectName` in TypeScript). Omit it and Opik uses the project from the `OPIK_PROJECT_NAME` environment variable or your config, falling back to `Default Project`.
 
 All snippets below assume a client:
 
@@ -133,20 +133,6 @@ An experiment — and **every trace, span, and feedback score it produces** — 
     ```
   </Tab>
 </Tabs>
-
-### Optimizations
-
-Optimizations are available in the Python SDK:
-
-```python
-client.create_optimization(
-    dataset_name="qa-pairs",
-    objective_name="accuracy",
-    project_name="my-agent",
-)
-```
-
-If you use the Opik Optimizer, pass `project_name` to `optimize_prompt(...)` so its runs land in the right project.
 
 ## Where your existing data lands
 
