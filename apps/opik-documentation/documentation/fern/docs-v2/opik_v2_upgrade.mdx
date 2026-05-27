@@ -47,81 +47,59 @@ Upgrade to the Opik SDK **2.0 or later**:
   </Tab>
 </Tabs>
 
-The main change is to **tell Opik which project you're working in**. New datasets, prompts, experiments, and traces are created inside that project. If you don't set one, they fall back to `Default Project`.
+The main change is to **pass the project to the method you're calling**. The create and search methods for datasets, prompts, and experiments all take a `project_name` argument. If you don't pass it, Opik uses the project from your environment (`OPIK_PROJECT_NAME`) or config, falling back to `Default Project`.
 
 <Tabs>
   <Tab title="Python">
     ```python
     import opik
 
-    # Set the project once for the client
-    client = opik.Opik(project_name="my-agent")
+    client = opik.Opik()
 
-    # Datasets, prompts, and experiments now live inside that project
-    dataset = client.create_dataset(name="qa-pairs")
-    prompt = client.create_prompt(name="assistant-prompt", prompt="Answer: {{question}}")
-
-    # The tracing decorator accepts a project too
-    @opik.track(project_name="my-agent")
-    def my_agent(question: str) -> str:
-        ...
+    # Pass the project to each call
+    dataset = client.create_dataset(name="qa-pairs", project_name="my-agent")
+    prompt = client.create_prompt(
+        name="assistant-prompt",
+        prompt="Answer: {{question}}",
+        project_name="my-agent",
+    )
     ```
 
-    Prefer to set it globally instead of per client? Use the `OPIK_PROJECT_NAME`
-    environment variable, or run `opik configure` to store `project_name` in
-    `~/.opik.config`. Most `create_*` / `search_*` methods also take a `project_name`
-    argument to override per call.
+    Omit `project_name` and Opik falls back to the `OPIK_PROJECT_NAME` environment
+    variable (or your `~/.opik.config`), and finally to `Default Project`.
   </Tab>
   <Tab title="TypeScript">
     ```typescript
     import { Opik } from "opik";
 
-    // Set the project once for the client
-    const client = new Opik({ projectName: "my-agent" });
+    const client = new Opik();
 
-    // Datasets and prompts now live inside that project
-    const dataset = await client.getOrCreateDataset("qa-pairs");
+    // Pass the project to each call
+    const dataset = await client.getOrCreateDataset("qa-pairs", "QA pairs", "my-agent");
     const prompt = await client.createPrompt({
       name: "assistant-prompt",
       prompt: "Answer: {{question}}",
+      projectName: "my-agent",
     });
     ```
 
-    Prefer to set it globally instead? Use the `OPIK_PROJECT_NAME` environment variable.
-    `createDataset` / `createPrompt` and related methods also accept a `projectName` to
-    override per call.
+    Omit the project and Opik falls back to the `OPIK_PROJECT_NAME` environment variable
+    (or your config), and finally to `Default Project`.
   </Tab>
 </Tabs>
 
-## Where your existing data went
+## Where your existing data lands
 
-When your workspace upgraded to 2.0, Opik **automatically moved your workspace-scoped 1.x data** — datasets, prompts, experiments, and optimizations — into projects. You don't need to migrate anything by hand.
+While upgrading your workspace to 2.0, Opik **automatically moves your workspace-scoped 1.x data** — datasets, prompts, experiments, and optimizations — into projects. You don't need to migrate anything by hand.
 
-Each item was placed in the project Opik could infer from the runs that used it. When there was nothing to infer from (no associated runs, or the original project had been deleted), the item was placed in your **`Default Project`**.
+Each item is placed in the project Opik can infer from the runs that used it. When there's nothing to infer from (no associated runs, or the original project had been deleted), the item is placed in your **`Default Project`**.
 
 So if you don't see a dataset, prompt, or experiment where you expected it, check the project its traces and experiments belong to — and check **`Default Project`**.
 
-## Self-hosted installations
-
-The automatic migration above runs on Opik Cloud. On self-hosted (open-source) deployments it is **off by default**, so your existing 1.x data is still at the workspace level and isn't attached to any project yet.
-
-Because 2.0 scopes these to a project, they can't stay at the workspace level — move each into the project it belongs to:
-
-- **Datasets** and **test suites**
-- **Prompts**
-- **Experiments** and **optimizations** (these come along automatically when you move their dataset)
-
-Move them with the [`opik migrate`](/tracing/advanced/migrate-data) CLI. Omit `--from-project` so it picks up the workspace-level entity, and point `--to-project` at the destination:
-
-```bash
-# A dataset brings its experiments, traces, spans, and optimizations along
-opik migrate dataset "my-dataset" --to-project="my-agent"
-
-# A prompt brings its full version history
-opik migrate prompt "my-prompt" --to-project="my-agent"
-```
-
-Preview with `--dry-run` first. See [Migrate data](/tracing/advanced/migrate-data) for the full guide.
+<Note>
+  On open-source installations, a workspace is promoted to 2.0 automatically as soon as its
+  blocking workspace-level (orphan) data has been migrated into projects.
+</Note>
 
 ## Moving data to a different project
 
