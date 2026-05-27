@@ -96,6 +96,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: "description",
     label: "Description",
     type: COLUMN_TYPE.string,
+    cell: TextCell as never,
   },
   {
     id: "version_count",
