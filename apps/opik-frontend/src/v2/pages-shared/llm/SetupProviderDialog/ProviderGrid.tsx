@@ -37,6 +37,8 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
           return (
             <button
               key={option.value}
+              data-testid="add-provider-dialog-option"
+              data-provider={option.providerType}
               type="button"
               disabled={disabled}
               onClick={() =>

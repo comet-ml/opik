@@ -28,7 +28,29 @@ async function sweepOrphans(apiKey: string | null): Promise<void> {
   const backend = makeBackendClient(apiKey);
   const cutoff = Date.now() - ORPHAN_MAX_AGE_MS;
 
-  /** Sweep datasets before projects — datasets don't cascade-delete with their parent project. */
+  /** Sweep order: experiments → datasets → projects. Experiments reference datasets which reference projects. */
+  try {
+    const staleExperiments = await backend.listExperimentsWithPrefix('cuj-');
+    let sweptCount = 0;
+    for (const e of staleExperiments) {
+      const ts = parseRunIdTimestamp(e.name);
+      if (ts === null) continue;
+      if (ts < cutoff) {
+        try {
+          await backend.deleteExperiment(e.id);
+          sweptCount++;
+        } catch {
+          // Best-effort; another runner may have just deleted it.
+        }
+      }
+    }
+    if (sweptCount > 0) {
+      console.log(`[global-setup] Swept ${sweptCount} orphaned experiments (>6h old)`);
+    }
+  } catch (e) {
+    console.warn('[global-setup] experiment orphan sweep warning (continuing):', e);
+  }
+
   try {
     const staleDatasets = await backend.listDatasetsWithPrefix('cuj-');
     let sweptCount = 0;

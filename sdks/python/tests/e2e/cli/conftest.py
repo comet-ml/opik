@@ -339,6 +339,9 @@ def seed_experiment_with_trace_tree(
     feedback_scores_per_trace: Optional[List[Dict[str, Any]]] = None,
     per_item_extras: Optional[List[Dict[str, Any]]] = None,
     optimization_id: Optional[str] = None,
+    trace_environment: Optional[str] = None,
+    span_environment: Optional[str] = None,
+    thread_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a source experiment + one trace per ``item_id`` + a small span
     tree per trace, then attach everything via ``create_experiment_items``.
@@ -357,6 +360,12 @@ def seed_experiment_with_trace_tree(
     parent_span_id. We deliberately do NOT use ``opik.evaluate`` here -- we
     want the wire shape, deterministic ids, and to assert on it without
     flush/streamer timing concerns.
+
+    ``trace_environment`` / ``span_environment`` stamp the ClickHouse
+    ``environment`` column on every seeded trace / span; ``thread_id``
+    groups the traces into one thread so the cascade's env preservation
+    (OPIK-6695) can be round-trip asserted on traces, spans, and the
+    BE-materialized thread row.
     """
     import datetime as dt
     import opik.id_helpers as id_helpers_module
@@ -394,6 +403,8 @@ def seed_experiment_with_trace_tree(
                 output={"answer": f"output-{index}"},
                 metadata={"item_id": item_id},
                 tags=["e2e-cascade"],
+                thread_id=thread_id,
+                environment=trace_environment,
             )
         )
 
@@ -414,6 +425,7 @@ def seed_experiment_with_trace_tree(
                 end_time=now + dt.timedelta(milliseconds=10),
                 input={"item": item_id},
                 output={"answer": f"output-{index}"},
+                environment=span_environment,
             )
         )
         for child_index in range(spans_per_trace - 1):
@@ -434,6 +446,7 @@ def seed_experiment_with_trace_tree(
                     model="gpt-mock",
                     provider="mock",
                     usage={"prompt_tokens": 5, "completion_tokens": 10},
+                    environment=span_environment,
                 )
             )
 

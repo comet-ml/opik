@@ -29,9 +29,11 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
           <LinkifyText>{value}</LinkifyText>
         </div>
       ) : (
-        <span className="truncate">
-          <LinkifyText>{value}</LinkifyText>
-        </span>
+        <CellTooltipWrapper content={toString(value)}>
+          <span className="truncate">
+            <LinkifyText>{value}</LinkifyText>
+          </span>
+        </CellTooltipWrapper>
       )}
     </CellWrapper>
   );

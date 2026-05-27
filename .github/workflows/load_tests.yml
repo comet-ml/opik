@@ -3,6 +3,10 @@ run-name: "Load Tests ${{ github.ref_name }} by @${{ github.actor }}"
 
 permissions:
   contents: read
+  # checks: write so EnricoMi/publish-unit-test-result-action can post the
+  # "Load Test Results" check; without it the step gets 403 Forbidden and
+  # fails the whole workflow even when all scenarios passed.
+  checks: write
 
 on:
   schedule:
@@ -86,31 +90,111 @@ jobs:
               print("## Load test metrics\n\n_No metrics produced (suite did not run)._")
               raise SystemExit
 
+
           def fmt_seconds(value):
-              return f"{value:.1f} s" if isinstance(value, (int, float)) else "—"
+              if not isinstance(value, (int, float)):
+                  return "—"
+              return f"{value / 60:.1f} m" if value >= 60 else f"{value:.1f} s"
+
 
           def fmt_count(value):
-              return f"{value:,}" if isinstance(value, int) else (value or "—")
+              return f"{value:,}" if isinstance(value, (int, float)) else "—"
+
+
+          def submit_seconds(metrics):
+              # The submit phase is timed as "logging" for trace-based tests and
+              # as "insert" for the dataset-versions test.
+              for key in ("logging_seconds", "insert_seconds"):
+                  if isinstance(metrics.get(key), (int, float)):
+                      return metrics[key]
+              return None
+
+
+          def submitted_volume(metrics):
+              # Returns (count, label). Picks the most representative unit per
+              # test type so the table shows what was actually submitted.
+              if "expected_total_items" in metrics:
+                  return metrics["expected_total_items"], (
+                      f"{metrics['expected_total_items']:,} items"
+                  )
+              if "total_traces" in metrics:
+                  return metrics["total_traces"], (
+                      f"{metrics['total_traces']:,} traces"
+                  )
+              trace_count = metrics.get("trace_count")
+              spans_per_trace = metrics.get("spans_per_trace")
+              if isinstance(trace_count, int) and isinstance(spans_per_trace, int):
+                  return trace_count, (
+                      f"{trace_count:,} traces × {spans_per_trace} spans"
+                  )
+              if isinstance(trace_count, int):
+                  return trace_count, f"{trace_count:,} traces"
+              return None, "—"
+
+
+          def submit_rate(count, seconds):
+              if count is None or not isinstance(seconds, (int, float)) or seconds <= 0:
+                  return "—"
+              return f"{count / seconds:,.0f}/s"
+
+
+          def total_seconds(metrics):
+              parts = [
+                  metrics.get(key)
+                  for key in (
+                      "logging_seconds",
+                      "insert_seconds",
+                      "flush_seconds",
+                      "verify_seconds",
+                  )
+              ]
+              parts = [p for p in parts if isinstance(p, (int, float))]
+              return sum(parts) if parts else None
+
+
+          def delivered_count(metrics):
+              for key in ("delivered_trace_count", "delivered_item_count"):
+                  if key in metrics:
+                      return metrics[key]
+              return None
+
 
           print("## Load test metrics\n")
-          print("| Test | Logged | Flush | Verify | Delivered |")
-          print("| --- | ---: | ---: | ---: | ---: |")
+          print(
+              "_Submit = time spent calling decorated functions / context managers."
+              " Submit rate = volume ÷ submit time."
+              " Total = submit + flush + verify._\n"
+          )
+          print(
+              "| Test | Volume | Submit | Submit rate"
+              " | Flush | Verify | Total | Delivered |"
+          )
+          print(
+              "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"
+          )
           payloads = []
           for path in files:
-              m = json.loads(path.read_text())
-              payloads.append(m)
-              name = m.get("test_name", path.stem)
-              logged = fmt_seconds(m.get("logging_seconds"))
-              flush = fmt_seconds(m.get("flush_seconds"))
-              verify = fmt_seconds(m.get("verify_seconds"))
-              delivered = fmt_count(m.get("delivered_trace_count"))
-              print(f"| `{name}` | {logged} | {flush} | {verify} | {delivered} |")
+              metrics = json.loads(path.read_text())
+              payloads.append(metrics)
+              name = metrics.get("test_name", path.stem)
+              count, volume_label = submitted_volume(metrics)
+              submit_s = submit_seconds(metrics)
+              print(
+                  f"| `{name}`"
+                  f" | {volume_label}"
+                  f" | {fmt_seconds(submit_s)}"
+                  f" | {submit_rate(count, submit_s)}"
+                  f" | {fmt_seconds(metrics.get('flush_seconds'))}"
+                  f" | {fmt_seconds(metrics.get('verify_seconds'))}"
+                  f" | {fmt_seconds(total_seconds(metrics))}"
+                  f" | {fmt_count(delivered_count(metrics))} |"
+              )
 
           print("\n<details>\n<summary>Per-test metrics (raw JSON)</summary>\n")
-          for m in payloads:
-              print(f"\n**{m.get('test_name', '?')}**")
+          for metrics in payloads:
+              print(f"\n**{metrics.get('test_name', '?')}**")
               print("```json")
-              print(json.dumps(m, indent=2))
+              print(json.dumps(metrics, indent=2))
               print("```")
           print("\n</details>")
           PY

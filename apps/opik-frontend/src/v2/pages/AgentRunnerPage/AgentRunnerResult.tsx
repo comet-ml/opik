@@ -1,10 +1,17 @@
 import React, { useMemo } from "react";
-import { AlertCircle, ArrowUpRight, Loader2, Text } from "lucide-react";
+import { AlertCircle, ArrowUpRight } from "lucide-react";
 
 import { Button } from "@/ui/button";
+import { Skeleton } from "@/ui/skeleton";
+import OpikLeaf from "@/icons/opik-leaf.svg?react";
+import OpikLeafDark from "@/icons/opik-leaf-dark.svg?react";
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { SandboxJob, SandboxJobStatus } from "@/types/agent-sandbox";
 import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
+
+const SKELETON_BAR_WIDTHS = ["w-72", "w-64", "w-56", "w-72", "w-60", "w-52"];
 
 type AgentRunnerResultProps = {
   job: SandboxJob | null;
@@ -40,13 +47,13 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({
     job?.status === SandboxJobStatus.RUNNING ||
     job?.status === SandboxJobStatus.PENDING;
 
+  const { themeMode } = useTheme();
+  const LeafIcon = themeMode === THEME_MODE.DARK ? OpikLeafDark : OpikLeaf;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-3 border-b px-4">
-        <div className="flex items-center gap-2">
-          <span className="inline-block size-3 rounded-sm bg-primary" />
-          <span className="comet-body-s-accented">Result</span>
-        </div>
+        <span className="comet-body-xs-accented text-foreground">Result</span>
 
         {isCompleted && (
           <TraceStatsDisplay
@@ -73,19 +80,37 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
         {!job && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-1 text-muted-slate">
-            <Text className="mb-2 size-5 text-primary" />
-            <p className="comet-body-s font-medium">No results yet</p>
-            <p className="comet-body-xs mt-1 max-w-36 text-center">
-              The agent response will appear here after a run
-            </p>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <LeafIcon className="h-10 w-auto" aria-hidden="true" />
+            <div className="flex flex-col gap-1">
+              <p className="comet-body-s font-medium text-foreground">
+                No results yet
+              </p>
+              <p className="comet-body-xs max-w-xs text-muted-slate">
+                The agent response will appear here after a run
+              </p>
+            </div>
           </div>
         )}
 
         {isRunning && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-1 text-muted-slate">
-            <Loader2 className="mb-2 size-5 animate-spin text-primary" />
-            <p className="comet-body-s font-medium">Your agent is working</p>
+          <div className="flex flex-1 flex-col items-center gap-6 px-6 pt-12 text-center">
+            <div className="flex flex-col gap-1">
+              <p className="comet-body-s font-medium text-foreground">
+                Running your agent...
+              </p>
+              <p className="comet-body-xs text-muted-slate">
+                Results will appear here when it&apos;s done.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {SKELETON_BAR_WIDTHS.map((width, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Skeleton className="size-3 shrink-0 rounded-sm" />
+                  <Skeleton className={`h-3 ${width}`} />
+                </div>
+              ))}
+            </div>
             {hasTraceData && (
               <Button variant="link" size="2xs" onClick={onViewTrace}>
                 View trajectory live
