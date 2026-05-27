@@ -1,0 +1,11 @@
+{
+  "test_name": "test_many_traces_one_span_each",
+  "project_name": "loadtest-many-traces-20260525T114844-6943db",
+  "trace_count": 1000,
+  "trace_input_bytes": 100,
+  "downstream_output_bytes": 100,
+  "logging_seconds": 3.292,
+  "flush_seconds": 2.94,
+  "verify_seconds": 0.359,
+  "delivered_trace_count": 1000
+}

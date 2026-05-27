@@ -33,6 +33,10 @@ navigation:
             path: ../docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
+          - page: Upgrading to Opik 2.0
+            path: ../docs-v2/opik_v2_upgrade.mdx
+            slug: /opik-v2-upgrade
+            icon: fa-regular fa-circle-up
           - page: Ollie Agent
             path: ../docs-v2/ollie.mdx
             slug: ollie

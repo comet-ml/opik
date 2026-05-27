@@ -1,0 +1,12 @@
+{
+  "test_name": "test_traces_with_implicit_attachments",
+  "project_name": "loadtest-implicit-attachments-20260525T120526-37328d",
+  "trace_count": 5,
+  "embedded_base64_bytes": 400000,
+  "trace_prompt_bytes": 100,
+  "logging_seconds": 0.069,
+  "flush_seconds": 0.4,
+  "verify_seconds": 0.21,
+  "delivered_trace_count": 5,
+  "delivered_attachments_on_sample_trace": 1
+}

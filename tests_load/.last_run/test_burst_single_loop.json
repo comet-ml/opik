@@ -1,0 +1,10 @@
+{
+  "test_name": "test_burst_single_loop",
+  "project_name": "loadtest-burst-20260525T193252-57e084",
+  "trace_count": 2500,
+  "trace_input_bytes": 200,
+  "logging_seconds": 5.364,
+  "flush_seconds": 0.827,
+  "verify_seconds": 0.837,
+  "delivered_trace_count": 2500
+}

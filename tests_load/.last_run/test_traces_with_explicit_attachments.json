@@ -1,0 +1,13 @@
+{
+  "test_name": "test_traces_with_explicit_attachments",
+  "project_name": "loadtest-explicit-attachments-20260525T120526-ba0a7f",
+  "trace_count": 5,
+  "attachments_per_trace": 2,
+  "attachment_bytes": 50000,
+  "trace_input_bytes": 100,
+  "logging_seconds": 0.022,
+  "flush_seconds": 0.361,
+  "verify_seconds": 0.246,
+  "delivered_trace_count": 5,
+  "delivered_attachments_on_sample_trace": 2
+}

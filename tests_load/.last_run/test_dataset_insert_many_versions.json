@@ -1,0 +1,11 @@
+{
+  "test_name": "test_dataset_insert_many_versions",
+  "dataset_name": "loadtest-dataset-insert-20260525T193259-8f6696",
+  "versions": 2,
+  "items_per_version": 50,
+  "item_payload_bytes": 4000,
+  "expected_total_items": 100,
+  "insert_seconds": 0.554,
+  "verify_seconds": 0.105,
+  "delivered_item_count": 100
+}

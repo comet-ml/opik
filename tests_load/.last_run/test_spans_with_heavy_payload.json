@@ -1,0 +1,15 @@
+{
+  "test_name": "test_spans_with_heavy_payload",
+  "project_name": "loadtest-heavy-span-payload-20260525T114844-4e156c",
+  "trace_count": 2,
+  "spans_per_trace": 5,
+  "trace_input_bytes": 1000,
+  "trace_output_bytes": 1000,
+  "span_input_bytes": 500000,
+  "span_output_bytes": 500000,
+  "logging_seconds": 1.034,
+  "flush_seconds": 3.812,
+  "verify_seconds": 1.427,
+  "delivered_trace_count": 2,
+  "delivered_spans_on_sample_trace": 5
+}

@@ -1,0 +1,12 @@
+{
+  "test_name": "test_concurrent_writers_share_one_client",
+  "project_name": "loadtest-concurrent-20260525T114844-9efcf9",
+  "thread_workers": 30,
+  "traces_per_worker": 10,
+  "total_traces": 300,
+  "trace_input_bytes": 200,
+  "logging_seconds": 0.877,
+  "flush_seconds": 1.617,
+  "verify_seconds": 2.904,
+  "delivered_trace_count": 300
+}

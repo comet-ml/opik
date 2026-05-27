@@ -1,0 +1,135 @@
+---
+headline: Upgrading to Opik 2.0 | Opik Documentation
+og:description: What changed in Opik 2.0 — everything is now organized around
+  projects — how to update your SDK code, where your existing data was moved, and
+  how to relocate it if needed.
+og:site_name: Opik Documentation
+og:title: Upgrading to Opik 2.0
+title: Upgrading to Opik 2.0
+---
+
+Opik 2.0 reorganized the product around **projects**. A project now maps to a single agent or app and is the home for everything related to it. This page explains what changed, how to work with the SDK from now on, where your existing data was moved, and how to relocate it if it didn't land where you want.
+
+<Note>
+  If you started on Opik 2.0, there's nothing to do here — projects are the default. This
+  guide is for users upgrading from Opik 1.x. For the full list of new features, see the
+  [2.0 release notes](/changelog).
+</Note>
+
+## What changed: projects are the home for everything
+
+In Opik 1.x, traces lived in projects, but **datasets, prompts, and experiments were shared across the whole workspace**. In 2.0, a project maps to one agent or app and scopes all of its work.
+
+These are now **scoped to a project**:
+
+- Traces and threads
+- Datasets and test suites
+- Experiments and optimizations
+- Prompts
+- Alerts and dashboards
+
+You also get a workspace-level project selector, project-scoped navigation across the app, a unified Logs page (threads, traces, and spans in one place), and a redesigned trace view. The result is a focused view of everything tied to a single agent. See the [2.0 release notes](/changelog) for the full picture.
+
+## How to work now
+
+Upgrade to the Opik SDK **2.0 or later**:
+
+<Tabs>
+  <Tab title="Python">
+    ```bash
+    pip install --upgrade "opik>=2.0.0"
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```bash
+    npm install opik@latest
+    ```
+  </Tab>
+</Tabs>
+
+The main change is to **tell Opik which project you're working in**. New datasets, prompts, experiments, and traces are created inside that project. If you don't set one, they fall back to `Default Project`.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import opik
+
+    # Set the project once for the client
+    client = opik.Opik(project_name="my-agent")
+
+    # Datasets, prompts, and experiments now live inside that project
+    dataset = client.create_dataset(name="qa-pairs")
+    prompt = client.create_prompt(name="assistant-prompt", prompt="Answer: {{question}}")
+
+    # The tracing decorator accepts a project too
+    @opik.track(project_name="my-agent")
+    def my_agent(question: str) -> str:
+        ...
+    ```
+
+    Prefer to set it globally instead of per client? Use the `OPIK_PROJECT_NAME`
+    environment variable, or run `opik configure` to store `project_name` in
+    `~/.opik.config`. Most `create_*` / `search_*` methods also take a `project_name`
+    argument to override per call.
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Opik } from "opik";
+
+    // Set the project once for the client
+    const client = new Opik({ projectName: "my-agent" });
+
+    // Datasets and prompts now live inside that project
+    const dataset = await client.getOrCreateDataset("qa-pairs");
+    const prompt = await client.createPrompt({
+      name: "assistant-prompt",
+      prompt: "Answer: {{question}}",
+    });
+    ```
+
+    Prefer to set it globally instead? Use the `OPIK_PROJECT_NAME` environment variable.
+    `createDataset` / `createPrompt` and related methods also accept a `projectName` to
+    override per call.
+  </Tab>
+</Tabs>
+
+## Where your existing data went
+
+When your workspace upgraded to 2.0, Opik **automatically moved your workspace-scoped 1.x data** — datasets, prompts, experiments, and optimizations — into projects. You don't need to migrate anything by hand.
+
+Each item was placed in the project Opik could infer from the runs that used it. When there was nothing to infer from (no associated runs, or the original project had been deleted), the item was placed in your **`Default Project`**.
+
+So if you don't see a dataset, prompt, or experiment where you expected it, check the project its traces and experiments belong to — and check **`Default Project`**.
+
+## Self-hosted installations
+
+The automatic migration above runs on Opik Cloud. On self-hosted (open-source) deployments it is **off by default**, so your existing 1.x data is still at the workspace level and isn't attached to any project yet.
+
+Because 2.0 scopes these to a project, they can't stay at the workspace level — move each into the project it belongs to:
+
+- **Datasets** and **test suites**
+- **Prompts**
+- **Experiments** and **optimizations** (these come along automatically when you move their dataset)
+
+Move them with the [`opik migrate`](/tracing/advanced/migrate-data) CLI. Omit `--from-project` so it picks up the workspace-level entity, and point `--to-project` at the destination:
+
+```bash
+# A dataset brings its experiments, traces, spans, and optimizations along
+opik migrate dataset "my-dataset" --to-project="my-agent"
+
+# A prompt brings its full version history
+opik migrate prompt "my-prompt" --to-project="my-agent"
+```
+
+Preview with `--dry-run` first. See [Migrate data](/tracing/advanced/migrate-data) for the full guide.
+
+## Moving data to a different project
+
+If something landed in a project you don't want, you can move it with the [`opik migrate`](/tracing/advanced/migrate-data) CLI. It relocates a dataset (with its experiments, traces, and spans) or a prompt (with its full version history) into another project.
+
+```bash
+# Move a dataset that landed in Default Project into your agent's project
+opik migrate dataset "qa-pairs" --to-project="my-agent"
+```
+
+Preview any move with `--dry-run` first. See [Migrate data](/tracing/advanced/migrate-data) for the full guide — what's copied, the options, and troubleshooting.

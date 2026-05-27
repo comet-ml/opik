@@ -1,0 +1,13 @@
+{
+  "test_name": "test_concurrent_writers_race_stress",
+  "project_name": "loadtest-concurrent-race-20260525T150824-4c4485",
+  "thread_workers": 32,
+  "traces_per_worker": 500,
+  "total_traces": 16000,
+  "trace_input_bytes": 500,
+  "flush_interval_seconds": 0.005,
+  "logging_seconds": 8.165,
+  "flush_seconds": 15.236,
+  "verify_seconds": 3.099,
+  "delivered_trace_count": 16000
+}

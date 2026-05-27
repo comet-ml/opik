@@ -1,0 +1,11 @@
+{
+  "test_name": "test_traces_with_one_megabyte_payload",
+  "project_name": "loadtest-heavy-trace-payload-20260525T114844-2de442",
+  "trace_count": 5,
+  "trace_input_bytes": 1000000,
+  "trace_output_bytes": 1000000,
+  "logging_seconds": 1.271,
+  "flush_seconds": 3.455,
+  "verify_seconds": 1.262,
+  "delivered_trace_count": 5
+}
