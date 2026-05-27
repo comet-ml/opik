@@ -15,6 +15,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.json.Json;
 
 import java.time.Instant;
@@ -103,6 +104,6 @@ public record PromptVersion(
 
     @JsonIgnore
     @AssertTrue(message = "environments cannot be set on a mask version") public boolean isEnvironmentCompatibleWithVersionType() {
-        return (environments == null || environments.isEmpty()) || versionType() != PromptVersionType.MASK;
+        return CollectionUtils.isEmpty(environments) || versionType() != PromptVersionType.MASK;
     }
 }

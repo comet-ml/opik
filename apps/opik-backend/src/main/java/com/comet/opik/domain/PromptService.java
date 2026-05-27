@@ -33,11 +33,13 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,6 +57,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
@@ -337,9 +340,9 @@ class PromptServiceImpl implements PromptService {
                 : createPromptVersion.version().environments().stream()
                         .filter(StringUtils::isNotBlank)
                         .map(String::trim)
-                        .collect(java.util.stream.Collectors.toSet());
+                        .collect(toSet());
 
-        if (!environments.isEmpty()) {
+        if (!CollectionUtils.isEmpty(environments)) {
             environmentService.bulkCreate(environments, workspaceId, userName);
         }
 
@@ -525,8 +528,11 @@ class PromptServiceImpl implements PromptService {
             }
 
             promptVersionDAO.save(workspaceId, toSave);
-            promptVersionDAO.saveEnvironments(workspaceId, toSave.promptId(), toSave.id(),
-                    toSave.environments(), toSave.createdBy());
+            if (!CollectionUtils.isEmpty(toSave.environments())) {
+                List<UUID> envIds = toSave.environments().stream().map(ignored -> idGenerator.generateId()).toList();
+                promptVersionDAO.saveEnvironments(envIds, workspaceId, toSave.promptId(), toSave.id(),
+                        toSave.environments(), toSave.createdBy());
+            }
             if (toSave.versionType() != PromptVersionType.MASK) {
                 promptDAO.updateLastUpdatedAt(toSave.promptId(), workspaceId, toSave.createdBy());
             }
@@ -772,7 +778,7 @@ class PromptServiceImpl implements PromptService {
                 : environments.stream()
                         .filter(StringUtils::isNotBlank)
                         .map(String::trim)
-                        .collect(java.util.stream.Collectors.toSet());
+                        .collect(toSet());
 
         PromptVersion version = getVersionById(versionId);
 
@@ -780,12 +786,12 @@ class PromptServiceImpl implements PromptService {
             throw new BadRequestException(MASK_ENV_NOT_ALLOWED);
         }
 
-        if (!envs.isEmpty()) {
+        if (!CollectionUtils.isEmpty(envs)) {
             Set<String> existing = environmentService.findExistingNames(envs, workspaceId);
             if (existing.size() != envs.size()) {
-                Set<String> missing = new java.util.HashSet<>(envs);
+                Set<String> missing = new HashSet<>(envs);
                 missing.removeAll(existing);
-                throw new NotFoundException(
+                throw new ConflictException(
                         "Environments do not exist in the workspace: '%s'".formatted(missing));
             }
         }
@@ -795,10 +801,11 @@ class PromptServiceImpl implements PromptService {
         withPromptVersionLock(workspaceId, promptId, () -> transactionTemplate.inTransaction(WRITE, handle -> {
             PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
             dao.closeVersionEnvironments(versionId, workspaceId);
-            if (!envs.isEmpty()) {
+            if (!CollectionUtils.isEmpty(envs)) {
                 dao.closeEnvOwnershipsForPrompt(promptId, workspaceId, envs);
+                List<UUID> envIds = envs.stream().map(ignored -> idGenerator.generateId()).toList();
+                dao.saveEnvironments(envIds, workspaceId, promptId, versionId, envs, userName);
             }
-            dao.saveEnvironments(workspaceId, promptId, versionId, envs, userName);
             return null;
         }));
 

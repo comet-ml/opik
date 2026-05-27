@@ -5033,14 +5033,9 @@ class PromptResourceTest {
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("prod");
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
+            var saved = createVersionWithEnvironments(prompt, Set.of(env));
 
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
-
-            assertThat(saved.environments()).contains(env);
+            getPromptVersionAndAssert(saved.id(), saved, API_KEY, TEST_WORKSPACE);
             assertWorkspaceContainsEnvironment(env);
         }
 
@@ -5051,11 +5046,7 @@ class PromptResourceTest {
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("dup");
-            var first = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), first, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            createVersionWithEnvironments(prompt, Set.of(env));
 
             var second = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
@@ -5073,20 +5064,11 @@ class PromptResourceTest {
             createPrompt(promptB, API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("shared");
-            var vA = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            var savedA = createPromptVersion(
-                    createPromptVersionRequest(promptA.name(), vA, promptA.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var savedA = createVersionWithEnvironments(promptA, Set.of(env));
+            var savedB = createVersionWithEnvironments(promptB, Set.of(env));
 
-            var vB = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            var savedB = createPromptVersion(
-                    createPromptVersionRequest(promptB.name(), vB, promptB.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
-
-            assertThat(savedA.environments()).contains(env);
-            assertThat(savedB.environments()).contains(env);
+            getPromptVersionAndAssert(savedA.id(), savedA, API_KEY, TEST_WORKSPACE);
+            getPromptVersionAndAssert(savedB.id(), savedB, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -5109,24 +5091,11 @@ class PromptResourceTest {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            var v1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(null).build();
-            createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), v1, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            createVersionWithoutEnvironments(prompt);
 
             String env = uniqueEnvName("resolve");
-            var v2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            var savedV2 = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), v2, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
-
-            var v3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(null).build();
-            var savedV3 = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), v3, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var savedV2 = createVersionWithEnvironments(prompt, Set.of(env));
+            var savedV3 = createVersionWithoutEnvironments(prompt);
 
             try (var response = promptResourceClient.callGetPrompt(promptId, null, env, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
@@ -5171,15 +5140,9 @@ class PromptResourceTest {
 
             String env1 = uniqueEnvName("create-a");
             String env2 = uniqueEnvName("create-b");
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
-                    .environments(Set.of(env1, env2)).build();
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
 
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
-
-            assertThat(saved.environments()).containsExactlyInAnyOrder(env1, env2);
+            getPromptVersionAndAssert(saved.id(), saved, API_KEY, TEST_WORKSPACE);
             assertWorkspaceContainsEnvironment(env1);
             assertWorkspaceContainsEnvironment(env2);
         }
@@ -5191,12 +5154,7 @@ class PromptResourceTest {
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             String takenEnv = uniqueEnvName("taken");
-            var first = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
-                    .environments(Set.of(takenEnv)).build();
-            createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), first, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            createVersionWithEnvironments(prompt, Set.of(takenEnv));
 
             String freeEnv = uniqueEnvName("free");
             var second = factory.manufacturePojo(PromptVersion.class).toBuilder()
@@ -5215,12 +5173,7 @@ class PromptResourceTest {
 
             String env1 = uniqueEnvName("multi-a");
             String env2 = uniqueEnvName("multi-b");
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
-                    .environments(Set.of(env1, env2)).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
 
             for (String env : List.of(env1, env2)) {
                 try (var response = promptResourceClient.callGetPrompt(promptId, null, env, API_KEY, TEST_WORKSPACE)) {
@@ -5241,12 +5194,7 @@ class PromptResourceTest {
 
             String env1 = uniqueEnvName("old1");
             String env2 = uniqueEnvName("old2");
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
-                    .environments(Set.of(env1, env2)).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
 
             String env3 = uniqueEnvName("new");
             environmentsResourceClient.createEnvironment(
@@ -5254,8 +5202,8 @@ class PromptResourceTest {
 
             patchVersionEnvironments(saved.id(), Set.of(env3), HttpStatus.SC_NO_CONTENT);
 
-            assertThat(promptResourceClient.getPromptVersion(saved.id(), API_KEY, TEST_WORKSPACE).environments())
-                    .containsExactly(env3);
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env3)).build(), API_KEY,
+                    TEST_WORKSPACE);
         }
 
         @Test
@@ -5266,12 +5214,7 @@ class PromptResourceTest {
 
             String env1 = uniqueEnvName("ret-a");
             String env2 = uniqueEnvName("ret-b");
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
-                    .environments(Set.of(env1, env2)).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
 
             for (String env : List.of(env1, env2)) {
                 var request = PromptVersionRetrieve.builder().name(prompt.name()).environment(env).build();
@@ -5290,11 +5233,7 @@ class PromptResourceTest {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(null).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithoutEnvironments(prompt);
 
             String env = uniqueEnvName("patch");
             environmentsResourceClient.createEnvironment(
@@ -5302,8 +5241,8 @@ class PromptResourceTest {
 
             patchVersionEnvironments(saved.id(), Set.of(env), HttpStatus.SC_NO_CONTENT);
 
-            assertThat(promptResourceClient.getPromptVersion(saved.id(), API_KEY, TEST_WORKSPACE).environments())
-                    .contains(env);
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env)).build(), API_KEY,
+                    TEST_WORKSPACE);
         }
 
         @Test
@@ -5312,11 +5251,7 @@ class PromptResourceTest {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(null).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithoutEnvironments(prompt);
 
             String env1 = uniqueEnvName("multi1");
             String env2 = uniqueEnvName("multi2");
@@ -5327,23 +5262,19 @@ class PromptResourceTest {
 
             patchVersionEnvironments(saved.id(), Set.of(env1, env2), HttpStatus.SC_NO_CONTENT);
 
-            assertThat(promptResourceClient.getPromptVersion(saved.id(), API_KEY, TEST_WORKSPACE).environments())
-                    .containsExactlyInAnyOrder(env1, env2);
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env1, env2)).build(), API_KEY,
+                    TEST_WORKSPACE);
         }
 
         @Test
-        @DisplayName("PATCH /versions/{id} with an unknown environment returns 404 Not Found")
-        void patchOnUnknownEnvironmentReturnsNotFound() {
+        @DisplayName("PATCH /versions/{id} with an unknown environment returns 409 Conflict")
+        void patchOnUnknownEnvironmentReturnsConflict() {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(null).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithoutEnvironments(prompt);
 
-            patchVersionEnvironments(saved.id(), Set.of(uniqueEnvName("ghost")), HttpStatus.SC_NOT_FOUND);
+            patchVersionEnvironments(saved.id(), Set.of(uniqueEnvName("ghost")), HttpStatus.SC_CONFLICT);
         }
 
         @Test
@@ -5353,16 +5284,12 @@ class PromptResourceTest {
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("clear");
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithEnvironments(prompt, Set.of(env));
 
             patchVersionEnvironments(saved.id(), Set.of(), HttpStatus.SC_NO_CONTENT);
 
-            assertThat(promptResourceClient.getPromptVersion(saved.id(), API_KEY, TEST_WORKSPACE).environments())
-                    .isNullOrEmpty();
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(null).build(), API_KEY,
+                    TEST_WORKSPACE);
         }
 
         @Test
@@ -5372,24 +5299,15 @@ class PromptResourceTest {
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("move");
-            var owner = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            var savedOwner = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), owner, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
-
-            var next = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(null).build();
-            var savedNext = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), next, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var savedOwner = createVersionWithEnvironments(prompt, Set.of(env));
+            var savedNext = createVersionWithoutEnvironments(prompt);
 
             patchVersionEnvironments(savedNext.id(), Set.of(env), HttpStatus.SC_NO_CONTENT);
 
-            assertThat(promptResourceClient.getPromptVersion(savedOwner.id(), API_KEY, TEST_WORKSPACE).environments())
-                    .isNullOrEmpty();
-            assertThat(promptResourceClient.getPromptVersion(savedNext.id(), API_KEY, TEST_WORKSPACE).environments())
-                    .contains(env);
+            getPromptVersionAndAssert(savedOwner.id(), savedOwner.toBuilder().environments(null).build(), API_KEY,
+                    TEST_WORKSPACE);
+            getPromptVersionAndAssert(savedNext.id(), savedNext.toBuilder().environments(Set.of(env)).build(), API_KEY,
+                    TEST_WORKSPACE);
         }
 
         @Test
@@ -5420,23 +5338,10 @@ class PromptResourceTest {
             createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("ret");
-            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            var saved = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var saved = createVersionWithEnvironments(prompt, Set.of(env));
 
-            var request = PromptVersionRetrieve.builder()
-                    .name(prompt.name())
-                    .environment(env)
-                    .build();
-
-            try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                PromptVersion retrieved = response.readEntity(PromptVersion.class);
-                assertThat(retrieved.id()).isEqualTo(saved.id());
-                assertThat(retrieved.environments()).contains(env);
-            }
+            var request = PromptVersionRetrieve.builder().name(prompt.name()).environment(env).build();
+            retrievePromptVersionAndAssert(request, saved, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -5463,17 +5368,8 @@ class PromptResourceTest {
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             String env = uniqueEnvName("restore");
-            var original = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
-            var savedOriginal = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), original, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
-
-            var successor = factory.manufacturePojo(PromptVersion.class).toBuilder()
-                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(null).build();
-            createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), successor, prompt.templateStructure()),
-                    API_KEY, TEST_WORKSPACE);
+            var savedOriginal = createVersionWithEnvironments(prompt, Set.of(env));
+            createVersionWithoutEnvironments(prompt);
 
             try (var response = promptResourceClient.callRestorePromptVersion(promptId, savedOriginal.id(),
                     API_KEY, TEST_WORKSPACE)) {
@@ -5483,9 +5379,25 @@ class PromptResourceTest {
                 assertThat(restored.environments()).isNullOrEmpty();
             }
 
-            assertThat(
-                    promptResourceClient.getPromptVersion(savedOriginal.id(), API_KEY, TEST_WORKSPACE).environments())
-                    .contains(env);
+            getPromptVersionAndAssert(savedOriginal.id(), savedOriginal, API_KEY, TEST_WORKSPACE);
+        }
+
+        private PromptVersion createVersionWithEnvironments(Prompt prompt, Set<String> environments) {
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
+                    .environments(environments).build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+        }
+
+        private PromptVersion createVersionWithoutEnvironments(Prompt prompt) {
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
+                    .environments(null).build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
         }
 
         private String uniqueEnvName(String prefix) {

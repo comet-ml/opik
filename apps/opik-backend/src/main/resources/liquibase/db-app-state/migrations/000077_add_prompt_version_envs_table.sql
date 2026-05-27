@@ -10,9 +10,11 @@ CREATE TABLE prompt_version_envs (
     created_at   TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by   VARCHAR(255) NOT NULL DEFAULT '',
     ended_at     TIMESTAMP(6) NULL DEFAULT NULL,
+    active_env   VARCHAR(150) GENERATED ALWAYS AS (IF(ended_at IS NULL, environment, NULL)) STORED,
     PRIMARY KEY (id),
     INDEX idx_pve_env_lookup (workspace_id, prompt_id, environment, ended_at),
-    INDEX idx_pve_version (workspace_id, version_id, ended_at)
+    INDEX idx_pve_version (workspace_id, version_id, ended_at),
+    UNIQUE INDEX uq_pve_active_env (workspace_id, prompt_id, active_env)
 );
 
 ALTER TABLE prompt_versions DROP INDEX idx_prompt_versions_workspace_prompt_environment;
