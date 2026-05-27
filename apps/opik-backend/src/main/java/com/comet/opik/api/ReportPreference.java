@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -19,6 +20,6 @@ public record ReportPreference(
         boolean enabled,
         String scheduleTime,
         String customPrompt,
-        Instant createdAt,
-        Instant lastUpdatedAt) {
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt) {
 }

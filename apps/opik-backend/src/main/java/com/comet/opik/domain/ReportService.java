@@ -43,6 +43,15 @@ public class ReportService {
 
     public UUID createAndTriggerReport(@NonNull String workspaceId, @NonNull String workspaceName,
             @NonNull UUID projectId) {
+        if (!orchestratorClient.isEnabled()) {
+            log.warn("Report generation not configured, skipping for project '{}'", projectId);
+            return null;
+        }
+
+        String projectName = projectService.findByIds(workspaceId, Set.of(projectId))
+                .stream().findFirst().map(p -> p.name())
+                .orElseThrow(() -> new NotFoundException("Project not found: " + projectId));
+
         UUID reportId = idGenerator.generateId();
 
         transactionTemplate.inTransaction(WRITE, handle -> {
@@ -50,9 +59,6 @@ public class ReportService {
                     .insert(reportId, workspaceId, projectId, ReportStatus.PENDING.getValue());
             return null;
         });
-
-        String projectName = projectService.findByIds(workspaceId, Set.of(projectId))
-                .stream().findFirst().map(p -> p.name()).orElse(projectId.toString());
 
         String customPrompt = transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(ReportPreferenceDAO.class)
