@@ -33,6 +33,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -61,6 +62,12 @@ public class ReportsResource {
         UUID reportId = reportService.generateReport(projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        if (reportId == null) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(Map.of("error", "Report generation is not configured"))
+                    .build();
+        }
 
         return Response.accepted(new GenerateReportResponse(reportId)).build();
     }

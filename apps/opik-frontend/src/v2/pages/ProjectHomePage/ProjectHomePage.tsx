@@ -4,7 +4,7 @@ import { buttonVariants } from "@/ui/button";
 import { useLoggedInUserName } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import usePluginsStore from "@/store/PluginsStore";
-import DailyBriefingSection from "./DailyBriefingSection";
+import DailyBriefingSection from "./DailyBriefing/DailyBriefingSection";
 import RecentActivitySection from "./RecentActivitySection";
 
 const ProjectHomePage = () => {
