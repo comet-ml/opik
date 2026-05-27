@@ -36,19 +36,25 @@ def _urlsafe_image_fixture(signature: bytes) -> str:
 
 
 class TestUrlsafeToStandardBase64:
-    def test_replaces_dash_and_underscore(self):
+    def test_urlsafe_to_standard_base64__dash_and_underscore_chars__replaced_with_plus_and_slash(
+        self,
+    ):
         assert (
             base64_normalizer.urlsafe_to_standard_base64("ab-cd_ef==") == "ab+cd/ef=="
         )
 
-    def test_noop_when_already_standard(self):
+    def test_urlsafe_to_standard_base64__already_standard_alphabet__returns_unchanged(
+        self,
+    ):
         value = "iVBORw0KGgo+AB/CD=="
         assert base64_normalizer.urlsafe_to_standard_base64(value) == value
 
-    def test_preserves_padding(self):
+    def test_urlsafe_to_standard_base64__urlsafe_chars_with_padding__padding_preserved(
+        self,
+    ):
         assert base64_normalizer.urlsafe_to_standard_base64("ab-_==") == "ab+/=="
 
-    def test_empty_string(self):
+    def test_urlsafe_to_standard_base64__empty_string__returns_empty(self):
         assert base64_normalizer.urlsafe_to_standard_base64("") == ""
 
 
@@ -71,12 +77,14 @@ class TestIsUrlsafeBase64Image:
         ],
         ids=["png", "jpeg", "gif87a", "gif89a", "webp", "tiff-le", "tiff-be"],
     )
-    def test_detects_urlsafe_encoded_image(self, signature):
+    def test_is_urlsafe_base64_image__urlsafe_encoded_image_signature__returns_true(
+        self, signature
+    ):
         """Every supported image signature, when URL-safe-base64-encoded, is detected."""
         urlsafe = _urlsafe_image_fixture(signature)
         assert base64_normalizer.is_urlsafe_base64_image(urlsafe) is True
 
-    def test_detects_urlsafe_encoded_real_png(self):
+    def test_is_urlsafe_base64_image__urlsafe_encoded_real_png__returns_true(self):
         """End-to-end sanity check using a real PNG fixture from constants.py."""
         urlsafe = _to_urlsafe(constants.PNG_BASE64)
         # The real PNG fixture happens to contain '+' / '/' in its standard
@@ -84,34 +92,34 @@ class TestIsUrlsafeBase64Image:
         assert "-" in urlsafe or "_" in urlsafe
         assert base64_normalizer.is_urlsafe_base64_image(urlsafe) is True
 
-    def test_rejects_standard_base64_image(self):
+    def test_is_urlsafe_base64_image__standard_alphabet_image__returns_false(self):
         """Standard-alphabet base64 should short-circuit to False — nothing to rewrite."""
         assert base64_normalizer.is_urlsafe_base64_image(constants.PNG_BASE64) is False
 
-    def test_rejects_short_string(self):
+    def test_is_urlsafe_base64_image__string_below_min_length__returns_false(self):
         assert base64_normalizer.is_urlsafe_base64_image("ab-_cd==") is False
 
-    def test_rejects_uuid_like_string(self):
+    def test_is_urlsafe_base64_image__uuid_string__returns_false(self):
         """UUIDs share the URL-safe alphabet and contain '-', but aren't images."""
         for _ in range(5):
             assert base64_normalizer.is_urlsafe_base64_image(str(uuid.uuid4())) is False
 
-    def test_rejects_urlsafe_non_image_payload(self):
+    def test_is_urlsafe_base64_image__urlsafe_non_image_binary__returns_false(self):
         """Non-image binary in URL-safe base64 (e.g. PDF) must be left alone."""
         urlsafe_pdf = _to_urlsafe(constants.PDF_BASE64)
         assert base64_normalizer.is_urlsafe_base64_image(urlsafe_pdf) is False
 
-    def test_rejects_text_with_dashes(self):
+    def test_is_urlsafe_base64_image__plain_text_with_dashes__returns_false(self):
         text = "hello-world this is not base64-encoded at all"
         assert base64_normalizer.is_urlsafe_base64_image(text) is False
 
-    def test_rejects_invalid_base64_alphabet(self):
+    def test_is_urlsafe_base64_image__non_base64_chars__returns_false(self):
         # Contains '$' which is not in either alphabet
         assert (
             base64_normalizer.is_urlsafe_base64_image("iVBORw0KGgo$$$abcdefgh") is False
         )
 
-    def test_rejects_empty_string(self):
+    def test_is_urlsafe_base64_image__empty_string__returns_false(self):
         assert base64_normalizer.is_urlsafe_base64_image("") is False
 
 
@@ -121,7 +129,9 @@ class TestIsUrlsafeBase64Image:
 
 
 class TestNormalizeUrlsafeBase64ImagesInPlace:
-    def test_rewrites_image_string_in_top_level_dict(self):
+    def test_normalize_urlsafe_base64_images_in_place__top_level_dict_with_image__image_rewritten(
+        self,
+    ):
         urlsafe = _to_urlsafe(constants.PNG_BASE64)
         payload = {"data": urlsafe}
 
@@ -133,7 +143,9 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
         original_bytes = base64.b64decode(constants.PNG_BASE64)
         assert base64.b64decode(payload["data"]) == original_bytes
 
-    def test_rewrites_image_string_in_list(self):
+    def test_normalize_urlsafe_base64_images_in_place__list_with_image__image_rewritten(
+        self,
+    ):
         urlsafe = _to_urlsafe(constants.JPEG_BASE64)
         payload = ["leading text", urlsafe]
 
@@ -142,7 +154,9 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
         assert payload[0] == "leading text"
         assert "-" not in payload[1] and "_" not in payload[1]
 
-    def test_rewrites_deeply_nested_image(self):
+    def test_normalize_urlsafe_base64_images_in_place__deeply_nested_image__image_rewritten(
+        self,
+    ):
         urlsafe = _to_urlsafe(constants.PNG_BASE64)
         payload = {
             "role": "user",
@@ -158,7 +172,9 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
         assert "-" not in normalized and "_" not in normalized
         assert base64.b64decode(normalized) == base64.b64decode(constants.PNG_BASE64)
 
-    def test_leaves_uuid_values_untouched(self):
+    def test_normalize_urlsafe_base64_images_in_place__uuid_values__left_untouched(
+        self,
+    ):
         uid = str(uuid.uuid4())
         payload = {"trace_id": uid, "nested": [{"span_id": uid}]}
 
@@ -167,7 +183,9 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
         assert payload["trace_id"] == uid
         assert payload["nested"][0]["span_id"] == uid
 
-    def test_leaves_standard_base64_image_untouched(self):
+    def test_normalize_urlsafe_base64_images_in_place__standard_base64_image__left_untouched(
+        self,
+    ):
         """If the value is already standard-alphabet base64, it stays byte-for-byte identical."""
         payload = {"data": constants.PNG_BASE64}
 
@@ -175,7 +193,9 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
 
         assert payload["data"] == constants.PNG_BASE64
 
-    def test_leaves_non_image_binary_untouched(self):
+    def test_normalize_urlsafe_base64_images_in_place__non_image_binary__left_untouched(
+        self,
+    ):
         """URL-safe non-image binary (e.g. PDF) is not rewritten — only images are."""
         urlsafe_pdf = _to_urlsafe(constants.PDF_BASE64)
         payload = {"data": urlsafe_pdf}
@@ -184,7 +204,7 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
 
         assert payload["data"] == urlsafe_pdf
 
-    def test_ignores_non_string_leaves(self):
+    def test_normalize_urlsafe_base64_images_in_place__non_string_leaves__ignored(self):
         payload = {"a": 1, "b": None, "c": True, "d": 1.5, "e": [None, 2, False]}
         snapshot = {"a": 1, "b": None, "c": True, "d": 1.5, "e": [None, 2, False]}
 
@@ -192,7 +212,9 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
 
         assert payload == snapshot
 
-    def test_returns_none_and_mutates_in_place(self):
+    def test_normalize_urlsafe_base64_images_in_place__mutated_payload__returns_none(
+        self,
+    ):
         urlsafe = _to_urlsafe(constants.PNG_BASE64)
         payload = {"data": urlsafe}
 
@@ -201,7 +223,9 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
         assert result is None
         assert payload["data"] != urlsafe  # was mutated
 
-    def test_handles_empty_structures(self):
+    def test_normalize_urlsafe_base64_images_in_place__empty_containers__no_change(
+        self,
+    ):
         empty_dict: dict = {}
         empty_list: list = []
 
@@ -211,7 +235,7 @@ class TestNormalizeUrlsafeBase64ImagesInPlace:
         assert empty_dict == {}
         assert empty_list == []
 
-    def test_handles_non_container_root(self):
+    def test_normalize_urlsafe_base64_images_in_place__scalar_root__no_raise(self):
         """Scalar roots are valid inputs (no-op) — the walker should not raise."""
         base64_normalizer.normalize_urlsafe_base64_images_in_place("plain string")
         base64_normalizer.normalize_urlsafe_base64_images_in_place(42)
