@@ -3073,10 +3073,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId,
                 excludeFilters != null ? excludeFilters.size() : 0, uuids.size());
 
+        // With excludeFilters present the pool size is no longer a valid lower bound on the row
+        // count: a filter can legitimately exclude every source row (e.g. a delete or batch-update
+        // whose filter matches all items), making 0 written rows a valid outcome rather than the
+        // catastrophic-zero replica-lag signature. Only assert the zero-rows guard on the unfiltered
+        // carry-forward path (OPIK-6674); passing expectedRows=0 bypasses it for the filtered path.
+        long expectedRows = CollectionUtils.isEmpty(excludeFilters)
+                ? FilterUtils.expectedRowsFromPool(uuids)
+                : 0L;
+
         return zeroRowsRetryPolicy.retryOnZeroRows(
                 executeCopyVersionItems(sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId, uuids,
                         null /* excludedIds */, excludeFilters),
-                FilterUtils.expectedRowsFromPool(uuids), "copyVersionItems");
+                expectedRows, "copyVersionItems");
     }
 
     /**
