@@ -787,7 +787,7 @@ class TestParamFiltering:
         only catches `tools` arriving as call-time kwargs, and the
         constructor-time list reaches the Anthropic SDK unchanged.
         """
-        _install_anthropic_stub(monkeypatch)
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
         monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
 
         model = anthropic_chat_model.AnthropicChatModel(
@@ -805,8 +805,10 @@ class TestParamFiltering:
             ],
         )
 
-        # Constructor-stored tools must be the Anthropic shape.
-        assert model._completion_kwargs["tools"] == [
+        model.generate_provider_response([{"role": "user", "content": "hi"}])
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert call_kwargs["tools"] == [
             {
                 "type": "custom",
                 "name": "read",
