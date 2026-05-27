@@ -1474,7 +1474,7 @@ def test_prompt__mask_chat_prompt__returns_masked_messages(
 
 def _register_env(opik_client: opik.Opik, name: str) -> str:
     """Create the environment in the workspace registry and return its name."""
-    opik_client.rest_client.environments.create_environment(name=name)
+    opik_client.create_environment(name=name)
     return name
 
 
@@ -1507,11 +1507,11 @@ def test_create_prompt__with_environment__sets_ownership(
         environments=[environment_name],
     )
 
-    assert environment_name in (prompt.environments or [])
+    verifiers.verify_prompt_environments(prompt, contains=[environment_name])
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert environment_name in (refreshed.environments or [])
+    verifiers.verify_prompt_environments(refreshed, contains=[environment_name])
 
 
 def test_create_prompt__with_two_environments__both_visible(
@@ -1528,9 +1528,9 @@ def test_create_prompt__with_two_environments__both_visible(
         environments=[environment_name, second_environment_name],
     )
 
-    envs = prompt.environments or []
-    assert environment_name in envs
-    assert second_environment_name in envs
+    verifiers.verify_prompt_environments(
+        prompt, contains=[environment_name, second_environment_name]
+    )
 
     by_first = opik_client.get_prompt(
         name=prompt_name, environment=environment_name, no_cache=True
@@ -1540,7 +1540,7 @@ def test_create_prompt__with_two_environments__both_visible(
     )
     assert by_first is not None
     assert by_second is not None
-    assert by_first.commit == by_second.commit
+    verifiers.verify_prompt_version(by_second, commit=by_first.commit)
 
 
 def test_set_prompt_environments__replaces_with_full_set(
@@ -1556,7 +1556,7 @@ def test_set_prompt_environments__replaces_with_full_set(
         prompt=prompt_template,
         environments=[environment_name],
     )
-    assert environment_name in (prompt.environments or [])
+    verifiers.verify_prompt_environments(prompt, contains=[environment_name])
 
     opik_client.set_prompt_environments(
         prompt.name, [environment_name, second_environment_name]
@@ -1564,9 +1564,9 @@ def test_set_prompt_environments__replaces_with_full_set(
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    envs = refreshed.environments or []
-    assert environment_name in envs
-    assert second_environment_name in envs
+    verifiers.verify_prompt_environments(
+        refreshed, contains=[environment_name, second_environment_name]
+    )
 
 
 def test_set_environments__moves_ownership__visible_after_refetch(
@@ -1582,15 +1582,17 @@ def test_set_environments__moves_ownership__visible_after_refetch(
         prompt=prompt_template,
         environments=[environment_name],
     )
-    assert environment_name in (prompt.environments or [])
+    verifiers.verify_prompt_environments(prompt, contains=[environment_name])
 
     opik_client.set_prompt_environments(prompt.name, [second_environment_name])
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    refreshed_envs = refreshed.environments or []
-    assert second_environment_name in refreshed_envs
-    assert environment_name not in refreshed_envs
+    verifiers.verify_prompt_environments(
+        refreshed,
+        contains=[second_environment_name],
+        excludes=[environment_name],
+    )
 
 
 def test_set_environments__empty__clears_ownership(
@@ -1610,7 +1612,7 @@ def test_set_environments__empty__clears_ownership(
 
     refreshed = opik_client.get_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert not refreshed.environments
+    verifiers.verify_prompt_environments(refreshed, exactly=[])
 
 
 def test_get_prompt__by_environment__resolves_to_owning_version(
@@ -1637,9 +1639,12 @@ def test_get_prompt__by_environment__resolves_to_owning_version(
         name=prompt_name, environment=environment_name, no_cache=True
     )
     assert resolved is not None
-    assert resolved.commit == first_version.commit
-    assert resolved.prompt == first_template
-    assert environment_name in (resolved.environments or [])
+    verifiers.verify_prompt_version(
+        resolved,
+        commit=first_version.commit,
+        template=first_template,
+        environments=[environment_name],
+    )
 
 
 def test_set_prompt_environment__targets_specific_version(
@@ -1664,7 +1669,7 @@ def test_set_prompt_environment__targets_specific_version(
         name=prompt_name, environment=environment_name, no_cache=True
     )
     assert resolved is not None
-    assert resolved.commit == v1_commit
+    verifiers.verify_prompt_version(resolved, commit=v1_commit)
 
 
 def test_set_environment__unknown_environment__raises_environment_not_found(
@@ -1694,8 +1699,8 @@ def test_create_chat_prompt__with_environment__sets_ownership(
         environments=[environment_name],
     )
 
-    assert environment_name in (chat_prompt.environments or [])
+    verifiers.verify_prompt_environments(chat_prompt, contains=[environment_name])
 
     refreshed = opik_client.get_chat_prompt(name=prompt_name, no_cache=True)
     assert refreshed is not None
-    assert environment_name in (refreshed.environments or [])
+    verifiers.verify_prompt_environments(refreshed, contains=[environment_name])
