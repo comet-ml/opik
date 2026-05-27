@@ -9378,6 +9378,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9458,6 +9463,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
       description: List of annotation queues to create
     AnnotationQueueBatch:
       required:
@@ -9550,6 +9560,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9607,6 +9622,11 @@ components:
           items:
             minLength: 1
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
     AssertionResultBatch:
       required:
       - assertion_results
