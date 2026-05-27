@@ -177,6 +177,30 @@ authentication:
   reactService:
     url: ${REACT_SERVICE_URL:-http://react-svc:8080}
 
+# OAuth 2.1 Authorization Server for hosted/local Opik MCP (OPIK-6666)
+mcpOAuth:
+  # Default: false
+  # Description: Whether to enable the MCP OAuth Authorization Server endpoints
+  enabled: ${MCP_OAUTH_ENABLED:-false}
+  # Default: empty
+  # Description: Public base URL of this deployment; drives the RFC 8414 issuer and the default RFC 8707 resource audience (baseUrl + /api/v1/mcp)
+  baseUrl: ${OPIK_BASE_URL:-}
+  # Default: empty (derived from baseUrl + /api/v1/mcp)
+  # Description: Canonical MCP resource URI for the OAuth instance. Set to a distinct path (e.g. .../api/v2/mcp) to run the OAuth-based opik-mcp alongside the existing API-key opik-mcp during migration.
+  mcpResourceUri: ${MCP_OAUTH_RESOURCE_URI:-}
+  # Default: PT1H
+  # Description: Access token lifetime
+  accessTokenTtl: ${MCP_OAUTH_ACCESS_TOKEN_TTL:-PT1H}
+  # Default: P7D
+  # Description: Refresh token absolute lifetime (not sliding)
+  refreshTokenTtl: ${MCP_OAUTH_REFRESH_TOKEN_TTL:-P7D}
+  # Default: PT60S
+  # Description: Authorization code lifetime
+  codeTtl: ${MCP_OAUTH_CODE_TTL:-PT60S}
+  # Default: PT30S
+  # Description: Grace window during which a just-rotated refresh token is still accepted
+  refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT30S}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
