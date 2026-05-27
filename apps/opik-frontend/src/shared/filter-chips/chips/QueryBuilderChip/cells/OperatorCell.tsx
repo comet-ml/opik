@@ -28,7 +28,12 @@ export function OperatorCell<T extends string>({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className={cellButton} aria-label={ariaLabel}>
+        <button
+          type="button"
+          data-filter-cell
+          className={cellButton}
+          aria-label={ariaLabel}
+        >
           <span>{current?.label ?? value}</span>
           <ChevronDown className="size-3 shrink-0" />
         </button>

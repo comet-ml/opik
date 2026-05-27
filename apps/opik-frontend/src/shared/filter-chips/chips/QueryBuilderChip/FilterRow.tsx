@@ -1,7 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { cellButton } from "./cells/cellBase";
 
 interface FilterRowProps {
   onRemove: () => void;
@@ -16,19 +15,24 @@ export const FilterRow: React.FC<FilterRowProps> = ({
 }) => (
   <div
     className={cn(
-      "flex w-full items-center rounded-[4px]",
-      "[&>*:first-child]:rounded-l-[2px]",
-      "[&>*:last-child]:rounded-r-[2px]",
-      "[&>*:not(:first-child)]:-ml-px",
+      "flex w-full items-center gap-0.5 rounded-[4px] bg-primary-100 px-1 py-0.5",
       className,
     )}
   >
-    {children}
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 items-center",
+        "[&>*:first-child[data-filter-cell]]:rounded-l-[2px] [&>*:first-child_[data-filter-cell]]:rounded-l-[2px]",
+        "[&>*:last-child[data-filter-cell]]:rounded-r-[2px] [&>*:last-child_[data-filter-cell]]:rounded-r-[2px]",
+      )}
+    >
+      {children}
+    </div>
     <button
       type="button"
       aria-label="Remove filter"
       onClick={onRemove}
-      className={cn(cellButton, "justify-center px-1.5 text-light-slate")}
+      className="flex shrink-0 items-center justify-center text-muted-slate hover:text-foreground"
     >
       <X className="size-3" />
     </button>

@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { FormErrorSkeleton } from "@/ui/form";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
+import FilterOperatorSelect, {
+  FilterOperatorOption,
+} from "@/shared/filter-chips/chips/FilterOperatorSelect";
 import { cn, padDecimalsString } from "@/lib/utils";
 import {
   NumericChipDefinition,
@@ -26,18 +28,12 @@ interface NumericChipPopoverContentProps {
   onClear: () => void;
 }
 
-const MODES: { mode: NumericChipMode; label: string }[] = [
-  { mode: "exactly", label: "Exactly" },
-  { mode: "between", label: "Between" },
-  { mode: "atLeast", label: "At least" },
-  { mode: "atMost", label: "At most" },
+const OPERATOR_OPTIONS: FilterOperatorOption<NumericChipMode>[] = [
+  { value: "exactly", label: "Is" },
+  { value: "atLeast", label: "Is at least" },
+  { value: "atMost", label: "Is at most" },
+  { value: "between", label: "Is between" },
 ];
-
-const SINGLE_LABEL: Record<Exclude<NumericChipMode, "between">, string> = {
-  exactly: "Value",
-  atLeast: "Minimum value",
-  atMost: "Maximum value",
-};
 
 const initialFromDraft = (value: NumericChipValue | undefined): string => {
   if (!value) return "";
@@ -148,22 +144,12 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
 
   return (
     <div className="flex w-[291px] flex-col gap-4 p-3">
-      <ToggleGroup
-        type="single"
-        variant="filter"
-        size="xs"
+      <FilterOperatorSelect
+        fieldLabel={definition.label}
         value={mode}
-        onValueChange={(next) => {
-          if (next) handleModeChange(next as NumericChipMode);
-        }}
-        className="w-full"
-      >
-        {MODES.map((m) => (
-          <ToggleGroupItem key={m.mode} value={m.mode} className="flex-1">
-            {m.label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+        options={OPERATOR_OPTIONS}
+        onChange={handleModeChange}
+      />
 
       {mode === "between" ? (
         <div className="flex flex-col gap-1">
@@ -193,7 +179,6 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
         </div>
       ) : (
         <NumericInputField
-          label={SINGLE_LABEL[mode]}
           value={fromDraft}
           format={format}
           onValueChange={handleFromChange}
@@ -210,7 +195,7 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
 };
 
 interface NumericInputFieldProps {
-  label: string;
+  label?: string;
   value: string;
   format: NumericFormat;
   hasError?: boolean;
@@ -227,9 +212,9 @@ const NumericInputField: React.FC<NumericInputFieldProps> = ({
   onBlur,
 }) => (
   <div className="flex min-w-0 flex-1 flex-col gap-1">
-    <label className="comet-body-s px-0.5 pb-0.5 text-foreground">
-      {label}
-    </label>
+    {label && (
+      <label className="comet-body-xs px-0.5 text-muted-slate">{label}</label>
+    )}
     <div className="relative">
       {format.prefix && (
         <span className="comet-body-s pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-slate">

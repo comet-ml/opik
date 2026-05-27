@@ -28,6 +28,7 @@ export const TextCell: React.FC<TextCellProps> = ({
     <DebounceInput
       ref={ref}
       type="text"
+      data-filter-cell
       variant="unstyled"
       dimension="none"
       value={value}

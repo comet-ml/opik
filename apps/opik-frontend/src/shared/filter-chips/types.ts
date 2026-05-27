@@ -53,7 +53,6 @@ export interface PseudoSearchChipDefinition extends ChipDefinitionBase {
   kind: "pseudo-search";
   searchMode: "contains" | "equals";
   columnType?: COLUMN_TYPE;
-  inputLabel?: string;
   placeholder?: string;
 }
 

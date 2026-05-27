@@ -815,7 +815,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4 pb-0"
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
         direction="horizontal"
         limitWidth
       >
@@ -848,6 +848,50 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           logsSource={LOGS_SOURCE.sdk}
         />
       </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pb-0 pt-3"
+        direction="bidirectional"
+        limitWidth
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search as string}
+              setSearchText={setSearch}
+              placeholder="Search threads..."
+              className="w-[320px]"
+              dimension="xs"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <DataTableRowHeightSelector
+              type={height as ROW_HEIGHT}
+              setType={setHeight}
+              layout="labeled"
+              size="2xs"
+            />
+            <ColumnsButton
+              columns={DEFAULT_COLUMNS}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+              sections={columnSections}
+              layout="labeled"
+              size="2xs"
+            />
+            <Separator orientation="vertical" className="mx-1 h-6" />
+            <RefreshButton
+              tooltip="Refresh threads list"
+              size="2xs"
+              label="Refresh"
+              isFetching={isFetching}
+              onRefresh={() => refetch()}
+            />
+          </div>
+        </div>
+      </PageBodyStickyContainer>
+
       {selectedRows.length > 0 ? (
         <SelectionActionBar
           selectedCount={selectedRows.length}
@@ -864,51 +908,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         </SelectionActionBar>
       ) : (
         <PageBodyStickyContainer
-          className="py-2"
-          direction="bidirectional"
-          limitWidth
-        >
-          <div className="flex h-10 items-center justify-between">
-            <div className="flex items-center gap-2">
-              <SearchInput
-                searchText={search as string}
-                setSearchText={setSearch}
-                placeholder="Search threads..."
-                className="w-[320px]"
-                dimension="sm"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <DataTableRowHeightSelector
-                type={height as ROW_HEIGHT}
-                setType={setHeight}
-                layout="labeled"
-              />
-              <ColumnsButton
-                columns={DEFAULT_COLUMNS}
-                selectedColumns={selectedColumns}
-                onSelectionChange={setSelectedColumns}
-                order={columnsOrder}
-                onOrderChange={setColumnsOrder}
-                sections={columnSections}
-                layout="labeled"
-              />
-              <Separator orientation="vertical" className="mx-1 h-6" />
-              <RefreshButton
-                tooltip="Refresh threads list"
-                size="sm"
-                label="Refresh"
-                isFetching={isFetching}
-                onRefresh={() => refetch()}
-              />
-            </div>
-          </div>
-        </PageBodyStickyContainer>
-      )}
-
-      {selectedRows.length === 0 && (
-        <PageBodyStickyContainer
-          className="py-2"
+          className="py-3"
           direction="bidirectional"
           limitWidth
         >

@@ -496,15 +496,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     searchMode: "contains",
     columnType: COLUMN_TYPE.list,
   },
-  {
-    id: "configuration_version",
-    field: "configuration_version",
-    label: "Configuration version",
-    group: "Identifiers",
-    kind: "pseudo-search",
-    searchMode: "equals",
-    columnType: COLUMN_TYPE.string,
-  },
 ];
 
 const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
@@ -618,15 +609,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "trace_id",
     field: "trace_id",
     label: "Trace ID",
-    group: "Identifiers",
-    kind: "pseudo-search",
-    searchMode: "equals",
-    columnType: COLUMN_TYPE.string,
-  },
-  {
-    id: "configuration_version",
-    field: "configuration_version",
-    label: "Configuration version",
     group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "equals",
@@ -1626,96 +1608,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     ];
   }, [type, handleThreadIdClick, isGuardrailsEnabled, addTagFilter]);
 
-  const filtersColumnData = useMemo(() => {
-    return [
-      {
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-      },
-      ...SHARED_COLUMNS.filter(
-        (col) => col.id !== COLUMN_ENVIRONMENT_ID,
-      ).flatMap((col) =>
-        col.id === "error_info"
-          ? [
-              col,
-              {
-                id: "error_type",
-                label: "Error type",
-                type: COLUMN_TYPE.string,
-              },
-            ]
-          : [col],
-      ),
-      ...(type === TRACE_DATA_TYPE.traces
-        ? [
-            {
-              id: "thread_id",
-              label: "Thread ID",
-              type: COLUMN_TYPE.string,
-            },
-            {
-              id: "annotation_queue_ids",
-              label: "Annotation queue ID",
-              type: COLUMN_TYPE.list,
-            },
-            {
-              id: "llm_span_count",
-              label: "LLM calls count",
-              type: COLUMN_TYPE.number,
-            },
-          ]
-        : []),
-      ...(type === TRACE_DATA_TYPE.spans
-        ? [
-            {
-              id: "type",
-              label: "Type",
-              type: COLUMN_TYPE.category,
-            },
-            {
-              id: "trace_id",
-              label: "Trace ID",
-              type: COLUMN_TYPE.string,
-            },
-          ]
-        : []),
-      {
-        id: COLUMN_METADATA_ID,
-        label: "Metadata",
-        type: COLUMN_TYPE.dictionary,
-      },
-      {
-        id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback scores",
-        type: COLUMN_TYPE.numberDictionary,
-      },
-      ...(type === TRACE_DATA_TYPE.traces
-        ? [
-            {
-              id: COLUMN_SPAN_FEEDBACK_SCORES_ID,
-              label: "Span feedback scores",
-              type: COLUMN_TYPE.numberDictionary,
-            },
-          ]
-        : []),
-      {
-        id: COLUMN_CUSTOM_ID,
-        label: "Custom filter",
-        type: COLUMN_TYPE.dictionary,
-      },
-      ...(isGuardrailsEnabled
-        ? [
-            {
-              id: COLUMN_GUARDRAILS_ID,
-              label: "Guardrails",
-              type: COLUMN_TYPE.category,
-            },
-          ]
-        : []),
-    ];
-  }, [type, isGuardrailsEnabled]);
-
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Trace | Span>(),
@@ -1840,7 +1732,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4 pb-0"
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
         direction="horizontal"
         limitWidth
       >
@@ -1880,6 +1772,60 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           logsSource={LOGS_SOURCE.sdk}
         />
       </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pb-0 pt-3"
+        direction="bidirectional"
+        limitWidth
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search as string}
+              setSearchText={setSearch}
+              placeholder={`Search ${type}...`}
+              className="w-[320px]"
+              dimension="xs"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <DataTableRowHeightSelector
+              type={height as ROW_HEIGHT}
+              setType={setHeight}
+              layout="labeled"
+              size="2xs"
+            />
+            <ColumnsButton
+              columns={columnData}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+              sections={columnSections}
+              layout="labeled"
+              size="2xs"
+              excludeFromSelectAll={
+                metadataColumnsData.length > 0
+                  ? metadataColumnsData.map((col) => col.id)
+                  : []
+              }
+            />
+            <Separator orientation="vertical" className="mx-1 h-6" />
+            <RefreshButton
+              tooltip={`Refresh ${
+                type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
+              } list`}
+              size="2xs"
+              label="Refresh"
+              isFetching={isFetching}
+              onRefresh={() => {
+                refetch();
+                refetchStatistic();
+              }}
+            />
+          </div>
+        </div>
+      </PageBodyStickyContainer>
+
       {selectedRows.length > 0 ? (
         <SelectionActionBar
           selectedCount={selectedRows.length}
@@ -1893,65 +1839,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
             buttonVariant="ghostInverted"
+            buttonSize="2xs"
           />
         </SelectionActionBar>
       ) : (
         <PageBodyStickyContainer
-          className="py-2"
-          direction="bidirectional"
-          limitWidth
-        >
-          <div className="flex h-10 items-center justify-between">
-            <div className="flex items-center gap-2">
-              <SearchInput
-                searchText={search as string}
-                setSearchText={setSearch}
-                placeholder={`Search ${type}...`}
-                className="w-[320px]"
-                dimension="sm"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <DataTableRowHeightSelector
-                type={height as ROW_HEIGHT}
-                setType={setHeight}
-                layout="labeled"
-              />
-              <ColumnsButton
-                columns={columnData}
-                selectedColumns={selectedColumns}
-                onSelectionChange={setSelectedColumns}
-                order={columnsOrder}
-                onOrderChange={setColumnsOrder}
-                sections={columnSections}
-                layout="labeled"
-                excludeFromSelectAll={
-                  metadataColumnsData.length > 0
-                    ? metadataColumnsData.map((col) => col.id)
-                    : []
-                }
-              />
-              <Separator orientation="vertical" className="mx-1 h-6" />
-              <RefreshButton
-                tooltip={`Refresh ${
-                  type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
-                } list`}
-                size="sm"
-                label="Refresh"
-                isFetching={isFetching}
-                onRefresh={() => {
-                  refetch();
-                  refetchStatistic();
-                }}
-              />
-            </div>
-          </div>
-        </PageBodyStickyContainer>
-      )}
-
-      {selectedRows.length === 0 && (
-        <PageBodyStickyContainer
-          className="py-2"
+          className="py-3"
           direction="bidirectional"
           limitWidth
         >

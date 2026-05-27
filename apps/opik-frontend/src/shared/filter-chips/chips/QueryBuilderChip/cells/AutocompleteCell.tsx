@@ -38,6 +38,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
   >
     <input
       type="text"
+      data-filter-cell
       placeholder={placeholder}
       className={cn(
         cellInput,

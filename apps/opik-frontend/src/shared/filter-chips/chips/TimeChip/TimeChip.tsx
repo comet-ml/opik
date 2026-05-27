@@ -28,7 +28,12 @@ const TimeChip: React.FC<TimeChipProps> = ({
     onOpenChange={onOpenChange}
     onClear={onClear}
   >
-    <TimeChipPopoverContent value={value} onApply={onApply} onClear={onClear} />
+    <TimeChipPopoverContent
+      fieldLabel={definition.label}
+      value={value}
+      onApply={onApply}
+      onClear={onClear}
+    />
   </FilterChipPopover>
 );
 

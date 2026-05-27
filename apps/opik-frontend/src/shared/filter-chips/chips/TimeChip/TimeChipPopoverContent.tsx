@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import dayjs from "dayjs";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { FormErrorSkeleton } from "@/ui/form";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
+import FilterOperatorSelect, {
+  FilterOperatorOption,
+} from "@/shared/filter-chips/chips/FilterOperatorSelect";
 import { TimeChipMode, TimeChipValue } from "@/shared/filter-chips/types";
 import {
   DATE_FORMAT,
@@ -22,16 +24,17 @@ import TimeChipDateInput from "@/shared/filter-chips/chips/TimeChip/TimeChipDate
 import TimeChipTimeInput from "@/shared/filter-chips/chips/TimeChip/TimeChipTimeInput";
 
 interface TimeChipPopoverContentProps {
+  fieldLabel: string;
   value: TimeChipValue | undefined;
   onApply: (value: TimeChipValue) => void;
   onClear: () => void;
 }
 
-const MODES: { mode: TimeChipMode; label: string }[] = [
-  { mode: "exactly", label: "Exactly" },
-  { mode: "between", label: "Between" },
-  { mode: "before", label: "Before" },
-  { mode: "after", label: "After" },
+const OPERATOR_OPTIONS: FilterOperatorOption<TimeChipMode>[] = [
+  { value: "exactly", label: "Is" },
+  { value: "before", label: "Is before" },
+  { value: "after", label: "Is after" },
+  { value: "between", label: "Is between" },
 ];
 
 const START_OF_DAY: SimpleTime = { hour: 0, minute: 0 };
@@ -83,6 +86,7 @@ const buildValue = (
 };
 
 const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
+  fieldLabel,
   value,
   onApply,
   onClear,
@@ -161,22 +165,12 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
 
   return (
     <div className="flex w-[320px] flex-col gap-4 p-3">
-      <ToggleGroup
-        type="single"
-        variant="filter"
-        size="xs"
+      <FilterOperatorSelect
+        fieldLabel={fieldLabel}
         value={mode}
-        onValueChange={(next) => {
-          if (next) handleModeChange(next as TimeChipMode);
-        }}
-        className="w-full"
-      >
-        {MODES.map((m) => (
-          <ToggleGroupItem key={m.mode} value={m.mode} className="flex-1">
-            {m.label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+        options={OPERATOR_OPTIONS}
+        onChange={handleModeChange}
+      />
 
       {mode === "between" ? (
         <>

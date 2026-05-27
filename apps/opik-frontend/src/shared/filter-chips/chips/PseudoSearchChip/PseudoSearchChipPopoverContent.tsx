@@ -19,7 +19,7 @@ interface PseudoSearchChipPopoverContentProps {
 const PseudoSearchChipPopoverContent: React.FC<
   PseudoSearchChipPopoverContentProps
 > = ({ definition, value, onApply, onClear, onCommit }) => {
-  const inputLabel = definition.inputLabel ?? `Search by ${definition.label}`;
+  const placeholder = definition.placeholder ?? `Search by ${definition.label}`;
 
   const handleChange = (
     raw: string | number | readonly string[] | undefined,
@@ -41,19 +41,14 @@ const PseudoSearchChipPopoverContent: React.FC<
 
   return (
     <div className="flex w-[291px] flex-col gap-4 p-3">
-      <div className="flex flex-col gap-1">
-        <label className="comet-body-s-accented px-0.5 pb-0.5 text-foreground">
-          {inputLabel}
-        </label>
-        <DebounceInput
-          autoFocus
-          dimension="sm"
-          value={value?.value ?? ""}
-          onValueChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder={definition.placeholder ?? ""}
-        />
-      </div>
+      <DebounceInput
+        autoFocus
+        dimension="sm"
+        value={value?.value ?? ""}
+        onValueChange={handleChange}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+      />
 
       <PopoverClearFooter
         onClear={onClear}

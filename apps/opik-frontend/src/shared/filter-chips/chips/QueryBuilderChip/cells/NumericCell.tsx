@@ -31,6 +31,7 @@ export const NumericCell: React.FC<NumericCellProps> = ({
       ref={ref}
       type="number"
       step="any"
+      data-filter-cell
       variant="unstyled"
       dimension="none"
       value={value}
