@@ -178,7 +178,6 @@ const LLMJudgeBaseSchema = z.object({
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
-  parsingVariablesError: z.boolean().optional(),
   schema: z
     .array(
       z.object({
@@ -207,19 +206,7 @@ const LLMJudgeBaseSchema = z.object({
 });
 
 export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
-  variables: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      // Allow the standard JSONPath form (input/output/metadata.[...]) OR a reserved
-      // bare sentinel like `spans` — see RESERVED_TRACE_EVALUATOR_VARIABLES. The
-      // backend's OnlineScoringEngine substitutes the sentinel with the JSON-
-      // serialized spans list at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
-        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
-      }),
-  ),
+  variables: z.record(z.string(), z.string()).optional().default({}),
 }).superRefine((data, ctx) => {
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
@@ -262,15 +249,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 });
 
 export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
-  variables: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-      }),
-  ),
+  variables: z.record(z.string(), z.string()).optional().default({}),
 }).superRefine((data, ctx) => {
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
@@ -313,7 +292,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
 });
 
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
-  variables: z.record(z.string(), z.string()),
+  variables: z.record(z.string(), z.string()).optional().default({}),
 }).superRefine((data, ctx) => {
   const contextCount = data.messages.filter((m) => {
     const content = getTextFromMessageContent(m.content);
@@ -524,7 +503,6 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
     variables: data.variables ?? {},
-    parsingVariablesError: false,
     schema: data.schema,
   };
 };

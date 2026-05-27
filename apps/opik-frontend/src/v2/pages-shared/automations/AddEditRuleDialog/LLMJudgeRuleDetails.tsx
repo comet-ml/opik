@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
@@ -11,35 +11,50 @@ import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/Prompt
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
-import LLMPromptMessagesVariables from "@/v2/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariables";
 import LLMJudgeScores from "@/v2/pages-shared/llm/LLMJudgeScores/LLMJudgeScores";
 import {
   LLM_MESSAGE_ROLE_NAME_MAP,
   LLM_PROMPT_TEMPLATES,
 } from "@/constants/llm";
-import {
-  LLM_JUDGE,
-  LLM_MESSAGE_ROLE,
-  LLMMessage,
-  LLMPromptTemplate,
-} from "@/types/llm";
-import {
-  generateDefaultLLMPromptMessage,
-  getAllTemplateStringsFromContent,
-  resolveTraceEvaluatorVariableDefault,
-} from "@/lib/llm";
+import { LLM_JUDGE, LLM_MESSAGE_ROLE, LLMPromptTemplate } from "@/types/llm";
+import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
-import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useTracesList from "@/api/traces/useTracesList";
+import useSpansList from "@/api/traces/useSpansList";
+import { JsonObject, JsonValue } from "@/types/shared";
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
+
+const deepMergeSchemas = (
+  target: JsonObject,
+  source: JsonObject,
+): JsonObject => {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const srcVal = source[key];
+    const tgtVal = result[key];
+    if (isPlainObject(srcVal) && isPlainObject(tgtVal)) {
+      result[key] = deepMergeSchemas(
+        tgtVal as JsonObject,
+        srcVal as JsonObject,
+      );
+    } else if (
+      !(key in result) ||
+      result[key] === undefined ||
+      result[key] === null
+    ) {
+      result[key] = srcVal as JsonValue;
+    }
+  }
+  return result;
+};
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -77,17 +92,74 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
-  const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
-  const agenticToolsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENTIC_TOOLS_ENABLED,
-  );
+  const projectId = form.watch("projectIds")[0] || "";
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
 
-  // Determine the type for autocomplete based on scope
-  const autocompleteType = isSpanScope
-    ? TRACE_DATA_TYPE.spans
-    : TRACE_DATA_TYPE.traces;
+  const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
+
+  const { data: tracesData } = useTracesList(
+    {
+      projectId,
+      page: 1,
+      size: 20,
+      truncate: true,
+    },
+    { enabled: !!projectId && !isSpanScope },
+  );
+
+  const { data: spansData } = useSpansList(
+    {
+      projectId,
+      page: 1,
+      size: 20,
+      truncate: true,
+    },
+    { enabled: !!projectId && isSpanScope },
+  );
+
+  const jsonTreeData: JsonObject | null = useMemo(() => {
+    if (isThreadScope) {
+      return {
+        context: "(full conversation history)" as unknown as JsonObject,
+      };
+    }
+
+    const items = isSpanScope ? spansData?.content : tracesData?.content;
+
+    if (items && items.length > 0) {
+      const merged: JsonObject = {
+        input: {} as JsonObject,
+        output: {} as JsonObject,
+        metadata: {} as JsonObject,
+      };
+      for (const item of items) {
+        for (const section of ["input", "output", "metadata"] as const) {
+          const data = item[section];
+          if (data && typeof data === "object") {
+            merged[section] = deepMergeSchemas(
+              merged[section] as JsonObject,
+              data as JsonObject,
+            );
+          }
+        }
+      }
+      if (!isSpanScope) {
+        merged.spans = "(child spans of the trace)" as unknown as JsonObject;
+      }
+      return merged;
+    }
+
+    const fallback: JsonObject = {
+      input: "(no data yet)" as unknown as JsonObject,
+      output: "(no data yet)" as unknown as JsonObject,
+      metadata: "(no data yet)" as unknown as JsonObject,
+    };
+    if (!isSpanScope) {
+      fallback.spans = "(child spans of the trace)" as unknown as JsonObject;
+    }
+    return fallback;
+  }, [tracesData, spansData, isThreadScope, isSpanScope]);
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
@@ -116,54 +188,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     [calculateModelProvider, form],
   );
 
-  // Memoized callback to handle messages change
-  const handleMessagesChange = useCallback(
-    (
-      messages: LLMMessage[],
-      fieldOnChange: (messages: LLMMessage[]) => void,
-      formInstance: UseFormReturn<EvaluationRuleFormType>,
-    ) => {
-      fieldOnChange(messages);
-
-      // recalculate variables
-      const variables = formInstance.getValues("llmJudgeDetails.variables");
-      const currentScope = formInstance.getValues("scope");
-      const localVariables: Record<string, string> = {};
-      let parsingVariablesError: boolean = false;
-      messages
-        .reduce<string[]>((acc, m) => {
-          // Extract template strings from both text and image URLs
-          const templateStrings = getAllTemplateStringsFromContent(m.content);
-          // Get mustache tags from all template strings
-          const allTags = templateStrings.flatMap((str) => {
-            const tags = safelyGetPromptMustacheTags(str);
-            if (!tags) {
-              parsingVariablesError = true;
-              return [];
-            }
-            return tags;
-          });
-          return acc.concat(allTags);
-        }, [])
-        .filter((v) => v !== "")
-        .forEach((v: string) => {
-          localVariables[v] = resolveTraceEvaluatorVariableDefault(
-            v,
-            variables[v],
-            currentScope,
-            agenticToolsEnabled,
-          );
-        });
-
-      formInstance.setValue("llmJudgeDetails.variables", localVariables);
-      formInstance.setValue(
-        "llmJudgeDetails.parsingVariablesError",
-        parsingVariablesError,
-      );
-    },
-    [agenticToolsEnabled],
-  );
-
   return (
     <>
       <FormField
@@ -187,7 +211,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     onChange={(m) => {
                       if (m) {
                         field.onChange(m);
-                        // Update config to ensure reasoning models have temperature >= 1.0
                         const newProvider = calculateModelProvider(m);
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
@@ -252,13 +275,12 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
               <SelectBox
                 value={field.value}
                 onChange={(newTemplate: string) => {
-                  const { variables, messages, schema, template } =
+                  const { messages, schema, template } =
                     form.getValues("llmJudgeDetails");
                   if (newTemplate !== template) {
                     cache.current[template] = {
                       ...cache.current[template],
                       messages: messages,
-                      variables: variables,
                       schema: schema,
                     };
 
@@ -269,10 +291,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     form.setValue(
                       "llmJudgeDetails.messages",
                       templateData.messages,
-                    );
-                    form.setValue(
-                      "llmJudgeDetails.variables",
-                      templateData.variables ?? {},
                     );
                     form.setValue(
                       "llmJudgeDetails.schema",
@@ -303,64 +321,26 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             ]);
 
             return (
-              <>
-                <LLMPromptMessages
-                  messages={messages}
-                  validationErrors={validationErrors}
-                  possibleTypes={MESSAGE_TYPE_OPTIONS}
-                  disableMedia={isThreadScope}
-                  promptVariables={datasetColumnNames}
-                  onChange={(messages: LLMMessage[]) =>
-                    handleMessagesChange(messages, field.onChange, form)
-                  }
-                  onAddMessage={() =>
-                    field.onChange([
-                      ...messages,
-                      generateDefaultLLMPromptMessage({
-                        role: LLM_MESSAGE_ROLE.user,
-                      }),
-                    ])
-                  }
-                />
-              </>
+              <LLMPromptMessages
+                messages={messages}
+                validationErrors={validationErrors}
+                possibleTypes={MESSAGE_TYPE_OPTIONS}
+                disableMedia={isThreadScope}
+                promptVariables={datasetColumnNames}
+                onChange={field.onChange}
+                onAddMessage={() =>
+                  field.onChange([
+                    ...messages,
+                    generateDefaultLLMPromptMessage({
+                      role: LLM_MESSAGE_ROLE.user,
+                    }),
+                  ])
+                }
+                jsonTreeData={jsonTreeData}
+              />
             );
           }}
         />
-        {!isThreadScope && (
-          <FormField
-            control={form.control}
-            name="llmJudgeDetails.variables"
-            render={({ field, formState }) => {
-              const parsingVariablesError = form.getValues(
-                "llmJudgeDetails.parsingVariablesError",
-              );
-              const validationErrors = get(formState.errors, [
-                "llmJudgeDetails",
-                "variables",
-              ]);
-
-              return (
-                <>
-                  <LLMPromptMessagesVariables
-                    parsingError={parsingVariablesError}
-                    validationErrors={validationErrors}
-                    projectId={form.watch("projectIds")[0] || ""}
-                    variables={field.value}
-                    onChange={field.onChange}
-                    datasetColumnNames={datasetColumnNames}
-                    type={autocompleteType}
-                    includeIntermediateNodes
-                    reservedSentinels={
-                      agenticToolsEnabled
-                        ? RESERVED_TRACE_EVALUATOR_VARIABLES
-                        : undefined
-                    }
-                  />
-                </>
-              );
-            }}
-          />
-        )}
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex items-center">

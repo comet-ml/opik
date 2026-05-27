@@ -62,6 +62,8 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Slf4j
 public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseScorer<TraceThreadToScoreLlmAsJudge> {
 
+    private static final int MAX_PROMPT_FIELD_CHARS = 4_000;
+
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
@@ -317,7 +319,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     // the trace-level path uses. Spans for any one trace are fetched reactively in
                     // ReadTool.readTrace only when the model actually asks for that trace.
                     scoreRequest = OnlineScoringEngine.prepareThreadLlmRequestWithTools(
-                            message.code(), traces, strategy);
+                            message.code(), traces, strategy, MAX_PROMPT_FIELD_CHARS);
                     // The post-tool-loop wrap-up uses the same structured-output strategy — for
                     // threads there is no separate InstructionStrategy variant, so the initial and
                     // wrap-up requests share a shape (modulo tool specs).
