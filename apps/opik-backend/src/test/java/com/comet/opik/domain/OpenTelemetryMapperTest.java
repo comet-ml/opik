@@ -217,6 +217,62 @@ class OpenTelemetryMapperTest {
     }
 
     @Test
+    void testGenAiUsageCostAsDoubleSetsTotalEstimatedCost() {
+        // LiteLLM sends the pre-computed cost as a float gen_ai.usage.cost; it must be used directly
+        // and must NOT be routed into the integer-only usage map (where it was previously dropped).
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.cost")
+                        .setValue(AnyValue.newBuilder().setDoubleValue(0.001234))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.prompt_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(100))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.completion_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(50))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.001234");
+        assertThat(span.usage()).doesNotContainKey("cost");
+        assertThat(span.usage().get("prompt_tokens")).isEqualTo(100);
+        assertThat(span.usage().get("completion_tokens")).isEqualTo(50);
+    }
+
+    @Test
+    void testGenAiUsageCostAsStringSetsTotalEstimatedCost() {
+        // LiteLLM may serialize the cost as a string; it must still be parsed into totalEstimatedCost
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.cost")
+                        .setValue(AnyValue.newBuilder().setStringValue("0.001234"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.001234");
+    }
+
+    @Test
     void testOldAndNewGenAiAttributesCoexist() {
         var attributes = List.of(
                 KeyValue.newBuilder()

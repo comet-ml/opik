@@ -9,9 +9,11 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -97,6 +99,35 @@ public class OpenTelemetryMappingUtils {
                 // extracting from a JSON object
                 tryExtractUsageFromJsonObject(usage, key, value.getStringValue());
             }
+        }
+    }
+
+    /**
+     * Extracts a pre-computed cost value from an AnyValue. Some integrations (e.g. LiteLLM) send the
+     * exact request cost as a float attribute; we use it as the authoritative cost instead of recalculating.
+     * Supports double, integer, and numeric string values.
+     *
+     * @param value the AnyValue containing the cost
+     * @return the parsed cost, or empty if the value is not a parseable number
+     */
+    public static Optional<BigDecimal> extractCost(@NonNull AnyValue value) {
+        return switch (value.getValueCase()) {
+            case DOUBLE_VALUE -> Optional.of(BigDecimal.valueOf(value.getDoubleValue()));
+            case INT_VALUE -> Optional.of(BigDecimal.valueOf(value.getIntValue()));
+            case STRING_VALUE -> parseCostString(value.getStringValue());
+            default -> {
+                log.warn("Unsupported value type for cost extraction: {}", value.getValueCase());
+                yield Optional.empty();
+            }
+        };
+    }
+
+    private static Optional<BigDecimal> parseCostString(String stringValue) {
+        try {
+            return Optional.of(new BigDecimal(stringValue.trim()));
+        } catch (NumberFormatException e) {
+            log.debug("Failed to parse cost string value '{}' as a number", stringValue);
+            return Optional.empty();
         }
     }
 
