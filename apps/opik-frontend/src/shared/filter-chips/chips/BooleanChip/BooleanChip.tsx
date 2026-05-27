@@ -26,7 +26,8 @@ const BooleanChip: React.FC<BooleanChipProps> = ({
       applied={applied}
       aria-pressed={applied}
       onClear={onClear}
-      onClick={applied ? undefined : () => onApply({ applied: true })}
+      onClick={applied ? onClear : () => onApply({ applied: true })}
+      className="pr-2"
     >
       <span className="truncate">{definition.label}</span>
     </ChipShell>

@@ -43,7 +43,7 @@ const SingleSelectChipPopoverContent: React.FC<
             searchText={search}
             setSearchText={setSearch}
             placeholder="Search"
-            size="sm"
+            dimension="sm"
             variant="ghost"
           />
           <Separator className="my-1" />

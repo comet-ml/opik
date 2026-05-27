@@ -17,15 +17,12 @@ const toggleVariants = cva(
           "rounded-md border border-input bg-transparent hover:bg-accent hover:text-accent-foreground active:bg-[var(--toggle-outline-active)] data-[state=on]:bg-[var(--toggle-outline-active)]",
         ghost:
           "bg-transparent font-normal hover:text-primary-hover active:text-primary-active disabled:text-muted-gray disabled:opacity-100 data-[state=on]:bg-upload-icon-bg/40 data-[state=on]:text-foreground disabled:data-[state=on]:bg-upload-icon-bg/20 disabled:data-[state=on]:text-muted-gray",
-        filter:
-          "comet-body-xs rounded-[2px] bg-transparent text-foreground hover:bg-muted data-[state=on]:bg-chart-gray-light data-[state=on]:text-foreground",
       },
       size: {
         default: "h-8 px-4",
         sm: "h-6 px-2",
         md: "h-7 px-2",
         lg: "h-9 px-5",
-        xs: "h-[18px] px-2",
         icon: "size-8 p-2",
         "icon-sm": "size-6 p-1 [&>svg]:size-3 [&>svg]:shrink-0",
       },

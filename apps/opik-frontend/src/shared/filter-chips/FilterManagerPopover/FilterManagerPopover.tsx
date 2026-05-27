@@ -116,7 +116,7 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
             searchText={searchText}
             setSearchText={setSearchText}
             placeholder="Search"
-            size="sm"
+            dimension="sm"
             variant="ghost"
           />
           <Separator className="my-1" />

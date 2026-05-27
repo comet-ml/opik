@@ -15,11 +15,12 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
     { applied, isOpen, onClear, disabled, className, children, ...rest },
     ref,
   ) => {
-    const showClear = Boolean(applied && onClear && !isOpen && !disabled);
+    const hasClear = Boolean(onClear && !disabled);
+    const showClearAffordance = Boolean(applied && !isOpen);
 
     const bodyButton = (
       <button
-        ref={showClear ? undefined : (ref as React.Ref<HTMLButtonElement>)}
+        ref={hasClear ? undefined : (ref as React.Ref<HTMLButtonElement>)}
         type="button"
         disabled={disabled}
         className={cn(
@@ -32,7 +33,7 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
               : "border-border bg-soft-background text-muted-slate hover:border-secondary hover:bg-primary-100 hover:text-primary-hover",
           "focus-visible:ring-2 focus-visible:ring-primary-active/40",
           disabled && "cursor-not-allowed opacity-50",
-          showClear && "group-hover:rounded-r-none group-hover:border-r-0",
+          showClearAffordance && "group-hover:rounded-r-none",
           className,
         )}
         {...rest}
@@ -41,7 +42,7 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
       </button>
     );
 
-    if (!showClear) return bodyButton;
+    if (!hasClear) return bodyButton;
 
     return (
       <span
@@ -58,7 +59,8 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
             }}
             aria-label="Clear filter"
             className={cn(
-              "hidden h-6 items-center justify-center rounded-r-[20px] border border-l-0 border-secondary bg-primary-100/50 pl-1 pr-1.5 text-primary-active outline-none transition-colors group-hover:inline-flex",
+              "hidden h-6 items-center justify-center rounded-r-[20px] border border-l-0 border-secondary bg-primary-100/50 pl-1 pr-1.5 text-primary-active outline-none transition-colors",
+              showClearAffordance && "group-hover:inline-flex",
               "hover:bg-primary-100 hover:text-primary-hover",
               "focus-visible:ring-2 focus-visible:ring-primary-active/40",
             )}

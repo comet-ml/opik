@@ -48,7 +48,7 @@ export function QueryFilterShell<TRow>({
       className={cn("flex flex-col gap-2 p-3", "min-w-[360px] max-w-[800px]")}
     >
       {hasRows && (
-        <ul className="flex flex-col gap-2">
+        <ul className="mb-2 flex flex-col gap-2">
           {rows.map((row, index) => (
             <li key={index}>
               <FilterRow onRemove={() => onRemoveRow(index)}>
