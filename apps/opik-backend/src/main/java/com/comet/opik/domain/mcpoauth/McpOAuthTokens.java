@@ -27,6 +27,10 @@ public class McpOAuthTokens {
         return REFRESH_PREFIX + randomSuffix();
     }
 
+    public static String generateCode() {
+        return randomSuffix();
+    }
+
     public static boolean isAccessToken(String token) {
         return token != null && token.startsWith(ACCESS_PREFIX);
     }
