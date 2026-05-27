@@ -4,12 +4,15 @@ import com.comet.opik.api.Environment;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
 import java.util.Optional;
@@ -55,15 +58,22 @@ interface EnvironmentDAO {
     @SqlQuery("SELECT * FROM environments WHERE workspace_id = :workspaceId ORDER BY created_at ASC")
     List<Environment> findAll(@Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT name FROM environments WHERE workspace_id = :workspaceId")
-    List<String> findAllNames(@Bind("workspaceId") String workspaceId);
+    @SqlQuery("SELECT name FROM environments WHERE workspace_id = :workspaceId <if(names)> AND name IN (<names>) <endif>")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Set<String> findNames(@Bind("workspaceId") String workspaceId,
+            @Define("names") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "names") Set<String> names);
+
+    default Set<String> findAllNames(String workspaceId) {
+        return findNames(workspaceId, null);
+    }
+
+    default Set<String> findExistingNames(String workspaceId, Set<String> names) {
+        return findNames(workspaceId, names);
+    }
 
     @SqlQuery("SELECT COUNT(*) FROM environments WHERE workspace_id = :workspaceId AND name = :name")
     long countByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name);
-
-    @SqlQuery("SELECT name FROM environments WHERE workspace_id = :workspaceId AND name IN (<names>)")
-    Set<String> findExistingNames(@Bind("workspaceId") String workspaceId,
-            @BindList("names") Set<String> names);
 
     @SqlQuery("SELECT COUNT(*) FROM environments WHERE workspace_id = :workspaceId")
     long countByWorkspace(@Bind("workspaceId") String workspaceId);

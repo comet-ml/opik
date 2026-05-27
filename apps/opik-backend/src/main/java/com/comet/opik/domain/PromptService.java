@@ -339,7 +339,7 @@ class PromptServiceImpl implements PromptService {
                 ? Set.of()
                 : createPromptVersion.version().environments().stream()
                         .filter(StringUtils::isNotBlank)
-                        .map(String::trim)
+                        .map(String::strip)
                         .collect(toSet());
 
         if (!CollectionUtils.isEmpty(environments)) {
@@ -777,7 +777,7 @@ class PromptServiceImpl implements PromptService {
                 ? Set.of()
                 : environments.stream()
                         .filter(StringUtils::isNotBlank)
-                        .map(String::trim)
+                        .map(String::strip)
                         .collect(toSet());
 
         PromptVersion version = getVersionById(versionId);

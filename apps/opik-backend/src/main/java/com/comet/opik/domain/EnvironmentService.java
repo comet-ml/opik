@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
@@ -203,7 +204,7 @@ class EnvironmentServiceImpl implements EnvironmentService {
 
     @Override
     public Set<String> findExistingNames(@NonNull Set<String> names, @NonNull String workspaceId) {
-        if (names.isEmpty()) {
+        if (CollectionUtils.isEmpty(names)) {
             return Set.of();
         }
         return template.inTransaction(READ_ONLY, handle -> handle.attach(EnvironmentDAO.class)
