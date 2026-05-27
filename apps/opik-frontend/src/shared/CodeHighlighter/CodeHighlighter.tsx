@@ -8,6 +8,7 @@ import { yamlLanguage } from "@codemirror/lang-yaml";
 import { pythonLanguage } from "@codemirror/lang-python";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useCodemirrorLineHighlight } from "@/hooks/useCodemirrorLineHighlight";
+import { cn } from "@/lib/utils";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 
 export enum SUPPORTED_LANGUAGE {
@@ -28,6 +29,13 @@ type CodeHighlighterProps = {
   language?: SUPPORTED_LANGUAGE;
   highlightedLines?: number[];
   hideCopy?: boolean;
+  /**
+   * When true, the wrapper drops its `bg-primary-foreground` and the CodeMirror
+   * editor uses a transparent background. Use this when the highlighter is
+   * slotted inside a parent container that already provides a background
+   * (e.g. `FormFieldCard`) — otherwise two backgrounds stack visibly.
+   */
+  transparent?: boolean;
 };
 
 const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
@@ -36,14 +44,20 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
   language = SUPPORTED_LANGUAGE.python,
   highlightedLines,
   hideCopy = false,
+  transparent = false,
 }) => {
-  const theme = useCodemirrorTheme();
+  const theme = useCodemirrorTheme({ transparent });
   const LineHighlightExtension = useCodemirrorLineHighlight({
     lines: highlightedLines,
   });
 
   return (
-    <div className="relative overflow-hidden rounded-md bg-primary-foreground">
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-md",
+        !transparent && "bg-primary-foreground",
+      )}
+    >
       {!hideCopy && (
         <div className="absolute right-2 top-0.5 z-10">
           <CopyButton

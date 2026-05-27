@@ -123,6 +123,13 @@ const PlaygroundPrompt = ({
     [promptId, updatePrompt],
   );
 
+  const handleChatPromptUnavailable = useCallback(() => {
+    updatePrompt(promptId, {
+      loadedChatPromptId: undefined,
+      loadedChatPromptVersionId: undefined,
+    });
+  }, [promptId, updatePrompt]);
+
   const {
     chatPromptData,
     chatPromptVersionData,
@@ -134,6 +141,7 @@ const PlaygroundPrompt = ({
     selectedChatPromptVersionId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
+    onPromptUnavailable: handleChatPromptUnavailable,
     skipInitialLoad: prompt?.skipInitialPromptLoad,
   });
 

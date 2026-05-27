@@ -105,13 +105,18 @@ export function usePromptTemplateEditor({
 
   const isDirty = useMemo(() => {
     if (isChatPrompt) {
+      // Compare against the serialized form of `initialMessages` rather than
+      // the raw `initialTemplate` string — when `initialTemplate` is empty
+      // (create flow), `initialMessages` falls back to a single default user
+      // message. Comparing the serialized messages against an empty string
+      // would always be unequal, flagging fresh sheets as dirty.
       return !chatTemplatesEqual(
         serializeChatTemplate(messages),
-        initialTemplate,
+        serializeChatTemplate(initialMessages),
       );
     }
     return template !== initialTemplate;
-  }, [isChatPrompt, messages, template, initialTemplate]);
+  }, [isChatPrompt, messages, initialMessages, template, initialTemplate]);
 
   const isValid = isChatPrompt
     ? messages.length > 0 && (chatViewMode === "pretty" || isRawJsonValid)

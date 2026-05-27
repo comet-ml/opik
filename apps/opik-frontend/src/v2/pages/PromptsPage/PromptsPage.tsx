@@ -454,9 +454,7 @@ const PromptsPage: React.FunctionComponent = () => {
             <div>
               <Button variant="outline" size="sm" asChild>
                 <a
-                  href={buildDocsUrl(
-                    "/development/agent-configuration/overview",
-                  )}
+                  href={buildDocsUrl("/development/prompt-library/overview")}
                   target="_blank"
                   rel="noreferrer"
                 >

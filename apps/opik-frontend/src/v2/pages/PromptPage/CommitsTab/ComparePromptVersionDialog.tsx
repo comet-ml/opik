@@ -125,43 +125,48 @@ const MessageCell: React.FC<{
   const baseContent = side === "base" ? thisContent : otherContent;
   const diffContent = side === "base" ? otherContent : thisContent;
 
+  // For wholly added/removed messages, paint the diff color on an INNER
+  // wrapper (with its own padding) rather than the outer card — that leaves
+  // a transparent inset around the colored area, matching the way `TextDiff`
+  // renders inline word highlights inside an edited message.
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-1 rounded-md border p-2",
-        isAdded && "border-transparent bg-[var(--tag-green-bg)]",
-        isRemoved && "border-transparent bg-[var(--tag-red-bg)]",
-        !isAdded && !isRemoved && "border-border bg-background",
-      )}
-    >
-      <span
-        className={cn(
-          "comet-body-xs",
-          isAdded && "text-[var(--tag-green-text)]",
-          isRemoved && "text-[var(--tag-red-text)]",
-          !isAdded && !isRemoved && "text-muted-slate",
-        )}
-      >
-        {getRoleLabel(message.role)}
-      </span>
+    <div className="flex flex-col gap-1 rounded-md border border-border bg-background p-2">
       <div
         className={cn(
-          "comet-body-s whitespace-pre-wrap break-words",
-          isAdded && "text-[var(--tag-green-text)]",
-          isRemoved && "text-[var(--tag-red-text)] line-through",
-          !isAdded && !isRemoved && "text-foreground",
+          "flex flex-col gap-1 rounded-md",
+          isAdded && "bg-diff-added-bg px-1.5 py-1",
+          isRemoved && "bg-diff-removed-bg px-1.5 py-1",
         )}
       >
-        {otherMessage ? (
-          <TextDiff
-            content1={baseContent}
-            content2={diffContent}
-            mode="words"
-            side={side}
-          />
-        ) : (
-          thisContent
-        )}
+        <span
+          className={cn(
+            "comet-body-xs",
+            isAdded && "text-diff-added-text",
+            isRemoved && "text-diff-removed-text",
+            !isAdded && !isRemoved && "text-muted-slate",
+          )}
+        >
+          {getRoleLabel(message.role)}
+        </span>
+        <div
+          className={cn(
+            "comet-body-s whitespace-pre-wrap break-words",
+            isAdded && "text-diff-added-text",
+            isRemoved && "text-diff-removed-text line-through",
+            !isAdded && !isRemoved && "text-foreground",
+          )}
+        >
+          {otherMessage ? (
+            <TextDiff
+              content1={baseContent}
+              content2={diffContent}
+              mode="words"
+              side={side}
+            />
+          ) : (
+            thisContent
+          )}
+        </div>
       </div>
     </div>
   );
@@ -397,7 +402,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
                   diffLabel={diffLabel ?? ""}
                 />
                 {isChatDiff && viewMode === "pretty" ? (
-                  <div className="grid grid-cols-2 gap-2 p-2">
+                  <div className="grid grid-cols-2 gap-2 p-3">
                     {Array.from({
                       length: Math.max(
                         baseChat?.length ?? 0,
@@ -419,7 +424,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
                     ])}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 p-2">
+                  <div className="grid grid-cols-2 gap-2 p-3">
                     <div className="comet-code whitespace-pre-line break-words rounded-md border border-border bg-primary-foreground p-2">
                       <TextDiff
                         content1={baseText}
@@ -449,7 +454,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
                   baseLabel={baseLabel ?? ""}
                   diffLabel={diffLabel ?? ""}
                 />
-                <div className="grid grid-cols-2 gap-2 p-2">
+                <div className="grid grid-cols-2 gap-2 p-3">
                   <MetadataCell
                     text={baseMetadataText}
                     baseText={baseMetadataText}

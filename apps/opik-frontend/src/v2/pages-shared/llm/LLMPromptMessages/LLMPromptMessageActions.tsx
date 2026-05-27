@@ -9,6 +9,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { Save, Sparkles, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 import isEqual from "fast-deep-equal";
+import { AxiosError } from "axios";
 
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage, MessageContent } from "@/types/llm";
@@ -17,6 +18,7 @@ import { PLAYGROUND_SELECTED_DATASET_VERSION_KEY } from "@/constants/llm";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptById from "@/api/prompts/usePromptById";
+import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveProjectId } from "@/store/AppStore";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
@@ -95,10 +97,39 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     },
   );
 
-  const { promptId, content } = message;
-  const { data: promptData } = usePromptById(
+  const { promptId, promptVersionId, content } = message;
+  const { data: promptData, error: promptError } = usePromptById(
     { promptId: promptId! },
-    { enabled: !!promptId },
+    {
+      enabled: !!promptId,
+      // Don't retry a definitively-missing prompt; the 404 needs to surface
+      // promptly so we can detach it from the message below.
+      retry: (failureCount, error) => {
+        if (error instanceof AxiosError && error.response?.status === 404) {
+          return false;
+        }
+        return failureCount < 3;
+      },
+    },
+  );
+
+  // If the linked prompt was deleted from the library, clear the message's
+  // prompt references so the UI stops showing it as if it still exists.
+  useEffect(() => {
+    if (
+      promptId &&
+      promptError instanceof AxiosError &&
+      promptError.response?.status === 404
+    ) {
+      onChangeMessage({ promptId: undefined, promptVersionId: undefined });
+    }
+  }, [promptId, promptError, onChangeMessage]);
+  // When a specific version is loaded, the dirty check needs that version's
+  // content — not `latest_version`, which would flag everything as unsaved
+  // whenever the user picked an older version.
+  const { data: loadedVersionData } = usePromptVersionById(
+    { versionId: promptVersionId! },
+    { enabled: !!promptVersionId },
   );
 
   // Check if content has meaningful text
@@ -190,14 +221,17 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   );
 
   const saveDisabled = !hasContent || !canCreatePrompts;
+  // Compare against the actually-loaded version when available; fall back to
+  // `latest_version` only when no specific version is referenced.
+  const baselineVersion =
+    promptVersionId && loadedVersionData?.id === promptVersionId
+      ? loadedVersionData
+      : promptData?.latest_version;
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      !isEqual(
-        message.content,
-        parsePromptVersionContent(promptData?.latest_version),
-      ),
+      !isEqual(message.content, parsePromptVersionContent(baselineVersion)),
   );
   const saveTooltip = saveWarning
     ? !datasetId

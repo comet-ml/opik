@@ -355,7 +355,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   <DropdownMenuItem asChild className="px-3">
                     <a
                       href={buildDocsUrl(
-                        "/prompt_engineering/prompt_management",
+                        "/development/prompt-library/getting-started",
                       )}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -461,6 +461,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   data={template}
                   language={SUPPORTED_LANGUAGE.json}
                   hideCopy
+                  transparent
                 />
               ) : (
                 <pre className="comet-code whitespace-pre-wrap break-words text-foreground">
@@ -482,6 +483,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   data={metadataJson}
                   language={SUPPORTED_LANGUAGE.json}
                   hideCopy
+                  transparent
                 />
               </FormFieldCard>
             </div>

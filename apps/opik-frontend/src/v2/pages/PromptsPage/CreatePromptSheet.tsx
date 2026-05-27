@@ -68,12 +68,6 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
     editor.template,
   ]);
 
-  const isDirty =
-    name.length > 0 ||
-    description.length > 0 ||
-    metadata.length > 0 ||
-    editor.isDirty;
-
   const onPromptCreated = useCallback(
     (prompt: Prompt) => {
       if (!prompt.id) return;
@@ -147,7 +141,9 @@ const CreatePromptSheet: React.FC<CreatePromptSheetProps> = ({
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[720px]"
         header={<SheetTopBar variant="form" title={title} />}
-        blockOverlayClose={isDirty}
+        // Creating a prompt requires several distinct inputs — block
+        // outside-click closing so a stray click never discards the form.
+        blockOverlayClose
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           <div className="space-y-1.5">

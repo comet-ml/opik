@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { AxiosError } from "axios";
 import isEqual from "fast-deep-equal";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
@@ -11,6 +12,13 @@ export interface UseLoadChatPromptOptions {
   selectedChatPromptVersionId?: string;
   messages: LLMMessage[];
   onMessagesLoaded: (messages: LLMMessage[], promptName: string) => void;
+  /**
+   * Fired when the loaded prompt is reported as missing by the backend (404),
+   * typically after it was deleted from the library. Callers should clear the
+   * loaded references from their state so the UI stops showing the prompt as
+   * if it still exists.
+   */
+  onPromptUnavailable?: () => void;
   skipInitialLoad?: boolean;
 }
 
@@ -29,20 +37,44 @@ const useLoadChatPrompt = ({
   selectedChatPromptVersionId,
   messages,
   onMessagesLoaded,
+  onPromptUnavailable,
   skipInitialLoad = false,
 }: UseLoadChatPromptOptions): UseLoadChatPromptReturn => {
   const skippedRef = useRef(false);
   const loadedChatPromptRef = useRef<string | null>(null);
 
-  const { data: chatPromptData, isSuccess: chatPromptDataLoaded } =
-    usePromptById(
-      {
-        promptId: selectedChatPromptId!,
+  const {
+    data: chatPromptData,
+    isSuccess: chatPromptDataLoaded,
+    error: chatPromptError,
+  } = usePromptById(
+    {
+      promptId: selectedChatPromptId!,
+    },
+    {
+      enabled: !!selectedChatPromptId,
+      // Don't keep retrying a definitively-missing prompt — the playground
+      // needs the 404 to surface promptly so it can detach the deleted prompt.
+      retry: (failureCount, error) => {
+        if (error instanceof AxiosError && error.response?.status === 404) {
+          return false;
+        }
+        return failureCount < 3;
       },
-      {
-        enabled: !!selectedChatPromptId,
-      },
-    );
+    },
+  );
+
+  // When the selected prompt is reported as 404, tell the caller so it can
+  // clear the loaded references from playground state.
+  useEffect(() => {
+    if (
+      selectedChatPromptId &&
+      chatPromptError instanceof AxiosError &&
+      chatPromptError.response?.status === 404
+    ) {
+      onPromptUnavailable?.();
+    }
+  }, [selectedChatPromptId, chatPromptError, onPromptUnavailable]);
 
   const effectiveVersionId =
     selectedChatPromptVersionId || chatPromptData?.latest_version?.id || "";
