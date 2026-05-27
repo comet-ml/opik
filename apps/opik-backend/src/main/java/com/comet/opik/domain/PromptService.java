@@ -800,11 +800,22 @@ class PromptServiceImpl implements PromptService {
 
         withPromptVersionLock(workspaceId, promptId, () -> transactionTemplate.inTransaction(WRITE, handle -> {
             PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
-            dao.closeVersionEnvironments(versionId, workspaceId);
-            if (!CollectionUtils.isEmpty(envs)) {
-                dao.closeEnvOwnershipsForPrompt(promptId, workspaceId, envs);
-                List<UUID> envIds = envs.stream().map(ignored -> idGenerator.generateId()).toList();
-                dao.saveEnvironments(envIds, workspaceId, promptId, versionId, envs, userName);
+
+            Set<String> currentEnvs = dao.findVersionEnvironments(versionId, workspaceId);
+
+            Set<String> toAdd = new HashSet<>(envs);
+            toAdd.removeAll(currentEnvs);
+
+            Set<String> toRemove = new HashSet<>(currentEnvs);
+            toRemove.removeAll(envs);
+
+            if (!CollectionUtils.isEmpty(toRemove)) {
+                dao.closeVersionEnvironmentsForNames(versionId, workspaceId, toRemove);
+            }
+            if (!CollectionUtils.isEmpty(toAdd)) {
+                dao.closeEnvOwnershipsForPrompt(promptId, workspaceId, toAdd);
+                List<UUID> envIds = toAdd.stream().map(ignored -> idGenerator.generateId()).toList();
+                dao.saveEnvironments(envIds, workspaceId, promptId, versionId, toAdd, userName);
             }
             return null;
         }));

@@ -5267,6 +5267,25 @@ class PromptResourceTest {
         }
 
         @Test
+        @DisplayName("PATCH /versions/{id} incrementally adds environment without removing existing ones")
+        void patchIncrementallyAddsEnvironmentToVersionWithExistingOnes() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env1 = uniqueEnvName("keep");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1));
+
+            String env2 = uniqueEnvName("add");
+            environmentsResourceClient.createEnvironment(
+                    Environment.builder().name(env2).build(), API_KEY, TEST_WORKSPACE);
+
+            patchVersionEnvironments(saved.id(), Set.of(env1, env2), HttpStatus.SC_NO_CONTENT);
+
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env1, env2)).build(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
         @DisplayName("PATCH /versions/{id} with an unknown environment returns 409 Conflict")
         void patchOnUnknownEnvironmentReturnsConflict() {
             var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();

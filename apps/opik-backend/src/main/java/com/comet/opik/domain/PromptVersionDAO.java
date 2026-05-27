@@ -83,12 +83,26 @@ interface PromptVersionDAO {
         saveEnvironments(ids, workspaceId, promptId, versionId, List.copyOf(environments), createdBy);
     }
 
+    @SqlQuery("""
+            SELECT environment FROM prompt_version_envs
+            WHERE workspace_id = :workspace_id AND version_id = :version_id AND ended_at IS NULL
+            """)
+    Set<String> findVersionEnvironments(@Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId);
+
     @SqlUpdate("""
             UPDATE prompt_version_envs
             SET ended_at = CURRENT_TIMESTAMP(6)
             WHERE workspace_id = :workspace_id AND version_id = :version_id AND ended_at IS NULL
             """)
     void closeVersionEnvironments(@Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("""
+            UPDATE prompt_version_envs
+            SET ended_at = CURRENT_TIMESTAMP(6)
+            WHERE workspace_id = :workspace_id AND version_id = :version_id AND environment IN (<environments>) AND ended_at IS NULL
+            """)
+    void closeVersionEnvironmentsForNames(@Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId,
+            @BindList("environments") Set<String> environments);
 
     @SqlUpdate("""
             UPDATE prompt_version_envs
