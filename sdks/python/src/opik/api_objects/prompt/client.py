@@ -272,6 +272,10 @@ class PromptClient:
             raise ValueError(
                 "'commit' and 'environment' are mutually exclusive; pass at most one."
             )
+        if version and environment:
+            raise ValueError(
+                "'version' and 'environment' are mutually exclusive; pass at most one."
+            )
         try:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
@@ -321,6 +325,14 @@ class PromptClient:
             raise ValueError(
                 "Provide either `commit` or `version`, not both. "
                 "Prefer `version` — `commit` is deprecated."
+            )
+        if commit and environment:
+            raise ValueError(
+                "'commit' and 'environment' are mutually exclusive; pass at most one."
+            )
+        if version and environment:
+            raise ValueError(
+                "'version' and 'environment' are mutually exclusive; pass at most one."
             )
 
         def _fetch(mask_id: Optional[str] = None) -> Optional[_PromptT]:
