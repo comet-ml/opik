@@ -1,4 +1,7 @@
 import * as React from "react";
+import TextareaAutosize, {
+  TextareaAutosizeProps,
+} from "react-textarea-autosize";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
@@ -25,10 +28,7 @@ const autoGrowTextareaVariants = cva(
 );
 
 export interface AutoGrowTextareaProps
-  extends Omit<
-      React.TextareaHTMLAttributes<HTMLTextAreaElement>,
-      "rows" | "onChange"
-    >,
+  extends Omit<TextareaAutosizeProps, "onChange">,
     VariantProps<typeof autoGrowTextareaVariants> {
   value: string;
   onChange?: (value: string) => void;
@@ -37,46 +37,15 @@ export interface AutoGrowTextareaProps
 const AutoGrowTextarea = React.forwardRef<
   HTMLTextAreaElement,
   AutoGrowTextareaProps
->(({ className, variant, dimension, value, onChange, ...props }, ref) => {
-  const innerRef = React.useRef<HTMLTextAreaElement>(null);
-  React.useImperativeHandle(ref, () => innerRef.current as HTMLTextAreaElement);
-
-  const resize = React.useCallback(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    el.style.height = "0";
-    const border = el.offsetHeight - el.clientHeight;
-    el.style.height = el.scrollHeight + border + "px";
-  }, []);
-
-  React.useEffect(() => {
-    resize();
-    const el = innerRef.current;
-    if (!el) return;
-    let lastWidth = el.offsetWidth;
-    const observer = new ResizeObserver(() => {
-      if (el.offsetWidth !== lastWidth) {
-        lastWidth = el.offsetWidth;
-        resize();
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [value, resize]);
-
-  return (
-    <textarea
-      ref={innerRef}
-      rows={1}
-      className={cn(
-        autoGrowTextareaVariants({ variant, dimension, className }),
-      )}
-      value={value}
-      onChange={(e) => onChange?.(e.target.value)}
-      {...props}
-    />
-  );
-});
+>(({ className, variant, dimension, value, onChange, ...props }, ref) => (
+  <TextareaAutosize
+    ref={ref}
+    className={cn(autoGrowTextareaVariants({ variant, dimension, className }))}
+    value={value}
+    onChange={(e) => onChange?.(e.target.value)}
+    {...props}
+  />
+));
 AutoGrowTextarea.displayName = "AutoGrowTextarea";
 
 export { AutoGrowTextarea };

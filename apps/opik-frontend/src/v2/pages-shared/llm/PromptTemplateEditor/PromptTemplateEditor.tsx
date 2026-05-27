@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useRef } from "react";
 import { LucideIcon, Sparkles } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
@@ -40,6 +40,13 @@ const PromptTemplateEditor: React.FC<PromptTemplateEditorProps> = ({
   textMinHeightClassName,
 }) => {
   const isJsonMode = editor.chatViewMode === "json";
+
+  // The textarea doesn't fill the wrapper's min-height, so clicks in the
+  // surrounding padding miss it. Forward focus through the wrapper.
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const focusTextarea = useCallback(() => {
+    textareaRef.current?.focus();
+  }, []);
 
   if (editor.isChatPrompt) {
     return (
@@ -98,8 +105,12 @@ const PromptTemplateEditor: React.FC<PromptTemplateEditorProps> = ({
         title="Prompt"
         actions={<CodeBlockCopy text={editor.template} />}
       >
-        <div className={cn(textMinHeightClassName)}>
+        <div
+          className={cn("cursor-text", textMinHeightClassName)}
+          onClick={focusTextarea}
+        >
           <AutoResizeTextarea
+            ref={textareaRef}
             value={editor.template}
             onChange={editor.setTemplate}
             placeholder="Type your prompt..."
