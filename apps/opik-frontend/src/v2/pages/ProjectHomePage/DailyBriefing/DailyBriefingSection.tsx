@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -18,15 +18,6 @@ import {
 } from "@/lib/date";
 import { Button } from "@/ui/button";
 import { Skeleton } from "@/ui/skeleton";
-import { Switch } from "@/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/ui/dialog";
 import useReports from "@/api/projects/useReports";
 import useReportPreference from "@/api/projects/useReportPreference";
 import useGenerateReportMutation from "@/api/projects/useGenerateReportMutation";
@@ -38,9 +29,8 @@ import {
   ReportStatus,
 } from "@/types/ollie-reports";
 import ReportPanel from "./ReportPanel";
-import ReportSettingsFields, {
-  useReportSettings,
-} from "./ReportSettingsFields";
+import TurnOnDialog from "./TurnOnDialog";
+import SettingsDialog from "./SettingsDialog";
 
 function getNextRunLabel(scheduleTimeUtc: string) {
   const day =
@@ -234,174 +224,8 @@ function ReportRow({
   );
 }
 
-function TurnOnDialog({
-  open,
-  onOpenChange,
-  onConfirm,
-  defaultScheduleTime,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: (
-    settings: ReportPreferenceSettings & { runImmediately: boolean },
-  ) => void;
-  defaultScheduleTime: string;
-}) {
-  const [runImmediately, setRunImmediately] = useState(true);
-  const schedule = useReportSettings(defaultScheduleTime, "");
-
-  const handleConfirm = () => {
-    onConfirm({
-      enabled: true,
-      scheduleTime: schedule.getUtcTime(),
-      customPrompt: schedule.customPrompt,
-      runImmediately,
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-[580px]">
-        <DialogHeader>
-          <DialogTitle>Turn on daily briefing?</DialogTitle>
-          <DialogDescription asChild className="pt-6">
-            <div className="flex flex-col gap-6">
-              <p>
-                Ollie will run every day, reviewing your traces and telling you
-                exactly what to improve.
-              </p>
-              <p>
-                Runs on your Ollie tokens. You can turn it off at any time.{" "}
-                <button className="underline underline-offset-4 hover:text-primary">
-                  Learn more
-                </button>
-              </p>
-
-              <ReportSettingsFields {...schedule} />
-
-              <div className="flex items-center gap-3">
-                <Switch
-                  checked={runImmediately}
-                  onCheckedChange={setRunImmediately}
-                  size="sm"
-                />
-                <div>
-                  <p className="font-medium text-foreground">
-                    Run the first report immediately on activation
-                  </p>
-                  <p className="text-light-slate">
-                    The next scheduled run will be{" "}
-                    {getNextRunLabel(schedule.getUtcTime())}.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm}>Turn on</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function SettingsDialog({
-  open,
-  onOpenChange,
-  enabled,
-  scheduleTime,
-  customPrompt,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  enabled: boolean;
-  scheduleTime: string;
-  customPrompt: string;
-  onSave: (settings: ReportPreferenceSettings) => void;
-}) {
-  const [localEnabled, setLocalEnabled] = useState(enabled);
-  const reportSettings = useReportSettings(scheduleTime, customPrompt);
-  const { reset } = reportSettings;
-
-  useEffect(() => {
-    setLocalEnabled(enabled);
-    reset(scheduleTime, customPrompt);
-  }, [enabled, scheduleTime, customPrompt, reset]);
-
-  const handleSave = () => {
-    onSave({
-      enabled: localEnabled,
-      scheduleTime: reportSettings.getUtcTime(),
-      customPrompt: reportSettings.customPrompt,
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-[580px]">
-        <DialogHeader>
-          <DialogTitle>Daily briefing settings</DialogTitle>
-          <DialogDescription asChild className="pt-6">
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center gap-3">
-                <Switch
-                  checked={localEnabled}
-                  onCheckedChange={setLocalEnabled}
-                  size="sm"
-                />
-                <div>
-                  {localEnabled ? (
-                    <>
-                      <p className="font-medium text-foreground">
-                        Daily briefing active
-                      </p>
-                      <p className="text-light-slate">
-                        Turn off to pause automated reports. You can reactivate
-                        at any time.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-medium text-foreground">
-                        Daily briefing is paused
-                      </p>
-                      <p className="text-light-slate">
-                        Turn on to resume automated reports.
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <ReportSettingsFields {...reportSettings} />
-
-              <p className="text-foreground">
-                <span className="font-medium">Billing:</span> Runs on your Ollie
-                tokens.{" "}
-                <button className="underline underline-offset-4 hover:text-primary">
-                  View billing
-                </button>
-              </p>
-            </div>
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave}>Save changes</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 const POLLING_INTERVAL = 10_000;
+const REPORT_PREVIEW_COUNT = 3;
 const DEFAULT_SCHEDULE_TIME = formatLocalTimeAsUtc("07:00:00");
 
 export default function DailyBriefingSection() {
@@ -448,26 +272,23 @@ export default function DailyBriefingSection() {
   );
   const displayReports = showMore
     ? completedReports
-    : completedReports.slice(0, 3);
+    : completedReports.slice(0, REPORT_PREVIEW_COUNT);
 
   const handleRunNow = () => {
     generateMutation.mutate({ projectId });
   };
 
-  const handleTurnOn = (
-    settings: ReportPreferenceSettings & { runImmediately: boolean },
-  ) => {
+  const handleTurnOn = (runImmediately: boolean) => {
     setShowTurnOnDialog(false);
     updatePreferenceMutation.mutate(
       {
         projectId,
         enabled: true,
-        schedule_time: settings.scheduleTime,
-        custom_prompt: settings.customPrompt,
+        schedule_time: DEFAULT_SCHEDULE_TIME,
       },
       {
         onSuccess: () => {
-          if (settings.runImmediately) {
+          if (runImmediately) {
             generateMutation.mutate({ projectId });
           }
         },
@@ -564,7 +385,7 @@ export default function DailyBriefingSection() {
             />
           ))}
 
-          {!showMore && completedReports.length > 3 && (
+          {!showMore && completedReports.length > REPORT_PREVIEW_COUNT && (
             <Button
               variant="ghost"
               size="2xs"
@@ -581,7 +402,7 @@ export default function DailyBriefingSection() {
         open={showTurnOnDialog}
         onOpenChange={setShowTurnOnDialog}
         onConfirm={handleTurnOn}
-        defaultScheduleTime={DEFAULT_SCHEDULE_TIME}
+        scheduleTimeLocal={formatUtcTimeAsLocal(DEFAULT_SCHEDULE_TIME)}
       />
 
       {preference != null && (

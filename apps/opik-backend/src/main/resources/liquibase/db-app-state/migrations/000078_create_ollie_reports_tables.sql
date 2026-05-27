@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset miguelg:000077_create_ollie_reports_tables
+--changeset miguelg:000078_create_ollie_reports_tables
 --comment: Create tables for Ollie daily reports and report preferences
 
 CREATE TABLE IF NOT EXISTS ollie_reports (
