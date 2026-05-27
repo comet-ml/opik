@@ -895,25 +895,6 @@ class TestPromptEnvironment:
         with pytest.raises(exceptions.EnvironmentNotFoundError, match="unknown-env"):
             opik_client.set_prompt_environments("env-prompt", ["unknown-env"])
 
-    def test_set_prompt_environments__mask_version__raises_not_assignable(
-        self, mock_rest_client
-    ):
-        mock_rest_client.prompts.retrieve_prompt_version.return_value = (
-            _make_mock_version()
-        )
-        mock_rest_client.prompts.set_prompt_version_environment.side_effect = (
-            rest_api_core.ApiError(status_code=422, body=None)
-        )
-
-        opik_client = opik_client_module.Opik()
-        opik_client._rest_client = mock_rest_client
-
-        with pytest.raises(
-            exceptions.PromptVersionNotAssignableToEnvironment,
-            match="internal-only",
-        ):
-            opik_client.set_prompt_environments("env-prompt", ["staging"])
-
     def test_set_prompt_environments__other_api_error__bubbles_up(
         self, mock_rest_client
     ):

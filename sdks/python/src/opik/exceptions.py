@@ -217,13 +217,6 @@ class EnvironmentNotFoundError(OpikException):
     pass
 
 
-class PromptVersionNotAssignableToEnvironment(OpikException):
-    """Raised when attempting to assign an environment to a prompt version that
-    is not user-addressable (for example an internal mask version)."""
-
-    pass
-
-
 class LLMJudgeParseError(OpikException):
     """Raised when LLMJudge output fails validation.
 
