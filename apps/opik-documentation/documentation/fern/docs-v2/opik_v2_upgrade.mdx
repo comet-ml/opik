@@ -49,6 +49,12 @@ Upgrade to the Opik SDK **2.0 or later**:
 
 The main change is to **pass the project to the methods you call**. The dataset, test suite, prompt, and experiment APIs all take a `project_name` (`projectName` in TypeScript). Omit it and Opik uses the project from the `OPIK_PROJECT_NAME` environment variable or your config, falling back to `Default Project`.
 
+<Tip>
+  Running `opik configure` now also prompts you to pick a project — it suggests your most
+  recent one and stores your choice as `project_name` in `~/.opik.config`, so you only pass
+  `project_name` on a call when you want to override that default.
+</Tip>
+
 All snippets below assume a client:
 
 <Tabs>
