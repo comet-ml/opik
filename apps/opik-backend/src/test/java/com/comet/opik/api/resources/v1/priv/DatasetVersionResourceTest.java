@@ -2708,8 +2708,14 @@ class DatasetVersionResourceTest {
         @Test
         @DisplayName("Success: Create items from traces for regular DATASET includes all enriched data")
         void createFromTraces__whenRegularDataset__thenDataContainsAllEnrichedFields() {
-            // Given - Create a regular DATASET
-            var datasetId = createDataset(UUID.randomUUID().toString());
+            // Given - Create a regular DATASET (type must be pinned: PODAM otherwise randomizes it,
+            // and a TEST_SUITE unwraps the input instead of keeping the enriched keys)
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .name(UUID.randomUUID().toString())
+                    .type(DatasetType.DATASET)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
             // Create a trace with known input
             String projectName = traceIdGenerator.generate().toString();
