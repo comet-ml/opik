@@ -40,7 +40,6 @@ import AutomationLogsPage from "@/v2/pages/AutomationLogsPage/AutomationLogsPage
 import OnlineEvaluationPage from "@/v2/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueuesPage";
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
-import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
@@ -60,6 +59,8 @@ import DatasetDetailPage from "@/v2/pages-shared/datasets/DatasetDetailPage/Data
 import TestSuitesPage from "@/v2/pages/TestSuitesPage/TestSuitesPage";
 import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage";
 import DatasetItemsPage from "@/v2/pages/DatasetItemsPage/DatasetItemsPage";
+import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
+import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
@@ -346,6 +347,30 @@ const testSuiteItemsRoute = createRoute({
   component: TestSuiteItemsPage,
 });
 
+// ----------- prompts (project-scoped)
+const promptsRoute = createRoute({
+  path: "/prompts",
+  getParentRoute: () => projectScopedRoute,
+  staticData: {
+    title: "Prompt library",
+  },
+});
+
+const promptsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => promptsRoute,
+  component: PromptsPage,
+});
+
+const promptRoute = createRoute({
+  path: "/$promptId",
+  getParentRoute: () => promptsRoute,
+  component: PromptPage,
+  staticData: {
+    param: "promptId",
+  },
+});
+
 // ----------- playground (project-scoped)
 const playgroundRoute = createRoute({
   path: "/playground",
@@ -422,16 +447,6 @@ const trialRoute = createRoute({
     param: "trial",
     paramValue: "trials",
   },
-});
-
-// ----------- agent configuration (project-scoped)
-const agentConfigurationRoute = createRoute({
-  path: "/agent-configuration",
-  getParentRoute: () => projectScopedRoute,
-  staticData: {
-    title: "Agent configuration",
-  },
-  component: AgentConfigurationPage,
 });
 
 // ----------- agent runner (project-scoped)
@@ -630,6 +645,7 @@ const routeTree = rootRoute.addChildren([
             testSuitesListRoute,
             testSuiteRoute.addChildren([testSuiteItemsRoute]),
           ]),
+          promptsRoute.addChildren([promptsListRoute, promptRoute]),
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
@@ -637,7 +653,6 @@ const routeTree = rootRoute.addChildren([
             optimizationCompareRedirectRoute,
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),
-          agentConfigurationRoute,
           agentRunnerRoute,
           onlineEvaluationRoute,
           annotationQueuesRoute.addChildren([

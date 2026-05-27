@@ -26,15 +26,6 @@ const OptimizationsNewPageContent: React.FC = () => {
     handleCancel,
     handleNameChange,
     getFirstMetricParamsError,
-    blueprintRef,
-    blueprintPromptName,
-    blueprintFieldNames,
-    isSavingBlueprint,
-    hasUnsavedBlueprintChanges,
-    handleBlueprintRefChange,
-    handleBlueprintRefClear,
-    handleSaveBlueprintExisting,
-    handleSaveBlueprintNewField,
   } = useOptimizationsNewFormHandlers();
 
   return (
@@ -56,15 +47,6 @@ const OptimizationsNewPageContent: React.FC = () => {
           onNameChange={handleNameChange}
           onModelChange={handleModelChange}
           onModelConfigChange={handleModelConfigChange}
-          blueprintRef={blueprintRef}
-          blueprintPromptName={blueprintPromptName}
-          blueprintFieldNames={blueprintFieldNames}
-          isSavingBlueprint={isSavingBlueprint}
-          hasUnsavedBlueprintChanges={hasUnsavedBlueprintChanges}
-          onBlueprintRefChange={handleBlueprintRefChange}
-          onBlueprintRefClear={handleBlueprintRefClear}
-          onSaveBlueprintExisting={handleSaveBlueprintExisting}
-          onSaveBlueprintNewField={handleSaveBlueprintNewField}
         />
 
         <OptimizationsNewConfigSidebar
