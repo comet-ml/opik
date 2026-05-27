@@ -2310,14 +2310,14 @@ class Opik:
             version: Optional sequential version selector in the wire format
                 ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
             environment: Optional environment name. When provided, returns the version that the given environment
-                currently points to. Mutually exclusive with ``commit``.
+                currently points to. Mutually exclusive with ``version``.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
-            ValueError: If both ``commit`` and ``version`` are provided.
+            ValueError: If both ``version`` and ``environment`` are provided.
         """
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
@@ -2355,14 +2355,14 @@ class Opik:
             version: Optional sequential version selector in the wire format
                 ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
             environment: Optional environment name. When provided, returns the version that the given environment
-                currently points to. Mutually exclusive with ``commit``.
+                currently points to. Mutually exclusive with ``version``.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
-            ValueError: If both ``commit`` and ``version`` are provided.
+            ValueError: If both ``version`` and ``environment`` are provided.
         """
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,

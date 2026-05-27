@@ -18,33 +18,6 @@ LOGGER = logging.getLogger(__name__)
 _PromptT = TypeVar("_PromptT", bound=BasePrompt)
 
 
-def _with_environments(
-    version: prompt_version_detail.PromptVersionDetail,
-    environments: Optional[List[str]],
-) -> prompt_version_detail.PromptVersionDetail:
-    """Return a copy of ``version`` with its ``environments`` replaced.
-
-    ``PromptVersionDetail`` is a frozen pydantic model, so a new instance must
-    be constructed to reflect the updated environments list locally after a
-    successful backend write.
-    """
-    return prompt_version_detail.PromptVersionDetail(
-        id=version.id,
-        prompt_id=version.prompt_id,
-        commit=version.commit,
-        template=version.template,
-        metadata=version.metadata,
-        type=version.type,
-        environments=environments,
-        change_description=version.change_description,
-        tags=version.tags,
-        variables=version.variables,
-        template_structure=version.template_structure,
-        created_at=version.created_at,
-        created_by=version.created_by,
-    )
-
-
 @dataclasses.dataclass
 class PromptSearchResult:
     """Result from searching prompts, containing name, template structure, and latest version details."""
@@ -156,7 +129,10 @@ class PromptClient:
                     version_id=prompt_version.id,
                     environments=target,
                 )
-                prompt_version = _with_environments(prompt_version, target)
+                # PromptVersionDetail is frozen; copy to reflect the write locally.
+                prompt_version = prompt_version.model_copy(
+                    update={"environments": target}
+                )
 
         return prompt_version
 
@@ -212,8 +188,9 @@ class PromptClient:
                     version_id=new_prompt_version_detail.id,
                     environments=target,
                 )
-                new_prompt_version_detail = _with_environments(
-                    new_prompt_version_detail, target
+                # PromptVersionDetail is frozen; copy to reflect the write locally.
+                new_prompt_version_detail = new_prompt_version_detail.model_copy(
+                    update={"environments": target}
                 )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version
