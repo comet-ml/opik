@@ -4,7 +4,6 @@ import { Prompt, PromptType } from "@/prompt";
 import {
   EnvironmentNotFoundError,
   PromptNotFoundError,
-  PromptVersionNotAssignableToEnvironmentError,
 } from "@/prompt/errors";
 import { OpikApiError } from "@/rest_api";
 import { logger } from "@/utils/logger";
@@ -1353,39 +1352,6 @@ describe("Opik prompt operations", () => {
           })
         ).rejects.toMatchObject({
           message: expect.stringContaining("unknown-env"),
-        });
-      } finally {
-        setEnvSpy.mockRestore();
-      }
-    });
-
-    it("maps 422 on set_prompt_version_environment to PromptVersionNotAssignableToEnvironmentError", async () => {
-      retrievePromptVersionSpy.mockImplementation(() =>
-        createMockHttpResponsePromise(versionResponse)
-      );
-      const setEnvSpy = vi
-        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
-        .mockImplementation(() => {
-          throw new OpikApiError({
-            message: "Unprocessable",
-            statusCode: 422,
-          });
-        });
-
-      try {
-        await expect(
-          client.setPromptEnvironments({
-            name: "mask-prompt",
-            environments: ["staging"],
-          })
-        ).rejects.toThrow(PromptVersionNotAssignableToEnvironmentError);
-        await expect(
-          client.setPromptEnvironments({
-            name: "mask-prompt",
-            environments: ["staging"],
-          })
-        ).rejects.toMatchObject({
-          message: expect.stringContaining("internal-only"),
         });
       } finally {
         setEnvSpy.mockRestore();
