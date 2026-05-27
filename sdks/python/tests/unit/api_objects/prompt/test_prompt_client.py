@@ -311,6 +311,37 @@ class TestGetPromptByVersionSelector:
                 version="v1",
             )
 
+    def test_get_prompt_with_cache__commit_and_environment__raises_value_error(
+        self, client, mock_rest_client
+    ):
+        from opik.api_objects.prompt.text import prompt as text_prompt_module
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            client.get_prompt_with_cache(
+                name="my-prompt",
+                commit="abc12345",
+                project_name=None,
+                template_structure="text",
+                prompt_cls=text_prompt_module.Prompt,
+                environment="staging",
+            )
+
+    def test_get_prompt_with_cache__version_and_environment__raises_value_error(
+        self, client, mock_rest_client
+    ):
+        from opik.api_objects.prompt.text import prompt as text_prompt_module
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            client.get_prompt_with_cache(
+                name="my-prompt",
+                commit=None,
+                project_name=None,
+                template_structure="text",
+                prompt_cls=text_prompt_module.Prompt,
+                version="v1",
+                environment="staging",
+            )
+
     def test_get_prompt_with_cache__different_versions__do_not_collide_in_cache(
         self, client, mock_rest_client
     ):
@@ -663,6 +694,14 @@ class TestPromptEnvironment:
             client.get_prompt(
                 name="env-prompt", commit="abc12345", environment="staging"
             )
+
+        mock_rest_client.prompts.retrieve_prompt_version.assert_not_called()
+
+    def test_get_prompt__version_and_environment__raises_value_error(
+        self, client, mock_rest_client
+    ):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            client.get_prompt(name="env-prompt", version="v3", environment="staging")
 
         mock_rest_client.prompts.retrieve_prompt_version.assert_not_called()
 
