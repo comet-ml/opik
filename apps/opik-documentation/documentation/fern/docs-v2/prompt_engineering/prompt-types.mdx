@@ -26,7 +26,7 @@ single-turn interactions or when you need to generate a single piece of text.
 ### Creating a text prompt
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -43,7 +43,7 @@ single-turn interactions or when you need to generate a single piece of text.
     print(prompt.format(text="Hello, world!"))
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
@@ -82,7 +82,7 @@ Each call with new content creates a new version, which is visible in the librar
 ### Fetching a text prompt
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -94,7 +94,7 @@ Each call with new content creates a new version, which is visible in the librar
     print(prompt.format(text="Hello, world!"))
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
@@ -131,7 +131,7 @@ when your agent has a multi-turn message structure.
 ### Creating a chat prompt
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -164,7 +164,7 @@ when your agent has a multi-turn message structure.
     # ]
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
@@ -221,7 +221,7 @@ The output of `chat_prompt.format()` is already in the shape the OpenAI chat com
 expects:
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
     from openai import OpenAI
@@ -246,7 +246,7 @@ expects:
     print(response.choices[0].message.content)
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
     import OpenAI from "openai";
@@ -280,7 +280,7 @@ Chat prompts can capture a multi-turn flow, with assistant turns inline and vari
 in the conversation:
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -308,7 +308,7 @@ in the conversation:
     )
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
@@ -350,7 +350,7 @@ Chat prompts can include images and videos alongside text — useful for vision-
 #### Image analysis
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -388,7 +388,7 @@ Chat prompts can include images and videos alongside text — useful for vision-
     )
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
@@ -434,7 +434,7 @@ Chat prompts can include images and videos alongside text — useful for vision-
 #### Video analysis
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -472,7 +472,7 @@ Chat prompts can include images and videos alongside text — useful for vision-
     )
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
@@ -521,7 +521,7 @@ You can combine multiple content blocks in a single message — e.g. two images 
 them:
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -555,7 +555,7 @@ them:
     )
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
@@ -612,7 +612,7 @@ Mustache is simple, portable, and covers the common case of substituting variabl
 template.
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
     from opik.api_objects.prompt import PromptType
@@ -632,7 +632,7 @@ template.
     # [{"role": "user", "content": "Hello Alice, you live in Paris."}]
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik, PromptType } from "opik";
 
@@ -659,7 +659,7 @@ Jinja2 supports conditionals, loops, and filters, which makes it a better fit wh
 needs to branch on input values.
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
     from opik.api_objects.prompt import PromptType
@@ -690,7 +690,7 @@ needs to branch on input values.
     chat_prompt.format(variables={"name": "Bob", "is_premium": False})
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik, PromptType } from "opik";
 
@@ -733,7 +733,7 @@ To discover prompts by name substring or filter expression, use `search_prompts`
 `searchPrompts`. Filters use Opik Query Language (OQL), the same syntax used elsewhere in Opik:
 
 <Tabs>
-  <Tab value="Python" title="Python">
+  <Tab value="Python" title="Python" language="python">
     ```python
     import opik
 
@@ -763,7 +763,7 @@ To discover prompts by name substring or filter expression, use `search_prompts`
         print(prompt.name, prompt.version, prompt.prompt)
     ```
   </Tab>
-  <Tab value="TypeScript" title="TypeScript">
+  <Tab value="TypeScript" title="TypeScript" language="typescript">
     ```typescript
     import { Opik } from "opik";
 
