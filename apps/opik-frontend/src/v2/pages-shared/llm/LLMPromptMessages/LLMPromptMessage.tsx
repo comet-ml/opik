@@ -198,8 +198,11 @@ const LLMPromptMessage = forwardRef<
       onJsonPathSelect,
     });
 
+    const cursorAtBrace =
+      braceStartPos !== null &&
+      editorViewRef.current?.state.selection.main.head === braceStartPos;
     const hintText =
-      isJsonPopoverOpen && !jsonSearchQuery
+      isJsonPopoverOpen && !jsonSearchQuery && cursorAtBrace
         ? focusedVariableKey || "Find variable"
         : null;
 

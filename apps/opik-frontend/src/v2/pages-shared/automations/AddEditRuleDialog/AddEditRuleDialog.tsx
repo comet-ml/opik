@@ -97,7 +97,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     },
     template: LLM_JUDGE.custom,
     messages: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.messages,
-    variables: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.variables,
+    variables: {},
     schema: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
   },
   [EVALUATORS_RULE_SCOPE.thread]: {
@@ -109,7 +109,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     },
     template: LLM_JUDGE.custom,
     messages: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.messages,
-    variables: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.variables,
+    variables: {},
     schema: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
   },
   [EVALUATORS_RULE_SCOPE.span]: {
@@ -121,7 +121,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     },
     template: LLM_JUDGE.custom,
     messages: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.messages,
-    variables: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.variables,
+    variables: {},
     schema: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema,
   },
 };
