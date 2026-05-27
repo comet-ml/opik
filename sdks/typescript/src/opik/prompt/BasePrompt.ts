@@ -24,10 +24,7 @@ export interface BasePromptData {
   templateStructure?: PromptTemplateStructure;
   synced?: boolean;
   projectName?: string;
-  /**
-   * Optional environments that own this prompt version. Mutually exclusive
-   * with mask-type versions on the backend.
-   */
+  /** Optional environments that own this prompt version. */
   environments?: string[];
 }
 

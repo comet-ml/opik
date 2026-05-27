@@ -49,9 +49,7 @@ export interface CommonPromptOptions {
    * Optional environments to own the newly created prompt version.
    *
    * Each environment must already be registered in the workspace, otherwise
-   * the backend rejects the assignment with a 404. Note: setting `environments`
-   * is incompatible with mask-type versions and the backend will reject it
-   * with a 422 if used on a mask version.
+   * the backend rejects the assignment with a 404.
    */
   environments?: string[];
 }
