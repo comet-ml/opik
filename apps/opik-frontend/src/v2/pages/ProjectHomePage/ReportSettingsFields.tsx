@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import dayjs from "dayjs";
 import { formatLocalTimeAsUtc, parseUtcTimeToLocalDate } from "@/lib/date";
 import { Textarea } from "@/ui/textarea";
@@ -13,10 +13,7 @@ export function useReportSettings(
   );
   const [customPrompt, setCustomPrompt] = useState(initialCustomPrompt);
 
-  const scheduleTimeLocal = useMemo(
-    () => (timeDate ? dayjs(timeDate).format("h:mm A") : ""),
-    [timeDate],
-  );
+  const scheduleTimeLocal = timeDate ? dayjs(timeDate).format("h:mm A") : "";
 
   const getUtcTime = () =>
     timeDate
