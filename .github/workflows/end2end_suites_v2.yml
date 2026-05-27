@@ -1,5 +1,12 @@
 name: Application E2E Tests (v2)
 
+env:
+  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
+  ALLURE_ENDPOINT: https://comet.testops.cloud/
+  ALLURE_PROJECT_ID: 1
+  ALLURE_RESULTS: allure-results
+
 on:
   workflow_dispatch:
     inputs:
@@ -12,6 +19,10 @@ on:
           - t1
           - t2
           - t3
+      ALLURE_JOB_RUN_ID:
+        description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
+      ALLURE_USERNAME:
+        description: ALLURE_USERNAME service parameter. Leave blank.
   pull_request:
     paths:
       - 'sdks/code_generation/fern/openapi/openapi.yaml'
@@ -69,6 +80,9 @@ jobs:
         working-directory: ${{ github.workspace }}/tests_end_to_end/e2e/services/opik-sdk-driver
         run: uv sync
 
+      - name: Install allurectl
+        uses: allure-framework/setup-allurectl@v1
+
       - name: Install Opik (Local)
         env:
           OPIK_USAGE_REPORT_ENABLED: false
@@ -92,8 +106,21 @@ jobs:
 
       - name: Run v2 E2E suite
         working-directory: ${{ github.workspace }}/tests_end_to_end/e2e
+        env:
+          ALLURE_LAUNCH_NAME: "Opik v2 E2E ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
         run: |
-          npm run test:${{ github.event.inputs.tier || 't1' }}
+          # Point both the allure-playwright reporter and allurectl at the same
+          # absolute results dir, then stream results to TestOps via allurectl watch.
+          export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/e2e/allure-results"
+          allurectl watch -- npm run test:${{ github.event.inputs.tier || 't1' }}
+
+      - name: Upload Allure Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-results-v2
+          path: tests_end_to_end/e2e/allure-results
+          retention-days: 7
 
       - name: Upload Playwright Report
         if: always()
