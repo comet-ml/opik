@@ -47,7 +47,7 @@ Upgrade to the Opik SDK **2.0 or later**:
   </Tab>
 </Tabs>
 
-The main change is to **pass the project to the methods you call**. The dataset, prompt, and experiment APIs all take a `project_name` (`projectName` in TypeScript). Omit it and Opik uses the project from the `OPIK_PROJECT_NAME` environment variable or your config, falling back to `Default Project`.
+The main change is to **pass the project to the methods you call**. The dataset, test suite, prompt, and experiment APIs all take a `project_name` (`projectName` in TypeScript). Omit it and Opik uses the project from the `OPIK_PROJECT_NAME` environment variable or your config, falling back to `Default Project`.
 
 All snippets below assume a client:
 
@@ -78,6 +78,7 @@ All snippets below assume a client:
     client.get_or_create_dataset(name="qa-pairs", project_name="my-agent")
     client.get_datasets(project_name="my-agent")
     client.delete_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_dataset_experiments(dataset_name="qa-pairs", project_name="my-agent")
     ```
   </Tab>
   <Tab title="TypeScript">
@@ -87,6 +88,32 @@ All snippets below assume a client:
     await client.getOrCreateDataset("qa-pairs", "QA pairs", "my-agent");
     await client.getDatasets(100, "my-agent");
     await client.deleteDataset("qa-pairs", "my-agent");
+    await client.getDatasetExperiments("qa-pairs", 100, "my-agent");
+    ```
+  </Tab>
+</Tabs>
+
+### Test suites
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    client.create_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_or_create_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_test_suites(project_name="my-agent")
+    client.delete_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_test_suite_experiments(name="qa-suite", project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createTestSuite({ name: "qa-suite", projectName: "my-agent" });
+    await client.getTestSuite("qa-suite", "my-agent");
+    await client.getOrCreateTestSuite({ name: "qa-suite", projectName: "my-agent" });
+    await client.getTestSuites(1000, "my-agent");
+    await client.deleteTestSuite("qa-suite", "my-agent");
+    await client.getTestSuiteExperiments("qa-suite", 100, "my-agent");
     ```
   </Tab>
 </Tabs>
@@ -97,7 +124,17 @@ All snippets below assume a client:
   <Tab title="Python">
     ```python
     client.create_prompt(name="assistant", prompt="Answer: {{question}}", project_name="my-agent")
+    client.create_chat_prompt(
+        name="assistant-chat",
+        messages=[{"role": "user", "content": "{{question}}"}],
+        project_name="my-agent",
+    )
     client.get_prompt(name="assistant", project_name="my-agent")
+    client.get_chat_prompt(name="assistant-chat", project_name="my-agent")
+    client.get_prompt_history(name="assistant", project_name="my-agent")
+    client.get_chat_prompt_history(name="assistant-chat", project_name="my-agent")
+    client.get_all_prompts(name="assistant", project_name="my-agent")
+    client.search_prompts(project_name="my-agent")
     ```
   </Tab>
   <Tab title="TypeScript">
@@ -107,7 +144,13 @@ All snippets below assume a client:
       prompt: "Answer: {{question}}",
       projectName: "my-agent",
     });
+    await client.createChatPrompt({
+      name: "assistant-chat",
+      messages: [{ role: "user", content: "{{question}}" }],
+      projectName: "my-agent",
+    });
     await client.getPrompt({ name: "assistant", projectName: "my-agent" });
+    await client.getChatPrompt({ name: "assistant-chat", projectName: "my-agent" });
     ```
   </Tab>
 </Tabs>
@@ -121,6 +164,8 @@ An experiment — and **every trace, span, and feedback score it produces** — 
     ```python
     # project_name must be the dataset's project — the experiment and its data land there
     client.create_experiment(dataset_name="qa-pairs", name="run-1", project_name="my-agent")
+    client.get_experiment_by_name(name="run-1", project_name="my-agent")
+    client.get_experiments_by_name(name="run-1", project_name="my-agent")
     ```
   </Tab>
   <Tab title="TypeScript">
@@ -130,6 +175,8 @@ An experiment — and **every trace, span, and feedback score it produces** — 
       name: "run-1",
       projectName: "my-agent", // the dataset's project
     });
+    await client.getExperiment("run-1", "my-agent");
+    await client.getExperimentsByName("run-1", "my-agent");
     ```
   </Tab>
 </Tabs>
