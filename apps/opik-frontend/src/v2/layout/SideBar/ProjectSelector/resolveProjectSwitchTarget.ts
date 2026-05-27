@@ -22,7 +22,6 @@ const PORTABLE_SEARCH_PARAMS: Record<string, readonly string[]> = {
   "test-suites": [...COMMON_UI_STATE],
   playground: [],
   optimizations: [...COMMON_UI_STATE],
-  "agent-configuration": [],
   "agent-playground": [],
   "online-evaluation": [...COMMON_UI_STATE],
   "annotation-queues": [...COMMON_UI_STATE],

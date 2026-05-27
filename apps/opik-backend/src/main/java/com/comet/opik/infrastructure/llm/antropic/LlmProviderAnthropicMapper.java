@@ -56,7 +56,7 @@ interface LlmProviderAnthropicMapper {
     AssistantMessage toAssistantMessage(@NonNull AnthropicContent content);
 
     @Mapping(expression = "java(request.model())", target = "model")
-    @Mapping(expression = "java(request.stream())", target = "stream")
+    @Mapping(expression = "java(Boolean.TRUE.equals(request.stream()))", target = "stream")
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.temperature() != null ? null : request.topP())", target = "topP")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")

@@ -23,7 +23,7 @@ jobs:
       - name: Set version
         id: version
         run: |
-          echo "version=$(cat version.txt)" | tee -a $GITHUB_OUTPUT
+          echo "version=$(cat version.txt)" | tee -a "$GITHUB_OUTPUT"
 
   create-git-tag:
     needs:
@@ -51,6 +51,9 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
+      # Caller-passes ref: build_apps.yml already exposes a ref input (defaults to inputs.ref || github.ref).
+      # TS SDK workflows in OPIK-6627 used callee-derives because they lacked one. See OPIK-6633.
+      ref: refs/tags/${{needs.set-version.outputs.version}}
 
   release-sdk:
     needs:
@@ -176,7 +179,7 @@ jobs:
           IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
           # Ensure all version parts are set
           for i in {0..2}; do
-            version_parts[$i]=${version_parts[$i]:-0}
+            version_parts[i]=${version_parts[i]:-0}
           done
           # Convert to decimal before incrementing to avoid octal interpretation issues
           version_parts[2]=$((10#${version_parts[2]} + 1))
@@ -184,7 +187,7 @@ jobs:
 
           # Update version file with the new version
           echo "$new_version" > version.txt
-          echo "new_version=${new_version}" >> $GITHUB_OUTPUT
+          echo "new_version=${new_version}" >> "$GITHUB_OUTPUT"
 
       - name: Commit all version changes
         run: |
@@ -205,4 +208,4 @@ jobs:
             git push origin main
           fi
           
-          echo "Version updated to ${{ steps.update_version.outputs.new_version }} on main" >> $GITHUB_STEP_SUMMARY
+          echo "Version updated to ${{ steps.update_version.outputs.new_version }} on main" >> "$GITHUB_STEP_SUMMARY"

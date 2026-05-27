@@ -518,7 +518,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
-        noData={<DataTableNoData title={noDataText}></DataTableNoData>}
+        noData={<DataTableNoData title={noDataText} />}
         TableBody={DataTableVirtualBody}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader

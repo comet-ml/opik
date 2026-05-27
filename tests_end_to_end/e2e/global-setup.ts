@@ -27,6 +27,52 @@ function parseRunIdTimestamp(name: string): number | null {
 async function sweepOrphans(apiKey: string | null): Promise<void> {
   const backend = makeBackendClient(apiKey);
   const cutoff = Date.now() - ORPHAN_MAX_AGE_MS;
+
+  /** Sweep order: experiments → datasets → projects. Experiments reference datasets which reference projects. */
+  try {
+    const staleExperiments = await backend.listExperimentsWithPrefix('cuj-');
+    let sweptCount = 0;
+    for (const e of staleExperiments) {
+      const ts = parseRunIdTimestamp(e.name);
+      if (ts === null) continue;
+      if (ts < cutoff) {
+        try {
+          await backend.deleteExperiment(e.id);
+          sweptCount++;
+        } catch {
+          // Best-effort; another runner may have just deleted it.
+        }
+      }
+    }
+    if (sweptCount > 0) {
+      console.log(`[global-setup] Swept ${sweptCount} orphaned experiments (>6h old)`);
+    }
+  } catch (e) {
+    console.warn('[global-setup] experiment orphan sweep warning (continuing):', e);
+  }
+
+  try {
+    const staleDatasets = await backend.listDatasetsWithPrefix('cuj-');
+    let sweptCount = 0;
+    for (const d of staleDatasets) {
+      const ts = parseRunIdTimestamp(d.name);
+      if (ts === null) continue;
+      if (ts < cutoff) {
+        try {
+          await backend.deleteDataset(d.id);
+          sweptCount++;
+        } catch {
+          // Best-effort; another runner may have just deleted it.
+        }
+      }
+    }
+    if (sweptCount > 0) {
+      console.log(`[global-setup] Swept ${sweptCount} orphaned datasets (>6h old)`);
+    }
+  } catch (e) {
+    console.warn('[global-setup] dataset orphan sweep warning (continuing):', e);
+  }
+
   try {
     const stale = await backend.listProjectsWithPrefix('cuj-');
     let sweptCount = 0;

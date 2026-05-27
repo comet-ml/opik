@@ -240,11 +240,13 @@ jobs:
             FLAKY="0"
           fi
           
-          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
-          echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
-          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
-          echo "skipped=$SKIPPED" >> "$GITHUB_OUTPUT"
-          echo "flaky=$FLAKY" >> "$GITHUB_OUTPUT"
+          {
+            echo "total=$TOTAL"
+            echo "passed=$PASSED"
+            echo "failed=$FAILED"
+            echo "skipped=$SKIPPED"
+            echo "flaky=$FLAKY"
+          } >> "$GITHUB_OUTPUT"
           
           echo "::endgroup::"
 
@@ -273,75 +275,78 @@ jobs:
         run: |
           SUITE="${{ github.event.inputs.suite || 'happypaths' }}"
           TESTOPS_URL="${{ steps.set-outputs.outputs.testops_url }}"
-          
+
           TOTAL="${{ steps.parse-results.outputs.total }}"
           PASSED="${{ steps.parse-results.outputs.passed }}"
           FAILED="${{ steps.parse-results.outputs.failed }}"
           SKIPPED="${{ steps.parse-results.outputs.skipped }}"
-          
+
+          # Redirect stdout to the summary file for the remainder of this step
+          exec >> "$GITHUB_STEP_SUMMARY"
+
           # Header
-          echo "# 🧪 E2E Test Results" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          
+          echo "# 🧪 E2E Test Results"
+          echo ""
+
           # Status banner
           if [ "${{ steps.run-tests.outcome }}" == "success" ]; then
-            echo "> ✅ **All tests passed!**" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ✅ **All tests passed!**"
           elif [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
-            echo "> ❌ **$FAILED test(s) failed** - Please review the results below" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ❌ **$FAILED test(s) failed** - Please review the results below"
           else
-            echo "> ⚠️ **Test run status: ${{ steps.run-tests.outcome }}**" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ⚠️ **Test run status: ${{ steps.run-tests.outcome }}**"
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          
+          echo ""
+
           # Configuration table
-          echo "## 📝 Configuration" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Suite** | \`$SUITE\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Trigger** | ${{ github.event_name == 'push' && 'Post-merge (push to main)' || 'Manual dispatch' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Author** | @${{ steps.get-pr-info.outputs.author }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          
+          echo "## 📝 Configuration"
+          echo ""
+          echo "| Property | Value |"
+          echo "|----------|-------|"
+          echo "| **Suite** | \`$SUITE\` |"
+          echo "| **Branch** | \`${{ github.ref_name }}\` |"
+          echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |"
+          echo "| **Trigger** | ${{ github.event_name == 'push' && 'Post-merge (push to main)' || 'Manual dispatch' }} |"
+          echo "| **Author** | @${{ steps.get-pr-info.outputs.author }} |"
+          echo ""
+
           # Results table
-          echo "## 📊 Results" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Status | Count |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|------:|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ✅ Passed | $PASSED |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ❌ Failed | $FAILED |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ⏭️ Skipped | $SKIPPED |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Total** | **$TOTAL** |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          
+          echo "## 📊 Results"
+          echo ""
+          echo "| Status | Count |"
+          echo "|--------|------:|"
+          echo "| ✅ Passed | $PASSED |"
+          echo "| ❌ Failed | $FAILED |"
+          echo "| ⏭️ Skipped | $SKIPPED |"
+          echo "| **Total** | **$TOTAL** |"
+          echo ""
+
           # Links section
-          echo "## 🔗 Quick Links" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Resource | Link |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|----------|------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📊 **TestOps Dashboard** | [View detailed results, traces & history]($TESTOPS_URL) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📄 **Playwright Report** | [Download from Artifacts below](#artifacts) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📚 **E2E Test Guide** | [Quickstart documentation](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          
+          echo "## 🔗 Quick Links"
+          echo ""
+          echo "| Resource | Link |"
+          echo "|----------|------|"
+          echo "| 📊 **TestOps Dashboard** | [View detailed results, traces & history]($TESTOPS_URL) |"
+          echo "| 📄 **Playwright Report** | [Download from Artifacts below](#artifacts) |"
+          echo "| 📚 **E2E Test Guide** | [Quickstart documentation](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) |"
+          echo ""
+
           # Debugging section (only on failure)
           if [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
-            echo "## 🔧 Debugging Guide" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### Quick steps to investigate failures:" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "1. **Open TestOps** → Click the link above to see detailed failure traces, screenshots, and video recordings" >> "$GITHUB_STEP_SUMMARY"
-            echo "2. **Download Playwright Report** → The HTML report includes step-by-step traces for each test" >> "$GITHUB_STEP_SUMMARY"
-            echo "3. **Check test logs** → Expand the 'Run E2E test suite' step above for console output" >> "$GITHUB_STEP_SUMMARY"
-            echo "4. **Run locally** → See the [Quickstart Guide](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) for local debugging" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### Common failure causes:" >> "$GITHUB_STEP_SUMMARY"
-            echo "- UI element selectors changed" >> "$GITHUB_STEP_SUMMARY"
-            echo "- API response format changed" >> "$GITHUB_STEP_SUMMARY"
-            echo "- Timing/race conditions" >> "$GITHUB_STEP_SUMMARY"
-            echo "- New feature requiring test updates" >> "$GITHUB_STEP_SUMMARY"
+            echo "## 🔧 Debugging Guide"
+            echo ""
+            echo "### Quick steps to investigate failures:"
+            echo ""
+            echo "1. **Open TestOps** → Click the link above to see detailed failure traces, screenshots, and video recordings"
+            echo "2. **Download Playwright Report** → The HTML report includes step-by-step traces for each test"
+            echo "3. **Check test logs** → Expand the 'Run E2E test suite' step above for console output"
+            echo "4. **Run locally** → See the [Quickstart Guide](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) for local debugging"
+            echo ""
+            echo "### Common failure causes:"
+            echo "- UI element selectors changed"
+            echo "- API response format changed"
+            echo "- Timing/race conditions"
+            echo "- New feature requiring test updates"
           fi
 
       # ========================================

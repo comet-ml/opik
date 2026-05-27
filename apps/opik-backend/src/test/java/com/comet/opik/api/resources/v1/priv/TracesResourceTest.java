@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.Environment;
@@ -4432,6 +4433,30 @@ class TracesResourceTest {
     class TraceComment {
 
         @Test
+        void createCommentReturnsIdInResponseBody() {
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY, TEST_WORKSPACE);
+            Comment comment = Comment.builder().text("test comment").build();
+
+            try (var response = client.target("%s/v1/private/traces".formatted(baseURI))
+                    .path(traceId.toString())
+                    .path("comments")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(comment))) {
+
+                assertThat(response.getStatus()).isEqualTo(201);
+
+                var body = response.readEntity(CreateCommentResponse.class);
+                assertThat(body.id()).isNotNull();
+
+                var fetched = traceResourceClient.getCommentById(body.id(), traceId, API_KEY, TEST_WORKSPACE, 200);
+                assertThat(fetched.id()).isEqualTo(body.id());
+            }
+        }
+
+        @Test
         void createCommentForNonExistingTraceFail() {
             traceResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
         }
@@ -6343,6 +6368,31 @@ class TracesResourceTest {
     @DisplayName("Thread Comment:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ThreadComment {
+
+        @Test
+        void createCommentReturnsIdInResponseBody() {
+            var thread = createThread();
+            Comment comment = Comment.builder().text("test comment").build();
+
+            try (var response = client.target("%s/v1/private/traces/threads".formatted(baseURI))
+                    .path(thread.threadModelId().toString())
+                    .path("comments")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(comment))) {
+
+                assertThat(response.getStatus()).isEqualTo(201);
+
+                var body = response.readEntity(CreateCommentResponse.class);
+                assertThat(body.id()).isNotNull();
+
+                var fetched = threadCommentResourceClient.getCommentById(body.id(), thread.threadModelId(), API_KEY,
+                        TEST_WORKSPACE, 200);
+                assertThat(fetched.id()).isEqualTo(body.id());
+            }
+        }
 
         @Test
         void createCommentForNonExistingThreadFail() {
