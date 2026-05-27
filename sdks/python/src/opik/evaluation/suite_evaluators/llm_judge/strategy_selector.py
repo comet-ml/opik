@@ -18,12 +18,12 @@ from . import config as llm_judge_config
 LOGGER = logging.getLogger(__name__)
 
 
-class ScoringStrategy(str, enum.Enum):
+class ScoringToolStrategy(str, enum.Enum):
     ONE_SHOT = "one_shot"
     AGENTIC = "agentic"
 
 
-ScoringStrategyMode = Literal["auto", "always", "never"]
+ScoringToolStrategyMode = Literal["auto", "always", "never"]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -67,7 +67,7 @@ _DEFAULT_CAPABILITY = ModelCapability(
 )
 
 
-class ScoringStrategySelector(abc.ABC):
+class ScoringToolStrategySelector(abc.ABC):
     """Decides whether one call should be one-shot or agentic."""
 
     @abc.abstractmethod
@@ -77,18 +77,18 @@ class ScoringStrategySelector(abc.ABC):
         trace_tool_context: Any,
         model_name: str,
         assertions: List[str],
-    ) -> ScoringStrategy:
+    ) -> ScoringToolStrategy:
         raise NotImplementedError
 
 
-class AlwaysAgentic(ScoringStrategySelector):
-    def select(self, **_: Any) -> ScoringStrategy:
-        return ScoringStrategy.AGENTIC
+class AlwaysAgentic(ScoringToolStrategySelector):
+    def select(self, **_: Any) -> ScoringToolStrategy:
+        return ScoringToolStrategy.AGENTIC
 
 
-class NeverAgentic(ScoringStrategySelector):
-    def select(self, **_: Any) -> ScoringStrategy:
-        return ScoringStrategy.ONE_SHOT
+class NeverAgentic(ScoringToolStrategySelector):
+    def select(self, **_: Any) -> ScoringToolStrategy:
+        return ScoringToolStrategy.ONE_SHOT
 
 
 # Rough fixed overhead for the LLM-judge prompt: system prompt +
@@ -147,7 +147,7 @@ def compute_budget_tokens(
     return int(capability.context_window * safety_factor) - prompt_overhead_tokens
 
 
-class HeuristicSelector(ScoringStrategySelector):
+class HeuristicSelector(ScoringToolStrategySelector):
     """Pick a strategy from trace size and model capability.
 
     Rules, in order:
@@ -179,9 +179,9 @@ class HeuristicSelector(ScoringStrategySelector):
         trace_tool_context: Any,
         model_name: str,
         assertions: List[str],
-    ) -> ScoringStrategy:
+    ) -> ScoringToolStrategy:
         if trace_tool_context is None:
-            return ScoringStrategy.ONE_SHOT
+            return ScoringToolStrategy.ONE_SHOT
 
         capability = _capability_for(model_name, self._capabilities)
         if not capability.single_pass_quality_ok:
@@ -189,7 +189,7 @@ class HeuristicSelector(ScoringStrategySelector):
                 "HeuristicSelector: model %s not flagged single-pass-capable; using agentic",
                 model_name,
             )
-            return ScoringStrategy.AGENTIC
+            return ScoringToolStrategy.AGENTIC
 
         budget = compute_budget_tokens(
             model_name,
@@ -205,7 +205,7 @@ class HeuristicSelector(ScoringStrategySelector):
                 budget,
                 model_name,
             )
-            return ScoringStrategy.AGENTIC
+            return ScoringToolStrategy.AGENTIC
 
         LOGGER.debug(
             "HeuristicSelector: trace size %d <= budget %d for model %s; using one-shot",
@@ -213,7 +213,7 @@ class HeuristicSelector(ScoringStrategySelector):
             budget,
             model_name,
         )
-        return ScoringStrategy.ONE_SHOT
+        return ScoringToolStrategy.ONE_SHOT
 
     def _capability_for(self, model_name: str) -> ModelCapability:
         # Preserved as a thin shim for backwards compatibility with the
@@ -239,14 +239,14 @@ def _estimate_context_tokens(trace_tool_context: Any) -> int:
 
 
 def make_selector(
-    mode_or_selector: Union[ScoringStrategyMode, ScoringStrategySelector],
-) -> ScoringStrategySelector:
+    mode_or_selector: Union[ScoringToolStrategyMode, ScoringToolStrategySelector],
+) -> ScoringToolStrategySelector:
     """Resolve a user-facing value into a selector instance.
 
     Accepts either the string mode (`"auto"`, `"always"`, `"never"`) or
     a pre-built selector so power users can inject their own.
     """
-    if isinstance(mode_or_selector, ScoringStrategySelector):
+    if isinstance(mode_or_selector, ScoringToolStrategySelector):
         return mode_or_selector
     if mode_or_selector == "auto":
         return HeuristicSelector()
@@ -256,7 +256,7 @@ def make_selector(
         return NeverAgentic()
     raise ValueError(
         f"Unknown scoring strategy {mode_or_selector!r}; "
-        f"expected one of 'auto', 'always', 'never' or a ScoringStrategySelector instance"
+        f"expected one of 'auto', 'always', 'never' or a ScoringToolStrategySelector instance"
     )
 
 

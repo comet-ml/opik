@@ -294,7 +294,9 @@ def __internal_api__run_test_suite__(
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
     blueprint_id: Optional[str] = None,
-    scoring_strategy: Optional[suite_evaluators_strategy.ScoringStrategyMode] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Internal function that runs the full test suite evaluation pipeline:
@@ -369,7 +371,7 @@ def __internal_api__run_test_suite__(
         dataset_item_ids=dataset_item_ids,
         dataset_filter_string=dataset_filter_string,
         source=source,  # type: ignore[arg-type]
-        scoring_strategy=scoring_strategy,
+        scoring_tool_strategy=scoring_tool_strategy,
     )
 
     suite_result = suite_result_constructor.build_suite_result(
@@ -416,7 +418,9 @@ def run_tests(
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
     blueprint_id: Optional[str] = None,
-    scoring_strategy: Optional[suite_evaluators_strategy.ScoringStrategyMode] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Run a test suite against a task function.
@@ -442,7 +446,7 @@ def run_tests(
         model: Optional model name for checking assertions.
         generate_report: Whether to generate a JSON report file.
         report_output_path: Optional file path for the report.
-        scoring_strategy: Optional override applied to every LLMJudge
+        scoring_tool_strategy: Optional override applied to every LLMJudge
             evaluator in the suite. One of ``"auto"`` (size+capability
             heuristic), ``"always"`` (force agentic tool loop) or
             ``"never"`` (force one-shot). When ``None``, each judge's own
@@ -483,7 +487,7 @@ def run_tests(
         generate_report=generate_report,
         report_output_path=report_output_path,
         blueprint_id=blueprint_id,
-        scoring_strategy=scoring_strategy,
+        scoring_tool_strategy=scoring_tool_strategy,
     )
 
 
@@ -587,20 +591,20 @@ def _evaluate_task(
     return evaluation_result_
 
 
-def _apply_scoring_strategy_override(
+def _apply_scoring_tool_strategy_override(
     scoring_metrics: List[base_metric.BaseMetric],
-    scoring_strategy: suite_evaluators_strategy.ScoringStrategyMode,
+    scoring_tool_strategy: suite_evaluators_strategy.ScoringToolStrategyMode,
 ) -> None:
     """Replace each LLMJudge's strategy selector with the suite-level override.
 
     Walks the resolved evaluator list once; non-LLMJudge metrics are left
     alone. Done after `dataset.get_evaluators(...)` returns so users keep
-    the precedence: explicit `run_tests(scoring_strategy=...)` wins over
+    the precedence: explicit `run_tests(scoring_tool_strategy=...)` wins over
     each judge's per-instance configuration.
     """
     for metric in scoring_metrics:
         if isinstance(metric, suite_evaluators_llm_judge_metric.LLMJudge):
-            metric.set_scoring_strategy(scoring_strategy)
+            metric.set_scoring_tool_strategy(scoring_tool_strategy)
 
 
 def _evaluate_test_suite_task(
@@ -616,7 +620,9 @@ def _evaluate_test_suite_task(
     evaluator_model: Optional[str],
     dataset_item_ids: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
-    scoring_strategy: Optional[suite_evaluators_strategy.ScoringStrategyMode] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> Tuple[evaluation_result.EvaluationResult, float]:
     from opik.message_processing.processors import message_processors_chain
 
@@ -647,8 +653,10 @@ def _evaluate_test_suite_task(
     try:
         with asyncio_support.async_http_connections_expire_immediately():
             scoring_metrics = dataset.get_evaluators(evaluator_model)
-            if scoring_strategy is not None:
-                _apply_scoring_strategy_override(scoring_metrics, scoring_strategy)
+            if scoring_tool_strategy is not None:
+                _apply_scoring_tool_strategy_override(
+                    scoring_metrics, scoring_tool_strategy
+                )
             execution_policy = dataset.get_execution_policy()
             items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
                 nb_samples=None,

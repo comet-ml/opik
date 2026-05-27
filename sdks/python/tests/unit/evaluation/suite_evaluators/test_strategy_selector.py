@@ -38,7 +38,7 @@ class TestSimpleSelectors:
         sel = strategy_selector.AlwaysAgentic()
         assert (
             sel.select(trace_tool_context=None, model_name="x", assertions=[])
-            is strategy_selector.ScoringStrategy.AGENTIC
+            is strategy_selector.ScoringToolStrategy.AGENTIC
         )
 
     def test_never_agentic__regardless_of_inputs(self):
@@ -46,7 +46,7 @@ class TestSimpleSelectors:
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
         assert (
             sel.select(trace_tool_context=ctx, model_name="x", assertions=[])
-            is strategy_selector.ScoringStrategy.ONE_SHOT
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
 
@@ -55,7 +55,7 @@ class TestHeuristicSelector:
         sel = strategy_selector.HeuristicSelector()
         assert (
             sel.select(trace_tool_context=None, model_name="gpt-5", assertions=[])
-            is strategy_selector.ScoringStrategy.ONE_SHOT
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
     def test_unknown_model__defaults_to_agentic(self):
@@ -67,7 +67,7 @@ class TestHeuristicSelector:
                 model_name="unknown-model-xyz",
                 assertions=[],
             )
-            is strategy_selector.ScoringStrategy.AGENTIC
+            is strategy_selector.ScoringToolStrategy.AGENTIC
         )
 
     def test_small_trace__capable_model__returns_one_shot(self):
@@ -75,7 +75,7 @@ class TestHeuristicSelector:
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
         assert (
             sel.select(trace_tool_context=ctx, model_name="gpt-5", assertions=[])
-            is strategy_selector.ScoringStrategy.ONE_SHOT
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
     def test_large_trace__capable_model__returns_agentic(self):
@@ -87,7 +87,7 @@ class TestHeuristicSelector:
         ctx = _fake_ctx(payload={"trace": {"id": "t", "input": big}})
         assert (
             sel.select(trace_tool_context=ctx, model_name="gpt-4o", assertions=[])
-            is strategy_selector.ScoringStrategy.AGENTIC
+            is strategy_selector.ScoringToolStrategy.AGENTIC
         )
 
     def test_small_model__forces_agentic_even_when_size_fits(self):
@@ -96,7 +96,7 @@ class TestHeuristicSelector:
         # gpt-5-nano is flagged single_pass_quality_ok=False
         assert (
             sel.select(trace_tool_context=ctx, model_name="gpt-5-nano", assertions=[])
-            is strategy_selector.ScoringStrategy.AGENTIC
+            is strategy_selector.ScoringToolStrategy.AGENTIC
         )
 
     def test_invalid_safety_factor__raises(self):
@@ -116,41 +116,53 @@ class TestLLMJudgeIntegration:
     def test_default_strategy_is_auto(self):
         judge = llm_judge.LLMJudge(assertions=["a"], track=False)
         assert isinstance(
-            judge.get_scoring_strategy(), strategy_selector.HeuristicSelector
+            judge.get_scoring_tool_strategy(), strategy_selector.HeuristicSelector
         )
 
     def test_string_mode_resolves_to_selector(self):
         judge = llm_judge.LLMJudge(
-            assertions=["a"], track=False, scoring_strategy="always"
+            assertions=["a"], track=False, scoring_tool_strategy="always"
         )
-        assert isinstance(judge.get_scoring_strategy(), strategy_selector.AlwaysAgentic)
+        assert isinstance(
+            judge.get_scoring_tool_strategy(), strategy_selector.AlwaysAgentic
+        )
 
     def test_custom_selector_instance_passes_through(self):
         custom = strategy_selector.NeverAgentic()
         judge = llm_judge.LLMJudge(
-            assertions=["a"], track=False, scoring_strategy=custom
+            assertions=["a"], track=False, scoring_tool_strategy=custom
         )
-        assert judge.get_scoring_strategy() is custom
+        assert judge.get_scoring_tool_strategy() is custom
 
-    def test_set_scoring_strategy__overrides_existing(self):
+    def test_set_scoring_tool_strategy__overrides_existing(self):
         judge = llm_judge.LLMJudge(
-            assertions=["a"], track=False, scoring_strategy="never"
+            assertions=["a"], track=False, scoring_tool_strategy="never"
         )
-        judge.set_scoring_strategy("always")
-        assert isinstance(judge.get_scoring_strategy(), strategy_selector.AlwaysAgentic)
+        judge.set_scoring_tool_strategy("always")
+        assert isinstance(
+            judge.get_scoring_tool_strategy(), strategy_selector.AlwaysAgentic
+        )
 
-    def test_merged__propagates_scoring_strategy(self):
-        a = llm_judge.LLMJudge(assertions=["x"], track=False, scoring_strategy="always")
-        b = llm_judge.LLMJudge(assertions=["y"], track=False, scoring_strategy="always")
+    def test_merged__propagates_scoring_tool_strategy(self):
+        a = llm_judge.LLMJudge(
+            assertions=["x"], track=False, scoring_tool_strategy="always"
+        )
+        b = llm_judge.LLMJudge(
+            assertions=["y"], track=False, scoring_tool_strategy="always"
+        )
         merged = llm_judge.LLMJudge.merged([a, b])
         assert merged is not None
         assert isinstance(
-            merged.get_scoring_strategy(), strategy_selector.AlwaysAgentic
+            merged.get_scoring_tool_strategy(), strategy_selector.AlwaysAgentic
         )
 
     def test_merged__different_strategies__returns_none(self):
-        a = llm_judge.LLMJudge(assertions=["x"], track=False, scoring_strategy="always")
-        b = llm_judge.LLMJudge(assertions=["y"], track=False, scoring_strategy="never")
+        a = llm_judge.LLMJudge(
+            assertions=["x"], track=False, scoring_tool_strategy="always"
+        )
+        b = llm_judge.LLMJudge(
+            assertions=["y"], track=False, scoring_tool_strategy="never"
+        )
         assert llm_judge.LLMJudge.merged([a, b]) is None
 
 

@@ -63,7 +63,7 @@ def _make_judge(assertion_or_assertions, model_name: str) -> LLMJudge:
         assertions=assertions,
         model=model_name,
         track=False,
-        scoring_strategy="always",
+        scoring_tool_strategy="always",
         seed=42,
         temperature=0.0,
     )

@@ -213,7 +213,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 )
 
             if missing_trace_ids:
-                LOGGER.warning(
+                LOGGER.debug(
                     "Skipping %d orphan span-to-trace link(s) with missing trace observation(s): %s",
                     len(missing_trace_ids),
                     ", ".join(sorted(missing_trace_ids)[:5]),
