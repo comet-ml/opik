@@ -129,6 +129,13 @@ class AnnotationQueuesResourceTest {
                 .annotatorsPerItem(1)
                 .build();
     }
+
+    private AnnotationQueueUpdate newAnnotationQueueUpdate() {
+        return factory.manufacturePojo(AnnotationQueueUpdate.class)
+                .toBuilder()
+                .annotatorsPerItem(2)
+                .build();
+    }
     private String baseURI;
     private ProjectResourceClient projectResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
@@ -350,7 +357,7 @@ class AnnotationQueuesResourceTest {
 
             wireMock.server().resetRequests();
             annotationQueuesResourceClient.callUpdateAnnotationQueue(queueId,
-                    factory.manufacturePojo(AnnotationQueueUpdate.class), apiKey, workspaceName).close();
+                    newAnnotationQueueUpdate(), apiKey, workspaceName).close();
 
             wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
@@ -368,7 +375,7 @@ class AnnotationQueuesResourceTest {
                     WorkspaceUserPermission.ANNOTATION_QUEUE_EDIT.getValue());
 
             try (var response = annotationQueuesResourceClient.callUpdateAnnotationQueue(UUID.randomUUID(),
-                    factory.manufacturePojo(AnnotationQueueUpdate.class), apiKey, workspaceName)) {
+                    newAnnotationQueueUpdate(), apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
@@ -443,7 +450,6 @@ class AnnotationQueuesResourceTest {
 
             var annotationQueue = newAnnotationQueue()
                     .toBuilder()
-                    .id(null)
                     .projectId(projectId)
                     .projectName(project.name())
                     .annotatorsPerItem(3)
@@ -466,7 +472,6 @@ class AnnotationQueuesResourceTest {
 
             var annotationQueue = newAnnotationQueue()
                     .toBuilder()
-                    .id(null)
                     .projectId(projectId)
                     .projectName(project.name())
                     .annotatorsPerItem(null)
@@ -481,26 +486,17 @@ class AnnotationQueuesResourceTest {
             assertThat(retrieved.annotatorsPerItem()).isEqualTo(1);
         }
 
-        @Test
-        @DisplayName("should reject annotation queue when annotatorsPerItem is zero")
-        void createAnnotationQueueWithZeroAnnotatorsPerItemShouldReject() {
-            var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
-
-            var annotationQueue = newAnnotationQueue()
-                    .toBuilder()
-                    .id(null)
-                    .projectId(projectId)
-                    .annotatorsPerItem(0)
-                    .build();
-
-            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
-                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
+        private Stream<Arguments> invalidAnnotatorsPerItemValues() {
+            return Stream.of(
+                    arguments(0, "zero"),
+                    arguments(-1, "negative"),
+                    arguments(1001, "exceeds max"));
         }
 
-        @Test
-        @DisplayName("should reject annotation queue when annotatorsPerItem exceeds 1000")
-        void createAnnotationQueueWithExcessiveAnnotatorsPerItemShouldReject() {
+        @ParameterizedTest
+        @MethodSource("invalidAnnotatorsPerItemValues")
+        @DisplayName("should reject annotation queue when annotatorsPerItem is invalid:")
+        void createAnnotationQueueWithInvalidAnnotatorsPerItemShouldReject(int value, String label) {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
@@ -508,7 +504,7 @@ class AnnotationQueuesResourceTest {
                     .toBuilder()
                     .id(null)
                     .projectId(projectId)
-                    .annotatorsPerItem(1001)
+                    .annotatorsPerItem(value)
                     .build();
 
             annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
@@ -1044,7 +1040,7 @@ class AnnotationQueuesResourceTest {
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Create update request
-            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class);
+            var updateRequest = newAnnotationQueueUpdate();
 
             // When
             annotationQueuesResourceClient.updateAnnotationQueue(
@@ -1123,7 +1119,7 @@ class AnnotationQueuesResourceTest {
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Create partial update request (only updating name and comments_enabled)
-            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class)
+            var updateRequest = newAnnotationQueueUpdate()
                     .toBuilder()
                     .name("")
                     .build();
@@ -1131,6 +1127,64 @@ class AnnotationQueuesResourceTest {
             // When
             annotationQueuesResourceClient.updateAnnotationQueue(
                     annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should update annotatorsPerItem when explicitly changed")
+        void updateAnnotatorsPerItem() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorsPerItem(1)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updateRequest = AnnotationQueueUpdate.builder()
+                    .annotatorsPerItem(5)
+                    .build();
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("should preserve annotatorsPerItem when not included in update")
+        void updateShouldPreserveAnnotatorsPerItemWhenNotIncluded() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorsPerItem(7)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updateRequest = AnnotationQueueUpdate.builder()
+                    .description("Updated description")
+                    .build();
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(7);
         }
     }
 
@@ -1850,6 +1904,9 @@ class AnnotationQueuesResourceTest {
                 .feedbackDefinitionNames(updateRequest.feedbackDefinitionNames() != null
                         ? updateRequest.feedbackDefinitionNames()
                         : existingQueue.feedbackDefinitionNames())
+                .annotatorsPerItem(updateRequest.annotatorsPerItem() != null
+                        ? updateRequest.annotatorsPerItem()
+                        : existingQueue.annotatorsPerItem())
                 .build();
     }
 

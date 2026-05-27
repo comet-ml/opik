@@ -68,6 +68,11 @@ public interface AnnotationQueueDAO {
 @Slf4j
 class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
+    // Best-effort threshold enforced client-side: the FE skips items once N distinct
+    // annotators are counted, but the BE does not reject if N+1 submit concurrently.
+
+    private static final int MIN_ANNOTATORS_PER_ITEM = 1;
+
     private static final String BATCH_INSERT = """
             INSERT INTO annotation_queues (
                 id,
@@ -129,7 +134,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 scope,
                 <if(comments_enabled)> :comments_enabled <else> comments_enabled <endif> as comments_enabled,
                 <if(has_feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
-                <if(annotators_per_item)> :annotators_per_item <else> annotators_per_item <endif> as annotators_per_item,
+                <if(has_annotators_per_item)> :annotators_per_item <else> annotators_per_item <endif> as annotators_per_item,
                 created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -534,7 +539,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     .bind("annotators_per_item" + i,
                             annotationQueue.annotatorsPerItem() != null
                                     ? annotationQueue.annotatorsPerItem()
-                                    : 1);
+                                    : MIN_ANNOTATORS_PER_ITEM);
             i++;
         }
 
@@ -582,7 +587,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .commentsEnabled(row.get("comments_enabled", Integer.class) == 1)
                 .feedbackDefinitionNames(Arrays.stream(row.get("feedback_definitions", String[].class))
                         .toList())
-                .annotatorsPerItem(Optional.ofNullable(row.get("annotators_per_item", Integer.class)).orElse(1))
+                .annotatorsPerItem(Optional.ofNullable(row.get("annotators_per_item", Integer.class))
+                        .orElse(MIN_ANNOTATORS_PER_ITEM))
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
@@ -695,7 +701,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     template.add("feedback_definitions", feedbackDefinitionNames.toArray(String[]::new));
                 });
         Optional.ofNullable(update.annotatorsPerItem())
-                .ifPresent(annotatorsPerItem -> template.add("annotators_per_item", true));
+                .ifPresent(annotatorsPerItem -> template.add("has_annotators_per_item", true));
 
         return template;
     }
