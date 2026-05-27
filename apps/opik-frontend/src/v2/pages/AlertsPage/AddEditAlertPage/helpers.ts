@@ -14,7 +14,11 @@ import {
   AlertTriggerConfig,
   Alert,
 } from "@/types/alerts";
-import { TriggerFormType, FeedbackScoreConditionType } from "./schema";
+import {
+  TriggerFormType,
+  FeedbackScoreConditionType,
+  FeedbackScoreConditionGroupType,
+} from "./schema";
 import SlackIcon from "@/icons/slack.svg?react";
 import PagerDutyIcon from "@/icons/pagerduty.svg?react";
 
@@ -98,6 +102,16 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   },
 };
 
+const SIMPLE_THRESHOLD_CONFIG_TYPE: Partial<
+  Record<ALERT_EVENT_TYPE, ALERT_TRIGGER_CONFIG_TYPE>
+> = {
+  [ALERT_EVENT_TYPE.trace_cost]: ALERT_TRIGGER_CONFIG_TYPE["threshold:cost"],
+  [ALERT_EVENT_TYPE.trace_latency]:
+    ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
+  [ALERT_EVENT_TYPE.trace_errors]:
+    ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
+};
+
 const getThresholdFromTriggerConfigs = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   triggerConfigs?: AlertTriggerConfig[],
@@ -123,55 +137,76 @@ const getThresholdFromTriggerConfigs = (
   return {};
 };
 
-const getAllThresholdConditionsFromTriggerConfigs = (
+const getAllThresholdConditionGroupsFromTriggerConfigs = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   triggerConfigs?: AlertTriggerConfig[],
-): FeedbackScoreConditionType[] => {
+): FeedbackScoreConditionGroupType[] => {
   if (!triggerConfigs) return [];
 
-  const conditions = triggerConfigs
-    .filter((config) => config.type === configType)
-    .map((config) => ({
-      threshold: config.config_value?.threshold || "",
-      window: config.config_value?.window || "",
-      name: config.config_value?.name || "",
-      operator: config.config_value?.operator || ">",
-    }))
-    .filter(
-      (condition) => condition.threshold && condition.window && condition.name,
-    );
+  const matching = triggerConfigs.filter(
+    (config) => config.type === configType,
+  );
 
-  return conditions;
+  // Bucket by group_index. Configs without a group_index land in their own
+  // group (preserves the pre-grouping "implicit OR" semantics).
+  const groupBuckets = new Map<string, FeedbackScoreConditionType[]>();
+  let fallbackKey = 0;
+
+  // Load every matching config (don't filter out partial ones) so existing
+  // alerts open in the editor — schema validation will flag any missing
+  // fields and the user can complete them.
+  matching.forEach((config) => {
+    if (!config.config_value) return;
+    const rawOperator = config.config_value.operator;
+    const condition: FeedbackScoreConditionType = {
+      threshold: config.config_value.threshold || "",
+      window: config.config_value.window || "",
+      name: config.config_value.name || "",
+      operator: rawOperator === "<" ? "<" : ">",
+    };
+
+    const key =
+      config.group_index === null || config.group_index === undefined
+        ? `__ungrouped_${fallbackKey++}`
+        : `g_${config.group_index}`;
+
+    const bucket = groupBuckets.get(key) ?? [];
+    bucket.push(condition);
+    groupBuckets.set(key, bucket);
+  });
+
+  return Array.from(groupBuckets.values()).map((conditions) => ({
+    conditions,
+  }));
 };
 
-const createThresholdTriggerConfig = (
-  configType: ALERT_TRIGGER_CONFIG_TYPE,
-  threshold?: string,
-  window?: string,
-  name?: string,
-  operator?: string,
-): AlertTriggerConfig[] => {
+type ThresholdConfigInput = {
+  configType: ALERT_TRIGGER_CONFIG_TYPE;
+  threshold?: string;
+  window?: string;
+  name?: string;
+  operator?: string;
+  groupIndex?: number;
+};
+
+const createThresholdTriggerConfig = ({
+  configType,
+  threshold,
+  window,
+  name,
+  operator,
+  groupIndex,
+}: ThresholdConfigInput): AlertTriggerConfig[] => {
   if (!threshold || !window) return [];
 
-  const config_value: Record<string, string> = {
-    threshold,
-    window,
-  };
+  const config_value: Record<string, string> = { threshold, window };
+  if (name) config_value.name = name;
+  if (operator) config_value.operator = operator;
 
-  // Add name and operator for feedback score triggers
-  if (name) {
-    config_value.name = name;
-  }
-  if (operator) {
-    config_value.operator = operator;
-  }
+  const config: AlertTriggerConfig = { type: configType, config_value };
+  if (groupIndex !== undefined) config.group_index = groupIndex;
 
-  return [
-    {
-      type: configType,
-      config_value,
-    },
-  ];
+  return [config];
 };
 
 export const alertTriggersToFormTriggers = (
@@ -180,41 +215,28 @@ export const alertTriggersToFormTriggers = (
   if (!triggers || triggers.length === 0) return [];
 
   return triggers.map((trigger) => {
-    // Extract threshold and window for cost/latency/errors triggers
-    let thresholdData = {};
-    if (trigger.event_type === ALERT_EVENT_TYPE.trace_cost) {
-      thresholdData = getThresholdFromTriggerConfigs(
-        ALERT_TRIGGER_CONFIG_TYPE["threshold:cost"],
-        trigger.trigger_configs,
-      );
-    } else if (trigger.event_type === ALERT_EVENT_TYPE.trace_latency) {
-      thresholdData = getThresholdFromTriggerConfigs(
-        ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
-        trigger.trigger_configs,
-      );
-    } else if (trigger.event_type === ALERT_EVENT_TYPE.trace_errors) {
-      thresholdData = getThresholdFromTriggerConfigs(
-        ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
-        trigger.trigger_configs,
-      );
-    }
+    const simpleThresholdType =
+      SIMPLE_THRESHOLD_CONFIG_TYPE[trigger.event_type];
+    const thresholdData = simpleThresholdType
+      ? getThresholdFromTriggerConfigs(
+          simpleThresholdType,
+          trigger.trigger_configs,
+        )
+      : {};
 
-    // Extract multiple conditions for feedback score triggers
-    let conditions: FeedbackScoreConditionType[] = [];
-    if (
+    const groups: FeedbackScoreConditionGroupType[] =
       trigger.event_type === ALERT_EVENT_TYPE.trace_feedback_score ||
       trigger.event_type === ALERT_EVENT_TYPE.trace_thread_feedback_score
-    ) {
-      conditions = getAllThresholdConditionsFromTriggerConfigs(
-        ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
-        trigger.trigger_configs,
-      );
-    }
+        ? getAllThresholdConditionGroupsFromTriggerConfigs(
+            ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
+            trigger.trigger_configs,
+          )
+        : [];
 
     return {
       eventType: trigger.event_type,
       ...thresholdData,
-      ...(conditions.length > 0 ? { conditions } : {}),
+      ...(groups.length > 0 ? { groups } : {}),
     };
   });
 };
@@ -225,49 +247,35 @@ export const formTriggersToAlertTriggers = (
   return triggers.map((trigger) => {
     const configs: AlertTriggerConfig[] = [];
 
-    // Add threshold config for cost/latency/errors triggers
-    if (trigger.eventType === ALERT_EVENT_TYPE.trace_cost) {
+    const simpleThresholdType = SIMPLE_THRESHOLD_CONFIG_TYPE[trigger.eventType];
+    if (simpleThresholdType) {
       configs.push(
-        ...createThresholdTriggerConfig(
-          ALERT_TRIGGER_CONFIG_TYPE["threshold:cost"],
-          trigger.threshold,
-          trigger.window,
-        ),
-      );
-    } else if (trigger.eventType === ALERT_EVENT_TYPE.trace_latency) {
-      configs.push(
-        ...createThresholdTriggerConfig(
-          ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
-          trigger.threshold,
-          trigger.window,
-        ),
-      );
-    } else if (trigger.eventType === ALERT_EVENT_TYPE.trace_errors) {
-      configs.push(
-        ...createThresholdTriggerConfig(
-          ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
-          trigger.threshold,
-          trigger.window,
-        ),
+        ...createThresholdTriggerConfig({
+          configType: simpleThresholdType,
+          threshold: trigger.threshold,
+          window: trigger.window,
+        }),
       );
     } else if (
       trigger.eventType === ALERT_EVENT_TYPE.trace_feedback_score ||
       trigger.eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score
     ) {
-      // Add multiple threshold configs for feedback scores (one per condition)
-      if (trigger.conditions && trigger.conditions.length > 0) {
-        trigger.conditions.forEach((condition) => {
+      // Flatten groups into threshold configs with group_index.
+      // Same group_index = AND; different = OR.
+      trigger.groups?.forEach((group, groupIndex) => {
+        group.conditions.forEach((condition) => {
           configs.push(
-            ...createThresholdTriggerConfig(
-              ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
-              condition.threshold,
-              condition.window,
-              condition.name,
-              condition.operator,
-            ),
+            ...createThresholdTriggerConfig({
+              configType: ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
+              threshold: condition.threshold,
+              window: condition.window,
+              name: condition.name,
+              operator: condition.operator,
+              groupIndex,
+            }),
           );
         });
-      }
+      });
     }
 
     return {

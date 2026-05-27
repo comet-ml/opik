@@ -189,6 +189,10 @@ class EvaluationEngine:
             client=self._client,
             execution_policy=execution_policy_dict or None,
         ):
+            if experiment_ is not None and experiment_.prompts:
+                for prompt_obj in experiment_.prompts:
+                    opik_context.attach_prompt_to_current_trace(prompt_obj)
+
             LOGGER.debug("[engine] Task started for item %s", item.id)
             task_start = time.perf_counter()
             try:

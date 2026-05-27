@@ -16,6 +16,7 @@ export const AlertTriggerConfigPublic: core.serialization.ObjectSchema<
         "config_value",
         core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     ),
+    groupIndex: core.serialization.property("group_index", core.serialization.number().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -28,6 +29,7 @@ export declare namespace AlertTriggerConfigPublic {
         alert_trigger_id?: string | null;
         type: AlertTriggerConfigPublicType.Raw;
         config_value?: Record<string, string> | null;
+        group_index?: number | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

@@ -213,6 +213,10 @@ gemini:
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
+  - id: "gemini-3.5-flash"
+    qualifiedName: "vertex_ai/gemini-3.5-flash"
+    label: "Gemini 3.5 Flash"
+    structuredOutput: true
   - id: "gemini-3.1-pro-preview"
     qualifiedName: "vertex_ai/gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
@@ -1210,6 +1214,8 @@ openrouter:
     label: "qwen/qwen3.6-plus-preview:free"
   - id: "qwen/qwen3.6-plus:free"
     label: "qwen/qwen3.6-plus:free"
+  - id: "qwen/qwen3.7-max"
+    label: "qwen/qwen3.7-max"
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true
@@ -1307,6 +1313,8 @@ openrouter:
     label: "x-ai/grok-4.20-multi-agent-beta"
   - id: "x-ai/grok-4.3"
     label: "x-ai/grok-4.3"
+  - id: "x-ai/grok-build-0.1"
+    label: "x-ai/grok-build-0.1"
   - id: "x-ai/grok-code-fast-1"
     label: "x-ai/grok-code-fast-1"
   - id: "xiaomi/mimo-v2-flash"

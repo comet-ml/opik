@@ -104,6 +104,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.resources.PromptTestAssertions.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
@@ -130,8 +131,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class PromptResourceTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
-    public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "requestedVersion", "template", "metadata",
-            "changeDescription", "type", "projectName"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -3012,7 +3011,7 @@ class PromptResourceTest {
 
                 // Additional checks specific to restore semantics
                 assertThat(restoredVersion.changeDescription())
-                        .isEqualTo("Restored from version " + createdV1.commit());
+                        .isEqualTo("Restored from version " + createdV1.versionNumber());
                 assertThat(restoredVersion.id()).isNotEqualTo(createdV1.id());
                 assertThat(restoredVersion.id()).isNotEqualTo(createdV2.id());
                 assertThat(restoredVersion.commit()).isNotEqualTo(createdV1.commit());
@@ -3172,11 +3171,16 @@ class PromptResourceTest {
             assertThat(promptVersionPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields("variables", "promptId", "templateStructure")
+                                    .withIgnoredFields("variables", "promptId", "templateStructure", "versionNumber")
                                     .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersions);
+
+            assertThat(promptVersionPage.content())
+                    .allSatisfy(v -> assertThat(v.versionNumber()).matches("^v\\d+$"));
+            assertThat(promptVersionPage.content().stream().map(PromptVersion::versionNumber).toList())
+                    .doesNotHaveDuplicates();
 
             assertThat(promptVersionPage.content().stream().map(PromptVersion::promptId).toList())
                     .allMatch(id -> id.equals(promptId));
@@ -3939,7 +3943,35 @@ class PromptResourceTest {
                             (Function<PromptVersion, String>) PromptVersion::template,
                             (BiFunction<PromptVersion, String, String>) (v, field) -> field,
                             (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.template()
-                                    .equals(filterValue)));
+                                    .equals(filterValue)),
+                    // EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.EQUAL,
+                            "exact version_number match",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .equals(filterValue)),
+                    // NOT_EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.NOT_EQUAL,
+                            "not equal to version_number",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.versionNumber()
+                                    .equals(filterValue)),
+                    // ENDS_WITH - VERSION_NUMBER (matches the numeric suffix of v1's version_number)
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.ENDS_WITH,
+                            "version_number ends with suffix",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field
+                                    .substring(field.length() - 1),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .endsWith(filterValue)));
         }
 
         @ParameterizedTest(name = "Success: filter by {0} - {1}")
@@ -5276,7 +5308,7 @@ class PromptResourceTest {
                     .build();
 
             try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
             }
         }
 
@@ -5341,6 +5373,188 @@ class PromptResourceTest {
 
     private Prompt.PromptBuilder buildPrompt() {
         return PromptResourceClient.buildPrompt(factory).toBuilder();
+    }
+
+    @Nested
+    @DisplayName("Prompt Version Numbers")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionNumbers {
+
+        @Test
+        @DisplayName("Sequential version_number is assigned v1, v2, v3 across successive versions")
+        void sequentialVersionNumbersAreAssigned() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            var v2 = createRegularVersion(prompt);
+            var v3 = createRegularVersion(prompt);
+
+            assertThat(v1.versionNumber()).isEqualTo("v1");
+            assertThat(v2.versionNumber()).isEqualTo("v2");
+            assertThat(v3.versionNumber()).isEqualTo("v3");
+        }
+
+        @Test
+        @DisplayName("Mask versions have a null version_number and do not advance the counter")
+        void masksDoNotAdvanceVersionNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            var mask1 = createMaskVersion(prompt);
+            var v2 = createRegularVersion(prompt);
+            var mask2 = createMaskVersion(prompt);
+            var v3 = createRegularVersion(prompt);
+
+            assertThat(v1.versionNumber()).isEqualTo("v1");
+            assertThat(v2.versionNumber()).isEqualTo("v2");
+            assertThat(v3.versionNumber()).isEqualTo("v3");
+            assertThat(mask1.versionNumber()).isNull();
+            assertThat(mask2.versionNumber()).isNull();
+        }
+
+        @Test
+        @DisplayName("getPromptById returns version_number on latestVersion")
+        void getPromptByIdExposesVersionNumberOnLatest() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            var fetched = promptResourceClient.getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+            assertThat(fetched.latestVersion()).isNotNull();
+            assertThat(fetched.latestVersion().versionNumber()).isEqualTo("v2");
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}/versions/by-number/{versionNumber} returns the matching version")
+        void getByNumberReturnsMatchingVersion() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            createRegularVersion(prompt);
+            var v2 = createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            try (var response = promptResourceClient.callGetPromptVersionByNumber(promptId, "v2", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                PromptVersion fetched = response.readEntity(PromptVersion.class);
+                assertThat(fetched.id()).isEqualTo(v2.id());
+                assertThat(fetched.versionNumber()).isEqualTo("v2");
+            }
+        }
+
+        @Test
+        @DisplayName("GET /by-number/{versionNumber} returns 404 when no such version exists")
+        void getByNumberReturnsNotFoundForUnknownNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            createRegularVersion(prompt);
+
+            try (var response = promptResourceClient.callGetPromptVersionByNumber(promptId, "v99", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("GET /by-number/{versionNumber} returns 400 when the value does not match v<N>")
+        void getByNumberRejectsInvalidFormat() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPromptVersionByNumber(promptId, "not-a-number", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("POST /versions/retrieve resolves by version_number")
+        void retrieveResolvesByVersionNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            var request = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .versionNumber("v1")
+                    .build();
+            try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                PromptVersion fetched = response.readEntity(PromptVersion.class);
+                assertThat(fetched.id()).isEqualTo(v1.id());
+                assertThat(fetched.versionNumber()).isEqualTo("v1");
+            }
+        }
+
+        @Test
+        @DisplayName("POST /versions/retrieve returns 422 when version_number is combined with commit or environment")
+        void retrieveRejectsMutuallyExclusiveResolutionFields() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var versionAndCommit = PromptVersionRetrieve.builder()
+                    .name(prompt.name()).versionNumber("v1").commit("abcdef12").build();
+            try (var response = promptResourceClient.callRetrievePromptVersion(versionAndCommit, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+
+            var versionAndEnv = PromptVersionRetrieve.builder()
+                    .name(prompt.name()).versionNumber("v1").environment("production").build();
+            try (var response = promptResourceClient.callRetrievePromptVersion(versionAndEnv, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        @Test
+        @DisplayName("Restoring a version creates a new version with the next sequential number")
+        void restoreAssignsNextSequentialNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            try (var response = promptResourceClient.callRestorePromptVersion(promptId, v1.id(), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                PromptVersion restored = response.readEntity(PromptVersion.class);
+                assertThat(restored.id()).isNotEqualTo(v1.id());
+                assertThat(restored.versionNumber()).isEqualTo("v4");
+            }
+        }
+
+        private PromptVersion createRegularVersion(Prompt prompt) {
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
+                    .environment(null)
+                    .build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+        }
+
+        private PromptVersion createMaskVersion(Prompt prompt) {
+            var mask = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .versionType(PromptVersionType.MASK)
+                    .environment(null)
+                    .build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), mask, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+        }
     }
 
 }

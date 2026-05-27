@@ -17,23 +17,43 @@ type UseThisPromptDialogProps = {
   setOpen: (open: boolean) => void;
   promptName: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+  versionLabel?: string;
+  versionCommit?: string;
 };
 
 const getCreatingPrompt = (promptName: string) => `import opik
 
-# Create a new Prompt instance
-prompt = opik.Prompt(
+client = opik.Opik()
+
+# Create a new prompt (or a new version if it already exists)
+prompt = client.create_prompt(
   name="${promptName}",
   prompt="Hello, {{name}}! Welcome to {{location}}. How can I assist you today?",
-  metadata={"temperature": 0.4}
+  metadata={"temperature": 0.4},
 )
+
+# Format the prompt with the given parameters
+formatted_prompt = prompt.format(name="Alice", location="Wonderland")
+print(formatted_prompt)
+`;
+
+const getGettingPrompt = (promptName: string, commit?: string) =>
+  commit
+    ? `import opik
+
+client = opik.Opik()
+
+# Get a specific version of a prompt by commit
+prompt = client.get_prompt(name="${promptName}", commit="${commit}")
+
+# Read metadata from this version of the prompt
+print(prompt.metadata)
 
 # Format the prompt with the given parameters
 formatted_prompt = prompt.format({"name": "Alice", "location": "Wonderland"})
 print(formatted_prompt)
-`;
-
-const getGettingPrompt = (promptName: string) => `import opik
+`
+    : `import opik
 
 client = opik.Opik()
 
@@ -44,28 +64,46 @@ prompt = client.get_prompt(name="${promptName}")
 print(prompt.metadata)
 
 # Format the prompt with the given parameters
-formatted_prompt = prompt.format({"name": "Alice", "location": "Wonderland"})
+formatted_prompt = prompt.format(name="Alice", location="Wonderland")
 print(formatted_prompt)
 `;
 
 const getCreatingChatPrompt = (promptName: string) => `import opik
 
-# Create a new ChatPrompt instance
-chat_prompt = opik.ChatPrompt(
+client = opik.Opik()
+
+# Create a new chat prompt (or a new version if it already exists)
+chat_prompt = client.create_chat_prompt(
   name="${promptName}",
   messages=[
     {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "Hello, {{name}}! How can you help me with {{topic}}?"}
+    {"role": "user", "content": "Hello, {{name}}! How can you help me with {{topic}}?"},
   ],
-  metadata={"temperature": 0.7}
+  metadata={"temperature": 0.7},
 )
+
+# Format the chat prompt with the given parameters
+formatted_messages = chat_prompt.format(variables={"name": "Alice", "topic": "Python programming"})
+print(formatted_messages)
+`;
+
+const getGettingChatPrompt = (promptName: string, commit?: string) =>
+  commit
+    ? `import opik
+
+client = opik.Opik()
+
+# Get a specific version of a chat prompt by commit
+chat_prompt = client.get_chat_prompt(name="${promptName}", commit="${commit}")
+
+# Read metadata from this version of the chat prompt
+print(chat_prompt.metadata)
 
 # Format the chat prompt with the given parameters
 formatted_messages = chat_prompt.format({"name": "Alice", "topic": "Python programming"})
 print(formatted_messages)
-`;
-
-const getGettingChatPrompt = (promptName: string) => `import opik
+`
+    : `import opik
 
 client = opik.Opik()
 
@@ -76,14 +114,23 @@ chat_prompt = client.get_chat_prompt(name="${promptName}")
 print(chat_prompt.metadata)
 
 # Format the chat prompt with the given parameters
-formatted_messages = chat_prompt.format({"name": "Alice", "topic": "Python programming"})
+formatted_messages = chat_prompt.format(variables={"name": "Alice", "topic": "Python programming"})
 print(formatted_messages)
 `;
 
 const UseThisPromptDialog: React.FunctionComponent<
   UseThisPromptDialogProps
-> = ({ open, setOpen, promptName, templateStructure }) => {
+> = ({
+  open,
+  setOpen,
+  promptName,
+  templateStructure,
+  versionLabel,
+  versionCommit,
+}) => {
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
+  const promptKind = isChatPrompt ? "chat prompt" : "prompt";
+  const versionSuffix = versionLabel ? ` (${versionLabel})` : "";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -93,7 +140,8 @@ const UseThisPromptDialog: React.FunctionComponent<
       >
         <DialogHeader>
           <DialogTitle>
-            Use this {isChatPrompt ? "chat " : ""}prompt
+            Use this {promptKind}
+            {versionSuffix}
           </DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
@@ -103,7 +151,7 @@ const UseThisPromptDialog: React.FunctionComponent<
           />
           <div className="flex flex-col gap-2">
             <div className="comet-body-accented mt-4">
-              Creating a {isChatPrompt ? "chat " : ""}prompt
+              Creating a {promptKind}
             </div>
             <CodeHighlighter
               data={
@@ -113,13 +161,15 @@ const UseThisPromptDialog: React.FunctionComponent<
               }
             />
             <div className="comet-body-accented mt-4">
-              Getting a {isChatPrompt ? "chat " : ""}prompt
+              {versionCommit
+                ? `Getting this ${promptKind}${versionSuffix}`
+                : `Getting a ${promptKind}`}
             </div>
             <CodeHighlighter
               data={
                 isChatPrompt
-                  ? getGettingChatPrompt(promptName)
-                  : getGettingPrompt(promptName)
+                  ? getGettingChatPrompt(promptName, versionCommit)
+                  : getGettingPrompt(promptName, versionCommit)
               }
             />
           </div>

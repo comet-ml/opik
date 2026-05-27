@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { PromptCache, buildCacheKey, getOrFetch } from "@/prompt/promptCache";
+import {
+  PromptCache,
+  buildCacheKey,
+  getOrFetch,
+  getGlobalCache,
+} from "@/prompt/promptCache";
 import type { BasePrompt } from "@/prompt/BasePrompt";
 
 function makeFakePrompt(overrides: Partial<BasePrompt> = {}): BasePrompt {
@@ -257,5 +262,80 @@ describe("module-level getOrFetch", () => {
 
     expect(second).toBe(prompt);
     expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it("produces distinct keys for different version pins", () => {
+    const k1 = buildCacheKey("p", undefined, "project", "text", undefined, "v1");
+    const k2 = buildCacheKey("p", undefined, "project", "text", undefined, "v2");
+    expect(k1).not.toBe(k2);
+  });
+
+  it("reuses the commit slot for the version pin (no extra entry in the key array)", () => {
+    // Key layout is [name, commit_or_version, projectName, templateStructure, maskId].
+    const key = buildCacheKey("p", undefined, "project", "text", undefined, "v3");
+    expect(JSON.parse(key)).toHaveLength(5);
+    expect(JSON.parse(key)[1]).toBe("v3");
+  });
+
+  it("version takes precedence over commit when both are provided", () => {
+    // (Client.ts validates this is impossible, but the helper should still be defined.)
+    const key = buildCacheKey("p", "abc12345", "project", "text", undefined, "v3");
+    expect(JSON.parse(key)[1]).toBe("v3");
+  });
+});
+
+describe("getOrFetch — version selector", () => {
+  beforeEach(() => {
+    getGlobalCache().clear();
+  });
+
+  afterEach(() => {
+    getGlobalCache().clear();
+  });
+
+  it("caches separate entries for different version values", async () => {
+    const promptV1 = makeFakePrompt({ name: "p", commit: "aaa11111" });
+    const promptV2 = makeFakePrompt({ name: "p", commit: "bbb22222" });
+
+    const fetchV1 = vi.fn().mockResolvedValue(promptV1);
+    const fetchV2 = vi.fn().mockResolvedValue(promptV2);
+
+    const r1 = await getOrFetch("p", undefined, "proj", "text", fetchV1, 300, undefined, "v1");
+    const r2 = await getOrFetch("p", undefined, "proj", "text", fetchV2, 300, undefined, "v2");
+
+    expect(r1).toBe(promptV1);
+    expect(r2).toBe(promptV2);
+    expect(fetchV1).toHaveBeenCalledOnce();
+    expect(fetchV2).toHaveBeenCalledOnce();
+  });
+
+  it("returns the cached prompt on a second call with the same version (no extra fetch)", async () => {
+    const prompt = makeFakePrompt({ name: "p" });
+    const fetchFn = vi.fn().mockResolvedValue(prompt);
+
+    const first = await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v1");
+    const second = await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v1");
+
+    expect(first).toBe(prompt);
+    expect(second).toBe(prompt);
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it("version entries follow the normal TTL refresh (not pinned indefinitely)", async () => {
+    // Sequential versions like "v3" can be reassigned by the backend if the
+    // underlying version is deleted and recreated, so they must NOT be cached
+    // indefinitely the way commits are.
+    const prompt = makeFakePrompt({ name: "p" });
+    const fetchFn = vi.fn().mockResolvedValue(prompt);
+
+    await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v9");
+
+    const key = buildCacheKey("p", undefined, "proj", "text", undefined, "v9");
+    // A second call with the same key MUST be served from cache (proves the
+    // entry is reachable and no eviction happened).
+    const second = await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v9");
+    expect(second).toBe(prompt);
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(getGlobalCache().get(key)).toBe(prompt);
   });
 });

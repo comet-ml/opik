@@ -118,12 +118,24 @@ def start_as_current_span(
                 **span_creation_result.trace_data.as_parameters
             )
 
-        # Clean up span and trace from context
+        # Clean up span and trace from context. ``_try_acquire_project_name``
+        # (called via ``add_start_candidates`` on enter) may have set the
+        # context project name with this span's or trace's id as owner; the
+        # matching release calls keep parity with the ``@track`` decorator
+        # path in ``base_track_decorator.pop_end_candidates`` /
+        # ``pop_end_candidate_trace_data``. Without them the project-name
+        # owner leaks across context-manager boundaries.
         opik_context_storage = context_storage.get_current_context_instance()
         opik_context_storage.pop_span_data(ensure_id=span_creation_result.span_data.id)
+        opik_context_storage.release_context_project_name_if_owner(
+            span_creation_result.span_data.id
+        )
         if span_creation_result.trace_data is not None:
             opik_context_storage.pop_trace_data(
                 ensure_id=span_creation_result.trace_data.id
+            )
+            opik_context_storage.release_context_project_name_if_owner(
+                span_creation_result.trace_data.id
             )
 
         if flush:

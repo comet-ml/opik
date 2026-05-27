@@ -20,7 +20,9 @@ const AIProviderCell = (
       className="flex gap-1"
     >
       {Icon && <Icon className="text-foreground" />}
-      <span>{providerKeyLabel}</span>
+      <span data-testid="ai-provider-row-cell" data-provider={row.provider}>
+        {providerKeyLabel}
+      </span>
     </CellWrapper>
   );
 };

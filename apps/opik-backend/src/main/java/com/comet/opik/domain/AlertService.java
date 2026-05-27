@@ -265,6 +265,7 @@ class AlertServiceImpl implements AlertService {
         String userName = requestContext.get().getUserName();
 
         validateNoProjectScopeConflict(alert);
+        validateGroupIndices(alert);
         var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
@@ -283,6 +284,7 @@ class AlertServiceImpl implements AlertService {
         var existingAlert = getById(id);
 
         validateNoProjectScopeConflict(alert);
+        validateGroupIndices(alert);
 
         alert = alert.toBuilder()
                 .createdBy(existingAlert.createdBy())
@@ -315,7 +317,7 @@ class AlertServiceImpl implements AlertService {
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         String filtersSQL = Optional.ofNullable(filters)
-                .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.ALERT))
+                .flatMap(f -> FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.ALERT))
                 .orElse(null);
 
         Map<String, Object> filterMapping = Optional.ofNullable(filters)
@@ -508,6 +510,31 @@ class AlertServiceImpl implements AlertService {
 
     private EntityAlreadyExistsException newAlertConflict() {
         return new EntityAlreadyExistsException(new ErrorMessage(HttpStatus.SC_CONFLICT, ALERT_ALREADY_EXISTS));
+    }
+
+    private static void validateGroupIndices(Alert alert) {
+        if (alert.triggers() == null) {
+            return;
+        }
+        for (AlertTrigger trigger : alert.triggers()) {
+            if (trigger.triggerConfigs() == null) {
+                continue;
+            }
+            for (AlertTriggerConfig config : trigger.triggerConfigs()) {
+                Integer groupIndex = config.groupIndex();
+                if (groupIndex == null) {
+                    continue;
+                }
+                if (groupIndex < 0) {
+                    throw new BadRequestException(
+                            "'group_index' must be non-negative, got '%d'".formatted(groupIndex));
+                }
+                if (config.type() == AlertTriggerConfigType.SCOPE_PROJECT) {
+                    throw new BadRequestException(
+                            "'group_index' must be null for 'scope:project' trigger configs; it applies as a global precondition, not as part of the boolean expression.");
+                }
+            }
+        }
     }
 
     private static void validateNoProjectScopeConflict(Alert alert) {

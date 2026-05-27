@@ -744,6 +744,68 @@ class RawPromptsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_prompt_version_by_number(
+        self, prompt_id: str, version_number: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[PromptVersionDetail]:
+        """
+        Get a prompt version by its sequential v<N> number for the given prompt.
+
+        Parameters
+        ----------
+        prompt_id : str
+
+        version_number : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[PromptVersionDetail]
+            Prompt version resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/prompts/{jsonable_encoder(prompt_id)}/versions/by-number/{jsonable_encoder(version_number)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PromptVersionDetail,
+                    parse_obj_as(
+                        type_=PromptVersionDetail,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_prompt_versions(
         self,
         id: str,
@@ -921,6 +983,7 @@ class RawPromptsClient:
         name: str,
         commit: typing.Optional[str] = OMIT,
         environment: typing.Optional[str] = OMIT,
+        version_number: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[PromptVersionDetail]:
@@ -934,7 +997,10 @@ class RawPromptsClient:
         commit : typing.Optional[str]
 
         environment : typing.Optional[str]
-            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit
+            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit and version_number
+
+        version_number : typing.Optional[str]
+            If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment
 
         project_name : typing.Optional[str]
             If provided, scopes the search to the specified project
@@ -954,6 +1020,7 @@ class RawPromptsClient:
                 "name": name,
                 "commit": commit,
                 "environment": environment,
+                "version_number": version_number,
                 "project_name": project_name,
             },
             headers={
@@ -1853,6 +1920,68 @@ class AsyncRawPromptsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def get_prompt_version_by_number(
+        self, prompt_id: str, version_number: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[PromptVersionDetail]:
+        """
+        Get a prompt version by its sequential v<N> number for the given prompt.
+
+        Parameters
+        ----------
+        prompt_id : str
+
+        version_number : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[PromptVersionDetail]
+            Prompt version resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/prompts/{jsonable_encoder(prompt_id)}/versions/by-number/{jsonable_encoder(version_number)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PromptVersionDetail,
+                    parse_obj_as(
+                        type_=PromptVersionDetail,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_prompt_versions(
         self,
         id: str,
@@ -2030,6 +2159,7 @@ class AsyncRawPromptsClient:
         name: str,
         commit: typing.Optional[str] = OMIT,
         environment: typing.Optional[str] = OMIT,
+        version_number: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[PromptVersionDetail]:
@@ -2043,7 +2173,10 @@ class AsyncRawPromptsClient:
         commit : typing.Optional[str]
 
         environment : typing.Optional[str]
-            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit
+            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit and version_number
+
+        version_number : typing.Optional[str]
+            If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment
 
         project_name : typing.Optional[str]
             If provided, scopes the search to the specified project
@@ -2063,6 +2196,7 @@ class AsyncRawPromptsClient:
                 "name": name,
                 "commit": commit,
                 "environment": environment,
+                "version_number": version_number,
                 "project_name": project_name,
             },
             headers={

@@ -7,6 +7,7 @@ import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,8 +30,10 @@ import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -62,7 +65,9 @@ public interface RunnerService {
 
     String getActiveRunnerId(String workspaceId, UUID projectId, String userName, RunnerType type);
 
-    void disconnectRunner(UUID runnerId);
+    // Returns the runner type on a real disconnect, empty on no-op (already reaped / not owned).
+    // Callers use the presence to decide whether to fire opik_runner_disconnected.
+    Optional<RunnerType> disconnectRunner(UUID runnerId);
 }
 
 @Slf4j
@@ -124,13 +129,15 @@ class RunnerServiceImpl implements RunnerService {
     private final @NonNull Provider<EndpointJobService> endpointJobService;
     private final @NonNull Provider<ConnectBridgeService> connectBridgeService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull AnalyticsService analyticsService;
 
     @Inject
     RunnerServiceImpl(@NonNull StringRedisClient redisClient, @NonNull IdGenerator idGenerator,
             @NonNull ProjectService projectService, @NonNull LocalRunnerConfig runnerConfig,
             @NonNull Provider<EndpointJobService> endpointJobService,
             @NonNull Provider<ConnectBridgeService> connectBridgeService,
-            @NonNull Provider<RequestContext> requestContext) {
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull AnalyticsService analyticsService) {
         this.redisClient = redisClient;
         this.idGenerator = idGenerator;
         this.projectService = projectService;
@@ -138,6 +145,7 @@ class RunnerServiceImpl implements RunnerService {
         this.endpointJobService = endpointJobService;
         this.connectBridgeService = connectBridgeService;
         this.requestContext = requestContext;
+        this.analyticsService = analyticsService;
     }
 
     @Override
@@ -346,7 +354,7 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     @Override
-    public void disconnectRunner(@NonNull UUID runnerId) {
+    public Optional<RunnerType> disconnectRunner(@NonNull UUID runnerId) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -354,7 +362,7 @@ class RunnerServiceImpl implements RunnerService {
         if (!isRunnerOwnedByUser(runnerId, workspaceId, userName)) {
             log.info("Runner '{}' not found for user in workspace '{}', treating disconnect as no-op", runnerId,
                     workspaceId);
-            return;
+            return Optional.empty();
         }
 
         RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId));
@@ -369,6 +377,16 @@ class RunnerServiceImpl implements RunnerService {
 
         cleanupOrphanedRunner(runnerId, workspaceId, userName, projectIdStr, typeStr);
         log.info("Disconnected runner '{}' in workspace '{}'", runnerId, workspaceId);
+
+        if (typeStr == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(RunnerType.fromValue(typeStr));
+        } catch (IllegalArgumentException e) {
+            log.warn("Disconnected runner '{}' had invalid stored type '{}'", runnerId, typeStr);
+            return Optional.empty();
+        }
     }
 
     // --- Private methods ---
@@ -621,6 +639,24 @@ class RunnerServiceImpl implements RunnerService {
         if (disconnectedAt == null) {
             disconnectedAt = Instant.now().toString();
             runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
+            // Fire once per reaped runner — gated on the field being unset so subsequent
+            // reaper passes (during the dead-runner grace period) don't re-emit.
+            String typeStr = runnerMap.get(FIELD_TYPE);
+            String userName = runnerMap.get(FIELD_USER_NAME);
+            Map<String, String> props = new HashMap<>(Map.of(
+                    "runner_id", runnerId.toString(),
+                    "workspace_id", workspaceId,
+                    "reason", "reaped",
+                    "date", disconnectedAt));
+            if (userName != null) {
+                props.put("user_name", userName);
+            }
+            if (typeStr != null) {
+                props.put("runner_type", typeStr);
+            }
+            // Reaper runs outside request scope (Quartz), so pass identity explicitly to
+            // avoid the installation-anonymous-ID fallback in AnalyticsService.
+            analyticsService.trackEvent("opik_runner_disconnected", props, userName);
         }
 
         Instant disconnected = Instant.parse(disconnectedAt);

@@ -4,6 +4,7 @@ export type { GetPromptByCommitRequest } from "./GetPromptByCommitRequest.js";
 export type { GetPromptByIdRequest } from "./GetPromptByIdRequest.js";
 export type { GetPromptsRequest } from "./GetPromptsRequest.js";
 export type { GetPromptVersionByIdRequest } from "./GetPromptVersionByIdRequest.js";
+export type { GetPromptVersionByNumberRequest } from "./GetPromptVersionByNumberRequest.js";
 export type { GetPromptVersionsRequest } from "./GetPromptVersionsRequest.js";
 export type { PromptUpdatable } from "./PromptUpdatable.js";
 export type { PromptVersionBatchUpdate } from "./PromptVersionBatchUpdate.js";

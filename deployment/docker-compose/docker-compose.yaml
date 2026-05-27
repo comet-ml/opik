@@ -247,10 +247,6 @@ services:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:${NGINX_PORT:-5173}/api}
       PYTHON_BACKEND_PORT: ${PYTHON_BACKEND_PORT:-8000}
-      # LLM API Keys for Optimizer
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Redis Configuration
       REDIS_URL: redis://:opik@redis:6379/0
       RQ_WORKER_ENABLED: ${RQ_WORKER_ENABLED:-true}

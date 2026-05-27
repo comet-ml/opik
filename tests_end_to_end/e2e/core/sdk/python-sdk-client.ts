@@ -1,5 +1,80 @@
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
+  createTrace(args: {
+    project_name: string;
+    name: string;
+    input: string;
+    output: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string }>;
+  createDataset(args: {
+    name: string;
+    project_name: string;
+    description?: string;
+    items?: Array<Record<string, unknown>>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  evaluateExperiment(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    items: Array<Record<string, unknown>>;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    experiment_name: string;
+    dataset_id: string;
+    item_count: number;
+    scored_item_count: number;
+    scores: Array<{
+      dataset_item_id: string;
+      input: string;
+      expected_output: string;
+      task_output: string;
+      score_name: string;
+      score_value: number;
+    }>;
+  }>;
+  createTestSuite(args: {
+    name: string;
+    project_name: string;
+    description?: string;
+    global_assertions?: string[];
+    runs_per_item?: number;
+    pass_threshold?: number;
+    items?: Array<{
+      data: Record<string, unknown>;
+      assertions?: string[];
+      description?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  insertTestSuiteItems(args: {
+    suite_name: string;
+    project_name: string;
+    items: Array<{
+      data: Record<string, unknown>;
+      assertions?: string[];
+      description?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{ suite_id: string; inserted: number }>;
+  runTestSuite(args: {
+    suite_name: string;
+    project_name: string;
+    task_output: string;
+    experiment_name: string;
+    judge_model?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string | null;
+    experiment_name: string | null;
+    pass_rate: number | null;
+    items_passed: number;
+    items_failed: number;
+    items_total: number;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -31,9 +106,15 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
     try {
+      const headers: Record<string, string> = {};
+      if (body !== undefined) headers['content-type'] = 'application/json';
+      // Read OPIK_API_KEY at request time so the minted key from globalSetup
+      // is picked up after the bridge has already spawned.
+      const apiKey = process.env.OPIK_API_KEY;
+      if (apiKey) headers['X-Opik-Api-Key'] = apiKey;
       const res = await fetch(`${bridgeUrl}${path}`, {
         method,
-        headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
       });
@@ -65,6 +146,49 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
   return {
     async createProject({ name, workspace }) {
       return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+    },
+    async createTrace(args) {
+      return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
+    },
+    async createDataset(args) {
+      return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async evaluateExperiment(args) {
+      return request<{
+        experiment_id: string;
+        experiment_name: string;
+        dataset_id: string;
+        item_count: number;
+        scored_item_count: number;
+        scores: Array<{
+          dataset_item_id: string;
+          input: string;
+          expected_output: string;
+          task_output: string;
+          score_name: string;
+          score_value: number;
+        }>;
+      }>('POST', '/experiments/evaluate', args);
+    },
+    async createTestSuite(args) {
+      return request<{ id: string; name: string }>('POST', '/test-suites', args);
+    },
+    async insertTestSuiteItems(args) {
+      return request<{ suite_id: string; inserted: number }>(
+        'POST',
+        '/test-suites/insert-items',
+        args,
+      );
+    },
+    async runTestSuite(args) {
+      return request<{
+        experiment_id: string | null;
+        experiment_name: string | null;
+        pass_rate: number | null;
+        items_passed: number;
+        items_failed: number;
+        items_total: number;
+      }>('POST', '/test-suites/run', args);
     },
   };
 }
