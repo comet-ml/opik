@@ -4,11 +4,12 @@ import { loadEnvConfig } from './config/env.config';
 
 const env = loadEnvConfig();
 
-// OSS deployments have no auth wall; cloud/self-hosted use the storage state
-// minted by global-setup at .auth/user.json (created on every run from
-// OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD, never checked in).
-const storageState =
-  env.deployment === 'oss' ? undefined : path.resolve(__dirname, '.auth/user.json');
+// Storage state minted by global-setup at .auth/user.json. For cloud/self-
+// hosted deployments it carries the auth cookies + storage from the login
+// round-trip; for OSS it's a minimal file holding the localStorage entries
+// (e.g. opik-version-override=v2) the suite needs the FE to read before any
+// API call. Never checked in.
+const storageState = path.resolve(__dirname, '.auth/user.json');
 
 export default defineConfig({
   testDir: './tests',
@@ -30,7 +31,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    ...(storageState ? { storageState } : {}),
+    storageState,
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
