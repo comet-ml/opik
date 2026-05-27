@@ -12,7 +12,7 @@
 import { Opik } from "opik";
 import {
   EnvironmentAlreadyExistsError,
-  EnvironmentColorUpdateNotAllowedError,
+  EnvironmentConfigurationError,
 } from "@/errors/environment/errors";
 import { OpikApiError } from "@/rest_api";
 import {
@@ -138,7 +138,7 @@ describe("environment feature", () => {
         const client = new Opik();
         await expect(
           client.updateEnvironment(envName, { color: "#ff0000" })
-        ).rejects.toThrow(EnvironmentColorUpdateNotAllowedError);
+        ).rejects.toThrow(EnvironmentConfigurationError);
         await expect(
           client.updateEnvironment(envName, { color: "#ff0000" })
         ).rejects.toThrow(envName);

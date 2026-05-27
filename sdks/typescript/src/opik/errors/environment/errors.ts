@@ -12,12 +12,9 @@ export class EnvironmentAlreadyExistsError extends EnvironmentError {
   }
 }
 
-export class EnvironmentColorUpdateNotAllowedError extends EnvironmentError {
-  constructor(name: string) {
-    super(
-      `Cannot change the colour of the built-in environment '${name}'. ` +
-        "Colour updates are not allowed for 'production', 'staging', or 'development'."
-    );
-    this.name = "EnvironmentColorUpdateNotAllowedError";
+export class EnvironmentConfigurationError extends EnvironmentError {
+  constructor(message: string) {
+    super(message);
+    this.name = "EnvironmentConfigurationError";
   }
 }

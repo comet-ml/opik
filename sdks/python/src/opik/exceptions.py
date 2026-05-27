@@ -199,8 +199,8 @@ class EnvironmentAlreadyExists(OpikException):
     pass
 
 
-class EnvironmentColorUpdateNotAllowed(OpikException):
-    """Raised when trying to change the colour of a built-in environment."""
+class EnvironmentConfigurationError(OpikException):
+    """Raised when an environment configuration operation is not permitted."""
 
     pass
 

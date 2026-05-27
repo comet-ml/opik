@@ -72,7 +72,7 @@ import { UpdateService } from "@/tracer/UpdateService";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
 import {
   EnvironmentAlreadyExistsError,
-  EnvironmentColorUpdateNotAllowedError,
+  EnvironmentConfigurationError,
 } from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
 
@@ -2070,7 +2070,10 @@ export class OpikClient {
       options?.color !== undefined &&
       OpikClient.BUILTIN_ENVIRONMENT_NAMES.has(name)
     ) {
-      throw new EnvironmentColorUpdateNotAllowedError(name);
+      throw new EnvironmentConfigurationError(
+        `Cannot change the colour of the built-in environment '${name}'. ` +
+          "Colour updates are not allowed for 'production', 'staging', or 'development'."
+      );
     }
     const existing = await this._findEnvironmentByName(name, true);
     await this.api.environments.updateEnvironment(existing!.id!, {

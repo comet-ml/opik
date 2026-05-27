@@ -162,15 +162,15 @@ def test_create_trace_message__environment_field_default_is_none_for_backwards_c
 
 
 def test_update_environment__colour_on_builtin_raises_error():
-    from opik.exceptions import EnvironmentColorUpdateNotAllowed
+    from opik.exceptions import EnvironmentConfigurationError
 
     client = opik_client.Opik(project_name="test-project")
 
     for env_name in ("production", "staging", "development"):
         try:
             client.update_environment(env_name, color="#ff0000")
-            assert False, f"expected EnvironmentColorUpdateNotAllowed for {env_name!r}"
-        except EnvironmentColorUpdateNotAllowed as e:
+            assert False, f"expected EnvironmentConfigurationError for {env_name!r}"
+        except EnvironmentConfigurationError as e:
             assert env_name in str(e)
 
 

@@ -1150,7 +1150,7 @@ class Opik:
         Returns the updated environment.
         """
         if color is not None and name in self._BUILTIN_ENVIRONMENT_NAMES:
-            raise exceptions.EnvironmentColorUpdateNotAllowed(
+            raise exceptions.EnvironmentConfigurationError(
                 f"Cannot change the colour of the built-in environment {name!r}. "
                 "Colour updates are not allowed for 'production', 'staging', or 'development'."
             )
