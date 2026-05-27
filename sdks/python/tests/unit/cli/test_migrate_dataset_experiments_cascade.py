@@ -133,6 +133,7 @@ class _Trace:
         feedback_scores: Optional[List[Any]] = None,
         comments: Optional[List[Any]] = None,
         project_id: Optional[str] = "src-project-1",
+        environment: Optional[str] = None,
     ) -> None:
         self.id = id
         self.name = name
@@ -160,6 +161,9 @@ class _Trace:
         # before; tests that exercise cross-project trace scenarios
         # override per-trace.
         self.project_id = project_id
+        # ``environment`` rides along ``__internal_api__trace__`` so the
+        # destination keeps the source's env partitioning (OPIK-6695).
+        self.environment = environment
 
 
 class _Span:
@@ -893,6 +897,41 @@ class TestCascadeExperiments:
         assert kwargs["tags"] == ["nightly"]
         assert kwargs["metadata"] == {"call_id": "abc"}
 
+    def test_trace_environment__preserved_on_destination(self) -> None:
+        # OPIK-6695: the source trace's ``environment`` must ride along the
+        # re-emit so the destination keeps the env partitioning. Without
+        # the field the ClickHouse default ('') would reset it.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        trace = _Trace(id="src-trace-1", environment="production")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": trace},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        client.__internal_api__trace__.assert_called_once()
+        kwargs = client.__internal_api__trace__.call_args.kwargs
+        assert kwargs["environment"] == "production"
+
     def test_span_tree__topological_order_preserves_parent_span_remap(
         self,
     ) -> None:
@@ -980,6 +1019,40 @@ class TestCascadeExperiments:
         for msg in span_messages:
             assert msg.project_name == "DestProject"
             assert msg.trace_id == trace_id_remap
+
+    def test_span_environment__preserved_on_destination(self) -> None:
+        # OPIK-6695: ``environment`` must be carried onto the
+        # ``CreateSpanMessage`` so destination spans keep the source's env.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        spans = [_Span(id="span-root", parent_span_id=None, environment="staging")]
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
+            spans_by_trace={"src-trace-1": spans},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        span_messages = [c.args[0] for c in client._streamer.put.call_args_list]
+        assert len(span_messages) == 1
+        assert span_messages[0].environment == "staging"
 
     def test_missing_trace_in_source__counts_as_skipped_item(self) -> None:
         # An experiment item with a trace_id that has no corresponding
