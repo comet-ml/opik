@@ -10,12 +10,20 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
+import java.util.List;
+
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 
 public interface AuthService {
 
     void authenticate(HttpHeaders headers, Cookie sessionToken, ContextInfoHolder contextInfo);
     void authenticateSession(Cookie sessionToken);
+
+    // MCP OAuth Authorization Server: resolve the logged-in user's workspaces for the consent picker, and
+    // validate a chosen workspace against the session (returning the resolved user). Cloud delegates to
+    // comet-backend; OSS returns the hardcoded admin/default.
+    List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken);
+    UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName);
 }
 
 @RequiredArgsConstructor
@@ -42,5 +50,16 @@ class AuthServiceImpl implements AuthService {
     @Override
     public void authenticateSession(Cookie sessionToken) {
         // no authentication for local installations
+    }
+
+    @Override
+    public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
+        return List.of(new WorkspaceInfo(ProjectService.DEFAULT_WORKSPACE_ID, ProjectService.DEFAULT_WORKSPACE_NAME));
+    }
+
+    @Override
+    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
+        return new UserWorkspace(ProjectService.DEFAULT_USER, ProjectService.DEFAULT_WORKSPACE_ID,
+                ProjectService.DEFAULT_WORKSPACE_NAME);
     }
 }

@@ -14,6 +14,7 @@ import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -91,6 +92,10 @@ class RemoteAuthService implements AuthService {
     @Builder(toBuilder = true)
     record AuthResponse(
             String user, String workspaceId, String workspaceName, List<Quota> quotas, OpikVersion opikVersion) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record WorkspaceForUserResponse(String workspaceId, String workspaceName) {
     }
 
     @Builder(toBuilder = true)
@@ -175,6 +180,60 @@ class RemoteAuthService implements AuthService {
             log.info("No cookies found");
             throw new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
         }
+    }
+
+    @Override
+    public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
+        requireSession(sessionToken);
+        try (var response = client.target(URI.create(reactServiceUrl.url()))
+                .path("workspaces")
+                .queryParam("withoutExtendedData", true)
+                .request()
+                .accept(MediaType.APPLICATION_JSON)
+                .cookie(sessionToken)
+                .get()) {
+            if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
+                throw toSessionAuthException(response);
+            }
+            return response.readEntity(new GenericType<List<WorkspaceForUserResponse>>() {
+            }).stream()
+                    .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
+                    .map(workspace -> new WorkspaceInfo(workspace.workspaceId(), workspace.workspaceName()))
+                    .toList();
+        }
+    }
+
+    @Override
+    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
+        requireSession(sessionToken);
+        if (isDefaultWorkspace(workspaceName)) {
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+        }
+        try (var response = client.target(URI.create(reactServiceUrl.url()))
+                .path("opik")
+                .path("auth-session")
+                .request()
+                .accept(MediaType.APPLICATION_JSON)
+                .cookie(sessionToken)
+                .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
+            var authResponse = verifyResponse(response);
+            return new UserWorkspace(authResponse.user(), authResponse.workspaceId(), authResponse.workspaceName());
+        }
+    }
+
+    private void requireSession(Cookie sessionToken) {
+        if (sessionToken == null || StringUtils.isBlank(sessionToken.getValue())) {
+            throw new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
+        }
+    }
+
+    private ClientErrorException toSessionAuthException(Response response) {
+        if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()
+                || response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
+            return new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
+        }
+        log.error("Unexpected error while listing workspaces, received status code: {}", response.getStatus());
+        throw new InternalServerErrorException();
     }
 
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path,
