@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { v4 as uuidv4 } from "uuid";
 import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
@@ -194,7 +195,7 @@ export const convertOptimizationStudioToFormData = (
 
   const messages: LLMMessage[] =
     optimization?.studio_config?.prompt?.messages?.map((m) => ({
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       role: m.role as LLM_MESSAGE_ROLE,
       content: m.content,
     })) || [generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user })];
