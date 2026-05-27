@@ -124,13 +124,13 @@ navigation:
                 path: ../docs-v2/prompt_engineering/getting-started.mdx
                 slug: getting-started
               - page: Text and chat prompts
-                path: ../docs-v2/prompt_engineering/prompt_types.mdx
+                path: ../docs-v2/prompt_engineering/prompt-types.mdx
                 slug: prompt-types
               - page: MCP server
-                path: ../docs-v2/prompt_engineering/mcp_server.mdx
+                path: ../docs-v2/prompt_engineering/mcp-server.mdx
                 slug: mcp-server
               - page: Version control
-                path: ../docs-v2/prompt_engineering/version_control.mdx
+                path: ../docs-v2/prompt_engineering/version-control.mdx
                 slug: version-control
           - section: Optimization runs
             slug: /optimization-runs
