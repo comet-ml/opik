@@ -10,7 +10,6 @@ from opik.api_objects import opik_client, trace, local_recording
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.api_objects.dataset import execution_policy as dataset_execution_policy
-from opik.api_objects.prompt import base_prompt
 from opik.evaluation import rest_operations, test_case, test_result
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
@@ -75,14 +74,12 @@ class EvaluationEngine:
         workers: int,
         verbose: int,
         source: TraceSource,
-        prompts: Optional[List[base_prompt.BasePrompt]] = None,
     ) -> None:
         self._client = client
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
         self._source = source
-        self._prompts = prompts
 
     # --- Private: metrics & scoring ---
 
@@ -192,8 +189,8 @@ class EvaluationEngine:
             client=self._client,
             execution_policy=execution_policy_dict or None,
         ):
-            if self._prompts:
-                for prompt_obj in self._prompts:
+            if experiment_ is not None and experiment_.prompts:
+                for prompt_obj in experiment_.prompts:
                     opik_context.attach_prompt_to_current_trace(prompt_obj)
 
             LOGGER.debug("[engine] Task started for item %s", item.id)

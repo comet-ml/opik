@@ -57,6 +57,7 @@ def create_mock_experiment() -> tuple[mock.Mock, mock.Mock, mock.Mock]:
         Tuple of (mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id)
     """
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -164,6 +165,7 @@ def test_evaluate__happyflow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -421,6 +423,9 @@ def test_evaluate__prompts_are_attached_to_each_trace(fake_backend):
         mock_create_experiment,
         mock_get_experiment_url_by_id,
     ) = create_mock_experiment()
+    # The engine reads prompts off the experiment object it receives, so the
+    # mocked experiment must expose them (create_experiment is mocked here).
+    mock_experiment.prompts = prompts
 
     with patch_evaluation_dependencies(
         mock_create_experiment, mock_get_experiment_url_by_id
@@ -481,6 +486,9 @@ def test_evaluate_prompt__prompt_attached_to_each_trace(fake_backend):
         mock_create_experiment,
         mock_get_experiment_url_by_id,
     ) = create_mock_experiment()
+    # The engine reads prompts off the experiment object it receives, so the
+    # mocked experiment must expose them (create_experiment is mocked here).
+    mock_experiment.prompts = [prompt_obj]
     mock_models_factory_get, _ = create_mock_model(model_name=MODEL_NAME)
 
     with patch_evaluation_dependencies(
@@ -552,6 +560,7 @@ def test_evaluate_with_scoring_key_mapping(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -811,6 +820,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -871,6 +881,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         raise Exception("some-error-message")
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1021,6 +1032,7 @@ def test_evaluate__with_random_sampler__happy_flow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1131,6 +1143,7 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1223,6 +1236,7 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1320,6 +1334,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1446,6 +1461,7 @@ def test_evaluate_prompt_happyflow(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1680,6 +1696,7 @@ def test_evaluate__aggregated_metric__happy_flow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2046,6 +2063,7 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2180,6 +2198,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2335,6 +2354,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2610,6 +2630,7 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "experiment-id"
     mock_experiment.name = "test-experiment"
     mock_create_experiment = mock.Mock()
@@ -2948,6 +2969,7 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -3013,6 +3035,7 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -3084,6 +3107,7 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -3161,6 +3185,7 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 

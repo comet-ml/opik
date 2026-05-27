@@ -266,7 +266,6 @@ def evaluate(
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
         source="experiment",
-        prompts=checked_prompts,
     )
 
 
@@ -365,7 +364,6 @@ def __internal_api__run_test_suite__(
         dataset_item_ids=dataset_item_ids,
         dataset_filter_string=dataset_filter_string,
         source=source,  # type: ignore[arg-type]
-        prompts=prompts,
     )
 
     suite_result = suite_result_constructor.build_suite_result(
@@ -494,7 +492,6 @@ def _evaluate_task(
     experiment_scoring_functions: List[ExperimentScoreFunction],
     dataset_filter_string: Optional[str],
     source: TraceSource,
-    prompts: Optional[List[base_prompt.BasePrompt]] = None,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -517,7 +514,6 @@ def _evaluate_task(
             workers=task_threads,
             verbose=verbose,
             source=source,
-            prompts=prompts,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=items_iter,
@@ -591,7 +587,6 @@ def _evaluate_test_suite_task(
     evaluator_model: Optional[str],
     dataset_item_ids: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
-    prompts: Optional[List[base_prompt.BasePrompt]] = None,
 ) -> Tuple[evaluation_result.EvaluationResult, float]:
     start_time = time.time()
 
@@ -612,7 +607,6 @@ def _evaluate_test_suite_task(
             workers=task_threads,
             verbose=verbose,
             source=source,
-            prompts=prompts,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=items_iter,
@@ -1031,7 +1025,6 @@ def evaluate_prompt(
             workers=task_threads,
             verbose=verbose,
             source="experiment",
-            prompts=prompts,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=items_iter,
@@ -1267,7 +1260,6 @@ def evaluate_optimization_trial(
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
         source="optimization",
-        prompts=checked_prompts,
     )
 
 
