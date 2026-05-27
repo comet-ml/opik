@@ -87,6 +87,9 @@ navigation:
               - page: Export data
                 path: ../docs-v2/observability/export_data.mdx
                 slug: export-data
+              - page: Migrate data
+                path: ../docs-v2/observability/migrate_data.mdx
+                slug: migrate-data
               - page: SDK configuration
                 path: ../docs-v2/tracing/advanced/sdk_configuration.mdx
                 slug: sdk_configuration
