@@ -8,7 +8,7 @@ import { getApiErrorMessage } from "@/lib/api-error";
 type UseSetPromptVersionEnvironmentMutationParams = {
   versionId: string;
   promptId: string;
-  environment: string | null;
+  environments: string[];
 };
 
 const useSetPromptVersionEnvironmentMutation = () => {
@@ -18,11 +18,11 @@ const useSetPromptVersionEnvironmentMutation = () => {
   return useMutation({
     mutationFn: async ({
       versionId,
-      environment,
+      environments,
     }: UseSetPromptVersionEnvironmentMutationParams) => {
       await api.patch(
         `${PROMPTS_REST_ENDPOINT}versions/${versionId}/environments`,
-        { environment },
+        { environments },
       );
     },
     onError: (error: AxiosError) => {

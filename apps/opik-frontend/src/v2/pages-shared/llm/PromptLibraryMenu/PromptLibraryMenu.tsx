@@ -10,7 +10,7 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import NoOptions from "@/shared/LoadableSelectBox/NoOptions";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
-import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
@@ -149,6 +149,7 @@ const PromptRow: React.FC<PromptRowProps> = ({
   const [hoverOpen, setHoverOpen] = useState(false);
 
   const latestStage = pickHighestStage(prompt.latest_version?.tags);
+  const latestEnvironments = prompt.latest_version?.environments;
   const latestLabel =
     prompt.version_count > 0 ? `v${prompt.version_count}` : "";
 
@@ -168,6 +169,13 @@ const PromptRow: React.FC<PromptRowProps> = ({
           </span>
         )}
         {latestStage && <StageTag value={latestStage} size="xs" />}
+        <EnvironmentBadgeList
+          names={latestEnvironments}
+          size="sm"
+          withOverflow
+          compact
+          maxWidth={80}
+        />
         {enableVersionSelect && (
           <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
         )}
@@ -272,9 +280,13 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
               {label}
             </span>
             {stage && <StageTag value={stage} size="xs" />}
-            {version.environment && (
-              <EnvironmentBadge name={version.environment} size="sm" />
-            )}
+            <EnvironmentBadgeList
+              names={version.environments}
+              size="sm"
+              withOverflow
+              compact
+              maxWidth={80}
+            />
             <TooltipWrapper
               content={`${formatDate(version.created_at, {
                 utc: true,
