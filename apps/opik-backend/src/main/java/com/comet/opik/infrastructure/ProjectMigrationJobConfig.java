@@ -4,18 +4,26 @@ import io.dropwizard.util.Duration;
 
 /**
  * Shared shape for the V1 → V2 project-migration Quartz job configs (experiments, datasets,
- * optimizations, prompts). Surfaces only the fields the
- * {@link com.comet.opik.api.resources.v1.jobs.AbstractProjectMigrationJob} abstract base needs to
- * drive a cycle — the enabled flag, the distributed-lock timeouts, and the per-cycle hard timeout.
+ * optimizations, prompts, automation rules, alerts). Surfaces the common fields the
+ * {@link com.comet.opik.api.resources.v1.jobs.AbstractProjectMigrationJob} abstract base and the
+ * {@code OpikGuiceyLifecycleEventListener} scheduling helper need to drive a recurring migration
+ * cycle: the enabled flag, the Quartz schedule, the distributed-lock timeouts, and the per-cycle
+ * hard timeout.
  *
- * <p>Entity-specific records add their own scheduling fields ({@code interval},
- * {@code startupDelay}, {@code schedulerThreadCap}, …) that {@code OpikGuiceyLifecycleEventListener}
- * reads independently when wiring the Quartz schedule.
+ * <p>Entity-specific records add their own per-cycle parameters
+ * ({@code workspacesPerRun}, batch sizes, dependency overrides, …) that the concrete migration
+ * services read directly off the concrete record.
  */
 public interface ProjectMigrationJobConfig {
 
     /** Master switch — short-circuits the cycle when false. */
     boolean enabled();
+
+    /** How often the Quartz schedule fires. */
+    Duration interval();
+
+    /** Delay between application start and the first cycle. */
+    Duration startupDelay();
 
     /** Distributed-lock TTL — must be shorter than {@link #jobTimeout()}. */
     Duration lockTimeout();
