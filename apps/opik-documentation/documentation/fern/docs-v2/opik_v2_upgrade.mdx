@@ -18,15 +18,16 @@ Opik 2.0 reorganized the product around **projects**. A project now maps to a si
 
 ## What changed: projects are the home for everything
 
-In Opik 1.x, traces lived in projects, but **datasets, prompts, and experiments were shared across the whole workspace**. In 2.0, a project maps to one agent or app and scopes all of its work.
+In Opik 1.x, traces and threads lived in projects, but **datasets, prompts, experiments, optimizations, automation rules, alerts, and dashboards were workspace-wide**. In 2.0, a project maps to one agent or app and scopes all of its work.
 
-These are now **scoped to a project**:
+These entities are now **scoped to a project**:
 
-- Traces and threads
 - Datasets and test suites
 - Experiments and optimizations
 - Prompts
-- Alerts and dashboards
+- Automation rules — in 1.x a rule could target multiple projects; in 2.0 a rule is scoped to a single project
+- Alerts
+- Dashboards — workspace-level dashboards remain supported through a dedicated view
 
 You also get a workspace-level project selector, project-scoped navigation across the app, a unified Logs page (threads, traces, and spans in one place), and a redesigned trace view. The result is a focused view of everything tied to a single agent. See the [2.0 release notes](/changelog) for the full picture.
 
@@ -189,15 +190,23 @@ An experiment — and **every trace, span, and feedback score it produces** — 
 
 ## Where your existing data lands
 
-While upgrading your workspace to 2.0, Opik **automatically moves your workspace-scoped 1.x data** — datasets, prompts, experiments, and optimizations — into projects. You don't need to migrate anything by hand.
+When your workspace is upgraded to 2.0, your workspace-scoped 1.x data — datasets, prompts, experiments, and optimizations — is **moved into projects**.
 
 Each item is placed in the project Opik can infer from the runs that used it. When there's nothing to infer from (no associated runs, or the original project had been deleted), the item is placed in your **`Default Project`**.
 
 So if you don't see a dataset, prompt, or experiment where you expected it, check the project its traces and experiments belong to — and check **`Default Project`**.
 
 <Note>
-  On open-source installations, a workspace is promoted to 2.0 automatically as soon as its
-  blocking workspace-level (orphan) data has been migrated into projects.
+  **Opik Cloud (Comet-hosted):** the move runs automatically — there is nothing to start by hand.
+  A workspace is promoted to 2.0 as soon as its blocking workspace-level (orphan) data has been
+  migrated into projects.
+</Note>
+
+<Note>
+  **Self-hosted Opik:** the same move is available as backend migration jobs that you run yourself
+  before promoting a workspace to 2.0. Dedicated runbooks for those jobs will be published under
+  [self-host configuration](/self-host/overview); until then, see the [2.0 release notes](/changelog)
+  for the current upgrade procedure.
 </Note>
 
 ## Moving data to a different project
