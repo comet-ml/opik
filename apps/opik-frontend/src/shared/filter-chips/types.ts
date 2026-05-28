@@ -34,7 +34,6 @@ interface ChipDefinitionBase {
   id: string;
   field: string;
   label: string;
-  group?: string;
 }
 
 interface SingleSelectOption {

@@ -18,6 +18,8 @@ import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
+import keyBy from "lodash/keyBy";
+import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
   DATE_RANGE_PRESET_ALLTIME,
@@ -367,7 +369,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "start_time",
     field: "start_time",
     label: "Start time",
-    group: "Time",
     kind: "time",
     columnType: COLUMN_TYPE.time,
   },
@@ -375,7 +376,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "end_time",
     field: "end_time",
     label: "End time",
-    group: "Time",
     kind: "time",
     columnType: COLUMN_TYPE.time,
   },
@@ -383,7 +383,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "duration",
     field: "duration",
     label: "Duration",
-    group: "Time",
     kind: "numeric",
     columnType: COLUMN_TYPE.duration,
     format: "duration",
@@ -392,7 +391,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "total_estimated_cost",
     field: "total_estimated_cost",
     label: "Cost",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.cost,
     format: "currency",
@@ -401,7 +399,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "usage_total_tokens",
     field: "usage.total_tokens",
     label: "Tokens",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
@@ -410,7 +407,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "usage_prompt_tokens",
     field: "usage.prompt_tokens",
     label: "Input tokens",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
@@ -419,7 +415,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "usage_completion_tokens",
     field: "usage.completion_tokens",
     label: "Output tokens",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
@@ -428,7 +423,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "llm_span_count",
     field: "llm_span_count",
     label: "LLM calls count",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
@@ -437,7 +431,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "input",
     field: "input",
     label: "Input",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -446,7 +439,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "output",
     field: "output",
     label: "Output",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -455,7 +447,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "name",
     field: "name",
     label: "Trace name",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -464,7 +455,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "with_errors",
     field: "error_info",
     label: "With errors",
-    group: "Content",
     kind: "boolean",
     onOperator: "is_not_empty",
     columnType: COLUMN_TYPE.errors,
@@ -473,7 +463,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "id",
     field: "id",
     label: "Trace ID",
-    group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "equals",
     columnType: COLUMN_TYPE.string,
@@ -482,7 +471,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "thread_id",
     field: "thread_id",
     label: "Thread ID",
-    group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "equals",
     columnType: COLUMN_TYPE.string,
@@ -491,7 +479,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "annotation_queue_ids",
     field: "annotation_queue_ids",
     label: "Annotation queue ID",
-    group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.list,
@@ -503,7 +490,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "start_time",
     field: "start_time",
     label: "Start time",
-    group: "Time",
     kind: "time",
     columnType: COLUMN_TYPE.time,
   },
@@ -511,7 +497,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "end_time",
     field: "end_time",
     label: "End time",
-    group: "Time",
     kind: "time",
     columnType: COLUMN_TYPE.time,
   },
@@ -519,16 +504,22 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "duration",
     field: "duration",
     label: "Duration",
-    group: "Time",
     kind: "numeric",
     columnType: COLUMN_TYPE.duration,
     format: "duration",
   },
   {
+    id: "total_estimated_cost",
+    field: "total_estimated_cost",
+    label: "Cost",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.cost,
+    format: "currency",
+  },
+  {
     id: "usage_total_tokens",
     field: "usage.total_tokens",
     label: "Tokens",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
@@ -537,7 +528,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "usage_prompt_tokens",
     field: "usage.prompt_tokens",
     label: "Input tokens",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
@@ -546,25 +536,14 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "usage_completion_tokens",
     field: "usage.completion_tokens",
     label: "Output tokens",
-    group: "Performance & cost",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
   },
   {
-    id: "total_estimated_cost",
-    field: "total_estimated_cost",
-    label: "Cost",
-    group: "Performance & cost",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.cost,
-    format: "currency",
-  },
-  {
     id: "input",
     field: "input",
     label: "Input",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -573,7 +552,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "output",
     field: "output",
     label: "Output",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -582,7 +560,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "name",
     field: "name",
     label: "Span name",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -591,7 +568,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "with_errors",
     field: "error_info",
     label: "With errors",
-    group: "Content",
     kind: "boolean",
     onOperator: "is_not_empty",
     columnType: COLUMN_TYPE.errors,
@@ -600,7 +576,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "id",
     field: "id",
     label: "Span ID",
-    group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "equals",
     columnType: COLUMN_TYPE.string,
@@ -609,11 +584,58 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "trace_id",
     field: "trace_id",
     label: "Trace ID",
-    group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "equals",
     columnType: COLUMN_TYPE.string,
   },
+];
+
+const TRACE_CHIP_ORDER: string[] = [
+  "start_time",
+  "end_time",
+  "duration",
+  "total_estimated_cost",
+  "usage_total_tokens",
+  "usage_prompt_tokens",
+  "usage_completion_tokens",
+  "llm_span_count",
+  "input",
+  "output",
+  "name",
+  "with_errors",
+  "error_type",
+  "tags",
+  "id",
+  "thread_id",
+  "annotation_queue_ids",
+  "feedback_scores",
+  "span_feedback_scores",
+  "guardrails",
+  "metadata",
+  "custom",
+];
+
+const SPAN_CHIP_ORDER: string[] = [
+  "start_time",
+  "end_time",
+  "duration",
+  "total_estimated_cost",
+  "usage_total_tokens",
+  "usage_prompt_tokens",
+  "usage_completion_tokens",
+  "input",
+  "output",
+  "name",
+  "with_errors",
+  "error_type",
+  "type",
+  "tags",
+  "id",
+  "trace_id",
+  "feedback_scores",
+  "guardrails",
+  "metadata",
+  "custom",
 ];
 
 const TRACE_DEFAULT_PINNED_CHIPS = ["with_errors", "tags", "metadata"];
@@ -794,62 +816,52 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   ]);
 
   const traceChipDefinitions = useMemo<ChipDefinition[]>(() => {
-    const tagsChip: ChipDefinition = {
-      id: "tags",
-      field: "tags",
-      label: "Tags",
-      group: "Identifiers",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.list,
-      operators: TAGS_OPERATORS,
-      defaultOperator: "contains",
-      value: {
-        placeholder: "Type a tag…",
-        options: chipOptions(useTagsOptions, {
-          projectId,
-          entityType: type === TRACE_DATA_TYPE.spans ? "spans" : "traces",
-        }),
+    const dynamicChips: Record<string, ChipDefinition> = {
+      tags: {
+        id: "tags",
+        field: "tags",
+        label: "Tags",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.list,
+        operators: TAGS_OPERATORS,
+        defaultOperator: "contains",
+        value: {
+          placeholder: "Type a tag…",
+          options: chipOptions(useTagsOptions, {
+            projectId,
+            entityType: type === TRACE_DATA_TYPE.spans ? "spans" : "traces",
+            logsSource: LOGS_SOURCE.sdk,
+          }),
+        },
+        addLabel: "Add tag",
       },
-      addLabel: "Add tag",
-    };
-    const errorTypeChip: ChipDefinition = {
-      id: "error_type",
-      field: "error_type",
-      label: "Error type",
-      group: "Content",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.string,
-      operators: ["contains", "=", "not_contains", "starts_with", "ends_with"],
-      defaultOperator: "contains",
-      value: {
-        placeholder: "Select error type",
-        options: chipOptions(useErrorTypeOptions, {
-          projectId,
-          type: TRACE_DATA_TYPE.traces,
-        }),
+      error_type: {
+        id: "error_type",
+        field: "error_type",
+        label: "Error type",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.string,
+        operators: [
+          "contains",
+          "=",
+          "not_contains",
+          "starts_with",
+          "ends_with",
+        ],
+        defaultOperator: "contains",
+        value: {
+          placeholder: "Select error type",
+          options: chipOptions(useErrorTypeOptions, {
+            projectId,
+            type: TRACE_DATA_TYPE.traces,
+            logsSource: LOGS_SOURCE.sdk,
+          }),
+        },
       },
-    };
-    const withErrorsIdx = TRACE_CHIP_DEFINITIONS_STATIC.findIndex(
-      (d) => d.id === "with_errors",
-    );
-    const afterErrorType = [
-      ...TRACE_CHIP_DEFINITIONS_STATIC.slice(0, withErrorsIdx + 1),
-      errorTypeChip,
-      ...TRACE_CHIP_DEFINITIONS_STATIC.slice(withErrorsIdx + 1),
-    ];
-    const idIndex = afterErrorType.findIndex((d) => d.id === "id");
-    const withTags = [
-      ...afterErrorType.slice(0, idIndex),
-      tagsChip,
-      ...afterErrorType.slice(idIndex),
-    ];
-    return [
-      ...withTags,
-      {
+      feedback_scores: {
         id: "feedback_scores",
         field: COLUMN_FEEDBACK_SCORES_ID,
         label: "Trace feedback scores",
-        group: "Scoring",
         kind: "query-builder",
         columnType: COLUMN_TYPE.numberDictionary,
         operators: FEEDBACK_SCORE_OPERATORS,
@@ -860,11 +872,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
         value: { type: "numeric", decimals: 2, placeholder: "0" },
       },
-      {
+      span_feedback_scores: {
         id: "span_feedback_scores",
         field: COLUMN_SPAN_FEEDBACK_SCORES_ID,
         label: "Span feedback scores",
-        group: "Scoring",
         kind: "query-builder",
         columnType: COLUMN_TYPE.numberDictionary,
         operators: FEEDBACK_SCORE_OPERATORS,
@@ -875,28 +886,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
         value: { type: "numeric", decimals: 2, placeholder: "0" },
       },
-      ...(isGuardrailsEnabled
-        ? [
-            {
-              id: "guardrails",
-              field: "guardrails",
-              label: "Guardrails",
-              group: "Guardrails",
-              kind: "single-select",
-              options: [
-                { value: GuardrailResult.FAILED, label: "Failed" },
-                { value: GuardrailResult.PASSED, label: "Passed" },
-              ],
-              columnType: COLUMN_TYPE.category,
-              operator: "=",
-            } satisfies ChipDefinition,
-          ]
-        : []),
-      {
+      metadata: {
         id: "metadata",
         field: COLUMN_METADATA_ID,
         label: "Metadata",
-        group: "Advanced",
         kind: "query-builder",
         columnType: COLUMN_TYPE.dictionary,
         operators: DICTIONARY_OPERATORS,
@@ -908,15 +901,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type: TRACE_DATA_TYPE.traces,
             rootKeys: ["metadata"],
             excludeRoot: true,
+            logsSource: LOGS_SOURCE.sdk,
           }),
         },
         value: { placeholder: "value" },
       },
-      {
+      custom: {
         id: "custom",
         field: COLUMN_CUSTOM_ID,
         label: "Custom filter",
-        group: "Advanced",
         kind: "query-builder",
         columnType: COLUMN_TYPE.dictionary,
         operators: DICTIONARY_OPERATORS,
@@ -927,6 +920,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type: TRACE_DATA_TYPE.traces,
             rootKeys: ["input", "output"],
             excludeRoot: false,
+            logsSource: LOGS_SOURCE.sdk,
           }),
           validate: (k) =>
             CUSTOM_FILTER_VALIDATION_REGEXP.test(k)
@@ -935,7 +929,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
         value: { placeholder: "value" },
       },
-    ];
+    };
+    if (isGuardrailsEnabled) {
+      dynamicChips.guardrails = {
+        id: "guardrails",
+        field: "guardrails",
+        label: "Guardrails",
+        kind: "single-select",
+        options: [
+          { value: GuardrailResult.FAILED, label: "Failed" },
+          { value: GuardrailResult.PASSED, label: "Passed" },
+        ],
+        columnType: COLUMN_TYPE.category,
+        operator: "=",
+      };
+    }
+    const byId: Record<string, ChipDefinition> = {
+      ...keyBy(TRACE_CHIP_DEFINITIONS_STATIC, "id"),
+      ...dynamicChips,
+    };
+    return compact(TRACE_CHIP_ORDER.map((id) => byId[id]));
   }, [
     isGuardrailsEnabled,
     projectId,
@@ -945,73 +958,61 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   ]);
 
   const spanChipDefinitions = useMemo<ChipDefinition[]>(() => {
-    const typeChip: ChipDefinition = {
-      id: "type",
-      field: "type",
-      label: "Type",
-      group: "Identifiers",
-      kind: "single-select",
-      options: getSpanTypeOptions(isGuardrailsEnabled),
-      columnType: COLUMN_TYPE.category,
-      operator: "=",
-    };
-    const tagsChip: ChipDefinition = {
-      id: "tags",
-      field: "tags",
-      label: "Tags",
-      group: "Identifiers",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.list,
-      operators: TAGS_OPERATORS,
-      defaultOperator: "contains",
-      value: {
-        placeholder: "Type a tag…",
-        options: chipOptions(useTagsOptions, {
-          projectId,
-          entityType: type === TRACE_DATA_TYPE.spans ? "spans" : "traces",
-        }),
+    const dynamicChips: Record<string, ChipDefinition> = {
+      type: {
+        id: "type",
+        field: "type",
+        label: "Type",
+        kind: "single-select",
+        options: getSpanTypeOptions(isGuardrailsEnabled),
+        columnType: COLUMN_TYPE.category,
+        operator: "=",
       },
-      addLabel: "Add tag",
-    };
-    const errorTypeChip: ChipDefinition = {
-      id: "error_type",
-      field: "error_type",
-      label: "Error type",
-      group: "Content",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.string,
-      operators: ["contains", "=", "not_contains", "starts_with", "ends_with"],
-      defaultOperator: "contains",
-      value: {
-        placeholder: "Select error type",
-        options: chipOptions(useErrorTypeOptions, {
-          projectId,
-          type: TRACE_DATA_TYPE.spans,
-        }),
+      tags: {
+        id: "tags",
+        field: "tags",
+        label: "Tags",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.list,
+        operators: TAGS_OPERATORS,
+        defaultOperator: "contains",
+        value: {
+          placeholder: "Type a tag…",
+          options: chipOptions(useTagsOptions, {
+            projectId,
+            entityType: type === TRACE_DATA_TYPE.spans ? "spans" : "traces",
+            logsSource: LOGS_SOURCE.sdk,
+          }),
+        },
+        addLabel: "Add tag",
       },
-    };
-    const withErrorsIdx = SPAN_CHIP_DEFINITIONS_STATIC.findIndex(
-      (d) => d.id === "with_errors",
-    );
-    const afterErrorType = [
-      ...SPAN_CHIP_DEFINITIONS_STATIC.slice(0, withErrorsIdx + 1),
-      errorTypeChip,
-      ...SPAN_CHIP_DEFINITIONS_STATIC.slice(withErrorsIdx + 1),
-    ];
-    const idIndex = afterErrorType.findIndex((d) => d.id === "id");
-    const withDynamic = [
-      ...afterErrorType.slice(0, idIndex),
-      typeChip,
-      tagsChip,
-      ...afterErrorType.slice(idIndex),
-    ];
-    return [
-      ...withDynamic,
-      {
+      error_type: {
+        id: "error_type",
+        field: "error_type",
+        label: "Error type",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.string,
+        operators: [
+          "contains",
+          "=",
+          "not_contains",
+          "starts_with",
+          "ends_with",
+        ],
+        defaultOperator: "contains",
+        value: {
+          placeholder: "Select error type",
+          options: chipOptions(useErrorTypeOptions, {
+            projectId,
+            type: TRACE_DATA_TYPE.spans,
+            logsSource: LOGS_SOURCE.sdk,
+          }),
+        },
+      },
+      feedback_scores: {
         id: "feedback_scores",
         field: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores",
-        group: "Scoring",
         kind: "query-builder",
         columnType: COLUMN_TYPE.numberDictionary,
         operators: FEEDBACK_SCORE_OPERATORS,
@@ -1022,28 +1023,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
         value: { type: "numeric", decimals: 2, placeholder: "0" },
       },
-      ...(isGuardrailsEnabled
-        ? [
-            {
-              id: "guardrails",
-              field: "guardrails",
-              label: "Guardrails",
-              group: "Guardrails",
-              kind: "single-select",
-              options: [
-                { value: GuardrailResult.FAILED, label: "Failed" },
-                { value: GuardrailResult.PASSED, label: "Passed" },
-              ],
-              columnType: COLUMN_TYPE.category,
-              operator: "=",
-            } satisfies ChipDefinition,
-          ]
-        : []),
-      {
+      metadata: {
         id: "metadata",
         field: COLUMN_METADATA_ID,
         label: "Metadata",
-        group: "Advanced",
         kind: "query-builder",
         columnType: COLUMN_TYPE.dictionary,
         operators: DICTIONARY_OPERATORS,
@@ -1055,15 +1038,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type: TRACE_DATA_TYPE.spans,
             rootKeys: ["metadata"],
             excludeRoot: true,
+            logsSource: LOGS_SOURCE.sdk,
           }),
         },
         value: { placeholder: "value" },
       },
-      {
+      custom: {
         id: "custom",
         field: COLUMN_CUSTOM_ID,
         label: "Custom filter",
-        group: "Advanced",
         kind: "query-builder",
         columnType: COLUMN_TYPE.dictionary,
         operators: DICTIONARY_OPERATORS,
@@ -1074,6 +1057,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type: TRACE_DATA_TYPE.spans,
             rootKeys: ["input", "output"],
             excludeRoot: false,
+            logsSource: LOGS_SOURCE.sdk,
           }),
           validate: (k) =>
             CUSTOM_FILTER_VALIDATION_REGEXP.test(k)
@@ -1082,7 +1066,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
         value: { placeholder: "value" },
       },
-    ];
+    };
+    if (isGuardrailsEnabled) {
+      dynamicChips.guardrails = {
+        id: "guardrails",
+        field: "guardrails",
+        label: "Guardrails",
+        kind: "single-select",
+        options: [
+          { value: GuardrailResult.FAILED, label: "Failed" },
+          { value: GuardrailResult.PASSED, label: "Passed" },
+        ],
+        columnType: COLUMN_TYPE.category,
+        operator: "=",
+      };
+    }
+    const byId: Record<string, ChipDefinition> = {
+      ...keyBy(SPAN_CHIP_DEFINITIONS_STATIC, "id"),
+      ...dynamicChips,
+    };
+    return compact(SPAN_CHIP_ORDER.map((id) => byId[id]));
   }, [isGuardrailsEnabled, projectId, type, spanScoreOptions]);
 
   const chipDefinitions =

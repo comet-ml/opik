@@ -6,6 +6,7 @@ import useTracesOrSpansList, {
 import useThreadList from "@/api/traces/useThreadsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import { COLUMN_TYPE } from "@/types/shared";
+import { LOGS_SOURCE } from "@/types/traces";
 import { ChipOptionsResult } from "@/shared/filter-chips/types";
 import { extractTagsFromItems } from "./helpers";
 
@@ -19,6 +20,7 @@ interface UseTagsOptionsArgs {
   projectId: string;
   entityType: TagsAutocompleteEntityType;
   promptId?: string;
+  logsSource?: LOGS_SOURCE;
 }
 
 const TAGS_NOT_EMPTY_FILTER = [
@@ -34,7 +36,7 @@ const TAGS_NOT_EMPTY_FILTER = [
 const SAMPLE_SIZE = 100;
 
 export const useTagsOptions = (args: UseTagsOptionsArgs): ChipOptionsResult => {
-  const { projectId, entityType, promptId } = args;
+  const { projectId, entityType, promptId, logsSource } = args;
   const hasProjectId = Boolean(projectId);
   const isExperiments = entityType === "experiments";
 
@@ -47,6 +49,7 @@ export const useTagsOptions = (args: UseTagsOptionsArgs): ChipOptionsResult => {
       truncate: true,
       stripAttachments: true,
       filters: TAGS_NOT_EMPTY_FILTER,
+      logsSource,
     },
     {
       enabled:

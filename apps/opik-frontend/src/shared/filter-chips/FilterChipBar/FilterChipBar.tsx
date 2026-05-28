@@ -30,7 +30,7 @@ export interface FilterChipBarProps {
   managerOpen: boolean;
   onManagerOpenChange: (open: boolean) => void;
   onApplyValue: (id: string, value: ChipValue) => void;
-  onClearValue: (id: string) => void;
+  onClearValue: (id: string, source?: "chip_x") => void;
   onPinChip: (id: string) => void;
   onUnpinChip: (id: string) => void;
   onClearAll: () => void;
@@ -81,7 +81,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
                 definition={def}
                 value={values[def.id] as SingleSelectChipValue}
                 onApply={(value) => onApplyValue(def.id, value)}
-                onClear={() => onClearValue(def.id)}
+                onClear={(source) => onClearValue(def.id, source)}
                 open={isOpen}
                 onOpenChange={handleOpenChange}
               />
@@ -93,7 +93,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
                 definition={def}
                 value={values[def.id] as PseudoSearchChipValue}
                 onApply={(value) => onApplyValue(def.id, value)}
-                onClear={() => onClearValue(def.id)}
+                onClear={(source) => onClearValue(def.id, source)}
                 open={isOpen}
                 onOpenChange={handleOpenChange}
               />
@@ -105,7 +105,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
                 definition={def}
                 value={values[def.id] as BooleanChipValue}
                 onApply={(value) => onApplyValue(def.id, value)}
-                onClear={() => onClearValue(def.id)}
+                onClear={(source) => onClearValue(def.id, source)}
               />
             );
           case "numeric":
@@ -115,7 +115,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
                 definition={def}
                 value={values[def.id] as NumericChipValue}
                 onApply={(value) => onApplyValue(def.id, value)}
-                onClear={() => onClearValue(def.id)}
+                onClear={(source) => onClearValue(def.id, source)}
                 open={isOpen}
                 onOpenChange={handleOpenChange}
               />
@@ -127,7 +127,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
                 definition={def}
                 value={values[def.id] as TimeChipValue}
                 onApply={(value) => onApplyValue(def.id, value)}
-                onClear={() => onClearValue(def.id)}
+                onClear={(source) => onClearValue(def.id, source)}
                 open={isOpen}
                 onOpenChange={handleOpenChange}
               />
@@ -139,7 +139,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
                 definition={def}
                 value={values[def.id] as QueryBuilderChipValue}
                 onApply={(value) => onApplyValue(def.id, value)}
-                onClear={() => onClearValue(def.id)}
+                onClear={(source) => onClearValue(def.id, source)}
                 open={isOpen}
                 onOpenChange={handleOpenChange}
               />

@@ -17,6 +17,7 @@ interface FilterOperatorSelectProps<T extends string> {
   value: T;
   options: FilterOperatorOption<T>[];
   onChange: (value: T) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 const lowerFirst = (text: string) =>
@@ -27,6 +28,7 @@ export function FilterOperatorSelect<T extends string>({
   value,
   options,
   onChange,
+  onCloseAutoFocus,
 }: FilterOperatorSelectProps<T>) {
   const current = options.find((option) => option.value === value);
 
@@ -45,7 +47,11 @@ export function FilterOperatorSelect<T extends string>({
             <ChevronDown className="size-3 shrink-0" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[146px]">
+        <DropdownMenuContent
+          align="start"
+          className="min-w-[146px]"
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
           {options.map((option) => (
             <DropdownMenuItem
               key={option.value}

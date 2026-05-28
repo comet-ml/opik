@@ -4,12 +4,14 @@ import { cn } from "@/lib/utils";
 
 interface FilterRowProps {
   onRemove: () => void;
+  disableRemove?: boolean;
   children: React.ReactNode;
   className?: string;
 }
 
 export const FilterRow: React.FC<FilterRowProps> = ({
   onRemove,
+  disableRemove = false,
   children,
   className,
 }) => (
@@ -32,7 +34,13 @@ export const FilterRow: React.FC<FilterRowProps> = ({
       type="button"
       aria-label="Remove filter"
       onClick={onRemove}
-      className="flex shrink-0 items-center justify-center text-muted-slate hover:text-foreground"
+      disabled={disableRemove}
+      className={cn(
+        "flex shrink-0 items-center justify-center transition-colors",
+        disableRemove
+          ? "cursor-not-allowed text-muted-slate/40"
+          : "text-muted-slate hover:text-foreground",
+      )}
     >
       <X className="size-3" />
     </button>

@@ -19,12 +19,14 @@ import {
 interface TimeChipTimeInputProps {
   slot: Slot;
   invalid?: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
   onChange: (patch: SlotPatch) => void;
 }
 
 const TimeChipTimeInput: React.FC<TimeChipTimeInputProps> = ({
   slot,
   invalid,
+  inputRef,
   onChange,
 }) => {
   const commit = (raw: string) => {
@@ -73,6 +75,7 @@ const TimeChipTimeInput: React.FC<TimeChipTimeInputProps> = ({
         )}
       >
         <DebounceInput
+          ref={inputRef}
           variant="unstyled"
           dimension="none"
           type="text"

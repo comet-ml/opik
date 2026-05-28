@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import dayjs from "dayjs";
 import { FormErrorSkeleton } from "@/ui/form";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
@@ -66,6 +66,16 @@ const slotFromIso = (iso: string | undefined): Slot => {
   };
 };
 
+const pickFirstEmptySlot = (
+  mode: TimeChipMode,
+  a: Slot,
+  b: Slot,
+): "A" | "B" => {
+  if (!a.date) return "A";
+  if (mode === "between" && !b.date) return "B";
+  return "A";
+};
+
 const buildValue = (
   mode: TimeChipMode,
   isoA: string | null,
@@ -106,6 +116,10 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
     value?.mode === "between" ? slotFromIso(value.end) : EMPTY_SLOT,
   );
 
+  const dateInputARef = useRef<HTMLInputElement>(null);
+  const dateInputBRef = useRef<HTMLInputElement>(null);
+  const pendingDateFocusRef = useRef<"A" | "B" | null>(null);
+
   const applyFromSlots = (nextMode: TimeChipMode, a: Slot, b: Slot): void => {
     const next = buildValue(
       nextMode,
@@ -141,6 +155,15 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
   const handleModeChange = (nextMode: TimeChipMode) => {
     setMode(nextMode);
     applyFromSlots(nextMode, slotA, slotB);
+    pendingDateFocusRef.current = pickFirstEmptySlot(nextMode, slotA, slotB);
+  };
+
+  const handleOperatorMenuClose = (event: Event) => {
+    event.preventDefault();
+    const target = pendingDateFocusRef.current;
+    pendingDateFocusRef.current = null;
+    if (target === "A") dateInputARef.current?.focus();
+    else if (target === "B") dateInputBRef.current?.focus();
   };
 
   const handleClear = () => {
@@ -170,6 +193,7 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
         value={mode}
         options={OPERATOR_OPTIONS}
         onChange={handleModeChange}
+        onCloseAutoFocus={handleOperatorMenuClose}
       />
 
       {mode === "between" ? (
@@ -178,6 +202,7 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
             label="Start"
             slot={slotA}
             autoFocus
+            dateInputRef={dateInputARef}
             calendarDefaultTime={calendarDefaultTime(mode, "A")}
             onChange={patchSlotA}
           />
@@ -186,6 +211,7 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
               label="End"
               slot={slotB}
               invalid={isRangeInverted}
+              dateInputRef={dateInputBRef}
               calendarDefaultTime={calendarDefaultTime(mode, "B")}
               onChange={patchSlotB}
             />
@@ -200,6 +226,7 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
         <SlotRow
           slot={slotA}
           autoFocus
+          dateInputRef={dateInputARef}
           calendarDefaultTime={calendarDefaultTime(mode, "A")}
           onChange={patchSlotA}
         />
@@ -222,6 +249,7 @@ interface SlotRowProps {
   slot: Slot;
   invalid?: boolean;
   autoFocus?: boolean;
+  dateInputRef: React.RefObject<HTMLInputElement>;
   calendarDefaultTime: SimpleTime;
   onChange: (patch: SlotPatch) => void;
 }
@@ -231,26 +259,38 @@ const SlotRow: React.FC<SlotRowProps> = ({
   slot,
   invalid,
   autoFocus,
+  dateInputRef,
   calendarDefaultTime,
   onChange,
-}) => (
-  <div className="flex w-full items-start gap-2">
-    {label && (
-      <span className="comet-body-xs mt-2 w-[31px] shrink-0 text-muted-slate">
-        {label}
-      </span>
-    )}
-    <div className="flex min-w-0 flex-1 items-start gap-1">
-      <TimeChipDateInput
-        slot={slot}
-        invalid={invalid}
-        autoFocus={autoFocus}
-        calendarDefaultTime={calendarDefaultTime}
-        onChange={onChange}
-      />
-      <TimeChipTimeInput slot={slot} invalid={invalid} onChange={onChange} />
+}) => {
+  const timeInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex w-full items-start gap-2">
+      {label && (
+        <span className="comet-body-xs mt-2 w-[31px] shrink-0 text-muted-slate">
+          {label}
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 items-start gap-1">
+        <TimeChipDateInput
+          slot={slot}
+          invalid={invalid}
+          autoFocus={autoFocus}
+          inputRef={dateInputRef}
+          calendarDefaultTime={calendarDefaultTime}
+          onChange={onChange}
+          onPicked={() => timeInputRef.current?.focus()}
+        />
+        <TimeChipTimeInput
+          slot={slot}
+          invalid={invalid}
+          inputRef={timeInputRef}
+          onChange={onChange}
+        />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default TimeChipPopoverContent;

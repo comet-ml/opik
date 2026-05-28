@@ -1,6 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Pin, PinOff } from "lucide-react";
-import groupBy from "lodash/groupBy";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Separator } from "@/ui/separator";
-import { cn } from "@/lib/utils";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { isSingleSelectApplied } from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip.logic";
@@ -76,6 +74,7 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
   onRequestOpenChip,
 }) => {
   const [searchText, setSearchText] = useState("");
+  const pendingChipIdRef = useRef<string | null>(null);
 
   const handleOpenChange = (next: boolean) => {
     if (!next) setSearchText("");
@@ -88,9 +87,10 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
       return;
     }
     onPinChip(def.id);
-    // Defer until the DropdownMenu has closed so its focus-return doesn't
-    // race with the chip's popover trying to open.
-    requestAnimationFrame(() => onRequestOpenChip(def.id));
+    // Open the chip popover only after Radix has finished tearing down the
+    // dropdown — see onCloseAutoFocus below. Avoids the stray outside-click
+    // event that otherwise races with the mounting chip popover.
+    pendingChipIdRef.current = def.id;
   };
 
   const query = searchText.trim().toLowerCase();
@@ -108,7 +108,13 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
         align="start"
         sideOffset={4}
         collisionPadding={16}
-        onCloseAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (pendingChipIdRef.current) {
+            onRequestOpenChip(pendingChipIdRef.current);
+            pendingChipIdRef.current = null;
+          }
+        }}
         className="flex max-h-[var(--radix-dropdown-menu-content-available-height)] w-[242px] flex-col p-1 shadow-sm"
       >
         <div className="shrink-0" onKeyDown={(e) => e.stopPropagation()}>
@@ -125,7 +131,7 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
           {visiblePinned.length > 0 && (
             <>
               <DropdownMenuLabel className="text-light-slate">
-                Pinned filters
+                Pinned
               </DropdownMenuLabel>
               {visiblePinned.map((def) => {
                 const isActive = chipHasAppliedValue(def, values[def.id]);
@@ -164,31 +170,17 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
           {visibleUnpinned.length > 0 && (
             <>
               <DropdownMenuLabel className="text-light-slate">
-                Available filters
+                All filters
               </DropdownMenuLabel>
-              {groupUnpinnedChips(visibleUnpinned).map((group, idx) => (
-                <React.Fragment key={group.name ?? `__none_${idx}`}>
-                  {group.name && (
-                    <DropdownMenuLabel
-                      className={cn(
-                        "comet-body-xs-accented text-light-slate",
-                        "min-h-10 py-2.5",
-                      )}
-                    >
-                      {group.name}
-                    </DropdownMenuLabel>
-                  )}
-                  {group.chips.map((def) => (
-                    <DropdownMenuItem
-                      key={def.id}
-                      size="sm"
-                      onSelect={() => handleSelectUnpinned(def)}
-                      className="px-4 text-foreground"
-                    >
-                      {def.label}
-                    </DropdownMenuItem>
-                  ))}
-                </React.Fragment>
+              {visibleUnpinned.map((def) => (
+                <DropdownMenuItem
+                  key={def.id}
+                  size="sm"
+                  onSelect={() => handleSelectUnpinned(def)}
+                  className="px-4 text-foreground"
+                >
+                  {def.label}
+                </DropdownMenuItem>
               ))}
             </>
           )}
@@ -203,10 +195,5 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
     </DropdownMenu>
   );
 };
-
-const groupUnpinnedChips = (chips: ChipDefinition[]) =>
-  Object.entries(groupBy(chips, (def) => def.group ?? "")).map(
-    ([name, items]) => ({ name, chips: items }),
-  );
 
 export default FilterManagerPopover;

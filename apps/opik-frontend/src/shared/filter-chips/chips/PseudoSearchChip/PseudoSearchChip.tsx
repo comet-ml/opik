@@ -11,7 +11,7 @@ interface PseudoSearchChipProps {
   definition: PseudoSearchChipDefinition;
   value: PseudoSearchChipValue | undefined;
   onApply: (value: PseudoSearchChipValue) => void;
-  onClear: () => void;
+  onClear: (source?: "chip_x") => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

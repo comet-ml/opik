@@ -7,6 +7,7 @@ import { getJSONPaths } from "@/lib/utils";
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
+import { LOGS_SOURCE } from "@/types/traces";
 import { ChipOptionsResult } from "@/shared/filter-chips/types";
 
 export type TRACE_AUTOCOMPLETE_ROOT_KEY = "input" | "output" | "metadata";
@@ -18,6 +19,7 @@ interface UsePathsOptionsArgs {
   excludeRoot?: boolean;
   includeIntermediateNodes?: boolean;
   datasetColumnNames?: string[];
+  logsSource?: LOGS_SOURCE;
 }
 
 export const usePathsOptions = (
@@ -30,6 +32,7 @@ export const usePathsOptions = (
     excludeRoot = false,
     includeIntermediateNodes = false,
     datasetColumnNames,
+    logsSource,
   } = args;
   const hasProjectId = Boolean(projectId);
 
@@ -41,6 +44,7 @@ export const usePathsOptions = (
       size: 100,
       truncate: true,
       stripAttachments: true,
+      logsSource,
     },
     { enabled: hasProjectId },
   );
@@ -54,6 +58,7 @@ export const usePathsOptions = (
         size: 10,
         truncate: false,
         stripAttachments: true,
+        logsSource,
       },
       { enabled: hasProjectId },
     );

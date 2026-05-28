@@ -10,7 +10,7 @@ interface BooleanChipProps {
   definition: BooleanChipDefinition;
   value: BooleanChipValue | undefined;
   onApply: (value: BooleanChipValue) => void;
-  onClear: () => void;
+  onClear: (source?: "chip_x") => void;
 }
 
 const BooleanChip: React.FC<BooleanChipProps> = ({
@@ -26,7 +26,9 @@ const BooleanChip: React.FC<BooleanChipProps> = ({
       applied={applied}
       aria-pressed={applied}
       onClear={onClear}
-      onClick={applied ? onClear : () => onApply({ applied: true })}
+      onClick={
+        applied ? () => onClear("chip_x") : () => onApply({ applied: true })
+      }
       className="pr-2"
     >
       <span className="truncate">{definition.label}</span>
