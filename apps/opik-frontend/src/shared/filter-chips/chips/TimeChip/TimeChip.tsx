@@ -27,6 +27,7 @@ const TimeChip: React.FC<TimeChipProps> = ({
     open={open}
     onOpenChange={onOpenChange}
     onClear={onClear}
+    contentProps={{ onOpenAutoFocus: (event) => event.preventDefault() }}
   >
     <TimeChipPopoverContent
       fieldLabel={definition.label}
