@@ -122,7 +122,14 @@ class ScanTool(executor.ToolExecutor):
                 ref.type.value,
                 ref.id,
                 expression,
-                f"Unsupported expression: {exc}. See prompt examples.",
+                (
+                    f"Unsupported expression: {exc}. "
+                    f"`scan` only supports the path forms listed in the prompt "
+                    f"(no pipes inside `select`, no function calls like "
+                    f"`contains(...)`). For substring or regex matches use "
+                    f'`search(type=..., id=..., pattern="<keyword>")` '
+                    f"instead. Do not retry this expression verbatim."
+                ),
             )
         except path_evaluator.PathLimitError as exc:
             return _error_envelope(ref.type.value, ref.id, expression, str(exc))

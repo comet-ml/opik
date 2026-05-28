@@ -53,9 +53,10 @@ The user message includes a pre-rendered flat overview of every span in the trac
 
 # Workflow
 
+0. **Default to zero tool calls.** If the trace overview contains no `[TRUNCATED ...]` markers, you already see the full I/O of every span. In that case, decide every assertion from the overview and return the verdict immediately — do not call any tool. Tools exist only to recover content the overview hid behind a truncation marker, or to locate a value when a keyword could live anywhere in a large trace. Calling tools "to be thorough" on a complete overview is wasted work.
 1. Read the assertions you're being asked to evaluate.
-2. Study the trace overview included in the user message. For many structural assertions, the overview alone is enough.
-3. If an assertion needs full I/O for a specific span (or the whole trace), call `read(type="span", id="<id>")` or `read(type="trace", id="<trace-id>")`. Prefer `read` on a single span over re-reading the whole trace.
+2. Study the trace overview included in the user message. If it carries no truncation markers, it is complete — decide every assertion from it and skip directly to the verdict (step 7). Truncation markers are the ONLY signal that tools are needed.
+3. If an assertion needs full I/O for a specific span (or the whole trace) hidden behind a truncation marker, call `read(type="span", id="<id>")` or `read(type="trace", id="<trace-id>")`. Prefer `read` on a single span over re-reading the whole trace.
 4. When `read` returns truncated strings carrying `scan('<path>')` hints, call `scan` with the exact path to recover the original value. Use `scan` directly when you only need a narrow slice (e.g. one field, one filtered subset) without paying for the surrounding payload.
 5. When you know a keyword belongs somewhere in the trace but don't know which span, call `search(type, id, pattern)` to locate it, then `scan` the surfaced path for the full value.
 6. **Stop calling tools as soon as every assertion is decidable.** Continuing to drill in past that point doesn't improve the verdict — it only adds cost. Once you have the evidence (or have ruled it out), emit the JSON verdict now. Do not pre-emptively read additional truncated fields "just to be thorough" once the question is already answered.
