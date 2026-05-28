@@ -24,6 +24,7 @@ import {
 import { Skeleton } from "@/ui/skeleton";
 import { useToast } from "@/ui/use-toast";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AutoResizeTextarea from "@/v2/pages-shared/agent-configuration/fields/AutoResizeTextarea";
@@ -324,10 +325,20 @@ const AgentRunnerPromptCard = forwardRef<
                 <GitCommitVertical className="size-3 text-muted-slate" />
               )}
               {selectedVersion?.label ?? "v?"}
+              <EnvironmentBadgeList
+                names={selectedVersion?.version.environments}
+                size="sm"
+                withOverflow
+                compact
+                maxWidth={60}
+              />
               <ChevronDown className="size-3" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[220px]">
+          <DropdownMenuContent
+            align="start"
+            className="max-h-[40vh] w-[220px] overflow-y-auto"
+          >
             {descriptors.map(({ version, label, stage }) => {
               const isActive = version.id === selectedVersionId;
               return (
@@ -339,6 +350,13 @@ const AgentRunnerPromptCard = forwardRef<
                 >
                   <span className="comet-body-s">{label}</span>
                   {stage && <StageTag value={stage} size="xs" />}
+                  <EnvironmentBadgeList
+                    names={version.environments}
+                    size="sm"
+                    withOverflow
+                    compact
+                    maxWidth={60}
+                  />
                   <TooltipWrapper
                     content={`${formatDate(version.created_at, {
                       utc: true,

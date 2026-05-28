@@ -19,7 +19,7 @@ const EnvironmentNameCell: React.FunctionComponent<
     >
       <TooltipWrapper content={name} stopClickPropagation>
         <div className="flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-2">
-          <EnvironmentSquare color={color} />
+          <EnvironmentSquare name={name} color={color} />
           <div className="comet-body-xs-accented min-w-0 flex-1 truncate text-muted-slate">
             {name}
           </div>
