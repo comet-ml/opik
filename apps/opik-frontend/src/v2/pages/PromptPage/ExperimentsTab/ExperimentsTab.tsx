@@ -37,6 +37,7 @@ import { transformExperimentScores } from "@/lib/feedback-scores";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import { ExperimentPromptVersion } from "@/types/datasets";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -177,19 +178,24 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: "prompt",
-        label: "Prompt commit",
+        label: "Prompt version",
         type: COLUMN_TYPE.list,
-        accessorFn: (row) => get(row, ["prompt_versions"], []),
+        accessorFn: (row) =>
+          (get(row, ["prompt_versions"], []) as ExperimentPromptVersion[]).map(
+            (v) => ({
+              ...v,
+              version_label: v.version_number ?? v.commit,
+            }),
+          ),
         cell: MultiResourceCell as never,
         customMeta: {
-          nameKey: "commit",
+          nameKey: "version_label",
           idKey: "prompt_id",
           resource: RESOURCE_TYPE.prompt,
           getSearch: (data: GroupedExperiment) => ({
             activeVersionId: get(data, "id", null),
           }),
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
       },
       {
         id: COLUMN_ID_ID,

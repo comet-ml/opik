@@ -258,6 +258,7 @@ public class ExperimentService {
         return new PromptVersionLink(
                 version.id(),
                 info != null ? info.commit() : null,
+                info != null ? info.versionNumber() : null,
                 version.promptId(),
                 info != null ? info.promptName() : null);
     }
