@@ -9,7 +9,6 @@ import {
   Pencil,
   Play,
   Sparkles,
-  Undo2,
   User,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -55,7 +54,6 @@ import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlayground
 import useLoadPromptIntoPlayground from "@/v2/pages-shared/playground/useLoadPromptIntoPlayground";
 import { getTimeFromNow } from "@/lib/date";
 import { pickHighestStage } from "@/utils/version-stages";
-import RestoreVersionDialog from "./RestoreVersionDialog";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -88,8 +86,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
   const [openCompare, setOpenCompare] = useState(false);
   const [openLoadConfirm, setOpenLoadConfirm] = useState(false);
-  const [versionToRestore, setVersionToRestore] =
-    useState<PromptVersion | null>(null);
   const [compareAgainstVersionId, setCompareAgainstVersionId] = useState<
     string | null
   >(null);
@@ -160,12 +156,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     (activeVersion as VersionWithMaybeAuthor | undefined)?.created_by ?? "";
   const activeVersionEnvironment = activeVersion?.environment ?? null;
 
-  const handleRestoreVersionClick = (version: PromptVersion) =>
-    setVersionToRestore(version);
-
   const isChatPrompt =
     prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
-  const isLatest = effectiveVersionId === prompt?.latest_version?.id;
   const template = activeVersion?.template ?? "";
   const metadataJson = useMemo(
     () =>
@@ -379,22 +371,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
               <Separator orientation="vertical" className="mx-1 h-4" />
 
-              {activeVersion && !isLatest && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="px-0"
-                  onClick={() => handleRestoreVersionClick(activeVersion)}
-                >
-                  <Undo2 className="mr-1.5 size-3.5" />
-                  Restore
-                </Button>
-              )}
-
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn("px-0", activeVersion && !isLatest && "ml-3")}
+                className="px-0"
                 onClick={() => setOpenEditPrompt(true)}
               >
                 <Pencil className="mr-1.5 size-3.5" />
@@ -509,18 +489,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         metadata={activeVersion?.metadata}
         templateStructure={prompt.template_structure}
         type={activeVersion?.type}
-        onSetActiveVersionId={setActiveVersionId}
-      />
-
-      <RestoreVersionDialog
-        open={!!versionToRestore}
-        setOpen={(v) => setVersionToRestore(v ? versionToRestore : null)}
-        versionToRestore={versionToRestore}
-        versionLabel={
-          versionToRestore
-            ? historyItems.find((h) => h.id === versionToRestore.id)?.label
-            : undefined
-        }
         onSetActiveVersionId={setActiveVersionId}
       />
 
