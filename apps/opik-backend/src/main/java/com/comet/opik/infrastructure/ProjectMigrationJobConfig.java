@@ -33,4 +33,13 @@ public interface ProjectMigrationJobConfig {
 
     /** Per-cycle hard timeout — safety net for stuck cycles. */
     Duration jobTimeout();
+
+    /** Max threads in the dedicated reactor scheduler for this migration. */
+    int schedulerThreadCap();
+
+    /** Max tasks queued in the dedicated reactor scheduler before backpressure rejects new work. */
+    int schedulerQueuedTaskCap();
+
+    /** Idle-thread TTL for the dedicated reactor scheduler — controls thread reaping during idle. */
+    Duration schedulerThreadTtl();
 }

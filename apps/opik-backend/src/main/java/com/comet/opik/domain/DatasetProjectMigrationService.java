@@ -5,7 +5,6 @@ import com.comet.opik.domain.workspaces.WorkspaceVersionService;
 import com.comet.opik.infrastructure.DatasetProjectMigrationConfig;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.google.common.collect.Lists;
-import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -19,8 +18,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -40,7 +37,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 @Slf4j
 @Singleton
-public class DatasetProjectMigrationService implements Managed {
+public class DatasetProjectMigrationService extends AbstractProjectMigrationService {
 
     public static final String METRIC_NAMESPACE = "opik.migration.dataset_project";
 
@@ -85,14 +82,6 @@ public class DatasetProjectMigrationService implements Managed {
     private final LongCounter datasetsAssignedToDefault;
     private final LongCounter datasetsAssignedToDominantProject;
     private final LongHistogram batchSize;
-
-    /**
-     * Dedicated bounded-elastic scheduler isolating the migration's blocking JDBC work and
-     * its post-collect CPU-heavy lambdas from the shared {@link Schedulers#boundedElastic()}
-     * and from the reactive client (R2DBC/Redisson) event loops. Sized for the sequential
-     * concatMap flow; daemon threads so JVM shutdown is never blocked by the migration pool.
-     */
-    private volatile Scheduler migrationScheduler;
 
     @Inject
     public DatasetProjectMigrationService(
@@ -146,26 +135,13 @@ public class DatasetProjectMigrationService implements Managed {
     }
 
     @Override
-    public void start() {
-        if (migrationScheduler == null) {
-            migrationScheduler = Schedulers.newBoundedElastic(
-                    config.schedulerThreadCap(),
-                    config.schedulerQueuedTaskCap(),
-                    "dataset-project-migration-service",
-                    (int) config.schedulerThreadTtl().toJavaDuration().toSeconds(),
-                    true);
-            log.info(
-                    "Initialized dataset project migration scheduler, threadCap='{}', queuedTaskCap='{}', threadTtl='{}'",
-                    config.schedulerThreadCap(), config.schedulerQueuedTaskCap(), config.schedulerThreadTtl());
-        }
+    protected String schedulerName() {
+        return "dataset-project-migration-service";
     }
 
     @Override
-    public void stop() {
-        if (migrationScheduler != null && !migrationScheduler.isDisposed()) {
-            migrationScheduler.dispose();
-            log.info("Dataset project migration scheduler disposed");
-        }
+    protected DatasetProjectMigrationConfig jobConfig() {
+        return config;
     }
 
     public Mono<Void> runMigrationCycle() {
@@ -177,7 +153,7 @@ public class DatasetProjectMigrationService implements Managed {
                     config.workspacesPerRun(), config.datasetBatchSize(), envExcludedWorkspaceIds.size());
             return envExcludedWorkspaceIds;
         })
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .flatMap(this::findEligibleWorkspaces)
                 .flatMapMany(eligibleWorkspaces -> {
                     cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
@@ -208,7 +184,7 @@ public class DatasetProjectMigrationService implements Managed {
                     return experimentDAO.computeDatasetProjectMapping(orphanIds)
                             .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                             .collectList()
-                            .publishOn(migrationScheduler)
+                            .publishOn(migrationScheduler())
                             .flatMap(inferenceResults -> classifyAndMigrate(
                                     workspaceId, orphanIds, inferenceResults, workspaceStartMillis));
                 })
@@ -265,7 +241,7 @@ public class DatasetProjectMigrationService implements Managed {
                     .filter(mapping -> existingProjectIds.contains(mapping.projectId()))
                     .toList();
         })
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .flatMap(validatedCertain -> {
                     var certainDeletedIds = certainCandidates.stream()
                             .filter(c -> !validatedCertain.contains(c))
@@ -321,7 +297,7 @@ public class DatasetProjectMigrationService implements Managed {
         }
         return Mono
                 .fromCallable(() -> projectService.getOrCreate(workspaceId, DEFAULT_PROJECT_NAME, SYSTEM_USER).id())
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .flatMap(defaultProjectId -> {
                     var allMappings = new ArrayList<>(validatedCertain);
                     // distinctProjectCount and projectBreakdown are query-side fields; for the
@@ -388,21 +364,21 @@ public class DatasetProjectMigrationService implements Managed {
                 log.debug("Updated dataset batch, workspaceId='{}', count='{}'", workspaceId, batch.size());
             }
             return true;
-        }).subscribeOn(migrationScheduler);
+        }).subscribeOn(migrationScheduler());
     }
 
     private Mono<List<EligibleDatasetWorkspace>> findEligibleWorkspaces(Set<String> excludedWorkspaceIds) {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(DatasetDAO.class).findEligibleDatasetMigrationWorkspaces(
                         DemoData.DATASETS, excludedWorkspaceIds, config.workspacesPerRun())))
-                .subscribeOn(migrationScheduler);
+                .subscribeOn(migrationScheduler());
     }
 
     private Mono<Set<UUID>> findOrphanDatasetIds(String workspaceId) {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(DatasetDAO.class)
                         .findOrphanDatasetIdsInWorkspace(workspaceId, DemoData.DATASETS)))
-                .subscribeOn(migrationScheduler);
+                .subscribeOn(migrationScheduler());
     }
 
     private void writeBatch(String workspaceId, List<DatasetProjectMapping> batch) {

@@ -5,7 +5,6 @@ import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.comet.opik.infrastructure.PromptProjectMigrationConfig;
 import com.google.common.collect.Lists;
-import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -19,8 +18,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -49,7 +46,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  */
 @Slf4j
 @Singleton
-public class PromptProjectMigrationService implements Managed {
+public class PromptProjectMigrationService extends AbstractProjectMigrationService {
 
     public static final String METRIC_NAMESPACE = "opik.migration.prompt_project";
 
@@ -94,12 +91,6 @@ public class PromptProjectMigrationService implements Managed {
     private final LongCounter promptsSkipped;
     private final LongCounter promptsAssignedToDefault;
     private final LongHistogram batchSize;
-
-    /**
-     * Dedicated bounded-elastic scheduler isolating this job's blocking JDBC work and CPU
-     * post-collect from {@link Schedulers#boundedElastic()} and the reactive client event loops.
-     */
-    private volatile Scheduler migrationScheduler;
 
     @Inject
     public PromptProjectMigrationService(
@@ -156,26 +147,13 @@ public class PromptProjectMigrationService implements Managed {
     }
 
     @Override
-    public void start() {
-        if (migrationScheduler == null) {
-            migrationScheduler = Schedulers.newBoundedElastic(
-                    config.schedulerThreadCap(),
-                    config.schedulerQueuedTaskCap(),
-                    "prompt-project-migration-service",
-                    (int) config.schedulerThreadTtl().toJavaDuration().toSeconds(),
-                    true);
-            log.info(
-                    "Initialized prompt project migration scheduler, threadCap='{}', queuedTaskCap='{}', threadTtl='{}'",
-                    config.schedulerThreadCap(), config.schedulerQueuedTaskCap(), config.schedulerThreadTtl());
-        }
+    protected String schedulerName() {
+        return "prompt-project-migration-service";
     }
 
     @Override
-    public void stop() {
-        if (migrationScheduler != null && !migrationScheduler.isDisposed()) {
-            migrationScheduler.dispose();
-            log.info("Prompt project migration scheduler disposed");
-        }
+    protected PromptProjectMigrationConfig jobConfig() {
+        return config;
     }
 
     public Mono<Void> runMigrationCycle() {
@@ -193,10 +171,10 @@ public class PromptProjectMigrationService implements Managed {
                     skippedWorkspaceIds.stream())
                     .collect(Collectors.toUnmodifiableSet());
         })
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .flatMapMany(excludedWorkspaceIds -> Mono
                         .fromCallable(() -> findEligibleWorkspaces(excludedWorkspaceIds))
-                        .subscribeOn(migrationScheduler)
+                        .subscribeOn(migrationScheduler())
                         .flatMapMany(eligibleWorkspaces -> {
                             cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
                             if (CollectionUtils.isEmpty(eligibleWorkspaces)) {
@@ -205,7 +183,7 @@ public class PromptProjectMigrationService implements Managed {
                             }
                             log.info("Found workspaces with orphan prompts, count='{}'", eligibleWorkspaces.size());
                             return Flux.fromIterable(eligibleWorkspaces)
-                                    .publishOn(migrationScheduler)
+                                    .publishOn(migrationScheduler())
                                     .concatMap(workspace -> migrateWorkspace(
                                             workspace.workspaceId(),
                                             workspace.promptsCount(),
@@ -219,7 +197,7 @@ public class PromptProjectMigrationService implements Managed {
         var workspaceStartMillis = System.currentTimeMillis();
         return Mono
                 .fromCallable(() -> findOrphanIds(workspaceId, batchSize))
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .flatMap(orphanIds -> {
                     if (CollectionUtils.isEmpty(orphanIds)) {
                         log.info("No orphan prompts to migrate, workspaceId='{}'", workspaceId);
@@ -245,7 +223,7 @@ public class PromptProjectMigrationService implements Managed {
         return experimentDAO.computePromptProjectClassification(orphanIds)
                 .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                 .collectList()
-                .publishOn(migrationScheduler)
+                .publishOn(migrationScheduler())
                 .flatMap(classifications -> applyClassifications(
                         workspaceId, orphanIds, classifications, batchSize, workspaceStartMillis));
     }
@@ -309,7 +287,7 @@ public class PromptProjectMigrationService implements Managed {
         }
 
         return Flux.fromIterable(assignments.entrySet())
-                .publishOn(migrationScheduler)
+                .publishOn(migrationScheduler())
                 .concatMap(entry -> batchUpdateProjectId(workspaceId, entry.getKey(), entry.getValue(), batchSize))
                 .reduce(0L, Long::sum)
                 .flatMap(totalUpdated -> {
@@ -410,7 +388,7 @@ public class PromptProjectMigrationService implements Managed {
             Mono<Boolean> result) {
         return Mono.fromRunnable(() -> workspacesService.markPromptProjectMigrationSkipped(
                 workspaceId, REASON_ALL_AMBIGUOUS))
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .doFinally(signalType -> recordWorkspaceDuration(RESULT_ALL_AMBIGUOUS, workspaceStartMillis))
                 .then(result);
     }
@@ -421,7 +399,7 @@ public class PromptProjectMigrationService implements Managed {
             Set<UUID> promptIds,
             int maxBatchSize) {
         return Flux.fromIterable(Lists.partition(List.copyOf(promptIds), maxBatchSize))
-                .publishOn(migrationScheduler)
+                .publishOn(migrationScheduler())
                 .concatMap(batch -> Mono.fromCallable(() -> {
                     var batchSet = Set.copyOf(batch);
                     var updated = batchSetProjectId(workspaceId, batchSet, projectId);
@@ -429,7 +407,7 @@ public class PromptProjectMigrationService implements Managed {
                     log.debug("Updated prompt batch, workspaceId='{}', projectId='{}', requested='{}', updated='{}'",
                             workspaceId, projectId, batch.size(), updated);
                     return updated;
-                }).subscribeOn(migrationScheduler))
+                }).subscribeOn(migrationScheduler()))
                 .reduce(0L, Long::sum);
     }
 

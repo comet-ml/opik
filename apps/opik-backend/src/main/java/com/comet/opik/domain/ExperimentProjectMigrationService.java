@@ -8,7 +8,6 @@ import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.ExperimentProjectMigrationConfig;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.google.common.collect.Lists;
-import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -22,8 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -39,7 +36,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 @Slf4j
 @Singleton
-public class ExperimentProjectMigrationService implements Managed {
+public class ExperimentProjectMigrationService extends AbstractProjectMigrationService {
 
     public static final String METRIC_NAMESPACE = "opik.migration.experiment_project";
 
@@ -75,14 +72,6 @@ public class ExperimentProjectMigrationService implements Managed {
     private final LongCounter experimentsSkipped;
     private final LongCounter experimentsAssignedToDefault;
     private final LongHistogram batchSize;
-
-    /**
-     * Dedicated bounded-elastic scheduler isolating the migration's blocking JDBC work and
-     * its post-collect CPU-heavy lambdas from the shared {@link Schedulers#boundedElastic()}
-     * and from the reactive client (R2DBC/Redisson) event loops. Sized for the sequential
-     * concatMap flow; daemon threads so JVM shutdown is never blocked by the migration pool.
-     */
-    private volatile Scheduler migrationScheduler;
 
     @Inject
     public ExperimentProjectMigrationService(
@@ -145,26 +134,13 @@ public class ExperimentProjectMigrationService implements Managed {
     }
 
     @Override
-    public void start() {
-        if (migrationScheduler == null) {
-            migrationScheduler = Schedulers.newBoundedElastic(
-                    config.schedulerThreadCap(),
-                    config.schedulerQueuedTaskCap(),
-                    "experiment-project-migration-service",
-                    (int) config.schedulerThreadTtl().toJavaDuration().toSeconds(),
-                    true);
-            log.info(
-                    "Initialized experiment project migration scheduler, threadCap='{}', queuedTaskCap='{}', threadTtl='{}'",
-                    config.schedulerThreadCap(), config.schedulerQueuedTaskCap(), config.schedulerThreadTtl());
-        }
+    protected String schedulerName() {
+        return "experiment-project-migration-service";
     }
 
     @Override
-    public void stop() {
-        if (migrationScheduler != null && !migrationScheduler.isDisposed()) {
-            migrationScheduler.dispose();
-            log.info("Experiment project migration scheduler disposed");
-        }
+    protected ExperimentProjectMigrationConfig jobConfig() {
+        return config;
     }
 
     public Mono<Void> runMigrationCycle() {
@@ -182,13 +158,13 @@ public class ExperimentProjectMigrationService implements Managed {
                     skippedWorkspaceIds.stream())
                     .collect(Collectors.toUnmodifiableSet());
         })
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .flatMapMany(excludedWorkspaceIds -> experimentDAO
                         .findEligibleExperimentWorkspaces(excludedWorkspaceIds, config.workspacesPerRun())
                         .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, ""))
                         .collectList()
                         // Hop downstream off the ClickHouse R2DBC thread before the per-workspace iteration.
-                        .publishOn(migrationScheduler)
+                        .publishOn(migrationScheduler())
                         .flatMapMany(eligibleWorkspaces -> {
                             cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
                             if (CollectionUtils.isEmpty(eligibleWorkspaces)) {
@@ -201,7 +177,7 @@ public class ExperimentProjectMigrationService implements Managed {
                                     // Pin every per-workspace concatMap iteration to migrationScheduler —
                                     // items 2 -> N would otherwise emit on whichever client thread completed
                                     // the previous workspace's reactive tail.
-                                    .publishOn(migrationScheduler)
+                                    .publishOn(migrationScheduler())
                                     .concatMap(workspace -> migrateWorkspace(
                                             workspace.workspaceId(),
                                             workspace.experimentsCount(),
@@ -219,7 +195,7 @@ public class ExperimentProjectMigrationService implements Managed {
                 .collectList()
                 // Hop downstream off the ClickHouse R2DBC thread before iterating/grouping the
                 // mappings; for a large workspace these CPU lists are non-trivial.
-                .publishOn(migrationScheduler)
+                .publishOn(migrationScheduler())
                 .flatMap(mappings -> {
                     if (CollectionUtils.isEmpty(mappings)) {
                         log.info("No certain experiments to migrate, workspaceId='{}'", workspaceId);
@@ -257,7 +233,7 @@ public class ExperimentProjectMigrationService implements Managed {
                 .map(ExperimentProjectMapping::projectId)
                 .collect(Collectors.toUnmodifiableSet());
         return Mono.fromCallable(() -> projectService.findByIds(workspaceId, inferredProjectIds))
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .flatMap(existingProjects -> {
                     var validProjectIds = existingProjects.stream()
                             .map(Project::id)
@@ -284,7 +260,7 @@ public class ExperimentProjectMigrationService implements Managed {
                     return Flux.fromIterable(byProject.entrySet())
                             // Pin every per-project concatMap iteration to migrationScheduler — also
                             // covers the CPU inside batchUpdateProjectId (Lists.partition).
-                            .publishOn(migrationScheduler)
+                            .publishOn(migrationScheduler())
                             .concatMap(entry -> batchUpdateProjectId(
                                     workspaceId, entry.getKey(), entry.getValue(), batchSize))
                             .doOnComplete(() -> log.info(
@@ -361,7 +337,7 @@ public class ExperimentProjectMigrationService implements Managed {
         return Mono
                 .fromRunnable(() -> workspacesService.markExperimentProjectMigrationSkipped(
                         workspaceId, REASON_ALL_AMBIGUOUS))
-                .subscribeOn(migrationScheduler)
+                .subscribeOn(migrationScheduler())
                 .doFinally(signalType -> recordWorkspaceDuration(RESULT_ALL_AMBIGUOUS, workspaceStartMillis))
                 .then(result);
     }
@@ -372,7 +348,7 @@ public class ExperimentProjectMigrationService implements Managed {
                 // Pin every per-batch concatMap iteration to migrationScheduler — the per-batch
                 // stream/collect for items 2 -> N would otherwise run on the R2DBC thread of the
                 // previous batchSetProjectId's completion, accumulating on large workspaces.
-                .publishOn(migrationScheduler)
+                .publishOn(migrationScheduler())
                 .concatMap(batch -> {
                     var experimentIds = batch.stream()
                             .map(ExperimentProjectMapping::experimentId)
@@ -397,7 +373,7 @@ public class ExperimentProjectMigrationService implements Managed {
         return experimentItemService.filterExperimentIdsByStatus(experimentIds, FINISHED_STATUSES)
                 .collect(Collectors.toUnmodifiableSet())
                 // Hop downstream off the ClickHouse R2DBC thread before the publishing hop.
-                .publishOn(migrationScheduler)
+                .publishOn(migrationScheduler())
                 .flatMap(finished -> {
                     if (finished.isEmpty()) {
                         log.info("No finished experiments to reaggregate, workspaceId='{}', candidateCount='{}'",
