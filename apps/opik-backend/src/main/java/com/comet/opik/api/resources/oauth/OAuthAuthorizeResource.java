@@ -39,6 +39,12 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_TARGET;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_RESPONSE_TYPE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.RESPONSE_TYPE_CODE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Path("/oauth")
@@ -70,14 +76,15 @@ public class OAuthAuthorizeResource {
         McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
 
         // client and redirect_uri are now trusted, so protocol errors are reported back to the client via redirect.
-        if (!"code".equals(responseType)) {
-            return errorRedirect(redirectUri, "unsupported_response_type", state);
+        if (!RESPONSE_TYPE_CODE.equals(responseType)) {
+            return errorRedirect(redirectUri, ERROR_UNSUPPORTED_RESPONSE_TYPE, state);
         }
-        if (codeChallenge == null || codeChallenge.isBlank() || !"S256".equals(codeChallengeMethod)) {
-            return errorRedirect(redirectUri, "invalid_request", state);
+        if (codeChallenge == null || codeChallenge.isBlank()
+                || !CODE_CHALLENGE_METHOD_S256.equals(codeChallengeMethod)) {
+            return errorRedirect(redirectUri, ERROR_INVALID_REQUEST, state);
         }
         if (!config.getMcpResourceUri().equals(resource)) {
-            return errorRedirect(redirectUri, "invalid_target", state);
+            return errorRedirect(redirectUri, ERROR_INVALID_TARGET, state);
         }
 
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
@@ -138,10 +145,10 @@ public class OAuthAuthorizeResource {
 
         requireClientWithRedirect(request.clientId(), request.redirectUri());
         if (!config.getMcpResourceUri().equals(request.resource())) {
-            throw new BadRequestException("invalid_target");
+            throw new BadRequestException(ERROR_INVALID_TARGET);
         }
-        if (!"S256".equals(request.codeChallengeMethod())) {
-            throw new BadRequestException("invalid_request");
+        if (!CODE_CHALLENGE_METHOD_S256.equals(request.codeChallengeMethod())) {
+            throw new BadRequestException(ERROR_INVALID_REQUEST);
         }
 
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
@@ -164,7 +171,7 @@ public class OAuthAuthorizeResource {
     private McpOAuthClient requireClientWithRedirect(String clientId, String redirectUri) {
         Optional<McpOAuthClient> client = clientService.resolve(clientId);
         if (client.isEmpty()) {
-            throw new BadRequestException("invalid_client");
+            throw new BadRequestException(ERROR_INVALID_CLIENT);
         }
         if (redirectUri == null || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
             throw new BadRequestException("invalid redirect_uri");

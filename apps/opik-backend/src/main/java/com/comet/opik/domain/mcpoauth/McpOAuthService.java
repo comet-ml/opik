@@ -19,6 +19,9 @@ import java.util.Optional;
 
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_ACCESS;
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_REFRESH;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_TYPE_BEARER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -26,9 +29,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class McpOAuthService {
 
-    private static final String INVALID_GRANT = "invalid_grant";
-    private static final String CODE_CHALLENGE_METHOD = "S256";
-    private static final String TOKEN_TYPE_BEARER = "Bearer";
     private static final String REASON_ROTATED = "rotated";
     private static final String REASON_REUSE = "reuse";
     private static final String REASON_CLIENT_REQUEST = "client_request";
@@ -50,7 +50,7 @@ public class McpOAuthService {
                 .workspaceName(cmd.workspaceName())
                 .workspaceId(cmd.workspaceId())
                 .codeChallenge(cmd.codeChallenge())
-                .codeChallengeMethod(CODE_CHALLENGE_METHOD)
+                .codeChallengeMethod(CODE_CHALLENGE_METHOD_S256)
                 .redirectUri(cmd.redirectUri())
                 .resource(cmd.resource())
                 .expiresAt(now.plus(config.getCodeTtl()))
@@ -73,16 +73,16 @@ public class McpOAuthService {
             var codeDao = handle.attach(McpOAuthCodeDAO.class);
 
             if (codeDao.markUsed(codeHash) != 1) {
-                throw new BadRequestException(INVALID_GRANT);
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
             McpOAuthCode row = codeDao.findByHash(codeHash);
             if (!row.clientId().equals(clientId) || !row.redirectUri().equals(redirectUri)) {
-                throw new BadRequestException(INVALID_GRANT);
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
             if (!verifyPkce(codeVerifier, row.codeChallenge())) {
-                throw new BadRequestException(INVALID_GRANT);
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
             String familyId = idGenerator.generateId().toString();
@@ -126,11 +126,11 @@ public class McpOAuthService {
 
             McpOAuthToken row = tokenDao.findByHash(tokenHash);
             if (row == null || !TYPE_REFRESH.equals(row.type()) || !row.clientId().equals(clientId)) {
-                throw new BadRequestException(INVALID_GRANT);
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
             if (!row.expiresAt().isAfter(now)) {
-                throw new BadRequestException(INVALID_GRANT);
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
             if (row.revokedAt() != null) {
@@ -139,7 +139,7 @@ public class McpOAuthService {
                 if (!benignRetry) {
                     tokenDao.revokeFamily(row.familyId(), REASON_REUSE);
                 }
-                throw new BadRequestException(INVALID_GRANT);
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
             String accessToken = McpOAuthTokens.generateAccessToken();

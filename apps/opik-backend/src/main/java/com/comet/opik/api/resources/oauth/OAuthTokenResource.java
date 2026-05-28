@@ -19,17 +19,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_GRANT_TYPE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_CODE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
+
 @Path("/oauth")
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OAuthTokenResource {
-
-    private static final String GRANT_AUTH_CODE = "authorization_code";
-    private static final String GRANT_REFRESH = "refresh_token";
-    private static final String INVALID_REQUEST = "invalid_request";
-    private static final String INVALID_CLIENT = "invalid_client";
-    private static final String UNSUPPORTED_GRANT_TYPE = "unsupported_grant_type";
 
     private final @NonNull OAuthClientService clientService;
     private final @NonNull McpOAuthService mcpOAuthService;
@@ -46,13 +46,13 @@ public class OAuthTokenResource {
             @FormParam("code_verifier") String codeVerifier,
             @FormParam("refresh_token") String refreshToken) {
 
-        if (GRANT_AUTH_CODE.equals(grantType)) {
+        if (GRANT_AUTHORIZATION_CODE.equals(grantType)) {
             if (StringUtils.isBlank(code) || StringUtils.isBlank(redirectUri) || StringUtils.isBlank(clientId)
                     || StringUtils.isBlank(codeVerifier)) {
-                return error(INVALID_REQUEST);
+                return error(ERROR_INVALID_REQUEST);
             }
             if (clientService.resolve(clientId).isEmpty()) {
-                return error(INVALID_CLIENT);
+                return error(ERROR_INVALID_CLIENT);
             }
             try {
                 return okToken(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId));
@@ -61,12 +61,12 @@ public class OAuthTokenResource {
             }
         }
 
-        if (GRANT_REFRESH.equals(grantType)) {
+        if (GRANT_REFRESH_TOKEN.equals(grantType)) {
             if (StringUtils.isBlank(refreshToken) || StringUtils.isBlank(clientId)) {
-                return error(INVALID_REQUEST);
+                return error(ERROR_INVALID_REQUEST);
             }
             if (clientService.resolve(clientId).isEmpty()) {
-                return error(INVALID_CLIENT);
+                return error(ERROR_INVALID_CLIENT);
             }
             try {
                 return okToken(mcpOAuthService.refresh(refreshToken, clientId));
@@ -75,7 +75,7 @@ public class OAuthTokenResource {
             }
         }
 
-        return StringUtils.isBlank(grantType) ? error(INVALID_REQUEST) : error(UNSUPPORTED_GRANT_TYPE);
+        return StringUtils.isBlank(grantType) ? error(ERROR_INVALID_REQUEST) : error(ERROR_UNSUPPORTED_GRANT_TYPE);
     }
 
     @POST

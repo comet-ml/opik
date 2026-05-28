@@ -13,7 +13,8 @@ public class McpOAuthBundle implements GuiceyBundle {
             environment.disableExtensions(
                     OAuthMetadataResource.class,
                     OAuthAuthorizeResource.class,
-                    OAuthTokenResource.class);
+                    OAuthTokenResource.class,
+                    OAuthValidateResource.class);
         }
     }
 }

@@ -14,6 +14,12 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.AUTH_METHOD_NONE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_CODE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.RESPONSE_TYPE_CODE;
+
 @Path("/.well-known/oauth-authorization-server")
 @Produces(MediaType.APPLICATION_JSON)
 @Timed
@@ -31,10 +37,10 @@ public class OAuthMetadataResource {
                 .tokenEndpoint(issuer + "/oauth/token")
                 .revocationEndpoint(issuer + "/oauth/revoke")
                 .registrationEndpoint(issuer + "/oauth/register")
-                .responseTypesSupported(List.of("code"))
-                .grantTypesSupported(List.of("authorization_code", "refresh_token"))
-                .codeChallengeMethodsSupported(List.of("S256"))
-                .tokenEndpointAuthMethodsSupported(List.of("none"))
+                .responseTypesSupported(List.of(RESPONSE_TYPE_CODE))
+                .grantTypesSupported(List.of(GRANT_AUTHORIZATION_CODE, GRANT_REFRESH_TOKEN))
+                .codeChallengeMethodsSupported(List.of(CODE_CHALLENGE_METHOD_S256))
+                .tokenEndpointAuthMethodsSupported(List.of(AUTH_METHOD_NONE))
                 .build())
                 .build();
     }

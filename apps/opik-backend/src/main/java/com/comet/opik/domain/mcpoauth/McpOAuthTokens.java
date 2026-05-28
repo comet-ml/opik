@@ -1,6 +1,7 @@
 package com.comet.opik.domain.mcpoauth;
 
 import lombok.experimental.UtilityClass;
+import org.apache.commons.lang3.Strings;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -32,7 +33,7 @@ public class McpOAuthTokens {
     }
 
     public static boolean isAccessToken(String token) {
-        return token != null && token.startsWith(ACCESS_PREFIX);
+        return Strings.CI.startsWith(token, ACCESS_PREFIX);
     }
 
     public static boolean isRefreshToken(String token) {
