@@ -18347,11 +18347,16 @@ components:
           enum:
           - prompt_version
           - mask
-        environment:
-          maxLength: 150
-          minLength: 0
-          pattern: "^[A-Za-z0-9_-]+$"
-          type: string
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18476,11 +18481,16 @@ components:
           enum:
           - prompt_version
           - mask
-        environment:
-          maxLength: 150
-          minLength: 0
-          pattern: "^[A-Za-z0-9_-]+$"
-          type: string
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18663,11 +18673,16 @@ components:
           enum:
           - prompt_version
           - mask
-        environment:
-          maxLength: 150
-          minLength: 0
-          pattern: "^[A-Za-z0-9_-]+$"
-          type: string
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18742,18 +18757,26 @@ components:
             type: string
             format: uuid
     PromptVersionEnvironmentUpdate:
+      required:
+      - environments
       type: object
       properties:
-        environment:
-          maxLength: 150
-          minLength: 0
-          pattern: "^[A-Za-z0-9_-]+$"
-          type: string
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
       description: |
-        Set or clear the environment owned by a prompt version.
-        - non-null name: maps the environment to this version; if another version of the same prompt currently owns the environment, ownership is moved atomically.
-        - null: clears the environment from this version.
-        The environment must already exist in the workspace registry; unknown names return 404.
+        Replace the full set of environments assigned to a prompt version.
+        The provided set becomes the new complete set of environments for this version.
+        - Non-empty set: assigns each environment to this version; if another version of the same prompt currently owns any of those environments, ownership is moved atomically.
+        - Empty set: clears all environments from this version.
+        All environments must already exist in the workspace registry; unknown names return 404.
     Prompt_Updatable:
       required:
       - name
