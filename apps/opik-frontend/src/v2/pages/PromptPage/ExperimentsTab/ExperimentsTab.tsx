@@ -177,7 +177,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: "prompt",
-        label: "Prompt commit",
+        label: "Prompt version",
         type: COLUMN_TYPE.list,
         accessorFn: (row) => get(row, ["prompt_versions"], []),
         cell: MultiResourceCell as never,
@@ -189,7 +189,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             activeVersionId: get(data, "id", null),
           }),
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
       },
       {
         id: COLUMN_ID_ID,
