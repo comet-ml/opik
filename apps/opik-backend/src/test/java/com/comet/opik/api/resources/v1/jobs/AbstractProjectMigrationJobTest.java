@@ -154,6 +154,16 @@ class AbstractProjectMigrationJobTest {
         }
 
         @Override
+        public Duration interval() {
+            return Duration.seconds(30);
+        }
+
+        @Override
+        public Duration startupDelay() {
+            return Duration.seconds(5);
+        }
+
+        @Override
         public Duration lockTimeout() {
             return LOCK_TIMEOUT;
         }
@@ -166,6 +176,21 @@ class AbstractProjectMigrationJobTest {
         @Override
         public Duration jobTimeout() {
             return JOB_TIMEOUT;
+        }
+
+        @Override
+        public int schedulerThreadCap() {
+            return 2;
+        }
+
+        @Override
+        public int schedulerQueuedTaskCap() {
+            return 10;
+        }
+
+        @Override
+        public Duration schedulerThreadTtl() {
+            return Duration.seconds(10);
         }
     }
 }
