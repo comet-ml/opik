@@ -1,4 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
+import dayjs from "dayjs";
 import {
   FlaskConical,
   Database,
@@ -7,8 +8,10 @@ import {
   Sparkles,
   FileTerminal,
   ArrowRight,
+  ListTree,
   LucideIcon,
 } from "lucide-react";
+import lowerFirst from "lodash/lowerFirst";
 import activityCloudIcon from "@/icons/activity-cloud.svg";
 import { formatRelativeDateTime } from "@/lib/date";
 import { Skeleton } from "@/ui/skeleton";
@@ -16,13 +19,25 @@ import useRecentActivity from "@/api/projects/useRecentActivity";
 import { ActivityType, RecentActivityItem } from "@/types/recent-activity";
 
 type ActivityConfigEntry = {
-  label: string;
+  label: string | ((item: RecentActivityItem) => string);
   icon: LucideIcon;
   color: string;
   getLink: (item: RecentActivityItem, base: string) => string;
 };
 
 const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
+  [ActivityType.TRACE_DAILY]: {
+    label: (item) =>
+      `Traces logged ${lowerFirst(
+        formatRelativeDateTime(item.created_at, false),
+      )}`,
+    icon: ListTree,
+    color: "text-chart-teal",
+    getLink: (item, base) => {
+      const date = dayjs(item.created_at).format("YYYY-MM-DD");
+      return `${base}/logs?time_range=${date},${date}&logsType=traces`;
+    },
+  },
   [ActivityType.OPTIMIZATION]: {
     label: "Optimization run created",
     icon: Sparkles,
@@ -39,7 +54,7 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
   [ActivityType.DATASET_VERSION]: {
     label: "Dataset updated",
     icon: Database,
-    color: "text-chart-teal",
+    color: "text-chart-purple",
     getLink: (item, base) => `${base}/datasets/${item.id}/items`,
   },
   [ActivityType.TEST_SUITE_VERSION]: {
@@ -79,11 +94,19 @@ function ActivityItem({ item }: { item: RecentActivityItem }) {
     >
       <Icon className={`size-4 shrink-0 ${config.color}`} />
       <span className="comet-body-xs min-w-0 flex-1 truncate">
-        <span className="comet-body-xs-accented">{config.label}:</span>{" "}
+        <span className="comet-body-xs-accented">
+          {typeof config.label === "function"
+            ? config.label(item)
+            : config.label}
+          :
+        </span>{" "}
         <span className="text-muted-foreground">{item.name}</span>
       </span>
       <span className="shrink-0 text-xs text-muted-foreground group-hover:hidden">
-        {formatRelativeDateTime(item.created_at)}
+        {formatRelativeDateTime(
+          item.created_at,
+          item.type !== ActivityType.TRACE_DAILY,
+        )}
       </span>
       <ArrowRight className="hidden size-4 shrink-0 text-primary group-hover:block" />
     </Link>
@@ -106,7 +129,8 @@ function EmptyState() {
       <img src={activityCloudIcon} alt="" className="mb-4 size-10" />
       <p className="text-sm font-medium">No activity yet</p>
       <p className="mt-2 text-xs text-muted-foreground">
-        We&apos;ll display recent activity on this project here
+        Tracks meaningful activity in this project — new artifacts, updates, and
+        triggered alerts.
       </p>
     </div>
   );
