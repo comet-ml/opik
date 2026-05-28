@@ -359,6 +359,7 @@ export enum PROVIDER_MODEL_TYPE {
   MOONSHOTAI_KIMI_K2_THINKING = "moonshotai/kimi-k2-thinking",
   MOONSHOTAI_KIMI_K2_5 = "moonshotai/kimi-k2.5",
   MOONSHOTAI_KIMI_K2_6 = "moonshotai/kimi-k2.6",
+  MOONSHOTAI_KIMI_K2_6_FREE = "moonshotai/kimi-k2.6:free",
   MOONSHOTAI_KIMI_K2_FREE = "moonshotai/kimi-k2:free",
   MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT = "moonshotai/kimi-linear-48b-a3b-instruct",
   MORPH_MORPH_V3_FAST = "morph/morph-v3-fast",

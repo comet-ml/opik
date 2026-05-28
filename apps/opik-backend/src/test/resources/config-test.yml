@@ -734,6 +734,16 @@ datasetVersioningMigration:
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: 3600
 
+# Dataset Versioning runtime configuration (OPIK-6674).
+# Tunes the application-side retry guard around INSERT...SELECT into dataset_item_versions.
+# Test backoffs tolerate the testcontainer's async-insert flush window
+# (async_insert_busy_timeout_max_ms=60) while keeping tests reasonably fast.
+datasetVersioning:
+  zeroRowsRetry:
+    maxAttempts: 3
+    minBackoff: 100ms
+    maxBackoff: 500ms
+
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).
 # Runs as a recurring job, processing workspaces in batches.
