@@ -18,7 +18,7 @@ const ProjectHomePage = () => {
   const isOllieAvailable = !!usePluginsStore((state) => state.AssistantSidebar);
 
   return (
-    <div className="mx-auto flex size-full max-w-[720px] flex-col gap-6 py-6">
+    <div className="mx-auto flex size-full max-w-[720px] flex-col gap-3 py-6">
       <div className="flex items-center justify-between">
         <h1 className="comet-body-accented">
           Hi{userName ? `, ${userName}` : ""}

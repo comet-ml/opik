@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetType;
+import com.comet.opik.api.Prompt;
 import com.comet.opik.api.RecentActivity;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -14,16 +14,12 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.AgentConfigsResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.RecentActivityResourceClient;
-import com.comet.opik.domain.AgentBlueprint;
-import com.comet.opik.domain.AgentBlueprint.BlueprintType;
-import com.comet.opik.domain.AgentConfigValue;
-import com.comet.opik.domain.AgentConfigValue.ValueType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -110,7 +106,7 @@ class RecentActivityResourceTest {
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
-    private AgentConfigsResourceClient agentConfigsResourceClient;
+    private PromptResourceClient promptResourceClient;
     private RecentActivityResourceClient recentActivityResourceClient;
 
     @BeforeAll
@@ -122,7 +118,7 @@ class RecentActivityResourceTest {
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, podamFactory);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, podamFactory);
-        this.agentConfigsResourceClient = new AgentConfigsResourceClient(client);
+        this.promptResourceClient = new PromptResourceClient(client, baseURI);
         this.recentActivityResourceClient = new RecentActivityResourceClient(client, baseURI);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -174,15 +170,10 @@ class RecentActivityResourceTest {
                     .projectName(projectName).build();
             optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
-            var agentConfigValues = List.of(AgentConfigValue.builder()
-                    .key("model").value("gpt-4").type(ValueType.STRING).build());
-            agentConfigsResourceClient.createAgentConfig(AgentConfigCreate.builder()
-                    .projectId(projectId)
-                    .blueprint(AgentBlueprint.builder()
-                            .type(BlueprintType.BLUEPRINT)
-                            .description("test")
-                            .values(agentConfigValues).build())
-                    .build(), API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_CREATED);
+            var promptName = "prompt-" + UUID.randomUUID();
+            promptResourceClient.createPrompt(Prompt.builder()
+                    .name(promptName).projectId(projectId)
+                    .template("Hello {{name}}").build(), API_KEY, TEST_WORKSPACE_NAME);
 
             var result = recentActivityResourceClient.getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
 
@@ -198,7 +189,8 @@ class RecentActivityResourceTest {
                     && datasetName.equals(item.name()));
             assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.TEST_SUITE_VERSION
                     && suiteName.equals(item.name()));
-            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.AGENT_CONFIG_VERSION);
+            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.PROMPT_VERSION
+                    && item.name().startsWith(promptName));
 
             content.forEach(item -> {
                 assertThat(item.id()).isNotNull();

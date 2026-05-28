@@ -4,7 +4,7 @@ export enum ActivityType {
   TEST_SUITE_VERSION = "test_suite_version",
   ALERT_EVENT = "alert_event",
   OPTIMIZATION = "optimization",
-  AGENT_CONFIG_VERSION = "agent_config_version",
+  PROMPT_VERSION = "prompt_version",
 }
 
 export interface RecentActivityItem {
