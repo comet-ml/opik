@@ -177,6 +177,7 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
           <SlotRow
             label="Start"
             slot={slotA}
+            autoFocus
             calendarDefaultTime={calendarDefaultTime(mode, "A")}
             onChange={patchSlotA}
           />
@@ -198,6 +199,7 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
       ) : (
         <SlotRow
           slot={slotA}
+          autoFocus
           calendarDefaultTime={calendarDefaultTime(mode, "A")}
           onChange={patchSlotA}
         />
@@ -219,6 +221,7 @@ interface SlotRowProps {
   label?: string;
   slot: Slot;
   invalid?: boolean;
+  autoFocus?: boolean;
   calendarDefaultTime: SimpleTime;
   onChange: (patch: SlotPatch) => void;
 }
@@ -227,6 +230,7 @@ const SlotRow: React.FC<SlotRowProps> = ({
   label,
   slot,
   invalid,
+  autoFocus,
   calendarDefaultTime,
   onChange,
 }) => (
@@ -240,6 +244,7 @@ const SlotRow: React.FC<SlotRowProps> = ({
       <TimeChipDateInput
         slot={slot}
         invalid={invalid}
+        autoFocus={autoFocus}
         calendarDefaultTime={calendarDefaultTime}
         onChange={onChange}
       />
