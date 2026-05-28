@@ -299,10 +299,24 @@ public class ExperimentExecutionService {
                     .toList());
         }
 
-        return promptService.findVersionByIds(uniqueVersionIds)
-                .map(versionsById -> linksByVariant.stream()
-                        .map(links -> buildOpikPromptEntries(links, versionsById))
-                        .toList())
+        // A name-lookup failure should not wipe out the version-based entries — entries with
+        // null name are still useful for trace linkage. Degrade locally to an empty info map.
+        Mono<Map<UUID, PromptVersionInfo>> infoLookup = promptService.getVersionsInfoByVersionsIds(uniqueVersionIds)
+                .onErrorResume(error -> {
+                    log.warn(
+                            "Failed to resolve prompt names for opik_prompts metadata; entries will be populated without names for dataset '{}' (id '{}', versionHash '{}')",
+                            request.datasetName(), request.datasetId(), request.versionHash(), error);
+                    return Mono.just(Map.of());
+                });
+
+        return Mono.zip(promptService.findVersionByIds(uniqueVersionIds), infoLookup)
+                .map(tuple -> {
+                    Map<UUID, PromptVersion> versionsById = tuple.getT1();
+                    Map<UUID, PromptVersionInfo> infoById = tuple.getT2();
+                    return linksByVariant.stream()
+                            .map(links -> buildOpikPromptEntries(links, versionsById, infoById))
+                            .toList();
+                })
                 .onErrorResume(error -> {
                     log.warn(
                             "Failed to resolve prompt versions for opik_prompts metadata; traces will not be linked to their prompt(s) for dataset '{}' (id '{}', versionHash '{}')",
@@ -314,24 +328,26 @@ public class ExperimentExecutionService {
     }
 
     private static List<OpikPromptEntry> buildOpikPromptEntries(List<Experiment.PromptVersionLink> links,
-            Map<UUID, PromptVersion> versionsById) {
+            Map<UUID, PromptVersion> versionsById, Map<UUID, PromptVersionInfo> infoById) {
         if (links == null || links.isEmpty()) {
             return List.of();
         }
         return links.stream()
-                .map(link -> toOpikPromptEntry(link, versionsById.get(link.id())))
+                .map(link -> toOpikPromptEntry(link, versionsById.get(link.id()), infoById.get(link.id())))
                 .filter(Objects::nonNull)
                 .toList();
     }
 
-    private static OpikPromptEntry toOpikPromptEntry(Experiment.PromptVersionLink link, PromptVersion version) {
+    private static OpikPromptEntry toOpikPromptEntry(Experiment.PromptVersionLink link, PromptVersion version,
+            PromptVersionInfo info) {
         if (version == null) {
             return null;
         }
         UUID promptId = version.promptId() != null ? version.promptId() : link.promptId();
+        String name = link.promptName() != null ? link.promptName() : (info != null ? info.promptName() : null);
         return OpikPromptEntry.builder()
                 .id(promptId)
-                .name(link.promptName())
+                .name(name)
                 .templateStructure(version.templateStructure())
                 .version(OpikPromptEntry.Version.builder()
                         .id(version.id())
