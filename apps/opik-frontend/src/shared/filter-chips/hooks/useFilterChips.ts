@@ -169,12 +169,11 @@ const useFilterChips = ({
         (prev) => (isEqual(prev[id], value) ? prev : { ...prev, [id]: value }),
         { kind: "apply", id, value },
       );
-      if (!pinnedIds.includes(id)) analytics.trackPinned(id);
       setPinnedIds((prev = defaultPinned) =>
         prev.includes(id) ? prev : [...prev, id],
       );
     },
-    [writeValues, setPinnedIds, defaultPinned, analytics, pinnedIds],
+    [writeValues, setPinnedIds, defaultPinned],
   );
 
   const clearValue = useCallback(

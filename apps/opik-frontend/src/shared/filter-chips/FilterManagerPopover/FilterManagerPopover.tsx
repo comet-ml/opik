@@ -82,11 +82,11 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
   };
 
   const handleSelectUnpinned = (def: ChipDefinition) => {
+    onPinChip(def.id);
     if (def.kind === "boolean") {
       onApplyValue(def.id, { applied: true });
       return;
     }
-    onPinChip(def.id);
     // Open the chip popover only after Radix has finished tearing down the
     // dropdown — see onCloseAutoFocus below. Avoids the stray outside-click
     // event that otherwise races with the mounting chip popover.
