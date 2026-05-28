@@ -4,6 +4,7 @@ import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -35,6 +36,7 @@ import java.util.Set;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
 import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_PARAM;
 
 @RequiredArgsConstructor
@@ -200,6 +202,28 @@ class RemoteAuthService implements AuthService {
                     .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
                     .map(workspace -> new WorkspaceInfo(workspace.workspaceId(), workspace.workspaceName()))
                     .toList();
+        }
+    }
+
+    @Override
+    public void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo) {
+        String path = contextInfo.uriInfo().getRequestUri().getPath();
+        try (var response = client.target(URI.create(reactServiceUrl.url()))
+                .path("opik")
+                .path("auth-by-username")
+                .request()
+                .accept(MediaType.APPLICATION_JSON)
+                .header(OAUTH_USERNAME_HEADER, token.userName())
+                .post(Entity.json(AuthRequest.builder()
+                        .workspaceName(token.workspaceName())
+                        .path(path)
+                        .requiredPermissions(contextInfo.requiredPermissions())
+                        .build()))) {
+            var authResponse = verifyResponse(response);
+            var credentials = ValidatedAuthCredentials.from(authResponse);
+            // Token is the bearer; setCredentialIntoContext stores it under the existing apiKey slot so downstream
+            // request-scoped logging treats it like any other inbound credential.
+            setCredentialIntoContext(credentials, token.workspaceName(), null);
         }
     }
 

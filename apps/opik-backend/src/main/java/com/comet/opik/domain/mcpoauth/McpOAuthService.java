@@ -5,8 +5,12 @@ import com.comet.opik.infrastructure.McpOAuthConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.NotAuthorizedException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -195,6 +199,15 @@ public class McpOAuthService {
 
             return null;
         });
+    }
+
+    public ValidatedToken validateAccessTokenForWorkspace(@NonNull String token, String headerWorkspace) {
+        ValidatedToken validated = validateAccessToken(token)
+                .orElseThrow(() -> new NotAuthorizedException(TOKEN_TYPE_BEARER));
+        if (StringUtils.isNotBlank(headerWorkspace) && !headerWorkspace.equals(validated.workspaceName())) {
+            throw new ClientErrorException("workspace does not match access token", Response.Status.FORBIDDEN);
+        }
+        return validated;
     }
 
     public Optional<ValidatedToken> validateAccessToken(@NonNull String token) {

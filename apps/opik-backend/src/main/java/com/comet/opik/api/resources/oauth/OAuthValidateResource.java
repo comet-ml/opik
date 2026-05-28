@@ -17,14 +17,13 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.Strings;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_TYPE_BEARER;
 
 @Path("/opik/auth-oauth")
 @Timed
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OAuthValidateResource {
-
-    private static final String BEARER_PREFIX = TOKEN_TYPE_BEARER + " ";
 
     private final @NonNull McpOAuthService mcpOAuthService;
 

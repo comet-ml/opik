@@ -10,6 +10,8 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
+
 @UtilityClass
 public class McpOAuthTokens {
 
@@ -42,6 +44,13 @@ public class McpOAuthTokens {
 
     public static boolean isOAuthToken(String token) {
         return isAccessToken(token) || isRefreshToken(token);
+    }
+
+    public static boolean isMcpOAuthToken(String authHeader) {
+        if (!Strings.CI.startsWith(authHeader, BEARER_PREFIX)) {
+            return false;
+        }
+        return isAccessToken(authHeader.substring(BEARER_PREFIX.length()).trim());
     }
 
     public static String hash(String token) {

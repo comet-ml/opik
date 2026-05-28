@@ -17,6 +17,10 @@ public class OAuthConstants {
 
     // RFC 6750 — bearer token type
     public static final String TOKEN_TYPE_BEARER = "Bearer";
+    public static final String BEARER_PREFIX = TOKEN_TYPE_BEARER + " ";
+
+    // Header used by opik-backend → comet-backend /opik/auth-by-username to carry the OAuth-resolved userName.
+    public static final String OAUTH_USERNAME_HEADER = "X-Opik-OAuth-Username";
 
     // RFC 8414 — token endpoint auth methods
     public static final String AUTH_METHOD_NONE = "none";

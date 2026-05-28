@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.utils.WorkspaceUtils;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
@@ -24,6 +25,11 @@ public interface AuthService {
     // comet-backend; OSS returns the hardcoded admin/default.
     List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken);
     UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName);
+
+    // OAuth bearer (opik_at_) was validated locally before this is called. Cloud forwards (userName, workspace,
+    // requiredPermissions) to comet-backend /opik/auth-by-username for the regular role-based authorization check;
+    // OSS populates RequestContext directly from the token (single-user installation).
+    void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo);
 }
 
 @RequiredArgsConstructor
@@ -61,5 +67,12 @@ class AuthServiceImpl implements AuthService {
     public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
         return new UserWorkspace(ProjectService.DEFAULT_USER, ProjectService.DEFAULT_WORKSPACE_ID,
                 ProjectService.DEFAULT_WORKSPACE_NAME);
+    }
+
+    @Override
+    public void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo) {
+        requestContext.get().setUserName(token.userName());
+        requestContext.get().setWorkspaceId(token.workspaceId());
+        requestContext.get().setWorkspaceName(token.workspaceName());
     }
 }

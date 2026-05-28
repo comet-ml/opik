@@ -1,5 +1,8 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.domain.mcpoauth.McpOAuthService;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
+import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
@@ -17,10 +20,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
+
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AuthFilter implements ContainerRequestFilter {
 
     private final AuthService authService;
+    private final McpOAuthService mcpOAuthService;
     private final jakarta.inject.Provider<RequestContext> requestContext;
 
     @Override
@@ -33,11 +39,20 @@ public class AuthFilter implements ContainerRequestFilter {
         UriInfo uriInfo = context.getUriInfo();
 
         if (Pattern.matches("/v1/private/.*", uriInfo.getRequestUri().getPath())) {
-            authService.authenticate(headers, sessionToken, ContextInfoHolder.builder()
+            ContextInfoHolder contextInfo = ContextInfoHolder.builder()
                     .uriInfo(uriInfo)
                     .method(context.getMethod())
                     .requiredPermissions(getRequiredPermissions(context))
-                    .build());
+                    .build();
+            String authHeader = context.getHeaderString(HttpHeaders.AUTHORIZATION);
+            if (McpOAuthTokens.isMcpOAuthToken(authHeader)) {
+                String token = authHeader.substring(BEARER_PREFIX.length()).trim();
+                ValidatedToken validatedToken = mcpOAuthService.validateAccessTokenForWorkspace(
+                        token, context.getHeaderString(RequestContext.WORKSPACE_HEADER));
+                authService.authorizeOAuth(validatedToken, contextInfo);
+            } else {
+                authService.authenticate(headers, sessionToken, contextInfo);
+            }
         } else if (Pattern.matches("/v1/session/.*", uriInfo.getRequestUri().getPath())) {
             authService.authenticateSession(sessionToken);
         }
