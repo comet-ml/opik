@@ -865,6 +865,7 @@ def _copy_traces_and_spans(
             thread_id=source_trace.thread_id,
             project_name=target_project_name,
             source=getattr(source_trace, "source", None) or "experiment",
+            environment=source_trace.environment,
         )
         if inner_progress is not None:
             inner_progress.tick(label=f"trace {index}/{total_traces}")
@@ -1516,6 +1517,7 @@ def _emit_spans_for_trace(
             total_cost=span_dict.get("total_estimated_cost"),
             last_updated_at=span_dict.get("last_updated_at"),
             source=span_dict.get("source") or "experiment",
+            environment=span_dict.get("environment"),
         )
         client._streamer.put(msg)
         spans_emitted += 1

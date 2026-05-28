@@ -39,6 +39,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @ImplementedBy(PairingServiceImpl.class)
@@ -46,7 +47,13 @@ public interface PairingService {
 
     CreateSessionResponse create(String workspaceId, String userName, CreateSessionRequest request);
 
-    UUID activate(String workspaceId, String userName, UUID sessionId, ActivateRequest request);
+    ActivationResult activate(String workspaceId, String userName, UUID sessionId, ActivateRequest request);
+
+    // Workspace-scoped read used to tag opik_connect_failed analytics with runner_type.
+    Optional<RunnerType> peekSessionType(String workspaceId, UUID sessionId);
+
+    record ActivationResult(UUID runnerId, RunnerType runnerType) {
+    }
 }
 
 @Slf4j
@@ -148,7 +155,7 @@ class PairingServiceImpl implements PairingService {
     }
 
     @Override
-    public UUID activate(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID sessionId,
+    public ActivationResult activate(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID sessionId,
             @NonNull ActivateRequest request) {
 
         RMap<String, String> sessionMap = redisClient.getMap(PairingSessionKey.key(sessionId));
@@ -233,9 +240,26 @@ class PairingServiceImpl implements PairingService {
                             .build());
         }
 
-        log.info("pairing session activated sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}'",
-                sessionId, runnerId, workspaceId, userName);
-        return runnerId;
+        log.info(
+                "pairing session activated sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}' type='{}'",
+                sessionId, runnerId, workspaceId, userName, runnerType.getValue());
+        return new ActivationResult(runnerId, runnerType);
+    }
+
+    @Override
+    public Optional<RunnerType> peekSessionType(@NonNull String workspaceId, @NonNull UUID sessionId) {
+        try {
+            RMap<String, String> sessionMap = redisClient.getMap(PairingSessionKey.key(sessionId));
+            Map<String, String> fields = sessionMap.readAllMap();
+            if (fields.isEmpty() || !workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
+                return Optional.empty();
+            }
+            String storedType = fields.get(FIELD_TYPE);
+            return storedType == null ? Optional.empty() : Optional.of(RunnerType.fromValue(storedType));
+        } catch (RuntimeException e) {
+            log.debug("peekSessionType failed for sessionId='{}' workspaceId='{}'", sessionId, workspaceId, e);
+            return Optional.empty();
+        }
     }
 
     // HMAC-SHA256(activationKey, sessionIdBytes(16) || SHA256(runnerNameBytes)(32)).

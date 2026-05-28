@@ -562,6 +562,122 @@ describe("Opik prompt operations", () => {
 
       expect(loggerErrorSpy).toHaveBeenCalled();
     });
+
+    it("should retrieve prompt by sequential version number", async () => {
+      const mockSearchResponse = {
+        content: [
+          {
+            id: "prompt-id",
+            name: "test-prompt",
+          },
+        ],
+      };
+
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        versionNumber: "v3",
+        template: "Version 3 content",
+        type: "mustache",
+        createdAt: new Date("2024-01-03"),
+      };
+
+      getPromptsSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockSearchResponse)
+      );
+
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      const result = await client.getPrompt({
+        name: "test-prompt",
+        version: "v3",
+      });
+
+      expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
+        {
+          name: "test-prompt",
+          projectName: "opik-sdk-typescript",
+          versionNumber: "v3",
+        },
+        client.api.requestOptions
+      );
+      expect(result).toBeInstanceOf(Prompt);
+      expect(result?.version).toBe("v3");
+      expect(result?.commit).toBe("abc123de");
+      expect(result?.prompt).toBe("Version 3 content");
+    });
+
+    it("should not leak the `version` SDK-only field into the REST request body", async () => {
+      const mockSearchResponse = {
+        content: [{ id: "prompt-id", name: "test-prompt" }],
+      };
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        versionNumber: "v1",
+        template: "Hello",
+        type: "mustache",
+      };
+
+      getPromptsSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockSearchResponse)
+      );
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      await client.getPrompt({ name: "test-prompt", version: "v1" });
+
+      const callArgs = retrievePromptVersionSpy.mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(callArgs).toBeDefined();
+      expect(callArgs.version).toBeUndefined();
+      expect(callArgs.versionNumber).toBe("v1");
+    });
+
+    it("should reject without hitting the network when both commit and version are provided", async () => {
+      await expect(
+        client.getPrompt({
+          name: "test-prompt",
+          commit: "abc123de",
+          version: "v3",
+        })
+      ).rejects.toThrow(/Provide either `commit` or `version`/);
+
+      // Validation must short-circuit before any REST traffic
+      expect(getPromptsSpy).not.toHaveBeenCalled();
+      expect(retrievePromptVersionSpy).not.toHaveBeenCalled();
+    });
+
+    it("should populate prompt.version from the API response versionNumber field", async () => {
+      const mockSearchResponse = {
+        content: [{ id: "prompt-id", name: "test-prompt" }],
+      };
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        versionNumber: "v7",
+        template: "Hi",
+        type: "mustache",
+      };
+
+      getPromptsSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockSearchResponse)
+      );
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      const result = await client.getPrompt({ name: "test-prompt" });
+      expect(result?.version).toBe("v7");
+    });
   });
 
   describe("searchPrompts", () => {

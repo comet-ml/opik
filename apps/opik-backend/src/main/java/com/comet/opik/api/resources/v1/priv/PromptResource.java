@@ -354,6 +354,30 @@ public class PromptResource {
         return Response.ok(promptVersion).build();
     }
 
+    @GET
+    @Path("/{promptId}/versions/by-number/{versionNumber}")
+    @Operation(operationId = "getPromptVersionByNumber", summary = "Get prompt version by sequential number", description = "Get a prompt version by its sequential v<N> number for the given prompt.", responses = {
+            @ApiResponse(responseCode = "200", description = "Prompt version resource", content = @Content(schema = @Schema(implementation = PromptVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+    })
+    @JsonView({PromptVersion.View.Detail.class})
+    public Response getPromptVersionByNumber(@PathParam("promptId") UUID promptId,
+            @PathParam("versionNumber") @Pattern(regexp = "v\\d+", message = "must match v<N>") @Size(max = 10, message = "cannot exceed 10 characters") String versionNumber) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting prompt version by prompt_id '{}', version_number '{}' on workspace_id '{}'",
+                promptId, versionNumber, workspaceId);
+
+        PromptVersion promptVersion = promptService.getVersionByNumber(promptId, versionNumber);
+
+        log.info("Got prompt version by prompt_id '{}', version_number '{}' on workspace_id '{}'",
+                promptId, versionNumber, workspaceId);
+
+        return Response.ok(promptVersion).build();
+    }
+
     @PATCH
     @Path("/versions")
     @Operation(operationId = "updatePromptVersions", summary = "Update prompt versions", description = """
@@ -400,11 +424,11 @@ public class PromptResource {
     public Response setPromptVersionEnvironment(@PathParam("versionId") UUID versionId,
             @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionEnvironmentUpdate.class))) @Valid @NotNull PromptVersionEnvironmentUpdate request) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Setting environment '{}' on prompt version '{}' on workspace_id '{}'",
-                request.environment(), versionId, workspaceId);
-        promptService.setVersionEnvironment(versionId, request.environment());
-        log.info("Successfully set environment '{}' on prompt version '{}' on workspace_id '{}'",
-                request.environment(), versionId, workspaceId);
+        log.info("Setting environments '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environments(), versionId, workspaceId);
+        promptService.setVersionEnvironment(versionId, request.environments());
+        log.info("Successfully set environments '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environments(), versionId, workspaceId);
         return Response.noContent().build();
     }
 
@@ -422,14 +446,17 @@ public class PromptResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving prompt name '{}' with commit '{}', environment '{}' on workspace_id '{}'",
-                request.name(), request.commit(), request.environment(), workspaceId);
+        log.info(
+                "Retrieving prompt name '{}' with commit '{}', environment '{}', version_number '{}' on workspace_id '{}'",
+                request.name(), request.commit(), request.environment(), request.versionNumber(), workspaceId);
 
         PromptVersion promptVersion = promptService.retrievePromptVersion(
-                request.name(), request.commit(), request.environment(), request.projectName());
+                request.name(), request.commit(), request.environment(), request.versionNumber(),
+                request.projectName());
 
-        log.info("Retrieved prompt name '{}' with commit '{}', environment '{}' on workspace_id '{}'", request.name(),
-                request.commit(), request.environment(), workspaceId);
+        log.info(
+                "Retrieved prompt name '{}' with commit '{}', environment '{}', version_number '{}' on workspace_id '{}'",
+                request.name(), request.commit(), request.environment(), request.versionNumber(), workspaceId);
 
         var responseBuilder = Response.ok(promptVersion);
         String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();

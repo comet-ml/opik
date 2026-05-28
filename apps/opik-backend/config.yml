@@ -1376,6 +1376,27 @@ datasetVersioningMigration:
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
 
+# Dataset Versioning runtime configuration (OPIK-6674).
+# Tunes the application-side retry guard around the INSERT...SELECT operations that
+# materialise new dataset versions in ClickHouse (COPY_VERSION_ITEMS / EDIT_ITEM_VIA_SELECT_INSERT).
+# If the SELECT lands on a stale replica it can return 0 rows; without this guard the
+# new version row would be silently committed with truncated items_total.
+datasetVersioning:
+  zeroRowsRetry:
+    # Default: 3
+    # Description: Number of retry attempts when an INSERT...SELECT writes 0 rows
+    # while the input set was non-empty. Total call count = maxAttempts + 1 (initial + retries).
+    # Set to 0 to disable retries (the guard still surfaces the failure as an exception).
+    maxAttempts: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_ATTEMPTS:-3}
+    # Default: 100ms
+    # Description: Minimum backoff between retries. Actual delay grows exponentially
+    # from this value up to maxBackoff.
+    minBackoff: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MIN_BACKOFF:-100ms}
+    # Default: 1s
+    # Description: Maximum backoff between retries. Caps the exponential growth of
+    # the per-attempt delay.
+    maxBackoff: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_BACKOFF:-1s}
+
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).
 # Runs as a recurring job, processing workspaces in batches.
@@ -1408,6 +1429,104 @@ experimentProjectMigration:
   # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
   # idle window and don't churn on every tick.
   schedulerThreadTtl: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+datasetProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${DATASET_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${DATASET_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of datasets to update per MySQL batch
+  datasetBatchSize: ${DATASET_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${DATASET_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${DATASET_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${DATASET_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${DATASET_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${DATASET_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Prompt Project Migration configuration (D4)
+# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Mirrors
+# experimentProjectMigration. Operational prerequisite (enforced via the rollout runbook, not in
+# code): D1 (OPIK-6184) and OPIK-6579 must be fully shipped to this environment first because the
+# only inference signal is experiment.project_id.
+promptProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${PROMPT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${PROMPT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of prompts to update per MySQL UPDATE batch
+  promptBatchSize: ${PROMPT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${PROMPT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${PROMPT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas. Intentionally shorter than
+  # jobTimeout: the WHERE project_id IS NULL predicate makes the cycle idempotent so replica
+  # overlap after lock expiry is safe.
+  lockTimeout: ${PROMPT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it
+  lockWaitTime: ${PROMPT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${PROMPT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the idle window.
+  schedulerThreadTtl: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+automationRuleProjectMigration:
+  # Master switch — set to true to activate the recurring Quartz job.
+  enabled: ${AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED:-false}
+  # Max workspaces processed per cycle (global, across all replicas via distributed lock).
+  workspacesPerRun: ${AUTOMATION_RULE_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions.
+  maxRulesPerCycle: ${AUTOMATION_RULE_PROJECT_MIGRATION_MAX_RULES_PER_CYCLE:-100}
+  # How often the Quartz job fires.
+  interval: ${AUTOMATION_RULE_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay after application start before the first cycle runs.
+  startupDelay: ${AUTOMATION_RULE_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Redis distributed lock held by the winning replica — must be shorter than jobTimeout.
+  lockTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # How long to wait trying to acquire the lock before giving up (non-blocking skip).
+  lockWaitTime: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Hard timeout for the entire cycle — safety net if processing stalls.
+  jobTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated bounded-elastic scheduler — isolates migration from the shared reactive chain.
+  schedulerThreadCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-2}
+  schedulerQueuedTaskCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+alertProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${ALERT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${ALERT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-100}
+  # Number of orphan alerts to process per workspace per cycle
+  alertBatchSize: ${ALERT_PROJECT_MIGRATION_ALERT_BATCH_SIZE:-100}
+  # Interval between recurring job runs
+  interval: ${ALERT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${ALERT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${ALERT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${ALERT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${ALERT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list

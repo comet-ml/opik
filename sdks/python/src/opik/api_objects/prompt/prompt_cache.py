@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
-_CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str], str]
+_CacheKey = typing.Tuple[
+    str, typing.Optional[str], typing.Optional[str], str, typing.Optional[str]
+]
+#                         name  commit               project_name           tmpl  mask_id
 
 _RefreshCallback = typing.Callable[[], typing.Optional[BasePrompt]]
 
@@ -67,6 +70,7 @@ class PromptCache:
         key: _CacheKey,
         fetch_fn: _RefreshCallback,
         ttl_seconds: typing.Optional[int],
+        refresh_callback: typing.Optional[_RefreshCallback] = None,
     ) -> typing.Optional[BasePrompt]:
         with self._lock:
             entry = self._entries.get(key)
@@ -81,7 +85,7 @@ class PromptCache:
         cached = _CachedPrompt(
             prompt=prompt,
             ttl_seconds=ttl_seconds,
-            refresh_callback=None if ttl_seconds is None else fetch_fn,
+            refresh_callback=refresh_callback,
         )
         with self._lock:
             self._entries[key] = cached
@@ -168,6 +172,8 @@ def get_or_fetch(
     project_name: typing.Optional[str],
     template_structure: str,
     fetch_fn: typing.Callable[[], typing.Optional[_PromptT]],
+    mask_id: typing.Optional[str] = None,
+    version: typing.Optional[str] = None,
 ) -> typing.Optional[_PromptT]:
     """Return a cached prompt or fetch, cache, and return it.
 
@@ -175,14 +181,27 @@ def get_or_fetch(
     Otherwise calls *fetch_fn* to produce one. If *fetch_fn* returns None
     (prompt not found), returns None without caching.
 
-    For unpinned prompts (commit is None), *fetch_fn* is also registered as
-    the background-refresh callback so the cache stays fresh.
+    ``commit`` and ``version`` reuse the same cache key slot (commits are 8
+    hex chars, versions match ``v\\d+``, so they cannot collide). Only
+    ``commit`` pins indefinitely — a sequential ``version`` like ``"v3"``
+    can be reassigned by the backend if the underlying version is deleted
+    and recreated, so it is subject to the normal TTL refresh just like
+    "latest" lookups.
+
+    For masked prompts (mask_id is not None), the entry is TTL-evicted like
+    normal unpinned entries but has no background refresh callback.
     """
-    key: _CacheKey = (name, commit, project_name, template_structure)
+    identifier = version if version is not None else commit
     ttl = opik_config.OpikConfig().prompt_cache_ttl_seconds
+    ttl_seconds = None if commit is not None else ttl
+    refresh_callback = (
+        fetch_fn if (ttl_seconds is not None and mask_id is None) else None
+    )
+    key: _CacheKey = (name, identifier, project_name, template_structure, mask_id)
     result = _cache.get_or_fetch(
         key=key,
         fetch_fn=fetch_fn,
-        ttl_seconds=None if commit is not None else ttl,
+        ttl_seconds=ttl_seconds,
+        refresh_callback=refresh_callback,
     )
     return typing.cast(typing.Optional[_PromptT], result)

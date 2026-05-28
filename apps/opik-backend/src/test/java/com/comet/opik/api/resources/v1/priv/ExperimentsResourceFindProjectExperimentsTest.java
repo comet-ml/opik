@@ -157,6 +157,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
         return PromptVersionLink.builder()
                 .id(promptVersion.id())
                 .commit(promptVersion.commit())
+                .versionNumber(promptVersion.versionNumber())
                 .promptId(promptVersion.promptId())
                 .promptName(promptName)
                 .build();

@@ -1833,6 +1833,11 @@ paths:
         - Returns 409 Conflict if baseVersion is stale and override is not set
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
       operationId: applyDatasetItemChanges
       parameters:
       - name: id
@@ -1987,6 +1992,10 @@ paths:
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
       operationId: createOrUpdateDatasetItems
       requestBody:
         content:
@@ -6178,6 +6187,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/{promptId}/versions/by-number/{versionNumber}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt version by sequential number
+      description: Get a prompt version by its sequential v<N> number for the given
+        prompt.
+      operationId: getPromptVersionByNumber
+      parameters:
+      - name: promptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: versionNumber
+        in: path
+        required: true
+        schema:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+      responses:
+        "200":
+          description: Prompt version resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
   /v1/private/prompts/{id}/versions:
     get:
       tags:
@@ -8899,6 +8950,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -8968,6 +9026,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
     AlertTrigger_Write:
       required:
       - event_type
@@ -9109,6 +9174,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -9315,6 +9387,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9395,6 +9472,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
       description: List of annotation queues to create
     AnnotationQueueBatch:
       required:
@@ -9487,6 +9569,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9544,6 +9631,11 @@ components:
           items:
             minLength: 1
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
     AssertionResultBatch:
       required:
       - assertion_results
@@ -12382,6 +12474,17 @@ components:
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
           format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "Optional. Dataset to read carry-forward rows from when materializing\
+            \ the new version. Required together with copy_from_version_id. When null,\
+            \ carry-forward rows are read from the destination dataset's prior version."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: Optional. Version within copy_from_dataset_id to read carry-forward
+            rows from. Required together with copy_from_dataset_id.
+          format: uuid
     ExperimentItem:
       required:
       - dataset_item_id
@@ -12597,6 +12700,17 @@ components:
           description: "Optional batch group ID to group multiple batches into a single\
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
+          format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "Optional. Dataset to read carry-forward rows from when materializing\
+            \ the new version. Required together with copy_from_version_id. When null,\
+            \ carry-forward rows are read from the destination dataset's prior version."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: Optional. Version within copy_from_dataset_id to read carry-forward
+            rows from. Required together with copy_from_dataset_id.
           format: uuid
     DatasetItem_Write:
       required:
@@ -18212,6 +18326,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18234,6 +18352,18 @@ components:
           minLength: 0
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18337,6 +18467,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18359,6 +18493,18 @@ components:
           minLength: 0
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18520,6 +18666,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18542,6 +18692,18 @@ components:
           minLength: 0
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18591,7 +18753,14 @@ components:
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
           description: "If provided, resolves to the version mapped to this environment\
-            \ for the prompt; mutually exclusive with commit"
+            \ for the prompt; mutually exclusive with commit and version_number"
+        version_number:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+          description: "If provided, resolves to the version with this sequential\
+            \ number (e.g. v3); mutually exclusive with commit and environment"
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -18609,18 +18778,26 @@ components:
             type: string
             format: uuid
     PromptVersionEnvironmentUpdate:
+      required:
+      - environments
       type: object
       properties:
-        environment:
-          maxLength: 150
-          minLength: 0
-          pattern: "^[A-Za-z0-9_-]+$"
-          type: string
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
       description: |
-        Set or clear the environment owned by a prompt version.
-        - non-null name: maps the environment to this version; if another version of the same prompt currently owns the environment, ownership is moved atomically.
-        - null: clears the environment from this version.
-        The environment must already exist in the workspace registry; unknown names return 404.
+        Replace the full set of environments assigned to a prompt version.
+        The provided set becomes the new complete set of environments for this version.
+        - Non-empty set: assigns each environment to this version; if another version of the same prompt currently owns any of those environments, ownership is moved atomically.
+        - Empty set: clears all environments from this version.
+        All environments must already exist in the workspace registry; unknown names return 404.
     Prompt_Updatable:
       required:
       - name
@@ -18834,6 +19011,7 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled

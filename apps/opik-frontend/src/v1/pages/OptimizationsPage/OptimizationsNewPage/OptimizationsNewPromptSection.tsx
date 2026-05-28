@@ -22,6 +22,10 @@ import OptimizationTemperatureConfig from "@/v1/pages-shared/optimizations/Optim
 import { OPTIMIZATION_MESSAGE_TYPE_OPTIONS } from "@/constants/optimizations";
 import PromptsSelectBox from "@/v1/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import {
+  PROMPT_SAVE_AS_CHAT_TOOLTIP,
+  PROMPT_UNSAVED_TOOLTIP,
+} from "@/constants/prompts";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -132,8 +136,8 @@ const OptimizationsNewPromptSection: React.FC<
             <TooltipWrapper
               content={
                 hasUnsavedChatPromptChanges
-                  ? "This prompt version hasn't been saved"
-                  : "Save as chat prompt"
+                  ? PROMPT_UNSAVED_TOOLTIP
+                  : PROMPT_SAVE_AS_CHAT_TOOLTIP
               }
             >
               <Button

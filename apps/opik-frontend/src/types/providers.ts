@@ -228,6 +228,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
+  GOOGLE_GEMINI_3_5_FLASH = "google/gemini-3.5-flash",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -358,6 +359,7 @@ export enum PROVIDER_MODEL_TYPE {
   MOONSHOTAI_KIMI_K2_THINKING = "moonshotai/kimi-k2-thinking",
   MOONSHOTAI_KIMI_K2_5 = "moonshotai/kimi-k2.5",
   MOONSHOTAI_KIMI_K2_6 = "moonshotai/kimi-k2.6",
+  MOONSHOTAI_KIMI_K2_6_FREE = "moonshotai/kimi-k2.6:free",
   MOONSHOTAI_KIMI_K2_FREE = "moonshotai/kimi-k2:free",
   MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT = "moonshotai/kimi-linear-48b-a3b-instruct",
   MORPH_MORPH_V3_FAST = "morph/morph-v3-fast",
@@ -537,6 +539,7 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_6_PLUS = "qwen/qwen3.6-plus",
   QWEN_QWEN3_6_PLUS_PREVIEW_FREE = "qwen/qwen3.6-plus-preview:free",
   QWEN_QWEN3_6_PLUS_FREE = "qwen/qwen3.6-plus:free",
+  QWEN_QWEN3_7_MAX = "qwen/qwen3.7-max",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
   REKA_REKA_EDGE = "reka/reka-edge",
@@ -582,6 +585,7 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_20_MULTI_AGENT = "x-ai/grok-4.20-multi-agent",
   X_AI_GROK_4_20_MULTI_AGENT_BETA = "x-ai/grok-4.20-multi-agent-beta",
   X_AI_GROK_4_3 = "x-ai/grok-4.3",
+  X_AI_GROK_BUILD_0_1 = "x-ai/grok-build-0.1",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
   XIAOMI_MIMO_V2_OMNI = "xiaomi/mimo-v2-omni",
@@ -630,13 +634,14 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_1_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
   GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
+  GEMINI_3_5_FLASH = "gemini-3.5-flash",
   GEMINI_PRO_VISION = "gemini-pro-vision",
+  GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
+  GEMMA_4_31B_IT = "gemma-4-31b-it",
   LYRIA_3_CLIP_PREVIEW = "lyria-3-clip-preview",
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
-  GEMMA_4_31B_IT = "gemma-4-31b-it",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -651,6 +656,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_FLASH_PREVIEW = "vertex_ai/gemini-3-flash-preview",
   VERTEX_AI_GEMINI_3_PRO = "vertex_ai/gemini-3-pro-preview",
   VERTEX_AI_GEMINI_3_1_PRO = "vertex_ai/gemini-3.1-pro-preview",
+  VERTEX_AI_GEMINI_3_5_FLASH = "vertex_ai/gemini-3.5-flash",
 }
 
 export interface ProviderModelsMap {

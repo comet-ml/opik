@@ -15,6 +15,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.json.Json;
 
 import java.time.Instant;
@@ -38,6 +39,9 @@ public record PromptVersion(
         @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version short unique identifier, generated if absent. it must be 8 characters long", requiredMode = Schema.RequiredMode.NOT_REQUIRED, pattern = ValidationUtils.COMMIT_PATTERN) @CommitValidation String commit,
+        @JsonView({Prompt.View.Detail.class,
+                PromptVersion.View.Public.class,
+                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "sequential version number in the format v<N>; null for masks") String versionNumber,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @NotBlank String template,
         @Json @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
@@ -47,7 +51,9 @@ public record PromptVersion(
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version type discriminator; defaults to prompt_version") PromptVersionType versionType,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
-                PromptVersion.View.Detail.class}) @Nullable @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment,
+                PromptVersion.View.Detail.class}) @Deprecated @Schema(deprecated = true, description = "Deprecated: use 'environments' instead") @Nullable @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) @Nullable @Size(max = 100, message = "cannot exceed 100 environments") Set<@Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String> environments,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
@@ -99,7 +105,7 @@ public record PromptVersion(
     }
 
     @JsonIgnore
-    @AssertTrue(message = "environment cannot be set on a mask version") public boolean isEnvironmentCompatibleWithVersionType() {
-        return environment == null || versionType() != PromptVersionType.MASK;
+    @AssertTrue(message = "environments cannot be set on a mask version") public boolean isEnvironmentCompatibleWithVersionType() {
+        return CollectionUtils.isEmpty(environments) || versionType() != PromptVersionType.MASK;
     }
 }

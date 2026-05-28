@@ -39,16 +39,18 @@ import org.quartz.UnableToInterruptJobException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuples;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -183,7 +185,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                         log.debug(
                                 "Skipping alert '{}' (id: '{}') - already fired by another instance recently",
                                 alert.name(), alert.id());
-                        return Mono.<Void>empty();
+                        return Mono.empty();
                     }
 
                     // Lock acquired - this instance will process the alert
@@ -209,9 +211,8 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             log.info("Skipping trigger evaluation due to job interruption for alert '{}'", alert.id());
             return Mono.empty();
         }
-        // Extract all configurations from trigger
-        List<TriggerConfig> configs = extractTriggerConfig(trigger, alert.projectId());
-        if (configs.isEmpty()) {
+        List<TriggerConfigGroup> groups = extractTriggerConfigGroups(trigger, alert.projectId());
+        if (groups.isEmpty()) {
             log.warn(
                     "Skipping alert: no trigger configs found for alert '{}' (id: '{}'), trigger: '{}', trigger id: '{}'",
                     alert.name(), alert.id(), trigger.eventType(), trigger.id());
@@ -219,133 +220,149 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             return Mono.empty();
         }
 
-        log.info("Evaluating '{}' config(s) for alert '{}' (id: '{}'), event type: '{}'",
-                configs.size(), alert.name(), alert.id(), trigger.eventType());
+        log.info("Evaluating '{}' group(s) for alert '{}' (id: '{}'), event type: '{}'",
+                groups.size(), alert.name(), alert.id(), trigger.eventType());
 
-        // Evaluate all configs and fire alerts for each one that triggers
-        return Flux.fromIterable(configs)
-                .flatMap(config -> evaluateSingleConfig(alert, trigger, config))
+        return Flux.fromIterable(groups)
+                .flatMap(group -> evaluateGroup(alert, trigger, group))
                 .then();
     }
 
-    private Mono<Void> evaluateSingleConfig(Alert alert, AlertTrigger trigger, TriggerConfig config) {
+    private Mono<Void> evaluateGroup(Alert alert, AlertTrigger trigger, TriggerConfigGroup group) {
         log.info(
-                "Evaluating config for alert '{}' (id: '{}'), event type: '{}', name: '{}', operator: '{}', threshold: '{}', window: '{}'s",
-                alert.name(), alert.id(), trigger.eventType(), config.name(), config.operator(), config.threshold(),
-                config.windowSeconds());
+                "Evaluating group_index='{}' ('{}' config(s)) for alert '{}' (id: '{}'), event type: '{}'",
+                group.groupIndex(), group.configs().size(), alert.name(), alert.id(), trigger.eventType());
 
-        // Calculate time window for query
-        Instant endTime = Instant.now();
-        Instant startTime = endTime.minusSeconds(config.windowSeconds());
-
-        // Query metrics based on trigger type - this needs to happen with context already set
-        Mono<BigDecimal> metricValueMono = switch (trigger.eventType()) {
-            case TRACE_COST -> projectMetricsDAO.getTotalCost(
-                    config.projectIds(),
-                    startTime,
-                    endTime);
-            case TRACE_LATENCY -> projectMetricsDAO.getAverageDuration(
-                    config.projectIds(),
-                    startTime,
-                    endTime);
-            case TRACE_ERRORS -> projectMetricsDAO.getTotalTraceErrors(
-                    config.projectIds(),
-                    startTime,
-                    endTime);
-            case TRACE_FEEDBACK_SCORE -> projectMetricsDAO.getAverageFeedbackScore(
-                    config.projectIds(),
-                    startTime,
-                    endTime,
-                    EntityType.TRACE,
-                    config.name());
-            case TRACE_THREAD_FEEDBACK_SCORE -> projectMetricsDAO.getAverageFeedbackScore(
-                    config.projectIds(),
-                    startTime,
-                    endTime,
-                    EntityType.THREAD,
-                    config.name());
-            default -> Mono.just(BigDecimal.ZERO);
-        };
-
-        // For latency, threshold is in seconds but metric value is in milliseconds
-        // Convert threshold to milliseconds for comparison
-        BigDecimal thresholdForComparison = trigger.eventType() == AlertEventType.TRACE_LATENCY
-                ? config.threshold().multiply(MILLISECONDS_PER_SECOND)
-                : config.threshold();
-
-        return metricValueMono
-                .doOnNext(
-                        value -> log.info(
-                                "Metric value retrieved: '{}', for workspace '{}', alert '{}', trigger: '{}', name: '{}'",
-                                value, alert.workspaceId(), alert.name(), trigger.eventType(), config.name()))
-                .doOnError(error -> log.error(
-                        "Error retrieving metric value: '{}', for workspace '{}', alert '{}', trigger: '{}', name: '{}'",
-                        error.getMessage(), alert.workspaceId(), alert.name(), trigger.eventType(), config.name(),
-                        error))
-                .switchIfEmpty(Mono.defer(() -> {
-                    alertsSkipped.add(1);
-                    log.info("No metric data found for alert '{}' (id: '{}'), trigger: '{}', name: '{}' in time window",
-                            alert.name(), alert.id(), trigger.eventType(), config.name());
-                    return Mono.empty();
-                }))
-                .flatMap(metricValue -> {
-                    // Compare with threshold
-                    if (compareMetric(metricValue, thresholdForComparison, config.operator())) {
-                        log.info("Alert '{}' (id: '{}') triggered: {} = '{}', threshold = '{}', name: '{}'",
-                                alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison,
-                                config.name());
-
-                        alertsFired.add(1);
-                        var metricValueFinal = trigger.eventType() == AlertEventType.TRACE_LATENCY
-                                ? metricValue.divide(MILLISECONDS_PER_SECOND, 9, RoundingMode.HALF_UP) // Convert back to seconds for payload
-                                : metricValue;
-
-                        // Wrap blocking JSON serialization in Mono.fromCallable
-                        return Mono.fromCallable(() -> {
-                            String eventId = idGenerator.generateId().toString();
-
-                            // Create MetricsAlertPayload DTO
-                            var metricsPayload = MetricsAlertPayload.builder()
-                                    .eventType(trigger.eventType().name())
-                                    .metricName(trigger.eventType().getValue())
-                                    .metricValue(NumberUtils.formatDecimal(metricValueFinal))
-                                    .threshold(NumberUtils.formatDecimal(config.threshold()))
-                                    .windowSeconds(config.windowSeconds())
-                                    .feedbackScoreName(config.name())
-                                    .projectIds(config.projectIds() != null
-                                            ? config.projectIds().stream().map(UUID::toString)
-                                                    .collect(Collectors.joining(","))
-                                            : "")
-                                    .projectNames(config.projectIds() != null
-                                            ? projectService
-                                                    .findByIds(alert.workspaceId(), Set.copyOf(config.projectIds()))
-                                                    .stream()
-                                                    .map(Project::name)
-                                                    .collect(Collectors.joining(","))
-                                            : "")
-                                    .build();
-
-                            String payloadJson = JsonUtils.writeValueAsString(metricsPayload);
-                            return Tuples.of(eventId, payloadJson);
-                        })
-                                .flatMap(payload -> alertWebhookSender.createAndSendWebhook(
-                                        alert,
-                                        alert.workspaceId(),
-                                        "",
-                                        trigger.eventType(),
-                                        List.of(payload.getT1()),
-                                        List.of(payload.getT2()),
-                                        List.of("system"))); // System user for automated alerts
+        // flatMapSequential preserves source order in the emitted results so that
+        // results.getFirst() below deterministically refers to the first configured condition
+        // (it still fetches metrics concurrently, just orders downstream emissions).
+        return Flux.fromIterable(group.configs())
+                .flatMapSequential(config -> fetchMetricValue(alert, trigger, config)
+                        .map(value -> new ConditionResult(config, value))
+                        .defaultIfEmpty(new ConditionResult(config, null)))
+                .collectList()
+                .flatMap(results -> {
+                    // If any condition in the group has no metric data, the group cannot be evaluated.
+                    boolean anyMissing = results.stream().anyMatch(r -> r.metricValue() == null);
+                    if (anyMissing) {
+                        alertsSkipped.add(1);
+                        log.info(
+                                "Skipping group: missing metric data for at least one condition; alert '{}' (id: '{}'), trigger '{}', group_index '{}'",
+                                alert.name(), alert.id(), trigger.eventType(), group.groupIndex());
+                        return Mono.empty();
                     }
 
-                    alertsSkipped.add(1);
-                    log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}', name: '{}'",
-                            alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison,
-                            config.name());
-                    return Mono.<Void>empty();
+                    // AND across all configs in the group; if any condition fails, the group does not fire.
+                    boolean allCross = results.stream().allMatch(r -> compareMetric(
+                            r.metricValue(),
+                            thresholdForComparison(r.config(), trigger.eventType()),
+                            r.config().operator()));
+                    if (!allCross) {
+                        alertsSkipped.add(1);
+                        log.debug(
+                                "Group not satisfied for alert '{}' (id: '{}'), trigger '{}', group_index '{}'",
+                                alert.name(), alert.id(), trigger.eventType(), group.groupIndex());
+                        return Mono.empty();
+                    }
+
+                    alertsFired.add(1);
+                    log.info(
+                            "Alert '{}' (id: '{}') triggered: group_index='{}', trigger='{}', conditions='{}'",
+                            alert.name(), alert.id(), group.groupIndex(), trigger.eventType(), results.size());
+
+                    return Mono.fromCallable(() -> buildAndSerializePayload(alert, trigger, group, results))
+                            .flatMap(payload -> alertWebhookSender.createAndSendWebhook(
+                                    alert,
+                                    alert.workspaceId(),
+                                    "",
+                                    trigger.eventType(),
+                                    List.of(payload.eventId()),
+                                    List.of(payload.json()),
+                                    List.of("system"))); // System user for automated alerts
                 })
                 .contextWrite(context -> AsyncUtils.setRequestContext(context, "system", alert.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<BigDecimal> fetchMetricValue(Alert alert, AlertTrigger trigger, TriggerConfig config) {
+        log.info(
+                "Fetching metric for alert '{}' (id: '{}'), event type: '{}', name: '{}', operator: '{}', threshold: '{}', window: '{}'s",
+                alert.name(), alert.id(), trigger.eventType(), config.name(), config.operator(), config.threshold(),
+                config.windowSeconds());
+
+        Instant endTime = Instant.now();
+        Instant startTime = endTime.minusSeconds(config.windowSeconds());
+
+        return switch (trigger.eventType()) {
+            case TRACE_COST -> projectMetricsDAO.getTotalCost(config.projectIds(), startTime, endTime);
+            case TRACE_LATENCY -> projectMetricsDAO.getAverageDuration(config.projectIds(), startTime, endTime);
+            case TRACE_ERRORS -> projectMetricsDAO.getTotalTraceErrors(config.projectIds(), startTime, endTime);
+            case TRACE_FEEDBACK_SCORE -> projectMetricsDAO.getAverageFeedbackScore(
+                    config.projectIds(), startTime, endTime, EntityType.TRACE, config.name());
+            case TRACE_THREAD_FEEDBACK_SCORE -> projectMetricsDAO.getAverageFeedbackScore(
+                    config.projectIds(), startTime, endTime, EntityType.THREAD, config.name());
+            default -> Mono.just(BigDecimal.ZERO);
+        };
+    }
+
+    private BigDecimal thresholdForComparison(TriggerConfig config, AlertEventType eventType) {
+        // For latency, threshold is in seconds but metric value is in milliseconds.
+        return eventType == AlertEventType.TRACE_LATENCY
+                ? config.threshold().multiply(MILLISECONDS_PER_SECOND)
+                : config.threshold();
+    }
+
+    private PayloadAndId buildAndSerializePayload(Alert alert, AlertTrigger trigger, TriggerConfigGroup group,
+            List<ConditionResult> results) {
+        String eventId = idGenerator.generateId().toString();
+
+        List<MetricsAlertPayload.Condition> conditions = results.stream()
+                .map(r -> {
+                    BigDecimal valueForPayload = trigger.eventType() == AlertEventType.TRACE_LATENCY
+                            ? r.metricValue().divide(MILLISECONDS_PER_SECOND, 9, RoundingMode.HALF_UP)
+                            : r.metricValue();
+                    return MetricsAlertPayload.Condition.builder()
+                            .metricName(trigger.eventType().getValue())
+                            .metricValue(NumberUtils.formatDecimal(valueForPayload))
+                            .threshold(NumberUtils.formatDecimal(r.config().threshold()))
+                            .windowSeconds(r.config().windowSeconds())
+                            .feedbackScoreName(r.config().name())
+                            .operator(r.config().operator().getValue())
+                            .build();
+                })
+                .toList();
+
+        // Populate the scalar fields from the first contributing condition so that webhook consumers
+        // built against the pre-grouping payload shape keep working unchanged.
+        ConditionResult primary = results.getFirst();
+        BigDecimal primaryValue = trigger.eventType() == AlertEventType.TRACE_LATENCY
+                ? primary.metricValue().divide(MILLISECONDS_PER_SECOND, 9, RoundingMode.HALF_UP)
+                : primary.metricValue();
+
+        List<UUID> projectIds = primary.config().projectIds();
+        String projectIdsStr = projectIds != null
+                ? projectIds.stream().map(UUID::toString).collect(Collectors.joining(","))
+                : "";
+        String projectNamesStr = projectIds != null
+                ? projectService.findByIds(alert.workspaceId(), Set.copyOf(projectIds)).stream()
+                        .map(Project::name).collect(Collectors.joining(","))
+                : "";
+
+        var metricsPayload = MetricsAlertPayload.builder()
+                .eventType(trigger.eventType().name())
+                .metricName(trigger.eventType().getValue())
+                .metricValue(NumberUtils.formatDecimal(primaryValue))
+                .threshold(NumberUtils.formatDecimal(primary.config().threshold()))
+                .windowSeconds(primary.config().windowSeconds())
+                .feedbackScoreName(primary.config().name())
+                .projectIds(projectIdsStr)
+                .projectNames(projectNamesStr)
+                .groupIndex(group.groupIndex())
+                .conditions(conditions)
+                .build();
+
+        String payloadJson = JsonUtils.writeValueAsString(metricsPayload);
+        return new PayloadAndId(eventId, payloadJson);
     }
 
     private boolean compareMetric(BigDecimal metricValue, BigDecimal threshold, Operator operator) {
@@ -355,7 +372,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         };
     }
 
-    private List<TriggerConfig> extractTriggerConfig(AlertTrigger trigger, UUID projectId) {
+    private List<TriggerConfigGroup> extractTriggerConfigGroups(AlertTrigger trigger, UUID projectId) {
         if (CollectionUtils.isEmpty(trigger.triggerConfigs())) {
             log.warn("Trigger has no configuration for metrics alert: event type: '{}', trigger id: '{}'",
                     trigger.eventType(), trigger.id());
@@ -365,7 +382,6 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         Set<UUID> collected = AlertScopeUtils.collectProjectIds(projectId, trigger.triggerConfigs());
         List<UUID> projectIds = collected.isEmpty() ? null : List.copyOf(collected);
 
-        // Determine which threshold config type to use based on event type
         AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {
             case TRACE_COST -> AlertTriggerConfigType.THRESHOLD_COST;
             case TRACE_LATENCY -> AlertTriggerConfigType.THRESHOLD_LATENCY;
@@ -375,56 +391,84 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                     "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType()));
         };
 
-        // Extract ALL threshold configs of the appropriate type (not just the first one)
         final List<UUID> finalProjectIds = projectIds;
-        return trigger.triggerConfigs().stream()
-                .filter(c -> c.type() == thresholdConfigType)
-                .map(config -> {
-                    // Extract threshold
-                    var thresholdString = config.configValue().get(THRESHOLD_CONFIG_KEY);
-                    if (thresholdString == null) {
-                        throw new IllegalArgumentException(
-                                "Missing config value for key '%s' in trigger of type '%s'"
-                                        .formatted(THRESHOLD_CONFIG_KEY, thresholdConfigType));
-                    }
-                    BigDecimal threshold = new BigDecimal(thresholdString);
+        final AlertTriggerConfigType finalThresholdConfigType = thresholdConfigType;
 
-                    // Extract window
-                    var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
-                    if (windowString == null) {
-                        throw new IllegalArgumentException(
-                                "Missing config value for key '%s' in trigger of type '%s'"
-                                        .formatted(WINDOW_CONFIG_KEY, thresholdConfigType));
-                    }
-                    long windowSeconds = Long.parseLong(windowString);
+        List<IndexedTriggerConfig> indexed = trigger.triggerConfigs().stream()
+                .filter(c -> c.type() == finalThresholdConfigType)
+                .map(c -> new IndexedTriggerConfig(
+                        c.groupIndex(),
+                        buildTriggerConfig(c, trigger.eventType(), finalProjectIds, finalThresholdConfigType)))
+                .toList();
 
-                    // Extract name and operator for feedback score alerts
-                    String name = null;
-                    Operator operator = Operator.GREATER_THAN;
-                    if (trigger.eventType() == AlertEventType.TRACE_FEEDBACK_SCORE
-                            || trigger.eventType() == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
-                        name = config.configValue().get(NAME_CONFIG_KEY);
-                        if (name == null) {
-                            throw new IllegalArgumentException(
-                                    "Missing config value for key '%s' in trigger of type '%s'"
-                                            .formatted(NAME_CONFIG_KEY, thresholdConfigType));
-                        }
-                        var operatorString = config.configValue().get(OPERATOR_CONFIG_KEY);
-                        if (operatorString == null) {
-                            throw new IllegalArgumentException(
-                                    "Missing config value for key '%s' in trigger of type '%s'"
-                                            .formatted(OPERATOR_CONFIG_KEY, thresholdConfigType));
-                        }
-                        operator = Operator.fromString(operatorString);
-                    }
+        // Partition by group_index: null → singleton legacy group; same int value collapses to one AND-group.
+        Map<Integer, List<TriggerConfig>> namedGroups = new LinkedHashMap<>();
+        List<TriggerConfigGroup> groups = new ArrayList<>();
+        for (IndexedTriggerConfig entry : indexed) {
+            if (entry.groupIndex() == null) {
+                groups.add(new TriggerConfigGroup(null, List.of(entry.config())));
+            } else {
+                namedGroups.computeIfAbsent(entry.groupIndex(), k -> new ArrayList<>()).add(entry.config());
+            }
+        }
+        namedGroups.forEach((idx, configs) -> groups.add(new TriggerConfigGroup(idx, List.copyOf(configs))));
+        return groups;
+    }
 
-                    return new TriggerConfig(finalProjectIds, threshold, windowSeconds, name, operator);
-                })
-                .collect(Collectors.toList());
+    private TriggerConfig buildTriggerConfig(com.comet.opik.api.AlertTriggerConfig config, AlertEventType eventType,
+            List<UUID> projectIds, AlertTriggerConfigType thresholdConfigType) {
+        var thresholdString = config.configValue().get(THRESHOLD_CONFIG_KEY);
+        if (thresholdString == null) {
+            throw new IllegalArgumentException(
+                    "Missing config value for key '%s' in trigger of type '%s'"
+                            .formatted(THRESHOLD_CONFIG_KEY, thresholdConfigType));
+        }
+        BigDecimal threshold = new BigDecimal(thresholdString);
+
+        var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
+        if (windowString == null) {
+            throw new IllegalArgumentException(
+                    "Missing config value for key '%s' in trigger of type '%s'"
+                            .formatted(WINDOW_CONFIG_KEY, thresholdConfigType));
+        }
+        long windowSeconds = Long.parseLong(windowString);
+
+        String name = null;
+        Operator operator = Operator.GREATER_THAN;
+        if (eventType == AlertEventType.TRACE_FEEDBACK_SCORE
+                || eventType == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
+            name = config.configValue().get(NAME_CONFIG_KEY);
+            if (name == null) {
+                throw new IllegalArgumentException(
+                        "Missing config value for key '%s' in trigger of type '%s'"
+                                .formatted(NAME_CONFIG_KEY, thresholdConfigType));
+            }
+            var operatorString = config.configValue().get(OPERATOR_CONFIG_KEY);
+            if (operatorString == null) {
+                throw new IllegalArgumentException(
+                        "Missing config value for key '%s' in trigger of type '%s'"
+                                .formatted(OPERATOR_CONFIG_KEY, thresholdConfigType));
+            }
+            operator = Operator.fromString(operatorString);
+        }
+
+        return new TriggerConfig(projectIds, threshold, windowSeconds, name, operator);
     }
 
     private record TriggerConfig(List<UUID> projectIds, BigDecimal threshold, long windowSeconds, String name,
             Operator operator) {
+    }
+
+    private record TriggerConfigGroup(Integer groupIndex, List<TriggerConfig> configs) {
+    }
+
+    private record ConditionResult(TriggerConfig config, BigDecimal metricValue) {
+    }
+
+    private record IndexedTriggerConfig(Integer groupIndex, TriggerConfig config) {
+    }
+
+    private record PayloadAndId(String eventId, String json) {
     }
 
     @RequiredArgsConstructor

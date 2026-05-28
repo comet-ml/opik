@@ -138,6 +138,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW("google/gemini-3.1-flash-lite-preview"),
     GOOGLE_GEMINI_3_1_PRO_PREVIEW("google/gemini-3.1-pro-preview"),
     GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS("google/gemini-3.1-pro-preview-customtools"),
+    GOOGLE_GEMINI_3_5_FLASH("google/gemini-3.5-flash"),
     GOOGLE_GEMMA_2_27B_IT("google/gemma-2-27b-it"),
     GOOGLE_GEMMA_2_9B_IT("google/gemma-2-9b-it"),
     GOOGLE_GEMMA_3_12B_IT("google/gemma-3-12b-it"),
@@ -268,6 +269,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MOONSHOTAI_KIMI_K2_THINKING("moonshotai/kimi-k2-thinking"),
     MOONSHOTAI_KIMI_K2_5("moonshotai/kimi-k2.5"),
     MOONSHOTAI_KIMI_K2_6("moonshotai/kimi-k2.6"),
+    MOONSHOTAI_KIMI_K2_6_FREE("moonshotai/kimi-k2.6:free"),
     MOONSHOTAI_KIMI_K2_FREE("moonshotai/kimi-k2:free"),
     MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT("moonshotai/kimi-linear-48b-a3b-instruct"),
     MORPH_MORPH_V3_FAST("morph/morph-v3-fast"),
@@ -447,6 +449,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     QWEN_QWEN3_6_PLUS("qwen/qwen3.6-plus"),
     QWEN_QWEN3_6_PLUS_PREVIEW_FREE("qwen/qwen3.6-plus-preview:free"),
     QWEN_QWEN3_6_PLUS_FREE("qwen/qwen3.6-plus:free"),
+    QWEN_QWEN3_7_MAX("qwen/qwen3.7-max"),
     QWEN_QWQ_32B("qwen/qwq-32b"),
     RAIFLE_SORCERERLM_8X22B("raifle/sorcererlm-8x22b"),
     REKA_REKA_EDGE("reka/reka-edge"),
@@ -492,6 +495,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     X_AI_GROK_4_20_MULTI_AGENT("x-ai/grok-4.20-multi-agent"),
     X_AI_GROK_4_20_MULTI_AGENT_BETA("x-ai/grok-4.20-multi-agent-beta"),
     X_AI_GROK_4_3("x-ai/grok-4.3"),
+    X_AI_GROK_BUILD_0_1("x-ai/grok-build-0.1"),
     X_AI_GROK_CODE_FAST_1("x-ai/grok-code-fast-1"),
     XIAOMI_MIMO_V2_FLASH("xiaomi/mimo-v2-flash"),
     XIAOMI_MIMO_V2_OMNI("xiaomi/mimo-v2-omni"),
@@ -535,6 +539,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
             GOOGLE_GEMINI_2_5_FLASH,
             GOOGLE_GEMINI_2_5_PRO,
+            GOOGLE_GEMINI_3_1_FLASH_LITE,
             GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW,
             GOOGLE_GEMINI_3_1_PRO_PREVIEW,
             GOOGLE_GEMINI_3_FLASH_PREVIEW,
@@ -585,7 +590,9 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             OPENROUTER_FREE,
             QWEN_QWEN_2_5_72B_INSTRUCT,
             QWEN_QWEN_2_5_CODER_32B_INSTRUCT,
-            QWEN_QWQ_32B);
+            QWEN_QWQ_32B,
+            XIAOMI_MIMO_V2_5,
+            XIAOMI_MIMO_V2_5_PRO);
 
     private final String value;
 

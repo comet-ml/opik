@@ -13,7 +13,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
@@ -37,7 +39,15 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .map(JsonNode::asText)
                 .map(PromptVersionType::fromString)
                 .orElse(PromptVersionType.PROMPT_VERSION);
-        String environment = Optional.ofNullable(jsonNode.get("environment"))
+        Set<String> environments = Optional.ofNullable(jsonNode.get("environments"))
+                .filter(node -> !node.isNull() && node.isArray())
+                .map(node -> {
+                    Set<String> result = new HashSet<>();
+                    node.forEach(e -> result.add(e.asText()));
+                    return result.isEmpty() ? null : result;
+                })
+                .orElse(null);
+        String versionNumber = Optional.ofNullable(jsonNode.get("version_number"))
                 .filter(node -> !node.isNull())
                 .map(JsonNode::asText)
                 .orElse(null);
@@ -46,12 +56,13 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .id(UUID.fromString(jsonNode.get("id").asText()))
                 .promptId(UUID.fromString(jsonNode.get("prompt_id").asText()))
                 .commit(jsonNode.get("commit").asText())
+                .versionNumber(versionNumber)
                 .template(template)
                 .metadata(jsonNode.get("metadata"))
                 .changeDescription(jsonNode.get("change_description").asText())
                 .type(type)
                 .versionType(versionType)
-                .environment(environment)
+                .environments(environments)
                 .variables(TemplateParseUtils.extractVariables(template, type))
                 .tags(jsonNode.has("tags") && jsonNode.get("tags") != null && !jsonNode.get("tags").isNull()
                         ? JsonUtils.readValue(jsonNode.get("tags").asText(), SetFlatArgumentFactory.TYPE_REFERENCE)

@@ -104,7 +104,7 @@ jobs:
             
             # 2. Restore timestamps for existing files from gh-pages git history
             echo "Restoring file timestamps from git history..."
-            git ls-files -z | while read -d $'\0' file; do
+            git ls-files -z | while read -r -d $'\0' file; do
               if [ -f "$file" ]; then
                 TIME=$(git log -1 --format="%cI" -- "$file")
                 if [ -n "$TIME" ]; then
@@ -143,11 +143,15 @@ jobs:
             git config user.email "actions@users.noreply.github.com"
             git ls-files -o --exclude-standard -z | xargs -0 -r git add
             git add "${INDEX_FILE}" README.md
-            git commit -m "Release Opik helm chart $VERSION"
-            git push   
+            if git diff --staged --quiet; then
+              echo "::warning title=helm publish::No changes to commit; chart ${VERSION} is already up to date in gh-pages."
+            else
+              git commit -m "Release Opik helm chart $VERSION"
+              git push
+            fi
 
         - name: Summary
           run: |
-            echo "Helm chart is published, version is : $VERSION" >> $GITHUB_STEP_SUMMARY
+            echo "Helm chart is published, version is : $VERSION" >> "$GITHUB_STEP_SUMMARY"
 
 

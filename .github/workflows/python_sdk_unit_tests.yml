@@ -45,7 +45,7 @@ jobs:
         run: env
 
       - name: Print event object
-        run: cat $GITHUB_EVENT_PATH
+        run: cat "$GITHUB_EVENT_PATH"
 
       - name: Print the PR title
         env:

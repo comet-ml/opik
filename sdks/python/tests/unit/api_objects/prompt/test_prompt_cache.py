@@ -6,11 +6,16 @@ from unittest import mock
 
 import pytest
 
+from opik import config as opik_config
 from opik.api_objects.prompt import prompt_cache
 from opik.api_objects.prompt.prompt_cache import (
     PromptCache,
     get_global_cache,
 )
+
+
+def _get_ttl() -> int:
+    return opik_config.OpikConfig().prompt_cache_ttl_seconds
 
 
 @pytest.fixture(autouse=True)
@@ -115,32 +120,34 @@ class TestPromptCache:
 
 
 class TestBackgroundRefresh:
-    def test_refresh__stale_entry__updates_prompt(self, cache):
-        new_prompt = _make_mock_prompt(commit="refreshed")
+    def test_refresh__stale_entry__updates_prompt(self):
+        new_prompt = _make_mock_prompt(commit=None)
         callback = mock.Mock(return_value=new_prompt)
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=0)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
             callback.reset_mock()
             callback.return_value = new_prompt
 
-            mock_time.monotonic.return_value = base + 0.1
+            mock_time.monotonic.return_value = base + _get_ttl() + 1
             mock_time.sleep = mock.Mock()
             cache._refresh_stale_entries()
 
             assert callback.call_count >= 1
-            assert cache.get(("p", None, None, "text")) is new_prompt
+            assert cache.get(("p", None, None, "text", None)) is new_prompt
 
-    def test_refresh__non_stale_entry__skips_callback(self, cache):
-        p = _make_mock_prompt()
+    def test_refresh__non_stale_entry__skips_callback(self):
+        p = _make_mock_prompt(commit=None)
         callback = mock.Mock(return_value=p)
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=300)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
             callback.reset_mock()
 
             mock_time.monotonic.return_value = base + 0.2
@@ -148,16 +155,17 @@ class TestBackgroundRefresh:
 
             callback.assert_not_called()
 
-    def test_refresh__callback_raises__thread_survives(self, cache):
-        p = _make_mock_prompt()
+    def test_refresh__callback_raises__thread_survives(self):
+        p = _make_mock_prompt(commit=None)
         callback = mock.Mock(side_effect=[p, RuntimeError("boom")])
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=0)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
 
-            mock_time.monotonic.return_value = base + 0.1
+            mock_time.monotonic.return_value = base + _get_ttl() + 1
             cache._refresh_stale_entries()
 
             assert cache._thread.is_alive()
@@ -220,6 +228,69 @@ class TestGetOrFetch:
         assert r2 is p2
 
 
+class TestGetOrFetchVersionSelector:
+    """Tests for the ``version`` parameter on the module-level ``get_or_fetch``."""
+
+    def test_get_or_fetch__different_versions__return_separate_entries(self):
+        p1 = _make_mock_prompt(commit="commitA")
+        p2 = _make_mock_prompt(commit="commitB")
+        fetch1 = mock.Mock(return_value=p1)
+        fetch2 = mock.Mock(return_value=p2)
+
+        first = prompt_cache.get_or_fetch("p", None, None, "text", fetch1, version="v1")
+        second = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch2, version="v2"
+        )
+
+        assert first is p1
+        assert second is p2
+        fetch1.assert_called_once()
+        fetch2.assert_called_once()
+
+    def test_get_or_fetch__same_version__second_call_hits_cache(self):
+        p = _make_mock_prompt()
+        fetch_fn = mock.Mock(return_value=p)
+
+        first = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch_fn, version="v2"
+        )
+        second = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch_fn, version="v2"
+        )
+
+        assert first is second is p
+        fetch_fn.assert_called_once()
+
+    def test_get_or_fetch__commit_pin_and_version_pin__do_not_collide(self):
+        p_commit = _make_mock_prompt(commit="abc12345")
+        p_version = _make_mock_prompt(commit="def67890")
+        fetch_commit = mock.Mock(return_value=p_commit)
+        fetch_version = mock.Mock(return_value=p_version)
+
+        from_commit = prompt_cache.get_or_fetch(
+            "p", "abc12345", None, "text", fetch_commit
+        )
+        from_version = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch_version, version="v3"
+        )
+
+        assert from_commit is p_commit
+        assert from_version is p_version
+        fetch_commit.assert_called_once()
+        fetch_version.assert_called_once()
+
+    def test_get_or_fetch__version_selector__starts_refresh_thread(self):
+        # Sequential versions can be reassigned by the backend if the underlying
+        # version is deleted and recreated, so they must follow the normal TTL
+        # refresh (not pinned indefinitely).
+        p = _make_mock_prompt()
+        fetch_fn = mock.Mock(return_value=p)
+        prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn, version="v1")
+        cache = get_global_cache()
+        assert cache._thread is not None
+        assert cache._thread.is_alive()
+
+
 class TestPromptCacheEdgeCases:
     def test_get_or_fetch__multiple_unpinned_inserts__reuses_single_refresh_thread(
         self, cache
@@ -259,19 +330,20 @@ class TestPromptCacheEdgeCases:
         cache.get_or_fetch(("p", None, None, "text"), fetch_fn, ttl_seconds=300)
         assert cache.get(("p", None, None, "text")) is None
 
-    def test_refresh__callback_returns_none__preserves_original_prompt(self, cache):
-        original = _make_mock_prompt(commit="original")
+    def test_refresh__callback_returns_none__preserves_original_prompt(self):
+        original = _make_mock_prompt(commit=None)
         callback = mock.Mock(side_effect=[original, None])
 
+        cache = get_global_cache()
         base = time.monotonic()
         with mock.patch("opik.api_objects.prompt.prompt_cache.time") as mock_time:
             mock_time.monotonic.return_value = base
-            cache.get_or_fetch(("p", None, None, "text"), callback, ttl_seconds=0)
+            prompt_cache.get_or_fetch("p", None, None, "text", callback)
 
-            mock_time.monotonic.return_value = base + 0.1
+            mock_time.monotonic.return_value = base + _get_ttl() + 1
             cache._refresh_stale_entries()
 
-        assert cache.get(("p", None, None, "text")) is original
+        assert cache.get(("p", None, None, "text", None)) is original
 
     def test_lru_eviction__oldest_entry_removed_when_max_size_exceeded(self):
         cache = PromptCache(max_size=3)

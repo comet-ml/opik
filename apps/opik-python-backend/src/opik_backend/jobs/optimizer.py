@@ -19,7 +19,7 @@ from opentelemetry import trace
 from opik_backend.executor_isolated import IsolatedSubprocessExecutor
 from opik_backend.subprocess_logger import create_optimization_log_collector
 from opik_backend.studio import (
-    LLM_API_KEYS,
+    OPIK_GATEWAY_BASE_URL,
     OptimizationJobContext,
     OPTIMIZATION_TIMEOUT_SECS,
     CancellationHandle,
@@ -114,11 +114,12 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
             f"for workspace: {context.workspace_name}"
         )
         
-        # Prepare environment variables for subprocess
-        # Pass LLM API keys and Opik configuration
-        env_vars = {
-            **LLM_API_KEYS,  # OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
-        }
+        # Route all LLM calls through the Opik backend gateway.
+        # LiteLLM reads OPENAI_API_BASE and uses it as an OpenAI-compatible endpoint.
+        env_vars = {}
+        if OPIK_GATEWAY_BASE_URL:
+            env_vars["OPENAI_API_BASE"] = OPIK_GATEWAY_BASE_URL
+        env_vars["OPENAI_API_KEY"] = context.opik_api_key or "opik-local"
         
         # Mark subprocess as Optimization Studio execution (SDK display behavior).
         env_vars["OPIK_OPTIMIZATION_STUDIO"] = "true"

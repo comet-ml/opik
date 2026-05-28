@@ -7,7 +7,9 @@ import Loader from "@/shared/Loader/Loader";
 const TAB_ROUTE_MAP: Record<string, string> = {
   "annotation-queues": "/annotation-queues",
   rules: "/online-evaluation",
-  configuration: "/agent-configuration",
+  // `agent-configuration` was removed; the closest replacement for old
+  // configuration deep-links is the Prompts library.
+  configuration: "/prompts",
   insights: "/dashboards",
   metrics: "/dashboards",
 };

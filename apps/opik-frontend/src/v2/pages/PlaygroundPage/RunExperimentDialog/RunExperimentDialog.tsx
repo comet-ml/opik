@@ -389,6 +389,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
         <DialogContent
+          data-testid="run-experiment-dialog"
           className="max-w-lg sm:max-w-[560px]"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
@@ -405,6 +406,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
               className="w-fit justify-start"
             >
               <ToggleGroupItem
+                data-testid="run-experiment-dialog-source-dataset"
                 value={DATASET_TYPE.DATASET}
                 aria-label="Dataset"
                 className="gap-1.5"
@@ -413,6 +415,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
                 <span>Dataset</span>
               </ToggleGroupItem>
               <ToggleGroupItem
+                data-testid="run-experiment-dialog-source-suite"
                 value={DATASET_TYPE.TEST_SUITE}
                 aria-label="Test suite"
                 className="gap-1.5"

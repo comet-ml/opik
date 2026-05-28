@@ -65,6 +65,10 @@ class Experiment:
     def tags(self) -> Optional[List[str]]:
         return self._tags
 
+    @property
+    def prompts(self) -> Optional[List[base_prompt.BasePrompt]]:
+        return self._prompts
+
     @functools.cached_property
     def dataset_id(self) -> str:
         return self._rest_client.datasets.get_dataset_by_identifier(

@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.0.15](https://img.shields.io/badge/Version-2.0.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.15](https://img.shields.io/badge/AppVersion-2.0.15-informational?style=flat-square)
+![Version: 2.0.48](https://img.shields.io/badge/Version-2.0.48-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.48](https://img.shields.io/badge/AppVersion-2.0.48-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm

@@ -57,6 +57,14 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
+    public ZeroRowsRetryPolicy getZeroRowsRetryPolicy(OpikConfiguration configuration) {
+        var retry = configuration.getDatasetVersioning().zeroRowsRetry();
+        return new ZeroRowsRetryPolicy(retry.maxAttempts(),
+                retry.minBackoff().toJavaDuration(), retry.maxBackoff().toJavaDuration());
+    }
+
+    @Provides
+    @Singleton
     @Named("Database Analytics Database Name")
     public String getDatabaseName() {
         return databaseAnalyticsFactory.getDatabaseName();

@@ -124,11 +124,30 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatasetVersioningConfig datasetVersioning = DatasetVersioningConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private MigrationConfig migration = new MigrationConfig();
 
     @Valid @NotNull @JsonProperty
     private ExperimentProjectMigrationConfig experimentProjectMigration = ExperimentProjectMigrationConfig.builder()
             .build();
+
+    @Valid @NotNull @JsonProperty
+    private DatasetProjectMigrationConfig datasetProjectMigration = DatasetProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private PromptProjectMigrationConfig promptProjectMigration = PromptProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private AutomationRuleProjectMigrationConfig automationRuleProjectMigration = AutomationRuleProjectMigrationConfig
+            .builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private AlertProjectMigrationConfig alertProjectMigration = AlertProjectMigrationConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();

@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
@@ -550,7 +551,7 @@ public class TracesResource {
         log.info("Added comment with id '{}' for trace with id '{}' on workspaceId '{}'", comment.id(), id,
                 workspaceId);
 
-        return Response.created(uri).build();
+        return Response.created(uri).entity(new CreateCommentResponse(commentId)).build();
     }
 
     @GET
@@ -1018,7 +1019,7 @@ public class TracesResource {
         log.info("Added comment with id '{}' for thread with id '{}' on workspaceId '{}'", comment.id(), id,
                 workspaceId);
 
-        return Response.created(uri).build();
+        return Response.created(uri).entity(new CreateCommentResponse(commentId)).build();
     }
 
     @GET

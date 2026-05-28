@@ -8,12 +8,16 @@ export interface PromptVersion {
     promptId?: string;
     /** version short unique identifier, generated if absent. it must be 8 characters long */
     commit?: string;
+    /** sequential version number in the format v<N>; null for masks */
+    versionNumber?: string;
     template: string;
     metadata?: OpikApi.JsonNode;
     type?: OpikApi.PromptVersionType;
     /** version type discriminator; defaults to prompt_version */
     versionType?: OpikApi.PromptVersionVersionType;
+    /** Deprecated: use 'environments' instead */
     environment?: string;
+    environments?: string[];
     changeDescription?: string;
     tags?: string[];
     variables?: string[];

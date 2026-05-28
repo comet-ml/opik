@@ -23,6 +23,11 @@ class PromptVersionPublic(UniversalBaseModel):
     version short unique identifier, generated if absent. it must be 8 characters long
     """
 
+    version_number: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    sequential version number in the format v<N>; null for masks
+    """
+
     template: str
     metadata: typing.Optional[JsonNodePublic] = None
     type: typing.Optional[PromptVersionPublicType] = None
@@ -31,7 +36,12 @@ class PromptVersionPublic(UniversalBaseModel):
     version type discriminator; defaults to prompt_version
     """
 
-    environment: typing.Optional[str] = None
+    environment: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Deprecated: use 'environments' instead
+    """
+
+    environments: typing.Optional[typing.List[str]] = None
     change_description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     template_structure: typing.Optional[PromptVersionPublicTemplateStructure] = None

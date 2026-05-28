@@ -451,6 +451,37 @@ class PromptsClient:
         _response = self._raw_client.get_prompt_version_by_id(version_id, request_options=request_options)
         return _response.data
 
+    def get_prompt_version_by_number(
+        self, prompt_id: str, version_number: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptVersionDetail:
+        """
+        Get a prompt version by its sequential v<N> number for the given prompt.
+
+        Parameters
+        ----------
+        prompt_id : str
+
+        version_number : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptVersionDetail
+            Prompt version resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.prompts.get_prompt_version_by_number(prompt_id='promptId', version_number='versionNumber', )
+        """
+        _response = self._raw_client.get_prompt_version_by_number(
+            prompt_id, version_number, request_options=request_options
+        )
+        return _response.data
+
     def get_prompt_versions(
         self,
         id: str,
@@ -561,6 +592,7 @@ class PromptsClient:
         name: str,
         commit: typing.Optional[str] = OMIT,
         environment: typing.Optional[str] = OMIT,
+        version_number: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
@@ -574,7 +606,10 @@ class PromptsClient:
         commit : typing.Optional[str]
 
         environment : typing.Optional[str]
-            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit
+            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit and version_number
+
+        version_number : typing.Optional[str]
+            If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment
 
         project_name : typing.Optional[str]
             If provided, scopes the search to the specified project
@@ -597,6 +632,7 @@ class PromptsClient:
             name=name,
             commit=commit,
             environment=environment,
+            version_number=version_number,
             project_name=project_name,
             request_options=request_options,
         )
@@ -633,7 +669,7 @@ class PromptsClient:
         self,
         version_id: str,
         *,
-        environment: typing.Optional[str] = OMIT,
+        environments: typing.Sequence[str],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -647,7 +683,7 @@ class PromptsClient:
         ----------
         version_id : str
 
-        environment : typing.Optional[str]
+        environments : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -660,10 +696,10 @@ class PromptsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.prompts.set_prompt_version_environment(version_id='versionId', )
+        client.prompts.set_prompt_version_environment(version_id='versionId', environments=['environments'], )
         """
         _response = self._raw_client.set_prompt_version_environment(
-            version_id, environment=environment, request_options=request_options
+            version_id, environments=environments, request_options=request_options
         )
         return _response.data
 
@@ -1129,6 +1165,40 @@ class AsyncPromptsClient:
         _response = await self._raw_client.get_prompt_version_by_id(version_id, request_options=request_options)
         return _response.data
 
+    async def get_prompt_version_by_number(
+        self, prompt_id: str, version_number: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptVersionDetail:
+        """
+        Get a prompt version by its sequential v<N> number for the given prompt.
+
+        Parameters
+        ----------
+        prompt_id : str
+
+        version_number : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptVersionDetail
+            Prompt version resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.prompts.get_prompt_version_by_number(prompt_id='promptId', version_number='versionNumber', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_prompt_version_by_number(
+            prompt_id, version_number, request_options=request_options
+        )
+        return _response.data
+
     async def get_prompt_versions(
         self,
         id: str,
@@ -1250,6 +1320,7 @@ class AsyncPromptsClient:
         name: str,
         commit: typing.Optional[str] = OMIT,
         environment: typing.Optional[str] = OMIT,
+        version_number: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
@@ -1263,7 +1334,10 @@ class AsyncPromptsClient:
         commit : typing.Optional[str]
 
         environment : typing.Optional[str]
-            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit
+            If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit and version_number
+
+        version_number : typing.Optional[str]
+            If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment
 
         project_name : typing.Optional[str]
             If provided, scopes the search to the specified project
@@ -1289,6 +1363,7 @@ class AsyncPromptsClient:
             name=name,
             commit=commit,
             environment=environment,
+            version_number=version_number,
             project_name=project_name,
             request_options=request_options,
         )
@@ -1328,7 +1403,7 @@ class AsyncPromptsClient:
         self,
         version_id: str,
         *,
-        environment: typing.Optional[str] = OMIT,
+        environments: typing.Sequence[str],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1342,7 +1417,7 @@ class AsyncPromptsClient:
         ----------
         version_id : str
 
-        environment : typing.Optional[str]
+        environments : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1357,10 +1432,10 @@ class AsyncPromptsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.prompts.set_prompt_version_environment(version_id='versionId', )
+            await client.prompts.set_prompt_version_environment(version_id='versionId', environments=['environments'], )
         asyncio.run(main())
         """
         _response = await self._raw_client.set_prompt_version_environment(
-            version_id, environment=environment, request_options=request_options
+            version_id, environments=environments, request_options=request_options
         )
         return _response.data
