@@ -299,10 +299,16 @@ public class ExperimentExecutionService {
                     .toList());
         }
 
-        return promptService.findVersionByIds(uniqueVersionIds)
-                .map(versionsById -> linksByVariant.stream()
-                        .map(links -> buildOpikPromptEntries(links, versionsById))
-                        .toList())
+        return Mono.zip(
+                promptService.findVersionByIds(uniqueVersionIds),
+                promptService.getVersionsInfoByVersionsIds(uniqueVersionIds))
+                .map(tuple -> {
+                    Map<UUID, PromptVersion> versionsById = tuple.getT1();
+                    Map<UUID, PromptVersionInfo> infoById = tuple.getT2();
+                    return linksByVariant.stream()
+                            .map(links -> buildOpikPromptEntries(links, versionsById, infoById))
+                            .toList();
+                })
                 .onErrorResume(error -> {
                     log.warn(
                             "Failed to resolve prompt versions for opik_prompts metadata; traces will not be linked to their prompt(s) for dataset '{}' (id '{}', versionHash '{}')",
@@ -314,24 +320,26 @@ public class ExperimentExecutionService {
     }
 
     private static List<OpikPromptEntry> buildOpikPromptEntries(List<Experiment.PromptVersionLink> links,
-            Map<UUID, PromptVersion> versionsById) {
+            Map<UUID, PromptVersion> versionsById, Map<UUID, PromptVersionInfo> infoById) {
         if (links == null || links.isEmpty()) {
             return List.of();
         }
         return links.stream()
-                .map(link -> toOpikPromptEntry(link, versionsById.get(link.id())))
+                .map(link -> toOpikPromptEntry(link, versionsById.get(link.id()), infoById.get(link.id())))
                 .filter(Objects::nonNull)
                 .toList();
     }
 
-    private static OpikPromptEntry toOpikPromptEntry(Experiment.PromptVersionLink link, PromptVersion version) {
+    private static OpikPromptEntry toOpikPromptEntry(Experiment.PromptVersionLink link, PromptVersion version,
+            PromptVersionInfo info) {
         if (version == null) {
             return null;
         }
         UUID promptId = version.promptId() != null ? version.promptId() : link.promptId();
+        String name = link.promptName() != null ? link.promptName() : (info != null ? info.promptName() : null);
         return OpikPromptEntry.builder()
                 .id(promptId)
-                .name(link.promptName())
+                .name(name)
                 .templateStructure(version.templateStructure())
                 .version(OpikPromptEntry.Version.builder()
                         .id(version.id())

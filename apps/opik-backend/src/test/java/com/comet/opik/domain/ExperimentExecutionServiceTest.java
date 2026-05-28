@@ -79,6 +79,11 @@ class ExperimentExecutionServiceTest {
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
 
         lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
+        // Default empty stub so tests that don't care about the version-info bulk lookup
+        // (used by resolveOpikPromptsByVariant for prompt-name fallback) don't NPE the
+        // Mono.zip on an un-stubbed call.
+        lenient().when(promptService.getVersionsInfoByVersionsIds(any()))
+                .thenReturn(Mono.just(Map.of()));
     }
 
     private ExperimentExecutionRequest.PromptVariant buildPrompt(String model, String content) {
@@ -536,6 +541,46 @@ class ExperimentExecutionServiceTest {
                     .filter(m -> name2.equals(m.opikPrompts().get(0).name())).toList();
             assertThat(firstVariantMessages).hasSize(2);
             assertThat(secondVariantMessages).hasSize(2);
+        }
+
+        @Test
+        void createAndExecuteResolvesPromptNameFromBulkLookupWhenLinkOmitsIt() {
+            // FE flow: the request carries PromptVersionLinks with only `id` (and `prompt_id`),
+            // no `prompt_name`. The bulk getVersionsInfoByVersionsIds lookup must supply it so
+            // the persisted opik_prompts[].name isn't null in trace metadata.
+            var versionId = UUID.randomUUID();
+            var promptId = UUID.randomUUID();
+            var resolvedName = RandomStringUtils.randomAlphanumeric(10);
+
+            var version = PromptVersion.builder().id(versionId).promptId(promptId)
+                    .commit(RandomStringUtils.randomAlphanumeric(8))
+                    .versionNumber("v1").template(RandomStringUtils.randomAlphanumeric(20))
+                    .templateStructure(TemplateStructure.TEXT).build();
+            // No promptName on the link — mirrors what the FE sends.
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId).promptId(promptId).build();
+
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildVariantWithVersions("gpt-4", List.of(link))))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(Map.of(versionId, version)));
+            when(promptService.getVersionsInfoByVersionsIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(Map.of(versionId,
+                            new PromptVersionInfo(versionId, version.commit(), resolvedName))));
+
+            executeRequest(request);
+
+            var entry = capturePublishedMessages().get(0).opikPrompts().get(0);
+            assertThat(entry.name()).isEqualTo(resolvedName);
+            assertThat(entry.id()).isEqualTo(promptId);
         }
 
         @Test
