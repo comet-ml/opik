@@ -25,6 +25,11 @@ export default defineConfig({
     ['line'],
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['json', { outputFile: 'test-results/results.json' }],
+    ['allure-playwright', {
+      outputFolder: process.env.ALLURE_RESULTS || 'allure-results',
+      detail: true,
+      suiteTitle: true,
+    }],
   ],
   use: {
     baseURL: env.baseUrl,
@@ -32,6 +37,13 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     storageState,
+    // Default upper bound for every Playwright action (click/fill/waitFor/etc.)
+    // when the call site doesn't pass an explicit `timeout:`. Without this,
+    // unmarked `locator.waitFor()` inherits the *test* timeout, so a missing
+    // FE testid can burn the full test budget on a single locator. POM calls
+    // that legitimately need longer (e.g. trace panel cold-load = 30s, async
+    // polling = 90-120s) pass their own `timeout:` and override this.
+    actionTimeout: 15_000,
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

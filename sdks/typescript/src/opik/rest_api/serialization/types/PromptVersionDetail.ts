@@ -20,6 +20,7 @@ export const PromptVersionDetail: core.serialization.ObjectSchema<
     metadata: JsonNodeDetail.optional(),
     type: PromptVersionDetailType.optional(),
     versionType: core.serialization.property("version_type", PromptVersionDetailVersionType.optional()),
+    environment: core.serialization.string().optional(),
     environments: core.serialization.list(core.serialization.string()).optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     tags: core.serialization.list(core.serialization.string()).optional(),
@@ -42,6 +43,7 @@ export declare namespace PromptVersionDetail {
         metadata?: JsonNodeDetail.Raw | null;
         type?: PromptVersionDetailType.Raw | null;
         version_type?: PromptVersionDetailVersionType.Raw | null;
+        environment?: string | null;
         environments?: string[] | null;
         change_description?: string | null;
         tags?: string[] | null;

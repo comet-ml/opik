@@ -11,3 +11,10 @@ export class EnvironmentAlreadyExistsError extends EnvironmentError {
     this.name = "EnvironmentAlreadyExistsError";
   }
 }
+
+export class EnvironmentConfigurationError extends EnvironmentError {
+  constructor(message: string) {
+    super(message);
+    this.name = "EnvironmentConfigurationError";
+  }
+}
