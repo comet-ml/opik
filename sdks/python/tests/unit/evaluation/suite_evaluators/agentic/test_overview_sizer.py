@@ -330,7 +330,7 @@ class TestComputeBudgetTokens:
     def test_custom_capabilities_table__used(self):
         custom = [
             model_capabilities.ModelCapability(
-                "tinybot", context_window=2_000, single_pass_quality_ok=True
+                "tinybot", context_window=2_000, agentic_in_auto=True
             )
         ]
         budget = strategy_selector.compute_budget_tokens(

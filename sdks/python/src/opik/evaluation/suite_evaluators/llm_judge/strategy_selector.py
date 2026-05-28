@@ -108,20 +108,22 @@ def compute_budget_tokens(
 
 
 class HeuristicSelector(ScoringToolStrategySelector):
-    """Pick a strategy from whether a trace context is available.
+    """Pick a strategy from context availability and model capability.
 
     Rules:
       1. No context available → ONE_SHOT (no trace to inspect anyway).
-      2. Context present → AGENTIC.
+      2. Context present + model flagged ``agentic_in_auto=True`` → AGENTIC.
+      3. Context present + model not flagged → ONE_SHOT (avoid the
+         tool-schema overhead on models we haven't profiled or that
+         are known to ignore tool affordances).
 
-    The agentic mode begins with an inline overview that already
-    subsumes what one-shot would see (input + output), and additionally
-    exposes tools so the model can navigate the span tree when the
-    overview isn't enough. Picking AGENTIC whenever a context is
-    available lets the model self-select between "answer from overview"
-    and "drill in via tools," instead of pre-deciding from a size
-    heuristic that becomes meaningless once context windows hit 1M+
-    tokens.
+    The agentic mode's inline overview already subsumes what one-shot
+    would see (input + output), so capable models can self-select
+    between "answer from overview" and "drill in via tools." The
+    ``agentic_in_auto`` flag in ``model_capabilities.py`` is the SDK's
+    curated list of models that engage with tools cleanly — others
+    stay on one-shot under ``auto`` and can still be forced via
+    ``scoring_tool_strategy="always"``.
     """
 
     def select(
@@ -132,6 +134,14 @@ class HeuristicSelector(ScoringToolStrategySelector):
         assertions: List[str],
     ) -> ScoringToolStrategy:
         if trace_tool_context is None:
+            return ScoringToolStrategy.ONE_SHOT
+        capability = _capability_for(model_name)
+        if not capability.agentic_in_auto:
+            LOGGER.debug(
+                "HeuristicSelector: model %s not flagged agentic_in_auto; "
+                "using one-shot",
+                model_name,
+            )
             return ScoringToolStrategy.ONE_SHOT
         return ScoringToolStrategy.AGENTIC
 

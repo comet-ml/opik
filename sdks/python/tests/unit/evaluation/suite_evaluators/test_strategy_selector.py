@@ -61,31 +61,54 @@ class TestHeuristicSelector:
             is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
-    def test_context_present__returns_agentic_regardless_of_size_or_model(self):
+    def test_context_present__capable_model__returns_agentic(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        for model in ("gpt-5", "gpt-5-nano", "gpt-4o", "unknown-model-xyz"):
+        for model in ("gpt-5", "gpt-4o", "gpt-4o-mini", "claude-opus-4-7"):
             assert (
                 sel.select(trace_tool_context=ctx, model_name=model, assertions=[])
                 is strategy_selector.ScoringToolStrategy.AGENTIC
             ), model
+
+    def test_context_present__opted_out_model__returns_one_shot(self):
+        sel = strategy_selector.HeuristicSelector()
+        ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
+        # gpt-5-nano is flagged agentic_in_auto=False because it tends
+        # to ignore tool affordances (see backend SupportedJudgeProvider).
+        assert (
+            sel.select(trace_tool_context=ctx, model_name="gpt-5-nano", assertions=[])
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
+        )
+
+    def test_context_present__unknown_model__returns_one_shot(self):
+        sel = strategy_selector.HeuristicSelector()
+        ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
+        # Unknown models fall back to DEFAULT_CAPABILITY (agentic_in_auto=False).
+        assert (
+            sel.select(
+                trace_tool_context=ctx,
+                model_name="totally-unknown-xyz",
+                assertions=[],
+            )
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
+        )
 
 
 class TestCapabilityLookup:
     def test_capability_prefix_match__longest_wins(self):
         table = [
             model_capabilities.ModelCapability(
-                "gpt-5", context_window=1, single_pass_quality_ok=True
+                "gpt-5", context_window=1, agentic_in_auto=True
             ),
             model_capabilities.ModelCapability(
-                "gpt-5-nano", context_window=2, single_pass_quality_ok=False
+                "gpt-5-nano", context_window=2, agentic_in_auto=False
             ),
         ]
         cap = strategy_selector._capability_for(
             "gpt-5-nano-2025-08-07", capabilities=table
         )
         assert cap.model_name_prefix == "gpt-5-nano"
-        assert cap.single_pass_quality_ok is False
+        assert cap.agentic_in_auto is False
 
     def test_unknown_model__falls_back_to_default(self):
         cap = strategy_selector._capability_for("totally-unknown-model")

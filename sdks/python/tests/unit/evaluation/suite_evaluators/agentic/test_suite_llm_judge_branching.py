@@ -52,9 +52,11 @@ def test_score__without_context__uses_one_shot_path():
 
 
 def test_score__with_context__routes_to_agentic_path():
-    judge = llm_judge.LLMJudge(
-        assertions=["x"], track=False, scoring_tool_strategy="always"
-    )
+    # gpt-5 is flagged `agentic_in_auto=True` in `model_capabilities.py`,
+    # so the default `auto` strategy routes context-bearing calls to
+    # agentic. No explicit `scoring_tool_strategy=` — exercising the
+    # heuristic is the point of this test.
+    judge = llm_judge.LLMJudge(assertions=["x"], track=False, model="gpt-5")
     ctx = _ctx()
     expected = [score_result.ScoreResult(name="x", value=False, reason="r")]
     with (

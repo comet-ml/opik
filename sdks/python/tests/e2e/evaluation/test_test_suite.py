@@ -68,7 +68,6 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -129,7 +128,6 @@ def test_test_suite__combined_suite_and_item_level_assertions__all_scores_create
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -181,7 +179,6 @@ def test_test_suite__assertion_fails__item_fails(
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -243,7 +240,6 @@ def test_test_suite__pass_threshold_not_met__item_fails(
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -298,7 +294,6 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     assert suite_result.pass_rate == 1.0
 
@@ -405,7 +400,6 @@ def test_test_suite__create_get_and_run__end_to_end(
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     # Verify suite ran with persisted execution policy (runs_per_item=2)
     verifiers.verify_test_suite_result(
@@ -834,7 +828,6 @@ def test_test_suite__insert_batch__all_items_persisted(
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -912,7 +905,6 @@ def test_get_test_suite_experiments__returns_experiments(
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        scoring_tool_strategy="never",
     )
     experiments = opik_client.get_test_suite_experiments(name=dataset_name)
     experiment_names = {e.name for e in experiments}
