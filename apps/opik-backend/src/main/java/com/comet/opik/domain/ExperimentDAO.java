@@ -1820,39 +1820,52 @@ public class ExperimentDAO {
             """;
 
     /**
-     * For one workspace, returns each dataset_id and the (single) project_id that all
-     * non-demo experiments for that dataset resolve to. Inference is derived directly from
-     * {@code experiments.project_id} (which D1 sets) rather than from the experiment→trace
-     * graph: this is correct only when D1 (experiment-project migration) has already run for
-     * the workspace, which is a documented operational pre-requirement. Experiments whose
-     * latest {@code project_id} is still {@code ''} (D1 left them V1 — typically ambiguous in
-     * D1's own bucketing) are filtered out and effectively count as "no-inference" at the
-     * dataset level, which the service then routes to the workspace's Default Project.
+     * For one workspace and the given orphan dataset IDs, returns each dataset's inferred
+     * {@code project_id}, the {@code distinct_project_count} of referencing projects, and a sorted
+     * {@code project_breakdown} ({@code projectId=count,...}) included in the log entry for each
+     * assignment.
      *
-     * <p>Scoped to the caller-supplied orphan dataset IDs via {@code dataset_id IN :dataset_ids}
-     * so the scan only walks the experiments rows for V1 datasets, not the whole workspace.
+     * <p>Inference reads {@code experiments.project_id} (set by the experiment-project migration);
+     * experiments still at {@code project_id = ''} are excluded, so a dataset whose experiments are
+     * all unmigrated does not appear in the result and the service treats it as no-inference. With
+     * one referencing project the choice is unambiguous; with several, the dominant project wins,
+     * ordered by {@code (count DESC, last_activity DESC, project_id ASC)} so that repeated runs
+     * produce the same result.
      *
-     * <p>Inner aggregate uses {@code argMax(project_id, last_updated_at) GROUP BY id} to dedup
-     * across ReplacingMergeTree row versions: when D1 updates {@code project_id} from {@code ''}
-     * to a non-empty value, the table briefly carries both pre- and post-update rows for the
-     * same {@code (workspace_id, id)} until merge. {@code argMax} picks the latest, so the outer
-     * {@code count(DISTINCT)} does not double-count an in-flight migration as ambiguous.
+     * <p>The inner {@code argMax(project_id, last_updated_at) GROUP BY id} removes duplicate
+     * ReplacingMergeTree row versions: while a migration is in progress the table can briefly hold
+     * both the previous and the updated row for an experiment, and taking the latest keeps the
+     * outer aggregates from counting it twice.
      */
     private static final String COMPUTE_DATASET_PROJECT_MAPPING = """
+            WITH arraySort(proj -> (-proj.1, -proj.2, proj.3),
+                    groupArray((per_proj_count, per_proj_last_activity_nanos, experiment_project_id))) AS ranked
             SELECT
                 dataset_id AS dataset_id,
-                count(DISTINCT experiment_project_id) AS distinct_project_count,
-                any(experiment_project_id) AS project_id
+                length(ranked) AS distinct_project_count,
+                ranked[1].3 AS project_id,
+                arrayStringConcat(
+                    arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked), ','
+                ) AS project_breakdown
             FROM (
                 SELECT
                     dataset_id,
-                    argMax(project_id, last_updated_at) AS experiment_project_id
-                FROM experiments
-                WHERE workspace_id = :workspace_id
-                AND dataset_id IN :dataset_ids
-                AND name NOT IN :demo_experiment_names
-                GROUP BY workspace_id, id, dataset_id
-                HAVING experiment_project_id != ''
+                    experiment_project_id,
+                    count() AS per_proj_count,
+                    toUnixTimestamp64Nano(max(experiment_last_updated_at)) AS per_proj_last_activity_nanos
+                FROM (
+                    SELECT
+                        dataset_id,
+                        argMax(project_id, last_updated_at) AS experiment_project_id,
+                        max(last_updated_at) AS experiment_last_updated_at
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id IN :dataset_ids
+                    AND name NOT IN :demo_experiment_names
+                    GROUP BY workspace_id, id, dataset_id
+                    HAVING experiment_project_id != ''
+                )
+                GROUP BY dataset_id, experiment_project_id
             )
             GROUP BY dataset_id
             SETTINGS log_comment = '<log_comment>'
@@ -2996,6 +3009,7 @@ public class ExperimentDAO {
                                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                                 .projectId(UUID.fromString(projectId))
                                 .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                                .projectBreakdown(row.get("project_breakdown", String.class))
                                 .build())))
                 .flatMap(Mono::justOrEmpty);
     }

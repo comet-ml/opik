@@ -488,6 +488,11 @@ public class DatasetsResource {
         }
     }
 
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward read source to a
+     * specific (dataset, version) pair, avoiding the multi-replica read-after-write window when
+     * chaining version writes against a destination that may not have replicated yet.
+     */
     @PUT
     @Path("/items")
     @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = """
@@ -495,11 +500,9 @@ public class DatasetsResource {
             Each item's 'id' field is the stable identifier and upsert key.
             Provide it to update an existing item, or omit it to create a new one.
 
-            OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward
-            rows from the supplied (dataset, version) pair instead of the destination's prior version.
-            This avoids the multi-replica read-after-write window when chaining version writes against a
-            destination that may not have replicated yet. When the fields are null, the existing behavior
-            applies (carry-forward reads from the destination's prior version).""", responses = {
+            Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+            from the supplied (dataset, version) pair instead of the destination's prior version. When
+            the fields are null, carry-forward rows are read from the destination's prior version.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited
@@ -616,6 +619,11 @@ public class DatasetsResource {
         return Response.status(Response.Status.ACCEPTED).build();
     }
 
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward (and edit-via-SELECT-INSERT)
+     * read source to a specific (dataset, version) pair, avoiding the multi-replica read-after-write window
+     * when chaining version writes against a destination that may not have replicated yet.
+     */
     @POST
     @Path("/{id}/items/changes")
     @Operation(operationId = "applyDatasetItemChanges", summary = "Apply changes to dataset items", description = """
@@ -628,11 +636,10 @@ public class DatasetsResource {
 
             Use `override=true` query parameter to force version creation even with stale baseVersion.
 
-            OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body
-            to read carry-forward rows (and the edit-via-SELECT-INSERT source rows) from the supplied
-            (dataset, version) pair instead of the destination's prior version. This avoids the
-            multi-replica read-after-write window when chaining version writes against a destination that
-            may not have replicated yet. When the fields are null, the existing behavior applies.
+            Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+            carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+            prior version. When the fields are null, carry-forward rows are read from the destination's
+            prior version.
             """, responses = {
             @ApiResponse(responseCode = "201", description = "Version created successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),

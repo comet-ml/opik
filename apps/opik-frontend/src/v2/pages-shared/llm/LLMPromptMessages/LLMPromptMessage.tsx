@@ -236,13 +236,15 @@ const LLMPromptMessage = forwardRef<
       <>
         <Card
           key={id}
+          data-testid="playground-message-row"
+          data-role={role}
           style={style}
           ref={setNodeRef}
           onClick={() => {
             editorViewRef.current?.focus();
           }}
           className={cn(
-            "group p-2 pb-3 shadow-none [&:focus-within]:border-primary",
+            "group p-1 pb-1.5 pl-2 shadow-none [&:focus-within]:border-primary",
             {
               "pb-0": showMediaActions || hasJsonData,
               "z-10 shadow-sm": id === active?.id,
@@ -255,7 +257,7 @@ const LLMPromptMessage = forwardRef<
               <div className="flex items-center">
                 <span
                   className={cn(
-                    "-ml-[7px] py-2 flex cursor-move items-center text-light-slate invisible [&>svg]:size-3.5",
+                    "-ml-[7px] py-1 flex cursor-move items-center text-light-slate invisible [&>svg]:size-3.5",
                     !hideDragButton &&
                       "group-hover:visible [.group:focus-within_&]:visible",
                   )}
@@ -267,11 +269,11 @@ const LLMPromptMessage = forwardRef<
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="minimal"
-                      size="sm"
-                      className="min-w-4 p-0 text-muted-slate"
+                      size="2xs"
+                      className="comet-body-xs min-w-4 p-0 text-muted-slate"
                     >
                       {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
-                      <ChevronDown className="ml-1 w-4" />
+                      <ChevronDown className="ml-1 size-3" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
@@ -315,7 +317,7 @@ const LLMPromptMessage = forwardRef<
                     <TooltipWrapper content="Remove message">
                       <Button
                         variant="minimal"
-                        size="icon-sm"
+                        size="icon-2xs"
                         onClick={onRemoveMessage}
                         type="button"
                       >
@@ -326,7 +328,7 @@ const LLMPromptMessage = forwardRef<
                   <TooltipWrapper content="Duplicate message">
                     <Button
                       variant="minimal"
-                      size="icon-sm"
+                      size="icon-2xs"
                       onClick={onDuplicateMessage}
                       type="button"
                     >
@@ -340,7 +342,7 @@ const LLMPromptMessage = forwardRef<
             {isLoading ? (
               <Loader className="min-h-32" />
             ) : (
-              <div className="flex flex-col gap-2 px-2">
+              <div className="flex flex-col gap-1 pl-[7px] pr-1">
                 <div className="relative">
                   <div
                     className={
@@ -478,7 +480,7 @@ const LLMPromptMessage = forwardRef<
                       onOpenChange={setIsMediaPopoverOpen}
                     >
                       <TooltipWrapper content="Add image">
-                        <Button variant="minimal" size="icon-sm" type="button">
+                        <Button variant="minimal" size="icon-2xs" type="button">
                           <Image />
                         </Button>
                       </TooltipWrapper>
@@ -491,7 +493,7 @@ const LLMPromptMessage = forwardRef<
                       onOpenChange={setIsMediaPopoverOpen}
                     >
                       <TooltipWrapper content="Add audio">
-                        <Button variant="minimal" size="icon-sm" type="button">
+                        <Button variant="minimal" size="icon-2xs" type="button">
                           <Music />
                         </Button>
                       </TooltipWrapper>
@@ -504,7 +506,7 @@ const LLMPromptMessage = forwardRef<
                       onOpenChange={setIsMediaPopoverOpen}
                     >
                       <TooltipWrapper content="Add video">
-                        <Button variant="minimal" size="icon-sm" type="button">
+                        <Button variant="minimal" size="icon-2xs" type="button">
                           <Video />
                         </Button>
                       </TooltipWrapper>
@@ -518,7 +520,7 @@ const LLMPromptMessage = forwardRef<
                   <TooltipWrapper content="Type {{ or click here to add variable">
                     <Button
                       variant="minimal"
-                      size="icon-sm"
+                      size="icon-2xs"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={(e) => {
                         e.stopPropagation();

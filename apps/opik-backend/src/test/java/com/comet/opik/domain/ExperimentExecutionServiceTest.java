@@ -9,12 +9,16 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.TemplateStructure;
+import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -29,6 +33,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,6 +65,9 @@ class ExperimentExecutionServiceTest {
     @Mock
     private IdGenerator idGenerator;
 
+    @Mock
+    private PromptService promptService;
+
     private ExperimentExecutionService service;
 
     @BeforeEach
@@ -68,7 +76,7 @@ class ExperimentExecutionServiceTest {
         var evaluatorMapper = new TestSuiteEvaluatorMapper(testSuiteConfig);
         service = new ExperimentExecutionService(
                 experimentService, datasetItemService, datasetVersionService,
-                itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig());
+                itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
 
         lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
     }
@@ -442,6 +450,255 @@ class ExperimentExecutionServiceTest {
 
             var metadata = captor.getValue().metadata();
             assertThat(metadata.has("model_config")).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("opik_prompts resolution")
+    class OpikPromptsResolution {
+
+        private ExperimentExecutionRequest.PromptVariant buildVariantWithVersions(String model,
+                List<Experiment.PromptVersionLink> versions) {
+            return ExperimentExecutionRequest.PromptVariant.builder()
+                    .model(model)
+                    .messages(List.of(ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build()))
+                    .promptVersions(versions)
+                    .build();
+        }
+
+        @SuppressWarnings("unchecked")
+        private List<ExperimentItemToProcess> capturePublishedMessages() {
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(itemPublisher).publish(any(UUID.class), captor.capture());
+            return (List<ExperimentItemToProcess>) captor.getValue();
+        }
+
+        @Test
+        void createAndExecuteResolvesPromptVersionsOncePerRequest() {
+            var versionId1 = UUID.randomUUID();
+            var versionId2 = UUID.randomUUID();
+            var promptId1 = UUID.randomUUID();
+            var promptId2 = UUID.randomUUID();
+            var name1 = RandomStringUtils.randomAlphanumeric(10);
+            var name2 = RandomStringUtils.randomAlphanumeric(10);
+
+            var v1 = PromptVersion.builder().id(versionId1).promptId(promptId1)
+                    .commit(RandomStringUtils.randomAlphanumeric(8))
+                    .versionNumber("v1").template(RandomStringUtils.randomAlphanumeric(20))
+                    .templateStructure(TemplateStructure.TEXT).build();
+            var v2 = PromptVersion.builder().id(versionId2).promptId(promptId2)
+                    .commit(RandomStringUtils.randomAlphanumeric(8))
+                    .versionNumber("v2").template(RandomStringUtils.randomAlphanumeric(20))
+                    .templateStructure(TemplateStructure.CHAT).build();
+
+            var link1 = Experiment.PromptVersionLink.builder()
+                    .id(versionId1).promptId(promptId1).promptName(name1).build();
+            var link2 = Experiment.PromptVersionLink.builder()
+                    .id(versionId2).promptId(promptId2).promptName(name2).build();
+
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(
+                            buildVariantWithVersions("gpt-4", List.of(link1)),
+                            buildVariantWithVersions("gpt-4", List.of(link2))))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null),
+                    buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(promptService.findVersionByIds(Set.of(versionId1, versionId2)))
+                    .thenReturn(Mono.just(Map.of(versionId1, v1, versionId2, v2)));
+
+            executeRequest(request);
+
+            // The lookup is invoked exactly once for the whole request, regardless of how
+            // many dataset items get published.
+            verify(promptService).findVersionByIds(Set.of(versionId1, versionId2));
+
+            var messages = capturePublishedMessages();
+            assertThat(messages).hasSize(4); // 2 items x 2 variants
+
+            // Each message carries the prebuilt opik_prompts array for its variant.
+            for (var msg : messages) {
+                assertThat(msg.opikPrompts()).isNotNull();
+                assertThat(msg.opikPrompts()).hasSize(1);
+            }
+            // Variant 0 messages reference link1; variant 1 messages reference link2.
+            var firstVariantMessages = messages.stream()
+                    .filter(m -> name1.equals(m.opikPrompts().get(0).name())).toList();
+            var secondVariantMessages = messages.stream()
+                    .filter(m -> name2.equals(m.opikPrompts().get(0).name())).toList();
+            assertThat(firstVariantMessages).hasSize(2);
+            assertThat(secondVariantMessages).hasSize(2);
+        }
+
+        @Test
+        void createAndExecuteSkipsLookupWhenNoPromptVersionsLinked() {
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            verify(promptService, never()).findVersionByIds(any());
+            var messages = capturePublishedMessages();
+            assertThat(messages).allSatisfy(m -> assertThat(m.opikPrompts()).isEmpty());
+        }
+
+        @Test
+        void createAndExecutePreservesTextTemplateAsRawString() {
+            // TEXT prompts: even when the template happens to look like valid JSON (e.g. "42"),
+            // it must round-trip as a string, not be eagerly parsed into a primitive node.
+            var versionId = UUID.randomUUID();
+            var promptId = UUID.randomUUID();
+            var version = PromptVersion.builder()
+                    .id(versionId).promptId(promptId)
+                    .commit(RandomStringUtils.randomAlphanumeric(8)).versionNumber("v1")
+                    .template("42")
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId).promptId(promptId)
+                    .promptName(RandomStringUtils.randomAlphanumeric(10)).build();
+
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildVariantWithVersions("gpt-4", List.of(link))))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(Map.of(versionId, version)));
+
+            executeRequest(request);
+
+            var entry = capturePublishedMessages().get(0).opikPrompts().get(0);
+            var template = entry.version().template();
+            assertThat(template.isTextual()).isTrue();
+            assertThat(template.asText()).isEqualTo("42");
+        }
+
+        @Test
+        void createAndExecuteParsesChatTemplateAsStructuredJson() {
+            // CHAT prompts: the stored string is a JSON-encoded list of messages. The wire
+            // format expects it to appear as a parsed array/object, matching the Python SDK.
+            var role = RandomStringUtils.randomAlphanumeric(8);
+            var content = RandomStringUtils.randomAlphanumeric(20);
+            var chatJson = "[{\"role\":\"" + role + "\",\"content\":\"" + content + "\"}]";
+            var versionId = UUID.randomUUID();
+            var promptId = UUID.randomUUID();
+            var version = PromptVersion.builder()
+                    .id(versionId).promptId(promptId)
+                    .commit(RandomStringUtils.randomAlphanumeric(8)).versionNumber("v1")
+                    .template(chatJson)
+                    .templateStructure(TemplateStructure.CHAT)
+                    .build();
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId).promptId(promptId)
+                    .promptName(RandomStringUtils.randomAlphanumeric(10)).build();
+
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildVariantWithVersions("gpt-4", List.of(link))))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(Map.of(versionId, version)));
+
+            executeRequest(request);
+
+            var entry = capturePublishedMessages().get(0).opikPrompts().get(0);
+            var template = entry.version().template();
+            assertThat(template.isArray()).isTrue();
+            assertThat(template).hasSize(1);
+            assertThat(template.get(0).get("role").asText()).isEqualTo(role);
+            assertThat(template.get(0).get("content").asText()).isEqualTo(content);
+        }
+
+        @Test
+        void createAndExecuteFallsBackToStringWhenChatTemplateIsNotValidJson() {
+            // Defensive: a CHAT template that fails to parse should fall back to a string
+            // rather than failing the experiment.
+            var raw = RandomStringUtils.randomAlphanumeric(15);
+            var versionId = UUID.randomUUID();
+            var promptId = UUID.randomUUID();
+            var version = PromptVersion.builder()
+                    .id(versionId).promptId(promptId)
+                    .commit(RandomStringUtils.randomAlphanumeric(8)).versionNumber("v1")
+                    .template(raw)
+                    .templateStructure(TemplateStructure.CHAT)
+                    .build();
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId).promptId(promptId)
+                    .promptName(RandomStringUtils.randomAlphanumeric(10)).build();
+
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildVariantWithVersions("gpt-4", List.of(link))))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(Map.of(versionId, version)));
+
+            executeRequest(request);
+
+            var entry = capturePublishedMessages().get(0).opikPrompts().get(0);
+            var template = entry.version().template();
+            assertThat(template.isTextual()).isTrue();
+            assertThat(template.asText()).isEqualTo(raw);
+        }
+
+        @Test
+        void createAndExecuteFallsBackToNullArraysWhenLookupFails() {
+            var versionId = UUID.randomUUID();
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId).promptId(UUID.randomUUID())
+                    .promptName(RandomStringUtils.randomAlphanumeric(10)).build();
+
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildVariantWithVersions("gpt-4", List.of(link))))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.error(new RuntimeException("db unavailable")));
+
+            executeRequest(request);
+
+            var messages = capturePublishedMessages();
+            assertThat(messages).allSatisfy(m -> assertThat(m.opikPrompts()).isEmpty());
         }
     }
 }

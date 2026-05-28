@@ -68,11 +68,10 @@ class RawDatasetsClient:
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
 
-        OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body
-        to read carry-forward rows (and the edit-via-SELECT-INSERT source rows) from the supplied
-        (dataset, version) pair instead of the destination's prior version. This avoids the
-        multi-replica read-after-write window when chaining version writes against a destination that
-        may not have replicated yet. When the fields are null, the existing behavior applies.
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
 
         Parameters
         ----------
@@ -389,11 +388,9 @@ class RawDatasetsClient:
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
 
-        OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward
-        rows from the supplied (dataset, version) pair instead of the destination's prior version.
-        This avoids the multi-replica read-after-write window when chaining version writes against a
-        destination that may not have replicated yet. When the fields are null, the existing behavior
-        applies (carry-forward reads from the destination's prior version).
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -415,10 +412,10 @@ class RawDatasetsClient:
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         copy_from_dataset_id : typing.Optional[str]
-            OPIK-6696. Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When both are set, the INSERT FROM SELECT that copies unchanged rows reads from this (dataset, version) pair instead of the destination dataset's prior version, avoiding the multi-replica read-after-write window. When null, the existing behavior applies (reads from the destination's prior version).
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
 
         copy_from_version_id : typing.Optional[str]
-            OPIK-6696. Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2170,11 +2167,10 @@ class AsyncRawDatasetsClient:
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
 
-        OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body
-        to read carry-forward rows (and the edit-via-SELECT-INSERT source rows) from the supplied
-        (dataset, version) pair instead of the destination's prior version. This avoids the
-        multi-replica read-after-write window when chaining version writes against a destination that
-        may not have replicated yet. When the fields are null, the existing behavior applies.
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
 
         Parameters
         ----------
@@ -2491,11 +2487,9 @@ class AsyncRawDatasetsClient:
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
 
-        OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward
-        rows from the supplied (dataset, version) pair instead of the destination's prior version.
-        This avoids the multi-replica read-after-write window when chaining version writes against a
-        destination that may not have replicated yet. When the fields are null, the existing behavior
-        applies (carry-forward reads from the destination's prior version).
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -2517,10 +2511,10 @@ class AsyncRawDatasetsClient:
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         copy_from_dataset_id : typing.Optional[str]
-            OPIK-6696. Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When both are set, the INSERT FROM SELECT that copies unchanged rows reads from this (dataset, version) pair instead of the destination dataset's prior version, avoiding the multi-replica read-after-write window. When null, the existing behavior applies (reads from the destination's prior version).
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
 
         copy_from_version_id : typing.Optional[str]
-            OPIK-6696. Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

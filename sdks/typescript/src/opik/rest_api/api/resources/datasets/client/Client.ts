@@ -37,11 +37,10 @@ export class DatasetsClient {
      *
      * Use `override=true` query parameter to force version creation even with stale baseVersion.
      *
-     * OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body
-     * to read carry-forward rows (and the edit-via-SELECT-INSERT source rows) from the supplied
-     * (dataset, version) pair instead of the destination's prior version. This avoids the
-     * multi-replica read-after-write window when chaining version writes against a destination that
-     * may not have replicated yet. When the fields are null, the existing behavior applies.
+     * Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+     * carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+     * prior version. When the fields are null, carry-forward rows are read from the destination's
+     * prior version.
      *
      * @param {string} id
      * @param {OpikApi.ApplyDatasetItemChangesRequest} request
@@ -375,11 +374,9 @@ export class DatasetsClient {
      * Each item's 'id' field is the stable identifier and upsert key.
      * Provide it to update an existing item, or omit it to create a new one.
      *
-     * OPIK-6696: set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward
-     * rows from the supplied (dataset, version) pair instead of the destination's prior version.
-     * This avoids the multi-replica read-after-write window when chaining version writes against a
-     * destination that may not have replicated yet. When the fields are null, the existing behavior
-     * applies (carry-forward reads from the destination's prior version).
+     * Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+     * from the supplied (dataset, version) pair instead of the destination's prior version. When
+     * the fields are null, carry-forward rows are read from the destination's prior version.
      *
      * @param {OpikApi.DatasetItemBatchWrite} request
      * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
