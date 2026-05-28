@@ -897,6 +897,39 @@ def test_extract_and_replace_top_level_list(extractor, files_to_remove):
     assert isinstance(data[3], dict)
 
 
+def test_extract_and_replace_duplicate_attachments_get_unique_placeholders(
+    extractor, files_to_remove
+):
+    """Each duplicate match must produce its own placeholder/file name.
+
+    Previously the extractor used `str.replace`, which rewrote every occurrence
+    of the matched chunk on the first iteration; subsequent iterations decoded
+    fresh attachments but their placeholders never made it into the sanitized
+    string, leaving orphaned attachments and aliased placeholders.
+    """
+    data = {"images": f"{constants.PNG_BASE64} and {constants.PNG_BASE64}"}
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="span",
+        entity_id="span-dup",
+        context="input",
+        project_name="test",
+    )
+
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
+
+    assert len(result) == 2
+    file_names = [r.attachment_data.file_name for r in result]
+    # Each extraction produces a distinct temp file with its own name.
+    assert file_names[0] != file_names[1]
+
+    # The sanitized text must reference *both* file names, not the same one twice.
+    assert f"[{file_names[0]}]" in data["images"]
+    assert f"[{file_names[1]}]" in data["images"]
+
+
 def test_extract_and_replace_data_uri_strips_prefix(extractor, files_to_remove):
     """Base64 embedded in a data URI is replaced whole, leaving a bare placeholder.
 

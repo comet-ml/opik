@@ -5,6 +5,9 @@ import {
   isBackendAttachmentPlaceholder,
   isImageBase64String,
   isImageContent,
+  parseAudioValue,
+  parseImageValue,
+  parseVideoValue,
   processInputData,
 } from "@/lib/images";
 import { ATTACHMENT_TYPE } from "@/types/attachments";
@@ -917,6 +920,34 @@ describe("extractWrappedAttachmentPlaceholder", () => {
         "prefix data:image/jpeg;base64,[input-attachment-1-2-sdk.jpg] suffix",
       ),
     ).toBeNull();
+  });
+});
+
+describe("parse* helpers bail on wrapped attachment placeholders", () => {
+  it("parseImageValue returns undefined for a wrapped image placeholder", () => {
+    expect(
+      parseImageValue("data:image/jpeg;base64,[input-attachment-1-2-sdk.jpg]"),
+    ).toBeUndefined();
+  });
+
+  it("parseImageValue still parses a genuine base64 image", () => {
+    const result = parseImageValue("data:image/png;base64,iVBORw0KGgo");
+    expect(result).toEqual({
+      url: "data:image/png;base64,iVBORw0KGgo",
+      name: "Base64 Image",
+    });
+  });
+
+  it("parseVideoValue returns undefined for a wrapped video placeholder", () => {
+    expect(
+      parseVideoValue("data:video/mp4;base64,[output-attachment-1-2-sdk.mp4]"),
+    ).toBeUndefined();
+  });
+
+  it("parseAudioValue returns undefined for a wrapped audio placeholder", () => {
+    expect(
+      parseAudioValue("data:audio/wav;base64,[output-attachment-1-2-sdk.wav]"),
+    ).toBeUndefined();
   });
 });
 

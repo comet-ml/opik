@@ -446,6 +446,15 @@ export const parseImageValue = (
     return undefined;
   }
 
+  // Legacy malformed traces (OPIK-6608) carry a wrapped placeholder like
+  // `data:image/jpeg;base64,[input-attachment-...]`. Don't render that as a
+  // base64 image — the placeholder needs media-context resolution, which the
+  // sync cell-renderer path doesn't have. Returning undefined lets the caller
+  // fall back to text instead of producing a broken <img src>.
+  if (extractWrappedAttachmentPlaceholder(value)) {
+    return undefined;
+  }
+
   if (isImageBase64String(value)) {
     return {
       url: value,
@@ -486,6 +495,12 @@ export const parseVideoValue = (
   value: unknown,
 ): ParsedVideoData | undefined => {
   if (!isString(value)) {
+    return undefined;
+  }
+
+  // See parseImageValue: bail on wrapped attachment placeholders (OPIK-6608)
+  // so we don't render `data:video/...;base64,[...]` as a broken inline video.
+  if (extractWrappedAttachmentPlaceholder(value)) {
     return undefined;
   }
 
@@ -530,6 +545,11 @@ export const parseAudioValue = (
   value: unknown,
 ): ParsedAudioData | undefined => {
   if (!isString(value)) {
+    return undefined;
+  }
+
+  // See parseImageValue: bail on wrapped attachment placeholders (OPIK-6608).
+  if (extractWrappedAttachmentPlaceholder(value)) {
     return undefined;
   }
 
