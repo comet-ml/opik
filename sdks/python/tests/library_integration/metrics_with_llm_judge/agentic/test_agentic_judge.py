@@ -8,9 +8,9 @@ the judge is the only network call, and the verdict is checked field
 by field.
 
 Each test pins the scoring strategy to `"always"` so the agentic path
-runs regardless of the trace size or the model's
-`single_pass_quality_ok` capability. That keeps these tests focused on
-agentic-judge behavior; one-shot LLMJudge integration is covered by
+runs even if the heuristic selector ever changes how it interprets
+"context present." That keeps these tests focused on agentic-judge
+behavior; one-shot LLMJudge integration is covered by
 `tests/library_integration/metrics_with_llm_judge/test_llm_judge.py`.
 
 Assertions are written deliberately on the unambiguous side — a
