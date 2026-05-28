@@ -33,12 +33,15 @@ class AttachmentsExtractor:
         self.decoder = decoder_base64.Base64AttachmentDecoder()
 
         # Pattern to match base64 strings (can be embedded in text)
-        # Requires at least min_attachment_size characters to reduce false positives
+        # Requires at least min_attachment_size characters to reduce false positives.
+        # An optional `data:<mime>;base64,` prefix is matched too so that data URIs
+        # (e.g. OpenAI/LangChain image_url.url) are replaced whole, not just their payload.
         min_base64_groups = int(min_attachment_size / 4)
         BASE64_PATTERN = (
-            r"(?:[A-Za-z0-9+/]{4}){"
+            r"(?P<prefix>data:[^,]*;base64,)?"
+            r"(?P<base64>(?:[A-Za-z0-9+/]{4}){"
             + str(min_base64_groups)
-            + ",}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"
+            + r",}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)"
         )
         self.pattern = re.compile(BASE64_PATTERN)
 
@@ -156,17 +159,28 @@ class AttachmentsExtractor:
             return ExtractionResult(attachments=[], sanitized_data=data)
 
         attachments: List[attachment.Attachment] = []
-        sanitized_data = data
+        # Rebuild positionally so each match gets its own placeholder. Using
+        # `str.replace` here would rewrite every occurrence of the matched chunk,
+        # causing later duplicate matches to alias the first one's file name.
+        parts: List[str] = []
+        last_end = 0
         for match in self.pattern.finditer(data):
-            to_decode = match.group()
+            to_decode = match.group("base64")
             decoded_attachment = self.decoder.decode(to_decode, context)
-            if decoded_attachment is not None:
-                attachments.append(decoded_attachment)
-                sanitized_data = sanitized_data.replace(
-                    to_decode, f"[{decoded_attachment.file_name}]"
-                )
+            if decoded_attachment is None:
+                continue
+            attachments.append(decoded_attachment)
+            # The full match span covers any optional `data:<mime>;base64,` prefix,
+            # so replacing it with the bare placeholder strips the prefix in one go.
+            parts.append(data[last_end : match.start()])
+            parts.append(f"[{decoded_attachment.file_name}]")
+            last_end = match.end()
 
-        return ExtractionResult(attachments=attachments, sanitized_data=sanitized_data)
+        if not attachments:
+            return ExtractionResult(attachments=attachments, sanitized_data=data)
+
+        parts.append(data[last_end:])
+        return ExtractionResult(attachments=attachments, sanitized_data="".join(parts))
 
     def _extract_from_dict(
         self, data: Dict[str, Any], context: Literal["input", "output", "metadata"]
