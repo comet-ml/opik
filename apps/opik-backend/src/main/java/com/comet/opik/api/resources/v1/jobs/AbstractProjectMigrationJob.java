@@ -58,16 +58,15 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
         this.cycleDuration = meter
                 .histogramBuilder("%s.cycle.duration".formatted(metricNamespace()))
                 .setDescription(
-                        "Duration of a %s migration cycle, tagged by result".formatted(entityLabelLowerCase()))
+                        "Duration of a %s migration cycle, tagged by result".formatted(entityLabel().toLowerCase()))
                 .setUnit("ms")
                 .ofLongs()
                 .build();
     }
 
     /**
-     * Entity-specific label used to log progress (e.g., {@code "Optimization project"}). Kept
-     * capitalised because the subclass uses it directly in {@code "Starting %s migration job"}
-     * style messages.
+     * Entity-specific label used for structured log entries and metric descriptions (e.g.,
+     * {@code "Optimization project"}).
      */
     protected abstract String entityLabel();
 
@@ -100,20 +99,20 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
     @Override
     public void doJob(JobExecutionContext context) {
         if (!isEnabled()) {
-            log.debug("{} migration job is disabled, skipping", entityLabel());
+            log.debug("Migration job disabled, skipping, entity='{}'", entityLabel());
             return;
         }
         if (interrupted.get()) {
-            log.info("{} migration job was interrupted before execution, skipping", entityLabel());
+            log.info("Migration job interrupted before execution, skipping, entity='{}'", entityLabel());
             return;
         }
-        log.info("Starting {} migration job", entityLabelLowerCase());
+        log.info("Starting migration job, entity='{}'", entityLabel());
         long startMillis = System.currentTimeMillis();
         var subscription = lockService.bestEffortLock(
                 jobLock,
                 Mono.defer(() -> {
                     if (interrupted.get()) {
-                        log.info("{} migration was interrupted before processing, skipping", entityLabel());
+                        log.info("Migration interrupted before processing, skipping, entity='{}'", entityLabel());
                         return Mono.empty();
                     }
                     return runMigrationCycle()
@@ -121,15 +120,16 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
                             .doOnSuccess(unused -> {
                                 long durationMillis = System.currentTimeMillis() - startMillis;
                                 cycleDuration.record(durationMillis, resultSuccess);
-                                log.info("{} migration cycle finished, duration='{}'",
+                                log.info("Migration cycle finished, entity='{}', duration='{}'",
                                         entityLabel(), Duration.ofMillis(durationMillis));
                             });
                 }),
                 Mono.defer(() -> {
                     long durationMillis = System.currentTimeMillis() - startMillis;
                     cycleDuration.record(durationMillis, resultLockSkipped);
-                    log.info("Could not acquire lock, another instance is already running, duration='{}'",
-                            Duration.ofMillis(durationMillis));
+                    log.info("Could not acquire lock, another instance is already running, "
+                            + "entity='{}', duration='{}'",
+                            entityLabel(), Duration.ofMillis(durationMillis));
                     return Mono.empty();
                 }),
                 lockTimeout(),
@@ -141,9 +141,11 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
                     var duration = Duration.ofMillis(durationMillis);
                     cycleDuration.record(durationMillis, resultError);
                     if (interrupted.get()) {
-                        log.warn("{} migration was interrupted, duration='{}'", entityLabel(), duration, throwable);
+                        log.warn("Migration interrupted, entity='{}', duration='{}'",
+                                entityLabel(), duration, throwable);
                     } else {
-                        log.error("{} migration failed, duration='{}'", entityLabel(), duration, throwable);
+                        log.error("Migration failed, entity='{}', duration='{}'",
+                                entityLabel(), duration, throwable);
                     }
                     return Mono.empty();
                 })
@@ -155,16 +157,12 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
 
     @Override
     public void interrupt() {
-        log.info("Interrupting {} migration job", entityLabelLowerCase());
+        log.info("Interrupting migration job, entity='{}'", entityLabel());
         interrupted.set(true);
         var execution = currentExecution.get();
         if (execution != null && !execution.isDisposed()) {
             execution.dispose();
-            log.info("{} migration job interrupted successfully", entityLabel());
+            log.info("Migration job interrupted successfully, entity='{}'", entityLabel());
         }
-    }
-
-    private String entityLabelLowerCase() {
-        return entityLabel().toLowerCase();
     }
 }
