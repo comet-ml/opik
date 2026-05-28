@@ -8,12 +8,12 @@ size-estimation helpers under `agentic/compression/`.
 """
 
 import abc
-import dataclasses
 import enum
 import logging
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, List, Literal, Optional, Sequence, Union
 
 from . import config as llm_judge_config
+from . import model_capabilities as capabilities_registry
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,43 +24,6 @@ class ScoringToolStrategy(str, enum.Enum):
 
 
 ScoringToolStrategyMode = Literal["auto", "always", "never"]
-
-
-@dataclasses.dataclass(frozen=True)
-class ModelCapability:
-    """Judge-specific view of a model's fitness for single-pass scoring.
-
-    `context_window` is the raw model context. `single_pass_quality_ok`
-    is the judgment call layer — even when a trace fits, weak models
-    score long contexts poorly and should stay in the loop.
-    """
-
-    context_window: int
-    single_pass_quality_ok: bool
-
-
-# Conservative defaults. Models not listed fall back to
-# `_DEFAULT_CAPABILITY` (small window, quality-not-ok), so unknown models
-# stay in the agentic loop by default. Override via
-# `HeuristicSelector(model_capabilities=...)`.
-_MODEL_CAPABILITIES: Dict[str, ModelCapability] = {
-    "gpt-5": ModelCapability(context_window=400_000, single_pass_quality_ok=True),
-    "gpt-5-mini": ModelCapability(context_window=400_000, single_pass_quality_ok=True),
-    "gpt-5-nano": ModelCapability(context_window=400_000, single_pass_quality_ok=True),
-    "gpt-4o": ModelCapability(context_window=128_000, single_pass_quality_ok=True),
-    "gpt-4o-mini": ModelCapability(context_window=128_000, single_pass_quality_ok=True),
-    "claude-opus-4-7": ModelCapability(
-        context_window=200_000, single_pass_quality_ok=True
-    ),
-    "claude-sonnet-4-6": ModelCapability(
-        context_window=200_000, single_pass_quality_ok=True
-    ),
-    "claude-haiku-4-5": ModelCapability(
-        context_window=200_000, single_pass_quality_ok=True
-    ),
-}
-
-_DEFAULT_CAPABILITY = ModelCapability(context_window=8_000, single_pass_quality_ok=True)
 
 
 class ScoringToolStrategySelector(abc.ABC):
@@ -102,24 +65,29 @@ _DEFAULT_SAFETY_FACTOR = 0.5
 
 def _capability_for(
     model_name: str,
-    capabilities: Optional[Dict[str, ModelCapability]] = None,
-) -> ModelCapability:
+    capabilities: Optional[Sequence[capabilities_registry.ModelCapability]] = None,
+) -> capabilities_registry.ModelCapability:
     """Resolve a model name to its capability entry.
 
-    Exact match wins; falls back to the longest matching prefix so
-    versioned ids like `"gpt-5-nano-2025-08-07"` still resolve. Unknown
-    models get `_DEFAULT_CAPABILITY` — small window, not single-pass-ok.
+    The exact match on ``model_name_prefix`` wins; falls back to the longest
+    matching prefix, so versioned ids like ``"gpt-5-nano-2025-08-07"``
+    still resolve. Unknown models get ``_DEFAULT_CAPABILITY``.
     """
-    table = capabilities or _MODEL_CAPABILITIES
-    if model_name in table:
-        return table[model_name]
-    best: Optional[ModelCapability] = None
+    table = (
+        capabilities
+        if capabilities is not None
+        else capabilities_registry.MODEL_CAPABILITIES
+    )
+    best: Optional[capabilities_registry.ModelCapability] = None
     best_len = -1
-    for key, cap in table.items():
-        if model_name.startswith(key) and len(key) > best_len:
+    for cap in table:
+        prefix = cap.model_name_prefix
+        if model_name == prefix:
+            return cap
+        if model_name.startswith(prefix) and len(prefix) > best_len:
             best = cap
-            best_len = len(key)
-    return best if best is not None else _DEFAULT_CAPABILITY
+            best_len = len(prefix)
+    return best if best is not None else capabilities_registry.DEFAULT_CAPABILITY
 
 
 def compute_budget_tokens(
@@ -127,7 +95,7 @@ def compute_budget_tokens(
     *,
     safety_factor: float = _DEFAULT_SAFETY_FACTOR,
     prompt_overhead_tokens: int = _PROMPT_OVERHEAD_TOKENS,
-    capabilities: Optional[Dict[str, ModelCapability]] = None,
+    capabilities: Optional[Sequence[capabilities_registry.ModelCapability]] = None,
 ) -> int:
     """Tokens available for the trace overview / one-shot trace payload.
 
@@ -161,13 +129,19 @@ class HeuristicSelector(ScoringToolStrategySelector):
         self,
         safety_factor: float = _DEFAULT_SAFETY_FACTOR,
         prompt_overhead_tokens: int = _PROMPT_OVERHEAD_TOKENS,
-        model_capabilities: Optional[Dict[str, ModelCapability]] = None,
+        model_capabilities: Optional[
+            Sequence[capabilities_registry.ModelCapability]
+        ] = None,
     ) -> None:
         if not 0.0 < safety_factor <= 1.0:
             raise ValueError("safety_factor must be in (0, 1]")
         self._safety_factor = safety_factor
         self._prompt_overhead_tokens = prompt_overhead_tokens
-        self._capabilities = model_capabilities or _MODEL_CAPABILITIES
+        self._capabilities = (
+            model_capabilities
+            if model_capabilities is not None
+            else capabilities_registry.MODEL_CAPABILITIES
+        )
 
     def select(
         self,
@@ -211,7 +185,7 @@ class HeuristicSelector(ScoringToolStrategySelector):
         )
         return ScoringToolStrategy.ONE_SHOT
 
-    def _capability_for(self, model_name: str) -> ModelCapability:
+    def _capability_for(self, model_name: str) -> capabilities_registry.ModelCapability:
         # Preserved as a thin shim for backwards compatibility with the
         # one existing test that patches via the private helper.
         return _capability_for(model_name, self._capabilities)

@@ -5,7 +5,10 @@ import types
 import pytest
 
 from opik.evaluation.suite_evaluators import llm_judge
-from opik.evaluation.suite_evaluators.llm_judge import strategy_selector
+from opik.evaluation.suite_evaluators.llm_judge import (
+    model_capabilities,
+    strategy_selector,
+)
 
 
 class TestMakeSelector:
@@ -58,7 +61,7 @@ class TestHeuristicSelector:
             is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
-    def test_unknown_model__defaults_to_agentic(self):
+    def test_unknown_model__defaults_to_one_shot(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
         assert (
@@ -67,7 +70,7 @@ class TestHeuristicSelector:
                 model_name="unknown-model-xyz",
                 assertions=[],
             )
-            is strategy_selector.ScoringToolStrategy.AGENTIC
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
     def test_small_trace__capable_model__returns_one_shot(self):
@@ -90,13 +93,14 @@ class TestHeuristicSelector:
             is strategy_selector.ScoringToolStrategy.AGENTIC
         )
 
-    def test_small_model__forces_agentic_even_when_size_fits(self):
+    def test_small_model__not_forces_agentic_even_when_size_fits(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        # gpt-5-nano is flagged single_pass_quality_ok=False
+        # gpt-5-nano is flagged single_pass_quality_ok=True and the trace
+        # fits comfortably, so the heuristic stays on the one-shot path.
         assert (
             sel.select(trace_tool_context=ctx, model_name="gpt-5-nano", assertions=[])
-            is strategy_selector.ScoringToolStrategy.AGENTIC
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
     def test_invalid_safety_factor__raises(self):
@@ -106,9 +110,18 @@ class TestHeuristicSelector:
             strategy_selector.HeuristicSelector(safety_factor=1.5)
 
     def test_capability_prefix_match__longest_wins(self):
-        sel = strategy_selector.HeuristicSelector()
+        table = [
+            model_capabilities.ModelCapability(
+                "gpt-5", context_window=1, single_pass_quality_ok=True
+            ),
+            model_capabilities.ModelCapability(
+                "gpt-5-nano", context_window=2, single_pass_quality_ok=False
+            ),
+        ]
+        sel = strategy_selector.HeuristicSelector(model_capabilities=table)
         cap = sel._capability_for("gpt-5-nano-2025-08-07")
-        # Longest prefix is "gpt-5-nano", not "gpt-5".
+        # Longest matching prefix is "gpt-5-nano", not "gpt-5".
+        assert cap.model_name_prefix == "gpt-5-nano"
         assert cap.single_pass_quality_ok is False
 
 

@@ -52,7 +52,9 @@ def test_score__without_context__uses_one_shot_path():
 
 
 def test_score__with_context__routes_to_agentic_path():
-    judge = _make_judge()
+    judge = llm_judge.LLMJudge(
+        assertions=["x"], track=False, scoring_tool_strategy="always"
+    )
     ctx = _ctx()
     expected = [score_result.ScoreResult(name="x", value=False, reason="r")]
     with (

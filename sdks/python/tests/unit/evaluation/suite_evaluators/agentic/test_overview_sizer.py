@@ -12,7 +12,10 @@ from opik.evaluation.suite_evaluators.agentic.compression import (
     span_tree_serializer,
     tokens,
 )
-from opik.evaluation.suite_evaluators.llm_judge import strategy_selector
+from opik.evaluation.suite_evaluators.llm_judge import (
+    model_capabilities,
+    strategy_selector,
+)
 from opik.message_processing.emulation import models
 
 
@@ -310,13 +313,13 @@ class TestComputeBudgetTokens:
         assert from_versioned == from_canonical
 
     def test_unknown_model__uses_default_capability(self):
-        # _DEFAULT_CAPABILITY.context_window == 8_000
+        expected = int(model_capabilities.DEFAULT_CAPABILITY.context_window * 0.5)
         budget = strategy_selector.compute_budget_tokens(
             "totally-unknown-model",
             safety_factor=0.5,
             prompt_overhead_tokens=0,
         )
-        assert budget == 4_000
+        assert budget == expected
 
     def test_invalid_safety_factor__raises(self):
         with pytest.raises(ValueError):
@@ -325,11 +328,11 @@ class TestComputeBudgetTokens:
             strategy_selector.compute_budget_tokens("gpt-5", safety_factor=1.1)
 
     def test_custom_capabilities_table__used(self):
-        custom = {
-            "tinybot": strategy_selector.ModelCapability(
-                context_window=2_000, single_pass_quality_ok=True
+        custom = [
+            model_capabilities.ModelCapability(
+                "tinybot", context_window=2_000, single_pass_quality_ok=True
             )
-        }
+        ]
         budget = strategy_selector.compute_budget_tokens(
             "tinybot",
             safety_factor=0.5,
