@@ -66,7 +66,12 @@ public class DatabaseAnalyticsFactory {
                 .setPassword(password)
                 .setDefaultDatabase(databaseName)
                 .compressClientRequest(true)
-                .compressServerResponse(true);
+                .compressServerResponse(true)
+                // Truly non-blocking: without this, Client.query() runs the HTTP round-trip
+                // synchronously on the calling thread and returns an already-completed future,
+                // defeating Mono.fromFuture(). With async on, work runs on the v2 client's
+                // executor and the future genuinely defers until the response is back.
+                .useAsyncRequests(true);
 
         // Only server settings (custom_http_params content) are forwarded to the v2 client.
         // Top-level driver options (compress=1, health_check_interval, auto_discovery, failover)
