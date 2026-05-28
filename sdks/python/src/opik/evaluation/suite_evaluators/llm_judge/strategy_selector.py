@@ -60,9 +60,7 @@ _MODEL_CAPABILITIES: Dict[str, ModelCapability] = {
     ),
 }
 
-_DEFAULT_CAPABILITY = ModelCapability(
-    context_window=8_000, single_pass_quality_ok=False
-)
+_DEFAULT_CAPABILITY = ModelCapability(context_window=8_000, single_pass_quality_ok=True)
 
 
 class ScoringToolStrategySelector(abc.ABC):
