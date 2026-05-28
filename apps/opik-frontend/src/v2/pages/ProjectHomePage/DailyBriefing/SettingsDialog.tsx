@@ -41,10 +41,12 @@ export default function SettingsDialog({
   const BillingLink = usePluginsStore((state) => state.BillingLink);
 
   useEffect(() => {
-    setLocalEnabled(enabled);
-    setTimeDate(parseUtcTimeToLocalDate(scheduleTime));
-    setLocalCustomPrompt(customPrompt);
-  }, [enabled, scheduleTime, customPrompt]);
+    if (open) {
+      setLocalEnabled(enabled);
+      setTimeDate(parseUtcTimeToLocalDate(scheduleTime));
+      setLocalCustomPrompt(customPrompt);
+    }
+  }, [open, enabled, scheduleTime, customPrompt]);
 
   const scheduleTimeLocal = timeDate ? dayjs(timeDate).format("h:mm A") : "";
 
