@@ -62,14 +62,15 @@ const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       ignoreNextFocusRef.current = true;
-      flushOnEnter(event);
-      return;
     }
     flushOnEnter(event);
     const isEditingKey =
-      event.key.length === 1 ||
-      event.key === "Backspace" ||
-      event.key === "Delete";
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      (event.key.length === 1 ||
+        event.key === "Backspace" ||
+        event.key === "Delete");
     if (isEditingKey) setCalendarOpen(false);
   };
 
@@ -139,11 +140,14 @@ const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
               onFocus={handleFocus}
               onBlur={() => onChange({ dateTouched: true })}
               onKeyDown={handleKeyDown}
+              onPaste={() => setCalendarOpen(false)}
               className={cn("pr-8", showError && "border-destructive")}
             />
             <button
               type="button"
               aria-label="Open calendar"
+              aria-haspopup="dialog"
+              aria-expanded={calendarOpen}
               onMouseDown={handleIconMouseDown}
               onClick={handleIconClick}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-slate hover:text-foreground"
