@@ -1,6 +1,6 @@
 import { Columns3 } from "lucide-react";
 
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +21,7 @@ export type ColumnsButtonProps<TColumnData> = {
   sections?: ColumnsContentExtraSection<TColumnData>[];
   excludeFromSelectAll?: string[];
   layout?: "icon" | "labeled";
+  size?: ButtonProps["size"];
 };
 
 const ColumnsButton = <TColumnData,>({
@@ -32,6 +33,7 @@ const ColumnsButton = <TColumnData,>({
   sections,
   excludeFromSelectAll = [],
   layout = "icon",
+  size = "sm",
 }: ColumnsButtonProps<TColumnData>) => {
   const { selectedCount, totalCount } = useColumnsCount({
     columns,
@@ -45,7 +47,7 @@ const ColumnsButton = <TColumnData,>({
       <TooltipWrapper content="Columns">
         <DropdownMenuTrigger asChild>
           {layout === "labeled" ? (
-            <Button variant="outline" size="sm" data-testid="columns-button">
+            <Button variant="outline" size={size} data-testid="columns-button">
               Columns
               <div className="ml-1 rounded bg-muted-disabled px-1 text-muted-slate">
                 {selectedCount}/{totalCount}
