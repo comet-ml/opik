@@ -16,6 +16,7 @@ public class McpOAuthBundle implements GuiceyBundle {
                     OAuthAuthorizeResource.class,
                     OAuthTokenResource.class,
                     OAuthValidateResource.class,
+                    OAuthRegisterResource.class,
                     McpOAuthScrubJob.class);
         }
     }
