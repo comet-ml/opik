@@ -199,6 +199,12 @@ class EnvironmentAlreadyExists(OpikException):
     pass
 
 
+class EnvironmentConfigurationError(OpikException):
+    """Raised when an environment configuration operation is not permitted."""
+
+    pass
+
+
 class LLMJudgeParseError(OpikException):
     """Raised when LLMJudge output fails validation.
 

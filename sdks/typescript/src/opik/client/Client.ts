@@ -70,7 +70,10 @@ import {
 import { trackStorage, getTrackContext } from "@/decorators/track";
 import { UpdateService } from "@/tracer/UpdateService";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
-import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
+import {
+  EnvironmentAlreadyExistsError,
+  EnvironmentConfigurationError,
+} from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
@@ -2053,10 +2056,25 @@ export class OpikClient {
     return page.content ?? [];
   };
 
+  private static readonly BUILTIN_ENVIRONMENT_NAMES = new Set([
+    "production",
+    "staging",
+    "development",
+  ]);
+
   public updateEnvironment = async (
     name: string,
     options?: { description?: string; color?: string }
   ): Promise<OpikApi.EnvironmentPublic> => {
+    if (
+      options?.color !== undefined &&
+      OpikClient.BUILTIN_ENVIRONMENT_NAMES.has(name)
+    ) {
+      throw new EnvironmentConfigurationError(
+        `Cannot change the colour of the built-in environment '${name}'. ` +
+          "Colour updates are not allowed for 'production', 'staging', or 'development'."
+      );
+    }
     const existing = await this._findEnvironmentByName(name, true);
     await this.api.environments.updateEnvironment(existing!.id!, {
       description: options?.description,
