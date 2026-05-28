@@ -4,7 +4,6 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
@@ -25,9 +24,6 @@ public class OAuthMetadataResource {
 
     @GET
     public Response metadata() {
-        if (!config.isEnabled()) {
-            throw new NotFoundException();
-        }
         String issuer = config.getIssuer();
         return Response.ok(AuthorizationServerMetadata.builder()
                 .issuer(issuer)

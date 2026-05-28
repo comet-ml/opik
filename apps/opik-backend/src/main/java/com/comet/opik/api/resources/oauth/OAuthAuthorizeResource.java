@@ -16,7 +16,6 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -68,7 +67,6 @@ public class OAuthAuthorizeResource {
             @Context HttpHeaders headers,
             @Context UriInfo uriInfo) {
 
-        requireEnabled();
         McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
 
         // client and redirect_uri are now trusted, so protocol errors are reported back to the client via redirect.
@@ -108,7 +106,6 @@ public class OAuthAuthorizeResource {
             @QueryParam("redirect_uri") String redirectUri,
             @Context HttpHeaders headers) {
 
-        requireEnabled();
         McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
 
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
@@ -132,8 +129,6 @@ public class OAuthAuthorizeResource {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response consent(@NonNull ConsentRequest request, @Context HttpHeaders headers) {
-
-        requireEnabled();
 
         Cookie csrfCookie = headers.getCookies().get(CSRF_COOKIE);
         if (csrfCookie == null || isBlank(csrfCookie.getValue()) || request.csrf() == null
@@ -164,12 +159,6 @@ public class OAuthAuthorizeResource {
 
         String query = "code=" + enc(code) + (isBlank(request.state()) ? "" : "&state=" + enc(request.state()));
         return Response.ok(new ConsentResponse(appendQuery(request.redirectUri(), query))).build();
-    }
-
-    private void requireEnabled() {
-        if (!config.isEnabled()) {
-            throw new NotFoundException();
-        }
     }
 
     private McpOAuthClient requireClientWithRedirect(String clientId, String redirectUri) {

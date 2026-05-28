@@ -14,8 +14,8 @@ public class McpOAuthTokens {
 
     public static final String ACCESS_PREFIX = "opik_at_";
     public static final String REFRESH_PREFIX = "opik_rt_";
+    public static final int RANDOM_BYTES = 32;
 
-    private static final int RANDOM_BYTES = 32;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
