@@ -958,11 +958,23 @@ def _added_item_payload(
     """Build the ``added_items`` payload entry for one source item.
 
     BE-side this maps to ``DatasetItem`` (the API record). Forwards every
-    user-writable field the BE persists: data, trace_id, span_id, source,
-    description, tags, evaluators, execution_policy. The BE assigns the
-    target's stable id regardless of what we send, so we leave id out.
+    user-writable field the BE persists: id, data, trace_id, span_id,
+    source, description, tags, evaluators, execution_policy.
+
+    OPIK-6697: ``id`` is forwarded so the destination's stable
+    ``dataset_item_id`` matches the source's. Without this, v1 items get
+    fresh BE-assigned ids while v2+ items COPY-preserve source ids (the
+    new copy_from path), and a single ``item_id_remap`` can't capture
+    "same source id maps to different dest ids per version" — the
+    experiment cascade then joins experiment_items.dataset_item_id (the
+    remapped v1 id) against dest v_i's items (source ids) and produces
+    a partial outer-join with null data + null source on the unmatched
+    rows. Forwarding ``id`` here makes dest v1 use the source's stable
+    id too, so the remap is identity across all versions.
     """
     payload: Dict[str, Any] = {"data": dict(item.data) if item.data else {}}
+    if item.id is not None:
+        payload["id"] = item.id
     if item.trace_id is not None:
         payload["trace_id"] = item.trace_id
     if item.span_id is not None:
