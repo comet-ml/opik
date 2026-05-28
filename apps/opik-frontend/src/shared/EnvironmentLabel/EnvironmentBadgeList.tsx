@@ -114,7 +114,7 @@ const EnvironmentBadgeList: React.FC<EnvironmentBadgeListProps> = ({
             className={cn(
               "flex shrink-0 items-center justify-center border border-border text-muted-slate",
               compact
-                ? "comet-body-xs h-4 min-w-4 px-1 text-[10px] leading-none rounded-[0.2rem]"
+                ? "comet-body-xs h-[18px] min-w-[18px] px-0.5 text-[10px] leading-none rounded-[0.2rem]"
                 : COUNTER_CLASSES[size ?? "sm"],
             )}
           >
