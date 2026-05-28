@@ -20,6 +20,7 @@ class AnnotationQueuePublic(UniversalBaseModel):
     scope: AnnotationQueuePublicScope
     comments_enabled: typing.Optional[bool] = None
     feedback_definition_names: typing.Optional[typing.List[str]] = None
+    annotators_per_item: typing.Optional[int] = None
     reviewers: typing.Optional[typing.List[AnnotationQueueReviewerPublic]] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
     items_count: typing.Optional[int] = None

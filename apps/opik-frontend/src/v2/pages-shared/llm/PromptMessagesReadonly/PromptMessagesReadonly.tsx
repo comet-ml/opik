@@ -1,11 +1,9 @@
 import React from "react";
-import capitalize from "lodash/capitalize";
 import { cn } from "@/lib/utils";
 import { useHeightTruncation } from "@/hooks/useHeightTruncation";
 import { Button } from "@/ui/button";
 import MediaTagsList from "@/v2/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
-import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
-import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import ChatMessageCard from "@/v2/pages-shared/llm/ChatMessageCard/ChatMessageCard";
 
 export interface ChatMessage {
   role: string;
@@ -25,14 +23,6 @@ type MediaItem = {
   video_url?: { url: string };
   audio_url?: { url: string };
   input_audio?: { data: string };
-};
-
-const getRoleLabel = (role: string): string => {
-  const roleKey = role.toUpperCase() as keyof typeof LLM_MESSAGE_ROLE;
-  if (LLM_MESSAGE_ROLE[roleKey]) {
-    return LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE[roleKey]] || role;
-  }
-  return capitalize(role);
 };
 
 const getTextAndMedia = (
@@ -102,12 +92,7 @@ export const PromptMessageCard: React.FC<PromptMessageCardProps> = ({
   );
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-md border bg-primary-foreground p-3">
-      <div className="flex items-center">
-        <span className="comet-body-s-accented text-light-slate">
-          {getRoleLabel(message.role)}
-        </span>
-      </div>
+    <ChatMessageCard role={message.role}>
       {text && (
         <div
           ref={ref}
@@ -136,7 +121,7 @@ export const PromptMessageCard: React.FC<PromptMessageCardProps> = ({
           <MediaTagsList type="audio" items={audios} editable={false} />
         </div>
       )}
-    </div>
+    </ChatMessageCard>
   );
 };
 
@@ -154,7 +139,7 @@ const PromptMessagesReadonly: React.FC<PromptMessagesReadonlyProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       {messages.map((message, index) => (
         <PromptMessageCard
           key={`${message.role}-${index}`}

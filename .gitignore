@@ -1,6 +1,9 @@
 # Mac
 .DS_Store
 
+# Load-test suite runtime output (one JSON file per scenario per run)
+.last_run/
+
 # Environment variables
 .env.local
 .env
@@ -111,6 +114,13 @@ response.txt
 
 # Playwright
 .playwright-mcp/
+tests_end_to_end/visual-tests/node_modules/
+tests_end_to_end/visual-tests/test-results/
+tests_end_to_end/typescript-tests/test-results/
+tests_end_to_end/visual-tests/visual-report/
+tests_end_to_end/visual-tests/.auth/
+tests_end_to_end/visual-tests/.test-state.json
+tests_end_to_end/visual-tests/screenshots/
 *~
 
 # Generated diagrams (local artifacts from /share-diagram command)

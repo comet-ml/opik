@@ -53,7 +53,14 @@ public interface WorkspacesService {
 
     List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
 
-    long countExperimentProjectMigrationSkipped();
+    /**
+     * Prompt-cycle parallel of {@link #markExperimentProjectMigrationSkipped}, recording the trap
+     * in the dedicated {@code prompt_project_migration_skipped_at} column so the experiment trap
+     * state isn't disturbed.
+     */
+    boolean markPromptProjectMigrationSkipped(String workspaceId, String reason);
+
+    List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
      * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
@@ -132,7 +139,7 @@ class WorkspacesServiceImpl implements WorkspacesService {
      * <p>A duplicate-key on the INSERT does <b>not</b> mean another writer flipped
      * {@code first_trace_reported_at} — it just means the row exists. It might have been inserted
      * by an unrelated writer (version determination, migration job) that didn't touch the column.
-     * Retrying the UPDATE-if-null disambiguates: if the column is still NULL we flip it.</p>
+     * Retrying the UPDATE-if-null disambiguate: if the column is still NULL we flip it.</p>
      */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
@@ -189,9 +196,30 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     @Override
-    public long countExperimentProjectMigrationSkipped() {
+    public boolean markPromptProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertPromptProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
+    }
+
+    @Override
+    public List<String> findPromptProjectMigrationSkippedWorkspaceIds() {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countExperimentProjectMigrationSkipped());
+                handle -> handle.attach(WorkspacesDAO.class).findPromptProjectMigrationSkippedWorkspaceIds());
     }
 
     /**

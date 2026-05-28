@@ -20,6 +20,7 @@ export const AnnotationQueueWrite: core.serialization.ObjectSchema<
         "feedback_definition_names",
         core.serialization.list(core.serialization.string()).optional(),
     ),
+    annotatorsPerItem: core.serialization.property("annotators_per_item", core.serialization.number().optional()),
 });
 
 export declare namespace AnnotationQueueWrite {
@@ -32,5 +33,6 @@ export declare namespace AnnotationQueueWrite {
         scope: AnnotationQueueWriteScope.Raw;
         comments_enabled?: boolean | null;
         feedback_definition_names?: string[] | null;
+        annotators_per_item?: number | null;
     }
 }

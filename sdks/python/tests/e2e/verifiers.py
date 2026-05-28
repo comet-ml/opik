@@ -514,6 +514,44 @@ def _verify_experiment_metadata(
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
 
 
+def verify_experiment_traces_have_opik_prompts(
+    opik_client: opik.Opik,
+    trace_ids: List[str],
+    prompts: List[Prompt],
+) -> None:
+    """Verify each trace produced by an experiment carries `opik_prompts`
+    in its metadata. Backend needs this for trace-level prompt linkage."""
+    assert trace_ids, "Expected at least one trace_id to verify prompt injection"
+
+    expected_prompt_keys = sorted(
+        (p.__internal_api__prompt_id__, p.commit) for p in prompts
+    )
+
+    for trace_id in trace_ids:
+        assert synchronization.until(
+            lambda: opik_client.get_trace_content(id=trace_id) is not None,
+            allow_errors=True,
+        ), f"Failed to get trace {trace_id}"
+
+        trace_content = opik_client.get_trace_content(id=trace_id)
+        assert trace_content.metadata is not None, (
+            f"Trace {trace_id} has no metadata; expected opik_prompts"
+        )
+        actual_prompts = trace_content.metadata.get("opik_prompts")
+        assert actual_prompts, (
+            f"Trace {trace_id} metadata is missing 'opik_prompts': "
+            f"{trace_content.metadata}"
+        )
+        actual_keys = sorted(
+            (p.get("id"), (p.get("version") or {}).get("commit"))
+            for p in actual_prompts
+        )
+        assert actual_keys == expected_prompt_keys, (
+            f"Trace {trace_id} opik_prompts mismatch: "
+            f"actual={actual_keys}, expected={expected_prompt_keys}"
+        )
+
+
 def _verify_experiment_prompts(
     experiment_content: ExperimentPublic,
     prompts: Optional[List[Prompt]],
@@ -797,6 +835,13 @@ def verify_opik_prompt_entry(
     )
     assert "commit" in version, (
         f"Missing 'version.commit' in opik_prompts entry for {name}"
+    )
+    # Sequential version identifier (e.g. "v1"). Mask versions don't carry one,
+    # but the injected entries in this happy-path test come from non-mask
+    # `create_prompt` / `create_chat_prompt` calls, which always have it.
+    assert version.get("version_number", "").startswith("v"), (
+        f"Expected 'version.version_number' starting with 'v' in opik_prompts entry for {name}, "
+        f"got {version.get('version_number')!r}"
     )
 
 

@@ -54,4 +54,10 @@ public class DemoData {
 
     /** ClickHouse — matching is case-sensitive, list every known casing explicitly. */
     public static final List<String> OPTIMIZATIONS = List.of("ivory_berm_3833");
+
+    /** MySQL (utf8mb4_unicode_ci) — matching is case-insensitive, no need for case variants. */
+    public static final List<String> AUTOMATION_RULES = List.of();
+
+    /** MySQL (utf8mb4_unicode_ci) — matching is case-insensitive, no need for case variants. */
+    public static final List<String> ALERTS = List.of();
 }

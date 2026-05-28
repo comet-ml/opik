@@ -21,7 +21,15 @@ export class PromptVersion {
   public readonly id: string;
   public readonly name: string;
   public readonly prompt: string;
+  /**
+   * @deprecated Legacy commit hash of this prompt version. Use {@link version} instead — `commit` is no longer surfaced in the Opik UI and is kept only for backwards compatibility with older SDK callers.
+   */
   public readonly commit: string;
+  /**
+   * Sequential version identifier of this prompt version (e.g. `"v3"`).
+   * Undefined for mask versions, which do not carry a version number.
+   */
+  public readonly version?: string;
   public readonly type: PromptType;
   public readonly metadata?: OpikApi.JsonNode;
   public readonly changeDescription?: string;
@@ -34,6 +42,7 @@ export class PromptVersion {
     this.name = data.name;
     this.prompt = data.prompt;
     this.commit = data.commit;
+    this.version = data.version;
     this.type = data.type;
     this.metadata = data.metadata;
     this.changeDescription = data.changeDescription;
@@ -61,11 +70,12 @@ export class PromptVersion {
   }
 
   /**
-   * Get formatted version information string
-   * Format: "[commitHash] YYYY-MM-DD by user@email.com - Change description"
+   * Get formatted version information string.
+   * Format: "[v3] YYYY-MM-DD by user@email.com - Change description"
+   * (falls back to the commit hash for mask versions, which have no version number).
    */
   getVersionInfo(): string {
-    const parts: string[] = [`[${this.commit}]`];
+    const parts: string[] = [`[${this.version ?? this.commit}]`];
 
     if (this.createdAt) {
       const date = new Date(this.createdAt);
@@ -95,17 +105,18 @@ export class PromptVersion {
    *
    * @example
    * ```typescript
-   * const currentVersion = await prompt.getVersion("commit123");
-   * const previousVersion = await prompt.getVersion("commit456");
+   * const versions = await prompt.getVersions();
+   * const [current, previous] = versions;
    *
    * // Logs diff to terminal and returns it
-   * const diff = currentVersion.compareTo(previousVersion);
+   * const diff = current.compareTo(previous);
    * ```
    */
   compareTo(other: PromptVersion): string {
-    // Use descriptive labels that include version identifiers
-    const thisLabel = `Current version [${this.commit}]`;
-    const otherLabel = `Other version [${other.commit}]`;
+    // Prefer the sequential version identifier in labels (e.g. "v3"); fall back
+    // to the legacy commit hash when version is absent (e.g. mask versions).
+    const thisLabel = `Current version [${this.version ?? this.commit}]`;
+    const otherLabel = `Other version [${other.version ?? other.commit}]`;
 
     // Check if this is a chat prompt (template structure is chat)
     let thisFormatted = this.prompt;
@@ -200,6 +211,7 @@ export class PromptVersion {
       name,
       prompt: apiResponse.template,
       commit: apiResponse.commit,
+      version: apiResponse.versionNumber ?? undefined,
       promptId: apiResponse.promptId,
       versionId: apiResponse.id,
       type: apiResponse.type ?? PromptType.MUSTACHE,

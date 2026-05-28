@@ -228,6 +228,69 @@ class TestGetOrFetch:
         assert r2 is p2
 
 
+class TestGetOrFetchVersionSelector:
+    """Tests for the ``version`` parameter on the module-level ``get_or_fetch``."""
+
+    def test_get_or_fetch__different_versions__return_separate_entries(self):
+        p1 = _make_mock_prompt(commit="commitA")
+        p2 = _make_mock_prompt(commit="commitB")
+        fetch1 = mock.Mock(return_value=p1)
+        fetch2 = mock.Mock(return_value=p2)
+
+        first = prompt_cache.get_or_fetch("p", None, None, "text", fetch1, version="v1")
+        second = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch2, version="v2"
+        )
+
+        assert first is p1
+        assert second is p2
+        fetch1.assert_called_once()
+        fetch2.assert_called_once()
+
+    def test_get_or_fetch__same_version__second_call_hits_cache(self):
+        p = _make_mock_prompt()
+        fetch_fn = mock.Mock(return_value=p)
+
+        first = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch_fn, version="v2"
+        )
+        second = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch_fn, version="v2"
+        )
+
+        assert first is second is p
+        fetch_fn.assert_called_once()
+
+    def test_get_or_fetch__commit_pin_and_version_pin__do_not_collide(self):
+        p_commit = _make_mock_prompt(commit="abc12345")
+        p_version = _make_mock_prompt(commit="def67890")
+        fetch_commit = mock.Mock(return_value=p_commit)
+        fetch_version = mock.Mock(return_value=p_version)
+
+        from_commit = prompt_cache.get_or_fetch(
+            "p", "abc12345", None, "text", fetch_commit
+        )
+        from_version = prompt_cache.get_or_fetch(
+            "p", None, None, "text", fetch_version, version="v3"
+        )
+
+        assert from_commit is p_commit
+        assert from_version is p_version
+        fetch_commit.assert_called_once()
+        fetch_version.assert_called_once()
+
+    def test_get_or_fetch__version_selector__starts_refresh_thread(self):
+        # Sequential versions can be reassigned by the backend if the underlying
+        # version is deleted and recreated, so they must follow the normal TTL
+        # refresh (not pinned indefinitely).
+        p = _make_mock_prompt()
+        fetch_fn = mock.Mock(return_value=p)
+        prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn, version="v1")
+        cache = get_global_cache()
+        assert cache._thread is not None
+        assert cache._thread.is_alive()
+
+
 class TestPromptCacheEdgeCases:
     def test_get_or_fetch__multiple_unpinned_inserts__reuses_single_refresh_thread(
         self, cache

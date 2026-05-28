@@ -155,7 +155,7 @@ describe("Prompt - Instance Methods", () => {
   });
 
   describe("getVersion()", () => {
-    it("should retrieve specific version by commit hash", async () => {
+    it("should retrieve specific version by commit hash (deprecated input)", async () => {
       const versionResponse = createMockVersionDetail({
         commit: "abc123de",
         template: "Version template",
@@ -170,6 +170,44 @@ describe("Prompt - Instance Methods", () => {
       expect(versionPrompt).toBeInstanceOf(Prompt);
       expect(versionPrompt?.commit).toBe("abc123de");
       expect(versionPrompt?.prompt).toBe("Version template");
+      // Commit-shaped input must hit the commit endpoint
+      expect(
+        mockOpikClient.api.prompts.retrievePromptVersion
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ commit: "abc123de" }),
+        expect.anything()
+      );
+    });
+
+    it("should retrieve specific version by sequential version identifier", async () => {
+      const versionResponse = createMockVersionDetail({
+        commit: "abc123de",
+        versionNumber: "v3",
+        template: "Version 3 template",
+      });
+
+      vi.mocked(
+        mockOpikClient.api.prompts.retrievePromptVersion
+      ).mockResolvedValueOnce(versionResponse);
+
+      const versionPrompt = await mockPrompt.getVersion("v3");
+
+      expect(versionPrompt).toBeInstanceOf(Prompt);
+      expect(versionPrompt?.version).toBe("v3");
+      expect(versionPrompt?.prompt).toBe("Version 3 template");
+      // "v<N>"-shaped input must hit the versionNumber endpoint, not commit
+      expect(
+        mockOpikClient.api.prompts.retrievePromptVersion
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ versionNumber: "v3" }),
+        expect.anything()
+      );
+      expect(
+        mockOpikClient.api.prompts.retrievePromptVersion
+      ).not.toHaveBeenCalledWith(
+        expect.objectContaining({ commit: expect.anything() }),
+        expect.anything()
+      );
     });
 
     it("should return null for non-existent version", async () => {

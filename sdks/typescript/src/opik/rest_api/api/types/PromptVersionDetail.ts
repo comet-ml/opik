@@ -15,7 +15,9 @@ export interface PromptVersionDetail {
     type?: OpikApi.PromptVersionDetailType;
     /** version type discriminator; defaults to prompt_version */
     versionType?: OpikApi.PromptVersionDetailVersionType;
+    /** Deprecated: use 'environments' instead */
     environment?: string;
+    environments?: string[];
     changeDescription?: string;
     tags?: string[];
     variables?: string[];

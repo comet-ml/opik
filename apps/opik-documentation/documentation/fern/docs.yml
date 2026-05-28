@@ -87,6 +87,28 @@ redirects:
     permanent: true
   - source: "/docs/opik/prompt_engineering/prompt_optimization"
     destination: "/docs/opik/development/optimization-runs/overview"
+  # Agent configuration → Prompt Library (renamed in v2)
+  - source: "/docs/opik/development/agent-configuration"
+    destination: "/docs/opik/development/prompt-library/overview"
+    permanent: true
+  - source: "/docs/opik/development/agent-configuration/overview"
+    destination: "/docs/opik/development/prompt-library/overview"
+    permanent: true
+  - source: "/docs/opik/development/agent-configuration/getting-started"
+    destination: "/docs/opik/development/prompt-library/getting-started"
+    permanent: true
+  - source: "/docs/opik/development/agent-configuration/concepts"
+    destination: "/docs/opik/development/prompt-library/overview"
+    permanent: true
+  - source: "/docs/opik/development/agent-configuration/version-control"
+    destination: "/docs/opik/development/prompt-library/version-control"
+    permanent: true
+  - source: "/docs/opik/development/agent-configuration/guaranteed-availability"
+    destination: "/docs/opik/development/prompt-library/overview"
+    permanent: true
+  - source: "/docs/opik/development/agent-configuration/mcp-server"
+    destination: "/docs/opik/development/prompt-library/mcp-server"
+    permanent: true
   # Common guessed paths for TypeScript SDK and integrations
   - source: "/docs/opik/typescript-sdk"
     destination: "/docs/opik/reference/typescript-sdk/overview"
@@ -365,9 +387,6 @@ redirects:
     permanent: true
   - source: "/docs/opik/cookbook/google_adk_integration"
     destination: "/docs/opik/integrations/adk"
-    permanent: true
-  - source: "/docs/opik/cookbook/gretel"
-    destination: "/docs/opik/integrations/gretel"
     permanent: true
   - source: "/docs/opik/cookbook/groq"
     destination: "/docs/opik/integrations/groq"

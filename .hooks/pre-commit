@@ -78,6 +78,20 @@ run_precommit_scope "Python SDK" '^sdks/python/' 'sdks/python/.pre-commit-config
 run_precommit_scope "Optimizer SDK" '^sdks/opik_optimizer/' 'sdks/opik_optimizer/.pre-commit-config.yaml'
 run_precommit_scope "Guardrails backend" '^apps/opik-guardrails-backend/' 'apps/opik-guardrails-backend/.pre-commit-config.yaml'
 
+# Helm chart docs: regenerate chart README when chart files change.
+staged_helm=$(staged_files | grep -E '^deployment/helm_chart/.+/(values\.yaml|Chart\.yaml|README\.md\.gotmpl)$' || true)
+
+if [ -z "$staged_helm" ]; then
+  echo "No Helm chart files changed. Skipping helm-docs."
+elif ! command -v pre-commit >/dev/null 2>&1; then
+  echo "Helm chart files changed but pre-commit is not installed. Skipping local helm-docs."
+  echo "Install: pip install pre-commit  (or see https://pre-commit.com/#install)"
+else
+  echo "Helm chart files have been changed. Running helm-docs..."
+  pre-commit run helm-docs --files $staged_helm || true
+  git -C "$REPO_ROOT" add -u deployment/helm_chart/
+fi
+
 # Workflows / composite actions: validate with actionlint when available.
 # Composite actions (`.github/actions/*/action.yml`) cannot be linted directly —
 # they're validated transitively when a workflow that uses them is linted. For

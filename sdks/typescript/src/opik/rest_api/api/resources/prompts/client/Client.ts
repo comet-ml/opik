@@ -1381,11 +1381,13 @@ export class PromptsClient {
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.prompts.setPromptVersionEnvironment("versionId")
+     *     await client.prompts.setPromptVersionEnvironment("versionId", {
+     *         environments: ["environments"]
+     *     })
      */
     public setPromptVersionEnvironment(
         versionId: string,
-        request: OpikApi.PromptVersionEnvironmentUpdate = {},
+        request: OpikApi.PromptVersionEnvironmentUpdate,
         requestOptions?: PromptsClient.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(
@@ -1395,7 +1397,7 @@ export class PromptsClient {
 
     private async __setPromptVersionEnvironment(
         versionId: string,
-        request: OpikApi.PromptVersionEnvironmentUpdate = {},
+        request: OpikApi.PromptVersionEnvironmentUpdate,
         requestOptions?: PromptsClient.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

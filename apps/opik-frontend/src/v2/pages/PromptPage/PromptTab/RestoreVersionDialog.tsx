@@ -17,12 +17,19 @@ type RestoreVersionDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   versionToRestore: PromptVersion | null;
+  versionLabel?: string;
   onSetActiveVersionId: (versionId: string) => void;
 };
 
 const RestoreVersionDialog: React.FunctionComponent<
   RestoreVersionDialogProps
-> = ({ open, setOpen, versionToRestore, onSetActiveVersionId }) => {
+> = ({
+  open,
+  setOpen,
+  versionToRestore,
+  versionLabel,
+  onSetActiveVersionId,
+}) => {
   const restorePromptVersionMutation = useRestorePromptVersionMutation();
   const isLoading = restorePromptVersionMutation.isPending;
 
@@ -45,15 +52,17 @@ const RestoreVersionDialog: React.FunctionComponent<
     );
   };
 
+  const label = versionLabel ?? versionToRestore?.commit ?? "";
+  const numericLabel = label.startsWith("v") ? label.slice(1) : label;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Restore Version</DialogTitle>
+          <DialogTitle>Restore version {numericLabel}</DialogTitle>
           <DialogDescription>
-            Are you sure you want to restore version{" "}
-            <span className="font-medium">{versionToRestore?.commit}</span>?
-            This will create a new version with the same content.
+            Are you sure you want to restore version {numericLabel}? This will
+            create a new version with the same content.
           </DialogDescription>
         </DialogHeader>
 
@@ -65,7 +74,7 @@ const RestoreVersionDialog: React.FunctionComponent<
             onClick={handleConfirm}
             disabled={isLoading || !versionToRestore}
           >
-            {isLoading ? "Restoring..." : "Restore"}
+            {isLoading ? "Restoring…" : `Restore ${label}`}
           </Button>
         </DialogFooter>
       </DialogContent>

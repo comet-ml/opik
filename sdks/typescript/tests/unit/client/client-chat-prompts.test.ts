@@ -3,6 +3,7 @@ import { OpikClient } from "@/client/Client";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { PromptTemplateStructureMismatch } from "@/prompt/errors";
 import { PromptTemplateStructure, type ChatMessage } from "@/prompt/types";
+import { getGlobalCache } from "@/prompt/promptCache";
 import { OpikApiError, OpikApiTimeoutError } from "@/rest_api";
 import type * as OpikApi from "@/rest_api/api";
 
@@ -10,6 +11,7 @@ describe("OpikClient - Chat Prompts", () => {
   let client: OpikClient;
 
   beforeEach(() => {
+    getGlobalCache().clear();
     client = new OpikClient({
       apiKey: "test-key",
       holdUntilFlush: true,
@@ -426,6 +428,91 @@ describe("OpikClient - Chat Prompts", () => {
         { name: "test-chat-prompt", commit: "abc123", projectName: "Default Project" },
         {}
       );
+    });
+
+    it("should retrieve specific version by sequential version number", async () => {
+      const messages: ChatMessage[] = [
+        { role: "user", content: "Hello v3" },
+      ];
+
+      vi.spyOn(client.api.prompts, "getPrompts").mockResolvedValue({
+        content: [
+          { name: "test-chat-prompt" } as OpikApi.PromptPublic,
+        ],
+      } as OpikApi.PromptPagePublic);
+
+      const mockRetrievePromptVersion = vi
+        .spyOn(client.api.prompts, "retrievePromptVersion")
+        .mockResolvedValue({
+          id: "version-123",
+          promptId: "prompt-456",
+          template: JSON.stringify(messages),
+          commit: "abc123",
+          versionNumber: "v3",
+          type: "mustache",
+          templateStructure: "chat",
+        } as OpikApi.PromptVersionDetail);
+
+      const chatPrompt = await client.getChatPrompt({
+        name: "test-chat-prompt",
+        version: "v3",
+      });
+
+      expect(chatPrompt).toBeInstanceOf(ChatPrompt);
+      expect(chatPrompt?.version).toBe("v3");
+      expect(mockRetrievePromptVersion).toHaveBeenCalledWith(
+        {
+          name: "test-chat-prompt",
+          projectName: "Default Project",
+          versionNumber: "v3",
+        },
+        {}
+      );
+
+      // Make sure the SDK-only `version` field is NOT forwarded as-is.
+      const callArgs = mockRetrievePromptVersion.mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(callArgs.version).toBeUndefined();
+    });
+
+    it("should reject when both commit and version are provided", async () => {
+      await expect(
+        client.getChatPrompt({
+          name: "test-chat-prompt",
+          commit: "abc123de",
+          version: "v3",
+        })
+      ).rejects.toThrow(/Provide either `commit` or `version`/);
+    });
+
+    it("should populate chatPrompt.version from the API response versionNumber field", async () => {
+      const messages: ChatMessage[] = [
+        { role: "user", content: "Hi" },
+      ];
+
+      vi.spyOn(client.api.prompts, "getPrompts").mockResolvedValue({
+        content: [
+          { name: "test-chat-prompt" } as OpikApi.PromptPublic,
+        ],
+      } as OpikApi.PromptPagePublic);
+
+      vi.spyOn(client.api.prompts, "retrievePromptVersion").mockResolvedValue({
+        id: "version-123",
+        promptId: "prompt-456",
+        template: JSON.stringify(messages),
+        commit: "abc123",
+        versionNumber: "v5",
+        type: "mustache",
+        templateStructure: "chat",
+      } as OpikApi.PromptVersionDetail);
+
+      const chatPrompt = await client.getChatPrompt({
+        name: "test-chat-prompt",
+      });
+
+      expect(chatPrompt?.version).toBe("v5");
     });
   });
 

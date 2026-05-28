@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
@@ -56,6 +57,8 @@ public interface EnvironmentService {
     void bulkCreate(Set<String> names, String workspaceId, String userName);
 
     boolean existsByName(String name, String workspaceId);
+
+    Set<String> findExistingNames(Set<String> names, String workspaceId);
 
     Environment update(UUID id, EnvironmentUpdate environmentUpdate);
 
@@ -197,6 +200,15 @@ class EnvironmentServiceImpl implements EnvironmentService {
             var repository = handle.attach(EnvironmentDAO.class);
             return repository.countByName(workspaceId, name) > 0;
         });
+    }
+
+    @Override
+    public Set<String> findExistingNames(Set<String> names, @NonNull String workspaceId) {
+        if (CollectionUtils.isEmpty(names)) {
+            return Set.of();
+        }
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(EnvironmentDAO.class)
+                .findNames(workspaceId, names));
     }
 
     private void trackEnvironmentCreatedEvent(Environment environment, String workspaceId, String userName,

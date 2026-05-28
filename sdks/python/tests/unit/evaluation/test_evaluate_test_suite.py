@@ -43,6 +43,7 @@ def _create_suite(mock_dataset, client=None):
 def test_run_tests__creates_experiment_with_evaluation_method_test_suite():
     mock_dataset = _create_mock_dataset()
     mock_experiment = mock.MagicMock()
+    mock_experiment.prompts = None
     mock_experiment.id = "exp-123"
     mock_experiment.name = "test-experiment"
 
@@ -73,6 +74,7 @@ def test_run_tests__passes_evaluation_method_not_dataset():
     """Verify it's specifically 'evaluation_suite', not 'dataset'."""
     mock_dataset = _create_mock_dataset()
     mock_experiment = mock.MagicMock()
+    mock_experiment.prompts = None
     mock_experiment.id = "exp-456"
     mock_experiment.name = "test-experiment-2"
 
@@ -104,6 +106,7 @@ def _call_run_tests(items, client=None):
     mock_dataset = _create_mock_dataset(items=items)
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "exp-789"
     mock_experiment.name = "source-test-experiment"
 
@@ -188,6 +191,7 @@ def test_internal_run__with_optimization_id__trace_source_optimization(
     mock_dataset = _create_mock_dataset(items=items)
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "exp-789"
     mock_experiment.name = "source-test-experiment"
 
@@ -254,6 +258,7 @@ def test_run_tests__explicit_client__used_for_experiment_creation():
     """When a suite has an explicit client, run_tests uses it."""
     mock_dataset = _create_mock_dataset()
     mock_experiment = mock.MagicMock()
+    mock_experiment.prompts = None
     mock_experiment.id = "exp-explicit"
     mock_experiment.name = "explicit-experiment"
 
@@ -292,6 +297,7 @@ def test_run_tests__explicit_client__propagated_to_worker_threads(
     mock_dataset = _create_mock_dataset(items=items)
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "exp-thread"
     mock_experiment.name = "thread-test-experiment"
 
@@ -352,6 +358,7 @@ def test_run_tests__runs_per_item__task_called_n_times():
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     with (
         mock.patch.object(
             opik_client.Opik, "create_experiment", return_value=mock_experiment
@@ -396,6 +403,7 @@ def test_run_tests__item_level_policy_overrides_suite_policy():
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     with (
         mock.patch.object(
             opik_client.Opik, "create_experiment", return_value=mock_experiment
@@ -434,6 +442,7 @@ def test_run_tests__no_assertions__items_pass_with_single_run(fake_backend):
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     with (
         mock.patch.object(
             opik_client.Opik, "create_experiment", return_value=mock_experiment
@@ -478,6 +487,7 @@ def test_run_tests__worker_threads_1__task_runs_in_caller_thread():
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     with (
         mock.patch.object(
             opik_client.Opik, "create_experiment", return_value=mock_experiment
@@ -513,6 +523,7 @@ def test_run_tests__worker_threads_1__no_thread_pool_executor_created():
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     with (
         mock.patch.object(
             opik_client.Opik, "create_experiment", return_value=mock_experiment
@@ -558,6 +569,7 @@ def test_run_tests__worker_threads_2__task_runs_in_worker_threads():
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     with (
         mock.patch.object(
             opik_client.Opik, "create_experiment", return_value=mock_experiment
@@ -589,6 +601,7 @@ def test_run_tests__worker_threads_1__caller_context_client_restored():
     pre_existing_client = mock.MagicMock(spec=opik_client.Opik)
     suite_client = mock.MagicMock(spec=opik_client.Opik)
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     suite_client.create_experiment.return_value = mock_experiment
 
     suite = _create_suite(mock_dataset, client=suite_client)
@@ -626,6 +639,7 @@ def test_run_tests__worker_threads_1__task_exception_propagates():
         raise BoomError("synchronous failure")
 
     mock_experiment = mock.Mock(id="exp", name="exp")
+    mock_experiment.prompts = None
     with (
         mock.patch.object(
             opik_client.Opik, "create_experiment", return_value=mock_experiment

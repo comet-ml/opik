@@ -27,6 +27,9 @@ public record AlertTriggerConfig(
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) Map<String, String> configValue,
 
+        @JsonView({Alert.View.Public.class,
+                Alert.View.Write.class}) @Schema(description = "Groups configs within a trigger: same group_index means AND between configs, different group_index means OR between groups. Null means a legacy/singleton group of one config. Always null for scope:project configs.") Integer groupIndex,
+
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
 

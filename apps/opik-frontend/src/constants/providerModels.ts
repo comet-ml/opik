@@ -1143,6 +1143,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k2.6",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_6_FREE,
+      label: "moonshotai/kimi-k2.6:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
       label: "moonshotai/kimi-k2:free",
     },
@@ -1858,6 +1862,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS_FREE,
       label: "qwen/qwen3.6-plus:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_MAX,
+      label: "qwen/qwen3.7-max",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,

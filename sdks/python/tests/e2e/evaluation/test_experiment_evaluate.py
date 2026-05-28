@@ -383,6 +383,12 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         sorted(experiment_items_contents, key=lambda item: str(item.dataset_item_data)),
     )
 
+    verifiers.verify_experiment_traces_have_opik_prompts(
+        opik_client=opik_client,
+        trace_ids=[item.trace_id for item in experiment_items_contents],
+        prompts=[prompt1, prompt2],
+    )
+
 
 def test_experiment_creation__name_can_be_omitted(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str

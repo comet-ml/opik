@@ -35,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -71,6 +72,7 @@ public class PairingResource {
                 "project_id", request.projectId().toString(),
                 "workspace_id", workspaceId,
                 "user_name", userName,
+                "runner_type", request.type().getValue(),
                 "date", Instant.now().toString()));
 
         return Response.status(Response.Status.CREATED).entity(response).build();
@@ -94,25 +96,30 @@ public class PairingResource {
         String userName = requestContext.get().getUserName();
 
         try {
-            UUID runnerId = pairingService.activate(workspaceId, userName, sessionId, request);
+            PairingService.ActivationResult result = pairingService.activate(workspaceId, userName, sessionId, request);
 
             analyticsService.trackEvent("opik_connect_succeeded", Map.of(
                     "session_id", sessionId.toString(),
                     "workspace_id", workspaceId,
                     "user_name", userName,
+                    "runner_type", result.runnerType().getValue(),
                     "date", Instant.now().toString()));
 
             URI location = uriInfo.getBaseUriBuilder()
                     .path("v1/private/local-runners/{runnerId}")
-                    .build(runnerId);
+                    .build(result.runnerId());
             return Response.created(location).build();
         } catch (Exception e) {
-            analyticsService.trackEvent("opik_connect_failed", Map.of(
+            Map<String, String> props = new HashMap<>(Map.of(
                     "session_id", sessionId.toString(),
                     "workspace_id", workspaceId,
                     "user_name", userName,
                     "error", e.getClass().getSimpleName(),
                     "date", Instant.now().toString()));
+            // Best-effort: empty when the session is missing or in another workspace.
+            pairingService.peekSessionType(workspaceId, sessionId)
+                    .ifPresent(type -> props.put("runner_type", type.getValue()));
+            analyticsService.trackEvent("opik_connect_failed", props);
             throw e;
         }
     }

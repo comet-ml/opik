@@ -3,7 +3,6 @@ package com.comet.opik.domain.workspaces;
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.domain.AlertDAO;
-import com.comet.opik.domain.DashboardDAO;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ExperimentDAO;
@@ -62,7 +61,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Entity Types Checked:</h3>
  * <ul>
- *   <li>State database (cheapest-first): dashboards, automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
+ *   <li>State database (cheapest-first): automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
  *   <li>Analytics database (cheapest-first): optimizations, experiments (excl. demo) etc.</li>
  *   <li>Not yet checked: alerts (no project_id column yet)</li>
  * </ul>
@@ -230,7 +229,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         if (storedHasLegacyScores) {
             try {
                 boolean hasLegacyScores = Boolean.TRUE.equals(feedbackScoreDAO.hasLegacyScores(workspaceId).block());
-                if (existingWorkspace.isEmpty() || hasLegacyScores != storedHasLegacyScores) {
+                if (existingWorkspace.isEmpty() || !hasLegacyScores) {
                     workspacesService.upsertHasLegacyScores(workspaceId, hasLegacyScores, userName);
                 }
             } catch (RuntimeException exception) {
@@ -241,8 +240,8 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,
-                "previous_version", previousVersion.map(OpikVersion::getValue).orElse("unknown"),
-                "new_version", newVersion.getValue(),
+                "previous_version", previousVersion.map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
+                "new_version", Optional.ofNullable(newVersion).map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
                 "version_changed", String.valueOf(versionChanged),
                 "date", Instant.now().toString()));
     }
@@ -301,10 +300,6 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      */
     private boolean hasStateDbVersion1Entities(String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            if (handle.attach(DashboardDAO.class).hasVersion1Dashboards(workspaceId)) {
-                log.info("Found version_1 dashboards in workspace '{}'", workspaceId);
-                return true;
-            }
             if (handle.attach(AutomationRuleDAO.class).hasVersion1AutomationRules(workspaceId)) {
                 log.info("Found multi-project automation rules in workspace '{}'", workspaceId);
                 return true;

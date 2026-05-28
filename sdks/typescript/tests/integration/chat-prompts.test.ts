@@ -480,8 +480,11 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
     expect(diff).toContain("+     custom_metadata: updated_image");
     expect(diff).toContain("-     custom_metadata: original_image");
 
-    // Verify commit hashes are present in headers
-    expect(diff).toContain(latestVersion.commit);
-    expect(diff).toContain(previousVersion.commit);
+    // Verify sequential version identifiers are present in the diff headers
+    // (compareTo prefers `version` over the legacy `commit` hash).
+    expect(latestVersion.version).toBeDefined();
+    expect(previousVersion.version).toBeDefined();
+    expect(diff).toContain(`[${latestVersion.version}]`);
+    expect(diff).toContain(`[${previousVersion.version}]`);
   });
 });
