@@ -33,7 +33,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 
 /**
  * Aggregates recent activity across multiple entity types (experiments, optimizations,
- * datasets, test suites, agent configs, alert events) for a project.
+ * datasets, test suites, prompt versions, alert events) for a project.
  * <p>
  * Each source is queried for its N most recent items (page 1 only, sorted by id DESC).
  * Results are merged, sorted by createdAt descending, and paginated in memory.
@@ -65,9 +65,9 @@ public class RecentActivityService {
         var optimizationsMono = fetchOptimizations(projectId, size);
         var alertsMono = fetchAlertEvents(projectId, size);
         var datasetsMono = fetchDatasetSources(workspaceId, projectId, size);
-        var agentConfigsMono = fetchAgentConfigs(workspaceId, projectId, size);
+        var promptVersionsMono = fetchPromptVersions(workspaceId, projectId, size);
 
-        return Mono.zip(experimentsMono, optimizationsMono, alertsMono, datasetsMono, agentConfigsMono)
+        return Mono.zip(experimentsMono, optimizationsMono, alertsMono, datasetsMono, promptVersionsMono)
                 .map(tuple -> {
                     var all = new ArrayList<RecentActivityItem>();
                     all.addAll(tuple.getT1());
@@ -169,17 +169,22 @@ public class RecentActivityService {
                 });
     }
 
-    private Mono<List<RecentActivityItem>> fetchAgentConfigs(String workspaceId, UUID projectId, int size) {
+    private Mono<List<RecentActivityItem>> fetchPromptVersions(String workspaceId, UUID projectId, int size) {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(AgentConfigDAO.class);
-            return dao.getBlueprintHistory(workspaceId, projectId, size, 0).stream()
-                    .map(bp -> RecentActivityItem.builder()
-                            .type(ActivityType.AGENT_CONFIG_VERSION).id(bp.id()).name(bp.name())
-                            .createdAt(bp.createdAt()).createdBy(bp.createdBy()).build())
+            var dao = handle.attach(PromptDAO.class);
+            return dao.findRecentPromptVersionsByProjectId(workspaceId, projectId, size).stream()
+                    .map(pv -> {
+                        String name = pv.versionNumber() != null
+                                ? "%s %s".formatted(pv.promptName(), pv.versionNumber())
+                                : pv.promptName();
+                        return RecentActivityItem.builder()
+                                .type(ActivityType.PROMPT_VERSION).id(pv.promptId()).name(name)
+                                .createdAt(pv.createdAt()).createdBy(pv.createdBy()).build();
+                    })
                     .toList();
         })).subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(e -> {
-                    log.warn("Failed to fetch recent agent configs for project '{}'", projectId, e);
+                    log.warn("Failed to fetch recent prompt versions for project '{}'", projectId, e);
                     return Mono.just(List.of());
                 });
     }
