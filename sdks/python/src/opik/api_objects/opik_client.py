@@ -2176,11 +2176,13 @@ class Opik:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environments: Optional[List[str]] = None,
     ) -> prompt_module.Prompt:
         """
         Creates a new text prompt with the given name and template.
         If a text prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
+
+        To assign the resulting version to one or more workspace environments,
+        call :meth:`set_prompt_environments` after creation.
 
         Parameters:
             name: The name of the prompt.
@@ -2192,8 +2194,6 @@ class Opik:
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name to associate with the prompt. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
-            environments: Optional list of environment names that should own this prompt version. Each environment
-                must already be registered in the workspace; otherwise the backend returns 404.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -2214,13 +2214,7 @@ class Opik:
             change_description=change_description,
             tags=tags,
             project_name=project_name,
-            environments=environments,
         )
-        # Invalidate whenever the caller touched env ownership — including
-        # passing ``environments=[]`` to clear it, which still changes the
-        # env→version mapping and would otherwise leave stale cache entries.
-        if environments is not None:
-            prompt_cache.invalidate_for_prompt(name=name, project_name=project_name)
         return prompt_module.Prompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
         )
@@ -2236,11 +2230,13 @@ class Opik:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environments: Optional[List[str]] = None,
     ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
         If a chat prompt with the same name already exists, it will create a new version if the messages differ.
+
+        To assign the resulting version to one or more workspace environments,
+        call :meth:`set_prompt_environments` after creation.
 
         Parameters:
             name: The name of the chat prompt.
@@ -2252,8 +2248,6 @@ class Opik:
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name for the prompt.
-            environments: Optional list of environment names that should own this prompt version. Each environment
-                must already be registered in the workspace; otherwise the backend returns 404.
 
         Returns:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
@@ -2280,13 +2274,7 @@ class Opik:
             change_description=change_description,
             tags=tags,
             project_name=project_name,
-            environments=environments,
         )
-        # Invalidate whenever the caller touched env ownership — including
-        # passing ``environments=[]`` to clear it, which still changes the
-        # env→version mapping and would otherwise leave stale cache entries.
-        if environments is not None:
-            prompt_cache.invalidate_for_prompt(name=name, project_name=project_name)
         return prompt_module.ChatPrompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
         )

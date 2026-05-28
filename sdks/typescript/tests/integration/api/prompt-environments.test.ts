@@ -71,14 +71,19 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     await ensureEnvironment(envA);
     await ensureEnvironment(envB);
 
-    // Step 1: create v1 pinned to envA; a newer v2 exists without any env.
-    // Fetching by environment must resolve to v1, not the latest.
+    // Step 1: create v1, pin it to envA via setPromptEnvironments, then push
+    // a newer v2 without any env. Fetching by environment must resolve to v1,
+    // not the latest.
     const v1 = await client.createPrompt({
       name: promptName,
       prompt: "v1 {{x}}",
-      environments: [envA],
     });
     createdPromptIds.push(v1.id!);
+    await client.setPromptEnvironments({
+      promptName,
+      environments: [envA],
+      version: v1.version,
+    });
     const v2 = await client.createPrompt({
       name: promptName,
       prompt: "v2 {{x}}",
@@ -168,13 +173,25 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     const v1 = await client.createPrompt({
       name: promptName,
       prompt: "v1 {{x}}",
-      environments: [envProd],
     });
     createdPromptIds.push(v1.id!);
     const v2 = await client.createPrompt({
       name: promptName,
       prompt: "v2 {{x}}",
+    });
+
+    // Pin each environment to a different version. setPromptEnvironments
+    // operates on a single target version at a time, so two calls are needed —
+    // the second call does not disturb envProd's ownership on v1.
+    await client.setPromptEnvironments({
+      promptName,
+      environments: [envProd],
+      version: v1.version,
+    });
+    await client.setPromptEnvironments({
+      promptName,
       environments: [envStaging],
+      version: v2.version,
     });
 
     const fromProd = await client.getPrompt({ name: promptName, environment: envProd });

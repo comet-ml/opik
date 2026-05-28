@@ -44,7 +44,6 @@ class PromptClient:
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environments: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -60,9 +59,6 @@ class PromptClient:
         - change_description: Optional description of changes in this version.
         - tags: Optional list of tags to associate with the prompt.
         - project_name: Optional project name to associate with the prompt. If not provided, the default project will be used.
-        - environments: Optional list of environment names that should own this prompt version. Each environment
-          must already be registered in the workspace; otherwise the backend returns 404. New environments are
-          assigned via the singular set-environment endpoint, one call per entry.
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -119,20 +115,7 @@ class PromptClient:
                 description=description,
                 change_description=change_description,
                 tags=tags,
-                environments=environments,
             )
-        elif environments is not None:
-            target = list(dict.fromkeys(environments))
-            current = list(prompt_version.environments or [])
-            if sorted(target) != sorted(current):
-                self._rest_client.prompts.set_prompt_version_environment(
-                    version_id=prompt_version.id,
-                    environments=target,
-                )
-                # PromptVersionDetail is frozen; copy to reflect the write locally.
-                prompt_version = prompt_version.model_copy(
-                    update={"environments": target}
-                )
 
         return prompt_version
 
@@ -149,7 +132,6 @@ class PromptClient:
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
-        environments: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         # If it's a new prompt and container-level params are provided, use create_prompt endpoint
         # which creates both the container and first version in one call
@@ -180,25 +162,12 @@ class PromptClient:
                 new_prompt_version_detail = new_prompt_version_detail.model_copy(
                     update={"tags": tags}
                 )
-            # The create_prompt container endpoint does not accept environments,
-            # so apply them via the dedicated environment endpoint after creation.
-            if environments:
-                target = list(dict.fromkeys(environments))
-                self._rest_client.prompts.set_prompt_version_environment(
-                    version_id=new_prompt_version_detail.id,
-                    environments=target,
-                )
-                # PromptVersionDetail is frozen; copy to reflect the write locally.
-                new_prompt_version_detail = new_prompt_version_detail.model_copy(
-                    update={"environments": target}
-                )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version
             new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
                 template=prompt,
                 metadata=metadata,
                 type=type,
-                environments=environments,
             )
             new_prompt_version_detail = self._rest_client.prompts.create_prompt_version(
                 name=name,

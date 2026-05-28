@@ -65,7 +65,6 @@ export class ChatPrompt extends BasePrompt {
         type: this.type,
         description: this._description,
         tags: this._tags.length ? Array.from(this._tags) : undefined,
-        environments: this.environments.length ? Array.from(this.environments) : undefined,
       }),
     );
   }
@@ -268,7 +267,6 @@ export class ChatPrompt extends BasePrompt {
         type: this.type,
         description: this.description,
         tags: this.tags ? Array.from(this.tags) : undefined,
-        environments: this.environments.length ? Array.from(this.environments) : undefined,
       });
     } catch (error) {
       logger.warn(

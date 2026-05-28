@@ -1201,7 +1201,6 @@ export class OpikClient {
               template,
               metadata: options.metadata,
               type: normalizedType,
-              environments: options.environments,
             },
             templateStructure,
             projectName,
@@ -1212,32 +1211,6 @@ export class OpikClient {
         // Return existing version (idempotent)
         logger.debug(`Returning existing ${logContext} version`, { name });
         versionResponse = latestVersion!;
-      }
-
-      // If caller requested an environments set that does not match the
-      // resolved version's current set (e.g. idempotent path returning an
-      // existing version, or container-create path where the endpoint does
-      // not accept environments), apply the full target set via PATCH —
-      // backend uses REPLACE semantics, so a single call is sufficient.
-      if (options.environments !== undefined && versionResponse.id) {
-        const target = Array.from(new Set(options.environments));
-        const current = [...(versionResponse.environments ?? [])].sort();
-        const desired = [...target].sort();
-        if (
-          current.length !== desired.length ||
-          current.some((v, i) => v !== desired[i])
-        ) {
-          await this.api.prompts.setPromptVersionEnvironment(
-            versionResponse.id,
-            { environments: target },
-            this.api.requestOptions
-          );
-          versionResponse = {
-            ...versionResponse,
-            environments: target,
-          };
-          getGlobalCache().invalidateForPrompt(name, projectName);
-        }
       }
 
       // Fetch full prompt data and create instance
@@ -1289,10 +1262,9 @@ export class OpikClient {
    * - Uses create_prompt_version endpoint (not create_prompt which is for containers)
    * - Synchronous: Returns immediately with the created/retrieved version
    *
-   * @param options - Prompt configuration. Supports an optional `environments`
-   *   list that, if provided, assigns ownership of the resulting version to
-   *   each workspace environment (each must already be registered; backend
-   *   returns 404 otherwise).
+   * @param options - Prompt configuration. To assign the resulting version
+   *   to one or more workspace environments, call
+   *   {@link setPromptEnvironments} after creation.
    * @returns Promise resolving to Prompt instance
    * @throws PromptValidationError if parameters invalid
    */
@@ -1321,7 +1293,6 @@ export class OpikClient {
             tags: options.tags,
             projectName: resolvedProjectName,
             synced: false,
-            environments: options.environments,
           },
           this
         ),
@@ -1335,10 +1306,9 @@ export class OpikClient {
    * Chat prompts use message arrays instead of string templates.
    * Idempotent: returns existing version if messages, metadata, and type match.
    *
-   * @param options - Chat prompt configuration with messages array. Supports an
-   *   optional `environments` list that, if provided, assigns ownership of the
-   *   resulting version to each workspace environment (each must already be
-   *   registered; backend returns 404 otherwise).
+   * @param options - Chat prompt configuration with messages array. To assign
+   *   the resulting version to one or more workspace environments, call
+   *   {@link setPromptEnvironments} after creation.
    * @returns Promise resolving to ChatPrompt instance
    * @throws PromptTemplateStructureMismatch if a text prompt with same name exists
    *
@@ -1393,7 +1363,6 @@ export class OpikClient {
             tags: options.tags,
             projectName: resolvedProjectName,
             synced: false,
-            environments: options.environments,
           },
           this
         ),

@@ -1501,12 +1501,11 @@ def test_prompt_environments__create_set_move_clear__happyflow(
     first_template = f"first-text-{_generate_random_suffix()}"
     second_template = f"second-text-{_generate_random_suffix()}"
 
-    # Step 1: create v1 pinned to environment_name; a newer v2 exists without any env.
-    # Fetching by environment must still resolve to v1.
-    v1 = opik_client.create_prompt(
-        name=prompt_name,
-        prompt=first_template,
-        environments=[environment_name],
+    # Step 1: create v1 and pin it to environment_name; a newer v2 exists
+    # without any env. Fetching by environment must still resolve to v1.
+    v1 = opik_client.create_prompt(name=prompt_name, prompt=first_template)
+    opik_client.set_prompt_environments(
+        prompt_name, [environment_name], version=v1.version
     )
     v2 = opik_client.create_prompt(name=prompt_name, prompt=second_template)
     assert v2.commit != v1.commit
@@ -1590,25 +1589,29 @@ def test_prompt_environments__set_specific_version__resolves_correctly(
 def test_chat_prompt_environments__create_and_get__sets_ownership(
     opik_client: opik.Opik, environment_name: str
 ):
-    """Chat prompts support environment assignment via create and get_chat_prompt."""
+    """Chat prompts support environment assignment via set_prompt_environments
+    after create, and get_chat_prompt resolves by environment name."""
     _register_env(opik_client, environment_name)
     prompt_name = _generate_random_prompt_name()
     messages = [{"role": "user", "content": f"hi {_generate_random_suffix()}"}]
 
-    chat_prompt = opik_client.create_chat_prompt(
-        name=prompt_name,
-        messages=messages,
-        environments=[environment_name],
+    chat_prompt = opik_client.create_chat_prompt(name=prompt_name, messages=messages)
+    opik_client.set_prompt_environments(
+        prompt_name, [environment_name], version=chat_prompt.version
     )
+    refreshed = opik_client.get_chat_prompt(name=prompt_name, no_cache=True)
+    assert refreshed is not None
     verifiers.verify_chat_prompt_version(
-        chat_prompt,
+        refreshed,
         name=prompt_name,
         messages=messages,
         environments=[environment_name],
     )
 
-    refreshed = opik_client.get_chat_prompt(name=prompt_name, no_cache=True)
-    assert refreshed is not None
+    by_env = opik_client.get_chat_prompt(
+        name=prompt_name, environment=environment_name, no_cache=True
+    )
+    assert by_env is not None
     verifiers.verify_chat_prompt_version(
-        refreshed, name=prompt_name, environments=[environment_name]
+        by_env, name=prompt_name, environments=[environment_name]
     )
