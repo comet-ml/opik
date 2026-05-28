@@ -3186,6 +3186,7 @@ class DatasetsResourceTest {
                                                 .promptId(promptVersion.promptId())
                                                 .id(promptVersion.id())
                                                 .commit(promptVersion.commit())
+                                                .versionNumber(promptVersion.versionNumber())
                                                 .build())
                                 .build();
 
