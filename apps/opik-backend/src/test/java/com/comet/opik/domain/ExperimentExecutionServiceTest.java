@@ -574,7 +574,8 @@ class ExperimentExecutionServiceTest {
                     .thenReturn(Mono.just(Map.of(versionId, version)));
             when(promptService.getVersionsInfoByVersionsIds(Set.of(versionId)))
                     .thenReturn(Mono.just(Map.of(versionId,
-                            new PromptVersionInfo(versionId, version.commit(), resolvedName))));
+                            new PromptVersionInfo(versionId, version.commit(), version.versionNumber(),
+                                    resolvedName))));
 
             executeRequest(request);
 
