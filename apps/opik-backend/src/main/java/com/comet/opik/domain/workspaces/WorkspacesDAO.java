@@ -57,43 +57,8 @@ public interface WorkspacesDAO {
             @Bind("userName") String userName);
 
     /**
-     * Atomic NULL → timestamp transition for the experiment-project-migration-skipped flag.
-     * Returns 1 only when this caller flipped the column from NULL; returns 0 if no row exists
-     * or the column was already non-null. Pair with {@link #insertExperimentProjectMigrationSkipped}
-     * for the missing-row case.
-     */
-    @SqlUpdate("""
-            UPDATE workspaces
-            SET experiment_project_migration_skipped_at = :skippedAt,
-                experiment_project_migration_skip_reason = :reason,
-                last_updated_by = :userName
-            WHERE id = :id AND experiment_project_migration_skipped_at IS NULL
-            """)
-    int updateExperimentProjectMigrationSkippedIfNull(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    /**
-     * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
-     * branch via the {@link #updateExperimentProjectMigrationSkippedIfNull} attempt that precedes it.
-     */
-    @SqlUpdate("""
-            INSERT INTO workspaces (id, experiment_project_migration_skipped_at, experiment_project_migration_skip_reason, created_by, last_updated_by)
-            VALUES (:id, :skippedAt, :reason, :userName, :userName)
-            """)
-    void insertExperimentProjectMigrationSkipped(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    @SqlQuery("SELECT id FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
-    List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
-
-    /**
-     * Atomic NULL → timestamp transition for the prompt-project-migration trap flag. Parallel to
-     * {@link #updateExperimentProjectMigrationSkippedIfNull} but scoped to the prompt cycle's own
-     * column so the two migrations record their traps independently.
+     * Atomic NULL → timestamp transition for the prompt-project-migration trap flag. Scoped to the
+     * prompt cycle's own column so its trap state is recorded independently of any other migration.
      */
     @SqlUpdate("""
             UPDATE workspaces
@@ -109,7 +74,7 @@ public interface WorkspacesDAO {
 
     /**
      * Plain INSERT (no upsert). Paired with {@link #updatePromptProjectMigrationSkippedIfNull}
-     * for the missing-row case, mirroring {@link #insertExperimentProjectMigrationSkipped}.
+     * for the missing-row case.
      */
     @SqlUpdate("""
             INSERT INTO workspaces (

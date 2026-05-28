@@ -1757,31 +1757,55 @@ public class ExperimentDAO {
             """;
 
     /**
-     * For each orphan experiment in a workspace, returns the trace-derived classification:
-     * {@code project_id} is any non-empty trace project_id (meaningful only when
-     * {@code project_count = 1}); {@code project_count} is the distinct count of non-empty trace
-     * project_ids — {@code 0} = no inference, {@code 1} = certain, {@code > 1} = ambiguous.
+     * For each orphan experiment in a workspace, returns the dominant project: {@code project_id}
+     * (empty when no traces are referenced), {@code distinct_project_count} ({@code 0} = no
+     * inference, {@code 1} = certain, {@code > 1} = dominant pick), and a {@code project_breakdown}
+     * ({@code projectId=count,...}) included in the per-assignment log line. Multi-project
+     * experiments are ranked by {@code (count DESC, last_activity DESC, project_id ASC)} so
+     * repeated runs produce the same result.
      *
-     * <p>The {@code CAST(t.project_id AS String)} converts away from {@code FixedString(36)},
-     * whose LEFT JOIN no-match default (36 NUL bytes, not {@code ''}) would slip past the
-     * {@code != ''} guard and trip the downstream UUID parser.
+     * <p>{@code CAST(t.project_id AS String)} converts away from {@code FixedString(36)}, whose
+     * default would slip past the {@code != ''} guard and trip the downstream UUID parser.
+     * {@code count(DISTINCT ei.trace_id)} counts in units of "distinct traces per project"
+     * (the natural unit for the dominant pick, since one trace lives in one project) and
+     * neutralizes join-output inflation from transient ReplacingMergeTree row versions on
+     * either side.
      */
     private static final String COMPUTE_EXPERIMENT_PROJECT_MAPPING = """
+            WITH per_experiment_ranked AS (
+                WITH arraySort(
+                        proj -> (-proj.1, -proj.2, proj.3),
+                        groupArray((per_proj_count, per_proj_last_activity_nanos, project_id))
+                    ) AS ranked
+                SELECT
+                    experiment_id,
+                    ranked,
+                    arrayStringConcat(
+                        arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked),
+                        ','
+                    ) AS project_breakdown
+                FROM (
+                    SELECT
+                        ei.experiment_id AS experiment_id,
+                        CAST(t.project_id AS String) AS project_id,
+                        count(DISTINCT ei.trace_id) AS per_proj_count,
+                        toUnixTimestamp64Nano(max(t.last_updated_at)) AS per_proj_last_activity_nanos
+                    FROM experiment_items ei
+                    INNER JOIN traces t
+                        ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
+                    WHERE ei.workspace_id = :workspace_id
+                    GROUP BY ei.experiment_id, project_id
+                    HAVING project_id != ''
+                )
+                GROUP BY experiment_id
+            )
             SELECT
                 e.id AS experiment_id,
-                anyIf(et.project_id, et.project_id != '') AS project_id,
-                countDistinctIf(et.project_id, et.project_id != '') AS project_count
+                any(if(length(per_experiment_ranked.ranked) > 0, per_experiment_ranked.ranked[1].3, '')) AS project_id,
+                any(length(per_experiment_ranked.ranked)) AS distinct_project_count,
+                any(ifNull(per_experiment_ranked.project_breakdown, '')) AS project_breakdown
             FROM experiments e
-            LEFT JOIN (
-                SELECT
-                    ei.workspace_id,
-                    ei.experiment_id,
-                    CAST(t.project_id AS String) AS project_id
-                FROM experiment_items ei
-                INNER JOIN traces t
-                    ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
-                WHERE ei.workspace_id = :workspace_id
-            ) et ON e.workspace_id = et.workspace_id AND e.id = et.experiment_id
+            LEFT JOIN per_experiment_ranked ON e.id = per_experiment_ranked.experiment_id
             WHERE e.workspace_id = :workspace_id
             AND e.name NOT IN :demo_experiment_names
             GROUP BY e.id
@@ -2968,7 +2992,8 @@ public class ExperimentDAO {
                                 .filter(StringUtils::isNotBlank)
                                 .map(UUID::fromString)
                                 .orElse(null))
-                        .projectCount(row.get("project_count", Long.class))
+                        .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                        .projectBreakdown(row.get("project_breakdown", String.class))
                         .build()));
     }
 
