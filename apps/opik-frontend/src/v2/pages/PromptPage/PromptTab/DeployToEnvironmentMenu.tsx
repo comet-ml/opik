@@ -30,7 +30,7 @@ type DeployToEnvironmentMenuProps = {
   versionLabel: string;
   versions: PromptVersion[] | undefined;
   totalVersions: number;
-  activeEnvironment: string | null;
+  activeEnvironments: string[];
 };
 
 const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
@@ -39,7 +39,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   versionLabel,
   versions,
   totalVersions,
-  activeEnvironment,
+  activeEnvironments,
 }) => {
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -60,62 +60,63 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
     [environmentsData?.content],
   );
 
+  const activeEnvSet = useMemo(
+    () => new Set(activeEnvironments),
+    [activeEnvironments],
+  );
+
   const environmentOwners = useMemo(() => {
     const map = new Map<string, { version: PromptVersion; index: number }>();
     // `versions` is newest-first; only keep the first writer per environment so
     // the "Currently vN" label reflects the newest version assigned to that env,
     // not whichever historical version was iterated last.
     versions?.forEach((v, index) => {
-      if (v.environment && !map.has(v.environment)) {
-        map.set(v.environment, { version: v, index });
-      }
+      v.environments?.forEach((env) => {
+        if (!map.has(env)) map.set(env, { version: v, index });
+      });
     });
     return map;
   }, [versions]);
 
-  const handleDeploy = useCallback(
-    (envName: string) => {
-      if (!canConfigureWorkspaceSettings) return;
-      if (activeEnvironment === envName) return;
+  const applyEnvironments = useCallback(
+    (next: string[], description: string) => {
       setVersionEnvironment(
-        { promptId, versionId, environment: envName },
-        {
-          onSuccess: () =>
-            toast({ description: `Deployed ${versionLabel} to ${envName}` }),
-        },
+        { promptId, versionId, environments: next },
+        { onSuccess: () => toast({ description }) },
       );
     },
+    [promptId, versionId, setVersionEnvironment, toast],
+  );
+
+  const handleToggle = useCallback(
+    (envName: string) => {
+      if (!canConfigureWorkspaceSettings) return;
+      if (activeEnvSet.has(envName)) {
+        const next = activeEnvironments.filter((e) => e !== envName);
+        applyEnvironments(next, `Removed ${versionLabel} from ${envName}`);
+      } else {
+        const next = [...activeEnvironments, envName];
+        applyEnvironments(next, `Deployed ${versionLabel} to ${envName}`);
+      }
+    },
     [
-      promptId,
-      versionId,
-      versionLabel,
-      activeEnvironment,
       canConfigureWorkspaceSettings,
-      setVersionEnvironment,
-      toast,
+      activeEnvSet,
+      activeEnvironments,
+      versionLabel,
+      applyEnvironments,
     ],
   );
 
-  const handleClear = useCallback(() => {
+  const handleClearAll = useCallback(() => {
     if (!canConfigureWorkspaceSettings) return;
-    if (!activeEnvironment) return;
-    setVersionEnvironment(
-      { promptId, versionId, environment: null },
-      {
-        onSuccess: () =>
-          toast({
-            description: `Removed ${versionLabel} from ${activeEnvironment}`,
-          }),
-      },
-    );
+    if (activeEnvironments.length === 0) return;
+    applyEnvironments([], `Removed ${versionLabel} from all environments`);
   }, [
-    promptId,
-    versionId,
-    versionLabel,
-    activeEnvironment,
     canConfigureWorkspaceSettings,
-    setVersionEnvironment,
-    toast,
+    activeEnvironments.length,
+    versionLabel,
+    applyEnvironments,
   ]);
 
   if (!canConfigureWorkspaceSettings) return null;
@@ -142,38 +143,39 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
         ) : (
           environments.map((env) => {
             const owner = environmentOwners.get(env.name);
+            const isActiveHere = activeEnvSet.has(env.name);
             const ownerLabel =
-              owner && totalVersions > 0
-                ? `v${totalVersions - owner.index}`
+              !isActiveHere && owner && totalVersions > 0
+                ? `Currently v${totalVersions - owner.index}`
                 : "";
-            const isActiveHere = activeEnvironment === env.name;
             return (
               <DropdownMenuItem
                 key={env.id}
-                selected={isActiveHere}
-                disabled={isActiveHere}
-                onSelect={() => handleDeploy(env.name)}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleToggle(env.name);
+                }}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <EnvironmentSquare color={env.color} />
+                  <EnvironmentSquare name={env.name} color={env.color} />
                   <span className="truncate">{env.name}</span>
                 </div>
                 <span className="comet-body-xs ml-3 shrink-0 text-light-slate">
                   {isActiveHere ? (
                     <Check className="size-3.5" />
                   ) : ownerLabel ? (
-                    `Currently ${ownerLabel}`
+                    ownerLabel
                   ) : null}
                 </span>
               </DropdownMenuItem>
             );
           })
         )}
-        {activeEnvironment && (
+        {activeEnvironments.length > 0 && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={handleClear}>
-              Remove from {activeEnvironment}
+            <DropdownMenuItem onSelect={handleClearAll}>
+              Remove from all environments
             </DropdownMenuItem>
           </>
         )}

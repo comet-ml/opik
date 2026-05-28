@@ -36,7 +36,9 @@ const calculateVisibleCount = (
     return 0;
   }
 
-  const itemListWidth = itemWidths.reduce((acc, w) => acc + w + itemGap, 0);
+  const itemListWidth =
+    itemWidths.reduce((acc, w) => acc + w, 0) +
+    Math.max(0, itemWidths.length - 1) * itemGap;
   const containerWidth = cellWidth - containerPadding;
 
   if (containerWidth >= itemListWidth) {
@@ -65,8 +67,7 @@ const calculateVisibleCount = (
   let availableWidth = containerWidth - counterTotalWidth;
 
   for (let idx = 0; idx <= lastIdx; idx++) {
-    const nextItemWidth =
-      itemWidths[idx] + (idx > 0 && idx < lastIdx ? itemGap * 2 : 0);
+    const nextItemWidth = itemWidths[idx] + (idx > 0 ? itemGap : 0);
 
     availableWidth -= nextItemWidth;
 

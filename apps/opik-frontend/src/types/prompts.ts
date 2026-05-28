@@ -45,7 +45,7 @@ export interface PromptVersion {
   tags?: string[];
   type?: PROMPT_TYPE;
   version_type?: PROMPT_VERSION_TYPE;
-  environment?: string | null;
+  environments?: string[] | null;
 }
 
 export interface PromptCommitInfo {

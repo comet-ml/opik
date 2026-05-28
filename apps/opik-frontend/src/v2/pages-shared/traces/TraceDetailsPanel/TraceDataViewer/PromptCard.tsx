@@ -32,6 +32,7 @@ import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import { useSyntaxHighlighterCode } from "@/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import { MODE_TYPE } from "@/shared/SyntaxHighlighter/constants";
 import CodeBlockBody from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlockBody";
@@ -113,15 +114,23 @@ const PromptCard: React.FC<PromptCardProps> = ({
   const { getDescriptor, isLoading: isVersionsLoading } =
     usePromptVersionsWithLabels(promptId);
 
-  const { versionLabel, stage } = useMemo(() => {
+  const { versionLabel, stage, environments } = useMemo(() => {
     const descriptor = getDescriptor(versionId);
     if (!descriptor) {
       const fallback = rawPrompt.version.commit
         ? rawPrompt.version.commit.slice(0, 7)
         : undefined;
-      return { versionLabel: fallback, stage: undefined };
+      return {
+        versionLabel: fallback,
+        stage: undefined,
+        environments: undefined,
+      };
     }
-    return { versionLabel: descriptor.label, stage: descriptor.stage };
+    return {
+      versionLabel: descriptor.label,
+      stage: descriptor.stage,
+      environments: descriptor.version.environments,
+    };
   }, [getDescriptor, versionId, rawPrompt.version.commit]);
 
   const messages = useMemo<ChatMessage[]>(
@@ -238,6 +247,13 @@ const PromptCard: React.FC<PromptCardProps> = ({
         ) : isVersionsLoading ? (
           <Skeleton className="h-3 w-8 shrink-0" />
         ) : null}
+        <EnvironmentBadgeList
+          names={environments}
+          size="sm"
+          withOverflow
+          compact
+          maxWidth={60}
+        />
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <DropdownMenu>
