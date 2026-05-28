@@ -130,6 +130,19 @@ const pairingRouteOssAlias = createRoute({
   component: PairRouteComponent,
 });
 
+// ----------- MCP OAuth consent (root-level; workspace-version-agnostic)
+// The browser lands here from opik-backend's GET /oauth/authorize 302 before any workspace
+// is selected, so both V1 and V2 routers must serve it — WorkspaceVersionGate picks the
+// app from cached defaults and the consent page itself is independent of either layout.
+const OAuthConsentPage = lazy(
+  () => import("@/shared/OAuthConsentPage/OAuthConsentPage"),
+);
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/oauth/consent",
+  component: OAuthConsentPage,
+});
+
 const baseRoute = createRoute({
   path: "/",
   getParentRoute: () => workspaceGuardRoute,
@@ -574,6 +587,7 @@ const automationLogsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   pairingRoute,
   pairingRouteOssAlias,
+  oauthConsentRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,

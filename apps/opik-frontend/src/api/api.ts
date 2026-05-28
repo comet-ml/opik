@@ -44,6 +44,9 @@ export const AGENT_CONFIGS_REST_ENDPOINT = "/v1/private/agent-configs/";
 export const LOCAL_RUNNERS_REST_ENDPOINT = "/v1/private/local-runners/";
 export const LLM_MODELS_REST_ENDPOINT = "/v1/private/llm/models";
 export const ENVIRONMENTS_REST_ENDPOINT = "/v1/private/environments/";
+// OAuth endpoints are public (no /v1/private prefix); served by opik-backend's MCP OAuth AS.
+export const OAUTH_REST_ENDPOINT = "/oauth/";
+export const OAUTH_AUTHORIZE_CONTEXT_KEY = "oauth-authorize-context";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";

@@ -135,6 +135,18 @@ const pairingRouteOssAlias = createRoute({
   component: PairRouteComponent,
 });
 
+// ----------- MCP OAuth consent (root-level, no workspace guard, no layout)
+// Browser lands here after the backend's GET /oauth/authorize 302-redirects with the OAuth
+// request parameters preserved. The page reads them from window.location.search.
+const OAuthConsentPage = lazy(
+  () => import("@/shared/OAuthConsentPage/OAuthConsentPage"),
+);
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/oauth/consent",
+  component: OAuthConsentPage,
+});
+
 // ----------- base redirect
 const baseRoute = createRoute({
   path: "/",
@@ -599,6 +611,7 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 const routeTree = rootRoute.addChildren([
   pairingRoute,
   pairingRouteOssAlias,
+  oauthConsentRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
