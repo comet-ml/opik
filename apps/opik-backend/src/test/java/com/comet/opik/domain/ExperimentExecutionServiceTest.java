@@ -721,6 +721,42 @@ class ExperimentExecutionServiceTest {
         }
 
         @Test
+        void createAndExecuteStillEmitsEntriesWhenVersionInfoLookupFails() {
+            // Partial-failure path: if the bulk name lookup fails (e.g. DB timeout) we still
+            // emit version-based entries with null name rather than dropping all opik_prompts.
+            var versionId = UUID.randomUUID();
+            var promptId = UUID.randomUUID();
+            var version = PromptVersion.builder().id(versionId).promptId(promptId)
+                    .commit(RandomStringUtils.randomAlphanumeric(8))
+                    .versionNumber("v1").template(RandomStringUtils.randomAlphanumeric(20))
+                    .templateStructure(TemplateStructure.TEXT).build();
+            var link = Experiment.PromptVersionLink.builder()
+                    .id(versionId).promptId(promptId).build();
+
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildVariantWithVersions("gpt-4", List.of(link))))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(promptService.findVersionByIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(Map.of(versionId, version)));
+            when(promptService.getVersionsInfoByVersionsIds(Set.of(versionId)))
+                    .thenReturn(Mono.error(new RuntimeException("info lookup failed")));
+
+            executeRequest(request);
+
+            var entry = capturePublishedMessages().get(0).opikPrompts().get(0);
+            assertThat(entry.id()).isEqualTo(promptId);
+            assertThat(entry.name()).isNull();
+            assertThat(entry.version().id()).isEqualTo(versionId);
+        }
+
+        @Test
         void createAndExecuteFallsBackToNullArraysWhenLookupFails() {
             var versionId = UUID.randomUUID();
             var link = Experiment.PromptVersionLink.builder()

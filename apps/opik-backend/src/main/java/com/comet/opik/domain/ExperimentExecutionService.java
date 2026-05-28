@@ -299,9 +299,17 @@ public class ExperimentExecutionService {
                     .toList());
         }
 
-        return Mono.zip(
-                promptService.findVersionByIds(uniqueVersionIds),
-                promptService.getVersionsInfoByVersionsIds(uniqueVersionIds))
+        // A name-lookup failure should not wipe out the version-based entries — entries with
+        // null name are still useful for trace linkage. Degrade locally to an empty info map.
+        Mono<Map<UUID, PromptVersionInfo>> infoLookup = promptService.getVersionsInfoByVersionsIds(uniqueVersionIds)
+                .onErrorResume(error -> {
+                    log.warn(
+                            "Failed to resolve prompt names for opik_prompts metadata; entries will be populated without names for dataset '{}' (id '{}', versionHash '{}')",
+                            request.datasetName(), request.datasetId(), request.versionHash(), error);
+                    return Mono.just(Map.of());
+                });
+
+        return Mono.zip(promptService.findVersionByIds(uniqueVersionIds), infoLookup)
                 .map(tuple -> {
                     Map<UUID, PromptVersion> versionsById = tuple.getT1();
                     Map<UUID, PromptVersionInfo> infoById = tuple.getT2();
