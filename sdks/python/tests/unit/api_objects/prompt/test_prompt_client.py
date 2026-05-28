@@ -826,7 +826,7 @@ class TestPromptEnvironment:
         assert retrieve_kwargs["name"] == "env-prompt"
         assert retrieve_kwargs["project_name"] == "my-project"
 
-    def test_set_prompt_environments__forwards_commit(self, mock_rest_client):
+    def test_set_prompt_environments__forwards_version(self, mock_rest_client):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             _make_mock_version()
         )
@@ -834,14 +834,15 @@ class TestPromptEnvironment:
         opik_client = opik_client_module.Opik()
         opik_client._rest_client = mock_rest_client
 
-        opik_client.set_prompt_environments(
-            "env-prompt", ["staging"], commit="abc12345"
-        )
+        opik_client.set_prompt_environments("env-prompt", ["staging"], version="v3")
 
         mock_rest_client.prompts.retrieve_prompt_version.assert_called_once()
         retrieve_kwargs = mock_rest_client.prompts.retrieve_prompt_version.call_args[1]
         assert retrieve_kwargs["name"] == "env-prompt"
-        assert retrieve_kwargs["commit"] == "abc12345"
+        # The SDK forwards ``version`` as the wire-level ``version_number`` field —
+        # ``commit`` is no longer part of this method's surface.
+        assert retrieve_kwargs["version_number"] == "v3"
+        assert "commit" not in retrieve_kwargs
         mock_rest_client.prompts.set_prompt_version_environment.assert_called_once_with(
             version_id="version-id",
             environments=["staging"],
@@ -862,7 +863,7 @@ class TestPromptEnvironment:
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
 
-    def test_set_prompt_environments__commit_not_found__raises_prompt_not_found_with_commit(
+    def test_set_prompt_environments__version_not_found__raises_prompt_not_found_with_version(
         self, mock_rest_client
     ):
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = (
@@ -872,10 +873,8 @@ class TestPromptEnvironment:
         opik_client = opik_client_module.Opik()
         opik_client._rest_client = mock_rest_client
 
-        with pytest.raises(exceptions.PromptNotFoundError, match="deadbeef"):
-            opik_client.set_prompt_environments(
-                "env-prompt", ["staging"], commit="deadbeef"
-            )
+        with pytest.raises(exceptions.PromptNotFoundError, match="v7"):
+            opik_client.set_prompt_environments("env-prompt", ["staging"], version="v7")
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
 

@@ -1296,7 +1296,7 @@ describe("Opik prompt operations", () => {
       createdAt: new Date("2024-01-01"),
     };
 
-    it("maps 404 on retrieve_prompt_version (no commit) to PromptNotFoundError", async () => {
+    it("maps 404 on retrieve_prompt_version (no version) to PromptNotFoundError", async () => {
       retrievePromptVersionSpy.mockImplementationOnce(() => {
         throw new OpikApiError({ message: "Not found", statusCode: 404 });
       });
@@ -1312,7 +1312,7 @@ describe("Opik prompt operations", () => {
       });
     });
 
-    it("maps 404 on retrieve_prompt_version (with commit) to PromptNotFoundError mentioning the commit", async () => {
+    it("maps 404 on retrieve_prompt_version (with version) to PromptNotFoundError mentioning the version", async () => {
       retrievePromptVersionSpy.mockImplementationOnce(() => {
         throw new OpikApiError({ message: "Not found", statusCode: 404 });
       });
@@ -1321,11 +1321,11 @@ describe("Opik prompt operations", () => {
         client.setPromptEnvironments({
           promptName: "env-prompt",
           environments: ["staging"],
-          commit: "deadbeef",
+          version: "v7",
         })
       ).rejects.toMatchObject({
         name: "PromptNotFoundError",
-        message: expect.stringContaining("deadbeef"),
+        message: expect.stringContaining("v7"),
       });
     });
 
@@ -1416,7 +1416,10 @@ describe("Opik prompt operations", () => {
           expect.objectContaining({
             name: "env-prompt",
             projectName: "opik-sdk-typescript",
-            commit: undefined,
+            // setPromptEnvironments wires its public `version` field through
+            // to the REST `versionNumber` field; `commit` is not part of the
+            // surface, so omitting it here yields `versionNumber: undefined`.
+            versionNumber: undefined,
           }),
           client.api.requestOptions
         );
@@ -1426,6 +1429,37 @@ describe("Opik prompt operations", () => {
           { environments: ["staging", "production"] },
           client.api.requestOptions
         );
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("forwards an explicit version selector as the REST versionNumber", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(undefined as unknown as void)
+        );
+
+      try {
+        await client.setPromptEnvironments({
+          promptName: "env-prompt",
+          environments: ["staging"],
+          version: "v3",
+        });
+
+        // The public ``version`` is the sequential selector (``v<N>``) and must
+        // be sent as the REST ``versionNumber`` — never as ``commit``.
+        const args = retrievePromptVersionSpy.mock.calls[0]?.[0] as unknown as Record<
+          string,
+          unknown
+        >;
+        expect(args).toBeDefined();
+        expect(args.versionNumber).toBe("v3");
+        expect(args.commit).toBeUndefined();
       } finally {
         setEnvSpy.mockRestore();
       }

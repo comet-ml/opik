@@ -93,11 +93,11 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(resolvedByEnvA?.commit).toBe(v1.commit);
     expect(resolvedByEnvA?.environments).toContain(envA);
 
-    // Step 2: expand to both envs on v1's commit.
+    // Step 2: expand to both envs on v1's version.
     await client.setPromptEnvironments({
       promptName,
       environments: [envA, envB],
-      commit: v1.commit,
+      version: v1.version,
     });
     getGlobalCache().clear();
 
@@ -128,31 +128,31 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(afterClear?.environments ?? []).toHaveLength(0);
   }, 30000);
 
-  it("set with explicit commit pins the env to that version", async () => {
+  it("set with explicit version pins the env to that version", async () => {
     const ts = Date.now();
     const envName = `staging-${ts}`;
-    const promptName = `env-commit-${ts}`;
+    const promptName = `env-version-${ts}`;
     await ensureEnvironment(envName);
 
     const v1 = await client.createPrompt({ name: promptName, prompt: "v1 {{x}}" });
     createdPromptIds.push(v1.id!);
-    const v1Commit = v1.commit!;
+    const v1Version = v1.version!;
     const v2 = await client.createPrompt({
       name: promptName,
       prompt: "different template {{x}}",
     });
-    expect(v2.commit).not.toBe(v1Commit);
+    expect(v2.version).not.toBe(v1Version);
 
     await client.setPromptEnvironments({
       promptName,
       environments: [envName],
-      commit: v1Commit,
+      version: v1Version,
     });
     getGlobalCache().clear();
 
     const retrieved = await client.getPrompt({ name: promptName, environment: envName });
     expect(retrieved).not.toBeNull();
-    expect(retrieved?.commit).toBe(v1Commit);
+    expect(retrieved?.version).toBe(v1Version);
     expect(retrieved?.prompt).toBe("v1 {{x}}");
     expect(retrieved?.environments).toContain(envName);
   }, 30000);

@@ -1797,35 +1797,35 @@ export class OpikClient {
    *
    * @param options.promptName - Name of the prompt
    * @param options.environments - Environments to assign. Each must already be registered in the workspace. Pass `[]` to clear.
-   * @param options.commit - 8-char short commit hash to target a specific version. Defaults to the latest version.
+   * @param options.version - Sequential version selector in the wire format `"v<N>"` (e.g. `"v3"`). Defaults to the latest version.
    * @param options.projectName - Project the prompt belongs to. Defaults to the client's project.
    *
-   * @throws {PromptNotFoundError} The prompt name (or the supplied `commit`) does not exist in the resolved project.
+   * @throws {PromptNotFoundError} The prompt name (or the supplied `version`) does not exist in the resolved project.
    * @throws {EnvironmentNotFoundError} One of `environments` is not registered in the workspace.
    */
   public setPromptEnvironments = async (
     options: {
       promptName: string;
       environments: string[];
-      commit?: string;
+      version?: string;
       projectName?: string;
     },
   ): Promise<void> => {
-    let version;
+    let resolvedVersion;
     try {
-      version = await this.api.prompts.retrievePromptVersion(
+      resolvedVersion = await this.api.prompts.retrievePromptVersion(
         {
           name: options.promptName,
-          commit: options.commit,
+          versionNumber: options.version,
           projectName: this.resolveProjectName(options.projectName),
         },
         this.api.requestOptions,
       );
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
-        if (options.commit !== undefined) {
+        if (options.version !== undefined) {
           throw new PromptNotFoundError(
-            `No version with commit '${options.commit}' found for prompt '${options.promptName}'.`,
+            `No version '${options.version}' found for prompt '${options.promptName}'.`,
           );
         }
         throw new PromptNotFoundError(
@@ -1838,7 +1838,7 @@ export class OpikClient {
     const target = Array.from(new Set(options.environments));
     try {
       await this.api.prompts.setPromptVersionEnvironment(
-        version.id!,
+        resolvedVersion.id!,
         { environments: target },
         this.api.requestOptions,
       );

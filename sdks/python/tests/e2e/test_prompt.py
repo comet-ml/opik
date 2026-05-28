@@ -1565,7 +1565,7 @@ def test_prompt_environments__create_set_move_clear__happyflow(
 def test_prompt_environments__set_specific_version__resolves_correctly(
     opik_client: opik.Opik, environment_name: str
 ):
-    """set_prompt_environments with an explicit commit pins the environment
+    """set_prompt_environments with an explicit version pins the environment
     to that version even when a newer version exists."""
     _register_env(opik_client, environment_name)
     prompt_name = _generate_random_prompt_name()
@@ -1574,10 +1574,10 @@ def test_prompt_environments__set_specific_version__resolves_correctly(
 
     v1 = opik_client.create_prompt(name=prompt_name, prompt=first_template)
     v2 = opik_client.create_prompt(name=prompt_name, prompt=second_template)
-    assert v2.commit != v1.commit
+    assert v2.version != v1.version
 
     opik_client.set_prompt_environments(
-        prompt_name, [environment_name], commit=v1.commit
+        prompt_name, [environment_name], version=v1.version
     )
 
     resolved = opik_client.get_prompt(

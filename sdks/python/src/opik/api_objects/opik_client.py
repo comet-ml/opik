@@ -2380,7 +2380,7 @@ class Opik:
         prompt_name: str,
         environments: List[str],
         *,
-        commit: Optional[str] = None,
+        version: Optional[str] = None,
         project_name: Optional[str] = None,
     ) -> None:
         """Replace the full set of environments owned by a prompt version.
@@ -2396,29 +2396,29 @@ class Opik:
             prompt_name: The name of the prompt.
             environments: Environments to assign. Each must already be registered in the
                 workspace. Pass ``[]`` to clear.
-            commit: 8-char short commit hash to target a specific version. Defaults to the
-                latest version.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). Defaults to the latest version.
             project_name: Project the prompt belongs to. Defaults to the active project
                 context, then to the client's default.
 
         Raises:
-            PromptNotFoundError: The prompt name (or the supplied ``commit``) does not exist
+            PromptNotFoundError: The prompt name (or the supplied ``version``) does not exist
                 in the resolved project.
             EnvironmentNotFoundError: One of ``environments`` is not registered in the
                 workspace.
         """
         resolved_project_name = self._resolve_project_name(project_name)
         try:
-            version = self._rest_client.prompts.retrieve_prompt_version(
+            resolved_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=prompt_name,
-                commit=commit,
+                version_number=version,
                 project_name=resolved_project_name,
             )
         except ApiError as e:
             if e.status_code == 404:
-                if commit is not None:
+                if version is not None:
                     raise exceptions.PromptNotFoundError(
-                        f"No version with commit {commit!r} found for prompt {prompt_name!r}."
+                        f"No version {version!r} found for prompt {prompt_name!r}."
                     ) from e
                 raise exceptions.PromptNotFoundError(
                     f"No prompt found with name {prompt_name!r}."
@@ -2428,7 +2428,7 @@ class Opik:
         target = list(dict.fromkeys(environments))
         try:
             self._rest_client.prompts.set_prompt_version_environment(
-                version_id=version.id,
+                version_id=resolved_version.id,
                 environments=target,
             )
         except ApiError as e:
