@@ -1,4 +1,4 @@
-import type { Page, Locator } from '@playwright/test';
+import { test, type Page, type Locator } from '@playwright/test';
 
 export class TracePanelPage {
   constructor(
@@ -7,9 +7,11 @@ export class TracePanelPage {
   ) {}
 
   async waitForFullyLoaded(): Promise<void> {
-    await this.page.waitForURL((url) => url.searchParams.get('trace') === this.traceId);
-    await this.closeButton.waitFor({ state: 'visible', timeout: 30_000 });
-    await this.page.getByTestId('data-viewer-created-at').waitFor({ state: 'visible', timeout: 30_000 });
+    return test.step(`Wait for trace panel ${this.traceId} to load`, async () => {
+      await this.page.waitForURL((url) => url.searchParams.get('trace') === this.traceId);
+      await this.closeButton.waitFor({ state: 'visible', timeout: 30_000 });
+      await this.page.getByTestId('data-viewer-created-at').waitFor({ state: 'visible', timeout: 30_000 });
+    });
   }
 
   /** Root locator for the side-panel content, scoped to the panel testid. */
@@ -50,8 +52,10 @@ export class TracePanelPage {
   }
 
   async close(): Promise<void> {
-    await this.closeButton.click();
-    await this.page.waitForURL((url) => !url.searchParams.get('trace'));
+    return test.step('Close trace panel', async () => {
+      await this.closeButton.click();
+      await this.page.waitForURL((url) => !url.searchParams.get('trace'));
+    });
   }
 
   /** Locator for the Feedback scores tab inside the panel. */
