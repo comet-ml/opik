@@ -6,8 +6,9 @@ the selection logic itself. Editing one shouldn't pull the other into
 review.
 
 Conservative defaults: models not matched fall back to
-`DEFAULT_CAPABILITY`, so unknown models keep a small window. Override
-per-judge via `HeuristicSelector(model_capabilities=...)`.
+`DEFAULT_CAPABILITY`, so unknown models keep a small window. Callers
+who need a different table can pass `capabilities=` to
+`compute_budget_tokens`.
 """
 
 import dataclasses

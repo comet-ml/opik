@@ -118,16 +118,19 @@ class LLMJudge(base.BaseSuiteEvaluator):
             or the agentic tool-call loop when a ``trace_tool_context`` is
             available. One of:
 
-            - ``"auto"`` (default): pick based on reconstructed-trace size
-              and the judge model's single-pass capability.
+            - ``"auto"`` (default): use the agentic loop whenever a
+              trace context is supplied, otherwise one-shot. The agentic
+              overview already subsumes the one-shot input/output, and
+              the model can answer from it without invoking any tools
+              when the trace is trivial.
             - ``"always"``: always run the agentic loop (when a context
               is available; otherwise falls back to one-shot).
             - ``"never"``: always use the one-shot prompt, even if a
-              context is available.
+              context is available. Useful to avoid the tool-schema
+              overhead on very cost-sensitive flows.
 
             A custom ``ScoringToolStrategySelector`` instance may also be
-            passed for fine-grained control (e.g., a different
-            ``safety_factor`` or model-capability table).
+            passed for fine-grained control.
 
     Example:
         >>> from opik.evaluation.suite_evaluators import LLMJudge
@@ -149,9 +152,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
     Example (scoring strategy):
         >>> from opik.evaluation.suite_evaluators import LLMJudge
-        >>> from opik.evaluation.suite_evaluators.llm_judge.strategy_selector import (
-        ...     HeuristicSelector,
-        ... )
         >>>
         >>> # Force the agentic tool loop whenever a trace context is supplied.
         >>> always_agentic = LLMJudge(
@@ -160,17 +160,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
         ...     scoring_tool_strategy="always",
         ... )
         >>>
-        >>> # Force one-shot scoring, even on large traces.
+        >>> # Force one-shot scoring, skipping the tool-schema overhead.
         >>> never_agentic = LLMJudge(
         ...     assertions=["Response is concise"],
         ...     scoring_tool_strategy="never",
-        ... )
-        >>>
-        >>> # Custom heuristic: reserve more headroom and use a different threshold.
-        >>> tuned = LLMJudge(
-        ...     assertions=["Reasoning is faithful to the retrieved context"],
-        ...     model="gpt-5",
-        ...     scoring_tool_strategy=HeuristicSelector(safety_factor=0.3),
         ... )
     """
 

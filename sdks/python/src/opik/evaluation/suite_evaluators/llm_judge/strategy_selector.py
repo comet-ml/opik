@@ -3,8 +3,7 @@
 Decides whether a judge call should go through the single-pass path or
 the agentic tool-call loop. Lives next to `metric.py` so the fast path
 doesn't import any `agentic/` submodule — `NeverAgentic` never reaches
-into the agentic package, and `HeuristicSelector` only touches the
-size-estimation helpers under `agentic/compression/`.
+into the agentic package.
 """
 
 import abc
@@ -57,9 +56,8 @@ _PROMPT_OVERHEAD_TOKENS = 1_500
 
 
 # Default headroom: reserve half the context window for the model's own
-# reasoning/response. Callers tuning cost vs. quality can override via
-# `HeuristicSelector(safety_factor=...)` or by passing `safety_factor`
-# to `compute_budget_tokens`.
+# reasoning/response. Callers tuning cost vs. quality can override by
+# passing `safety_factor` to `compute_budget_tokens`.
 _DEFAULT_SAFETY_FACTOR = 0.5
 
 
@@ -71,7 +69,7 @@ def _capability_for(
 
     The exact match on ``model_name_prefix`` wins; falls back to the longest
     matching prefix, so versioned ids like ``"gpt-5-nano-2025-08-07"``
-    still resolve. Unknown models get ``_DEFAULT_CAPABILITY``.
+    still resolve. Unknown models get ``DEFAULT_CAPABILITY``.
     """
     table = (
         capabilities
@@ -97,13 +95,11 @@ def compute_budget_tokens(
     prompt_overhead_tokens: int = _PROMPT_OVERHEAD_TOKENS,
     capabilities: Optional[Sequence[capabilities_registry.ModelCapability]] = None,
 ) -> int:
-    """Tokens available for the trace overview / one-shot trace payload.
+    """Tokens available for the agentic-judge inline overview.
 
     `context_window * safety_factor - prompt_overhead_tokens`. The
-    agentic judge uses this to size the inline overview; the heuristic
-    selector uses the same formula to decide one-shot vs. agentic.
-    Single source of truth for "how much of the context can we spend on
-    trace data."
+    agentic overview sizer uses this to decide how rich the inline
+    trace summary can be before falling back to compressed views.
     """
     if not 0.0 < safety_factor <= 1.0:
         raise ValueError("safety_factor must be in (0, 1]")
@@ -112,36 +108,21 @@ def compute_budget_tokens(
 
 
 class HeuristicSelector(ScoringToolStrategySelector):
-    """Pick a strategy from trace size and model capability.
+    """Pick a strategy from whether a trace context is available.
 
-    Rules, in order:
+    Rules:
       1. No context available → ONE_SHOT (no trace to inspect anyway).
-      2. Model not flagged single-pass-capable → AGENTIC.
-      3. Estimated reconstructed-trace tokens > budget → AGENTIC.
-      4. Otherwise → ONE_SHOT.
+      2. Context present → AGENTIC.
 
-    `safety_factor` reserves headroom for the model's own reasoning /
-    response tokens. A value of 0.5 means "use at most half of the
-    context window for input."
+    The agentic mode begins with an inline overview that already
+    subsumes what one-shot would see (input + output), and additionally
+    exposes tools so the model can navigate the span tree when the
+    overview isn't enough. Picking AGENTIC whenever a context is
+    available lets the model self-select between "answer from overview"
+    and "drill in via tools," instead of pre-deciding from a size
+    heuristic that becomes meaningless once context windows hit 1M+
+    tokens.
     """
-
-    def __init__(
-        self,
-        safety_factor: float = _DEFAULT_SAFETY_FACTOR,
-        prompt_overhead_tokens: int = _PROMPT_OVERHEAD_TOKENS,
-        model_capabilities: Optional[
-            Sequence[capabilities_registry.ModelCapability]
-        ] = None,
-    ) -> None:
-        if not 0.0 < safety_factor <= 1.0:
-            raise ValueError("safety_factor must be in (0, 1]")
-        self._safety_factor = safety_factor
-        self._prompt_overhead_tokens = prompt_overhead_tokens
-        self._capabilities = (
-            model_capabilities
-            if model_capabilities is not None
-            else capabilities_registry.MODEL_CAPABILITIES
-        )
 
     def select(
         self,
@@ -152,60 +133,7 @@ class HeuristicSelector(ScoringToolStrategySelector):
     ) -> ScoringToolStrategy:
         if trace_tool_context is None:
             return ScoringToolStrategy.ONE_SHOT
-
-        capability = _capability_for(model_name, self._capabilities)
-        if not capability.single_pass_quality_ok:
-            LOGGER.debug(
-                "HeuristicSelector: model %s not flagged single-pass-capable; using agentic",
-                model_name,
-            )
-            return ScoringToolStrategy.AGENTIC
-
-        budget = compute_budget_tokens(
-            model_name,
-            safety_factor=self._safety_factor,
-            prompt_overhead_tokens=self._prompt_overhead_tokens,
-            capabilities=self._capabilities,
-        )
-        size = _estimate_context_tokens(trace_tool_context)
-        if size > budget:
-            LOGGER.debug(
-                "HeuristicSelector: trace size %d > budget %d for model %s; using agentic",
-                size,
-                budget,
-                model_name,
-            )
-            return ScoringToolStrategy.AGENTIC
-
-        LOGGER.debug(
-            "HeuristicSelector: trace size %d <= budget %d for model %s; using one-shot",
-            size,
-            budget,
-            model_name,
-        )
-        return ScoringToolStrategy.ONE_SHOT
-
-    def _capability_for(self, model_name: str) -> capabilities_registry.ModelCapability:
-        # Preserved as a thin shim for backwards compatibility with the
-        # one existing test that patches via the private helper.
-        return _capability_for(model_name, self._capabilities)
-
-
-def _estimate_context_tokens(trace_tool_context: Any) -> int:
-    """Estimate token count of the composite trace+spans payload.
-
-    Reuses the agentic-compression sizing helper so the SDK and the
-    backend agree on the boundary. Import is local: this module must
-    not pull `agentic/` into the one-shot path during construction.
-    """
-    from opik.evaluation.suite_evaluators.agentic import entity_ref
-    from opik.evaluation.suite_evaluators.agentic.compression import tokens
-
-    ref = entity_ref.EntityRef(entity_ref.EntityType.TRACE, trace_tool_context.trace.id)
-    payload = trace_tool_context.get_cached(ref)
-    if payload is None:
-        return 0
-    return tokens.estimate_tokens(payload)
+        return ScoringToolStrategy.AGENTIC
 
 
 def make_selector(

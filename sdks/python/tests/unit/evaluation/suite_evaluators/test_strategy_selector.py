@@ -61,54 +61,17 @@ class TestHeuristicSelector:
             is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
-    def test_unknown_model__defaults_to_one_shot(self):
+    def test_context_present__returns_agentic_regardless_of_size_or_model(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        assert (
-            sel.select(
-                trace_tool_context=ctx,
-                model_name="unknown-model-xyz",
-                assertions=[],
-            )
-            is strategy_selector.ScoringToolStrategy.ONE_SHOT
-        )
+        for model in ("gpt-5", "gpt-5-nano", "gpt-4o", "unknown-model-xyz"):
+            assert (
+                sel.select(trace_tool_context=ctx, model_name=model, assertions=[])
+                is strategy_selector.ScoringToolStrategy.AGENTIC
+            ), model
 
-    def test_small_trace__capable_model__returns_one_shot(self):
-        sel = strategy_selector.HeuristicSelector()
-        ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        assert (
-            sel.select(trace_tool_context=ctx, model_name="gpt-5", assertions=[])
-            is strategy_selector.ScoringToolStrategy.ONE_SHOT
-        )
 
-    def test_large_trace__capable_model__returns_agentic(self):
-        sel = strategy_selector.HeuristicSelector(
-            safety_factor=0.5, prompt_overhead_tokens=0
-        )
-        # Push past gpt-4o budget (128k * 0.5 = 64k tokens ~= 256k chars).
-        big = "x" * 2_000_000
-        ctx = _fake_ctx(payload={"trace": {"id": "t", "input": big}})
-        assert (
-            sel.select(trace_tool_context=ctx, model_name="gpt-4o", assertions=[])
-            is strategy_selector.ScoringToolStrategy.AGENTIC
-        )
-
-    def test_small_model__not_forces_agentic_even_when_size_fits(self):
-        sel = strategy_selector.HeuristicSelector()
-        ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        # gpt-5-nano is flagged single_pass_quality_ok=True and the trace
-        # fits comfortably, so the heuristic stays on the one-shot path.
-        assert (
-            sel.select(trace_tool_context=ctx, model_name="gpt-5-nano", assertions=[])
-            is strategy_selector.ScoringToolStrategy.ONE_SHOT
-        )
-
-    def test_invalid_safety_factor__raises(self):
-        with pytest.raises(ValueError):
-            strategy_selector.HeuristicSelector(safety_factor=0.0)
-        with pytest.raises(ValueError):
-            strategy_selector.HeuristicSelector(safety_factor=1.5)
-
+class TestCapabilityLookup:
     def test_capability_prefix_match__longest_wins(self):
         table = [
             model_capabilities.ModelCapability(
@@ -118,11 +81,15 @@ class TestHeuristicSelector:
                 "gpt-5-nano", context_window=2, single_pass_quality_ok=False
             ),
         ]
-        sel = strategy_selector.HeuristicSelector(model_capabilities=table)
-        cap = sel._capability_for("gpt-5-nano-2025-08-07")
-        # Longest matching prefix is "gpt-5-nano", not "gpt-5".
+        cap = strategy_selector._capability_for(
+            "gpt-5-nano-2025-08-07", capabilities=table
+        )
         assert cap.model_name_prefix == "gpt-5-nano"
         assert cap.single_pass_quality_ok is False
+
+    def test_unknown_model__falls_back_to_default(self):
+        cap = strategy_selector._capability_for("totally-unknown-model")
+        assert cap is model_capabilities.DEFAULT_CAPABILITY
 
 
 class TestLLMJudgeIntegration:
