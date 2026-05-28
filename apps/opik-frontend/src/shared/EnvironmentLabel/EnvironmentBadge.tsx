@@ -1,14 +1,25 @@
 import React from "react";
-import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import { TagProps } from "@/ui/tag";
 import { cn } from "@/lib/utils";
-import { getContrastingTextColor, resolveEnvironmentColor } from "./helpers";
+import {
+  getContrastingTextColor,
+  getDefaultEnvironmentMeta,
+  resolveEnvironmentColor,
+} from "./helpers";
+import { useEnvironmentByName } from "./EnvironmentLabel";
 
 const SIZE_CLASSES: Record<NonNullable<TagProps["size"]>, string> = {
   default: "comet-body-xs h-5 px-2 leading-5 rounded-sm",
   sm: "comet-body-xs h-4 px-2 text-[11px] leading-4 rounded-sm",
   md: "comet-body-s h-6 px-1.5 leading-6 rounded-md",
   lg: "comet-body-s h-7 px-3 leading-7 rounded-md",
+};
+
+const ICON_SIZE_CLASSES: Record<NonNullable<TagProps["size"]>, string> = {
+  default: "size-3",
+  sm: "size-2.5",
+  md: "size-3",
+  lg: "size-3.5",
 };
 
 type EnvironmentBadgeProps = {
@@ -22,24 +33,31 @@ const EnvironmentBadge: React.FC<EnvironmentBadgeProps> = ({
   size = "sm",
   className,
 }) => {
-  const { data } = useEnvironmentsList();
+  const env = useEnvironmentByName(name);
 
   if (!name) return null;
 
-  const env = data?.content?.find((e) => e.name === name);
   const bg = resolveEnvironmentColor(env?.color);
   const text = getContrastingTextColor(bg);
+  const defaultMeta = getDefaultEnvironmentMeta(name);
+  const Icon = defaultMeta?.icon;
+  const resolvedSize = size ?? "sm";
 
   return (
     <div
       className={cn(
-        "inline-block max-w-[160px] truncate transition-colors",
-        SIZE_CLASSES[size ?? "sm"],
+        "inline-flex max-w-[160px] items-center gap-1 truncate transition-colors",
+        SIZE_CLASSES[resolvedSize],
         className,
       )}
       style={{ backgroundColor: bg, color: text }}
     >
-      {name}
+      {Icon && (
+        <Icon
+          className={cn("shrink-0 text-white", ICON_SIZE_CLASSES[resolvedSize])}
+        />
+      )}
+      <span className="truncate">{name}</span>
     </div>
   );
 };

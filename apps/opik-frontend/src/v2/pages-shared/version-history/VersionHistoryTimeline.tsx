@@ -5,7 +5,7 @@ import { useInView } from "react-intersection-observer";
 import { cn } from "@/lib/utils";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import VersionTagList from "./VersionTagList";
 import VersionMeta from "./VersionMeta";
 
@@ -16,7 +16,7 @@ export interface VersionHistoryItem {
   description?: string;
   created_at: string;
   created_by?: string;
-  environment?: string | null;
+  environments?: string[] | null;
 }
 
 interface VersionHistoryTimelineProps {
@@ -94,15 +94,17 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
               )}
               onClick={() => onSelect(item)}
             >
-              <div className="flex items-center gap-1">
+              <div className="flex min-w-0 items-center gap-1">
                 <span className="comet-body-s-accented shrink-0">
                   {item.label}
                 </span>
                 <VersionTagList tags={item.tags} size="sm" maxWidth={200} />
-                <EnvironmentBadge
-                  name={item.environment}
+                <EnvironmentBadgeList
+                  names={item.environments}
                   size="sm"
-                  className="max-w-[120px]"
+                  badgeClassName="max-w-[120px]"
+                  withOverflow
+                  maxWidth={160}
                 />
               </div>
               {item.description && (
