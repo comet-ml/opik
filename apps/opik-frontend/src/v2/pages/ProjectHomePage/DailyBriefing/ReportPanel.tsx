@@ -7,19 +7,16 @@ import { formatRelativeDateTime } from "@/lib/date";
 
 const CARD_STYLES = [
   {
-    bg: "rgba(186, 230, 253, 0.1)",
-    border: "rgba(186, 230, 253, 0.6)",
-    iconBg: "#89DEFF",
+    card: "border-sky-200/60 bg-sky-200/10 hover:bg-sky-200/20 hover:border-sky-200/80",
+    iconBg: "bg-sky-300",
   },
   {
-    bg: "rgba(196, 181, 253, 0.1)",
-    border: "rgba(196, 181, 253, 0.4)",
-    iconBg: "#A78BFA",
+    card: "border-violet-300/40 bg-violet-300/10 hover:bg-violet-300/20 hover:border-violet-300/60",
+    iconBg: "bg-violet-400",
   },
   {
-    bg: "rgba(240, 171, 252, 0.1)",
-    border: "rgba(240, 171, 252, 0.5)",
-    iconBg: "#E25AF6",
+    card: "border-fuchsia-300/50 bg-fuchsia-300/10 hover:bg-fuchsia-300/20 hover:border-fuchsia-300/70",
+    iconBg: "bg-fuchsia-400",
   },
 ];
 
@@ -67,17 +64,11 @@ export default function ReportPanel({
                 return (
                   <button
                     key={i}
-                    className="flex flex-1 flex-col rounded-md p-3 pb-2 text-left shadow-sm"
-                    style={{
-                      backgroundColor: style.bg,
-                      borderWidth: 1,
-                      borderColor: style.border,
-                    }}
+                    className={`flex flex-1 flex-col rounded-md border p-3 pb-2 text-left shadow-sm transition-colors ${style.card}`}
                     onClick={() => onStartConversation(action)}
                   >
                     <div
-                      className="mb-2 flex size-5 items-center justify-center rounded-[6px]"
-                      style={{ backgroundColor: style.iconBg }}
+                      className={`mb-2 flex size-5 items-center justify-center rounded-[6px] ${style.iconBg}`}
                     >
                       <Lightbulb className="size-3 shrink-0 text-foreground-secondary dark:text-background" />
                     </div>
