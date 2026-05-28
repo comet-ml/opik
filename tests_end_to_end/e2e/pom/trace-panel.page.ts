@@ -57,4 +57,50 @@ export class TracePanelPage {
       await this.page.waitForURL((url) => !url.searchParams.get('trace'));
     });
   }
+
+  /** Locator for the Feedback scores tab inside the panel. */
+  get feedbackScoresTab(): Locator {
+    return this.root.getByRole('tab', { name: 'Feedback scores' });
+  }
+
+  /** Locator for the Feedback scores tab panel content (the table area). */
+  get feedbackScoresTabPanel(): Locator {
+    return this.root.getByRole('tabpanel', { name: 'Feedback scores' });
+  }
+
+  /** Switches to the Feedback scores tab. Idempotent if already selected. */
+  async openFeedbackScoresTab(): Promise<void> {
+    await this.feedbackScoresTab.click();
+    await this.feedbackScoresTabPanel.waitFor({ state: 'visible' });
+  }
+
+  /**
+   * Row in the Trace scores table matching the given score name. The Key cell
+   * truncates long names with CSS ellipsis, so the accessible name reads as
+   * "cuj-..." rather than the full string; matching by `hasText` against the
+   * row's DOM text content (which preserves the full name) is reliable across
+   * panel widths.
+   */
+  feedbackScoreRow(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.getByRole('row').filter({ hasText: scoreName });
+  }
+
+  /**
+   * Read the numeric value rendered in the Score column for the given score name.
+   * Requires the Feedback scores tab to be open (call openFeedbackScoresTab first).
+   * Throws if the row doesn't exist or the cell isn't a parseable number.
+   */
+  async readFeedbackScoreValue(scoreName: string): Promise<number> {
+    const row = this.feedbackScoreRow(scoreName);
+    await row.waitFor({ state: 'visible' });
+    // Columns are: Key | Score | Reason | <actions>
+    const cellText = (await row.getByRole('cell').nth(1).textContent()) ?? '';
+    const parsed = Number(cellText.trim());
+    if (Number.isNaN(parsed)) {
+      throw new Error(
+        `TracePanelPage.readFeedbackScoreValue: cell text "${cellText}" for score "${scoreName}" is not a number`,
+      );
+    }
+    return parsed;
+  }
 }

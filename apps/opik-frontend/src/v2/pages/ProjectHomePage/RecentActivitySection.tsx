@@ -49,10 +49,12 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
     getLink: (item, base) => `${base}/test-suites/${item.id}/items`,
   },
   [ActivityType.AGENT_CONFIG_VERSION]: {
-    label: "Agent configuration created",
+    label: "Prompt updated",
     icon: Workflow,
     color: "text-chart-blue",
-    getLink: (item, base) => `${base}/agent-configuration?configId=${item.id}`,
+    // The agent-configuration route was removed; agent-config versions
+    // surface as prompt versions in the library now.
+    getLink: (item, base) => `${base}/prompts/${item.id}`,
   },
   [ActivityType.ALERT_EVENT]: {
     label: "Alert triggered",

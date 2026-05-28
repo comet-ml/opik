@@ -46,7 +46,6 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
 
   const hasTags = tags.length > 0 || immutableTags.length > 0;
 
-  const tagSizeClass = size === "sm" ? "w-3" : "w-4";
   const tagMarginClass = size === "sm" ? "mx-0" : "mx-1";
 
   const isImmutableTag = (tag: string): boolean =>
@@ -81,13 +80,13 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
       )}
     >
       <TooltipWrapper content={tooltipText}>
-        <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
+        <Tag className={`${tagMarginClass} size-3 text-muted-slate`} />
       </TooltipWrapper>
       {[...immutableTags].sort().map((tag) => (
         <RemovableTag
           label={tag}
           key={`immutable-${tag}`}
-          size="md"
+          size="default"
           variant={tagVariant}
         />
       ))}
@@ -95,7 +94,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
         <RemovableTag
           label={tag}
           key={tag}
-          size="md"
+          size="default"
           variant={tagVariant}
           onDelete={() => onDeleteTag(tag)}
         />
@@ -107,6 +106,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
               data-testid="add-tag-button"
               variant="outline"
               size="icon-2xs"
+              className="size-5"
             >
               <Plus />
             </Button>

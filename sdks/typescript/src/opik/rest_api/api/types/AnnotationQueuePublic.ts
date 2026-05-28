@@ -12,6 +12,7 @@ export interface AnnotationQueuePublic {
     scope: OpikApi.AnnotationQueuePublicScope;
     commentsEnabled?: boolean;
     feedbackDefinitionNames?: string[];
+    annotatorsPerItem?: number;
     reviewers?: OpikApi.AnnotationQueueReviewerPublic[];
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
     itemsCount?: number;

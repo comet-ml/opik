@@ -46,12 +46,10 @@ describe("TracesTabRedirect", () => {
     );
   });
 
-  it("redirects ?tab=configuration to /agent-configuration", () => {
+  it("redirects ?tab=configuration to /prompts", () => {
     mockSearch = { tab: "configuration" };
     render(<TracesTabRedirect />);
-    expect(mockNavigate).toHaveBeenCalledWith(
-      projectRoute("/agent-configuration"),
-    );
+    expect(mockNavigate).toHaveBeenCalledWith(projectRoute("/prompts"));
   });
 
   it("redirects ?tab=insights to /dashboards", () => {
@@ -145,12 +143,10 @@ describe("TracesTabRedirect", () => {
     );
   });
 
-  it("redirects ?type=configuration to /agent-configuration", () => {
+  it("redirects ?type=configuration to /prompts", () => {
     mockSearch = { type: "configuration" };
     render(<TracesTabRedirect />);
-    expect(mockNavigate).toHaveBeenCalledWith(
-      projectRoute("/agent-configuration"),
-    );
+    expect(mockNavigate).toHaveBeenCalledWith(projectRoute("/prompts"));
   });
 
   // --- Legacy ?view= redirect ---

@@ -1,0 +1,234 @@
+name: Load Tests (SDK ingestion)
+run-name: "Load Tests ${{ github.ref_name }} by @${{ github.actor }}"
+
+permissions:
+  contents: read
+  # checks: write so EnricoMi/publish-unit-test-result-action can post the
+  # "Load Test Results" check; without it the step gets 403 Forbidden and
+  # fails the whole workflow even when all scenarios passed.
+  checks: write
+
+on:
+  schedule:
+    - cron: '0 4 * * 0'  # Weekly, Sunday 04:00 UTC
+  workflow_dispatch:
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_CONSOLE_LOGGING_LEVEL: WARNING
+
+jobs:
+  run-load-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run latest Opik server
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+          COMPOSE_BAKE: false
+          TOGGLE_RUNNERS_ENABLED: "true"
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --backend --port-mapping --build
+
+      - name: Check Opik server availability
+        shell: bash
+        run: |
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+          cd ${{ github.workspace }}/deployment/docker-compose
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Install Opik SDK
+        run: |
+          cd ${{ github.workspace }}/sdks/python
+          pip install .
+
+      - name: Install Python SDK load-test requirements
+        run: |
+          cd ${{ github.workspace }}/tests_load/suite/python_sdk
+          pip install -r requirements.txt
+
+      - name: Run Python SDK load tests
+        # -n 2 + --dist=worksteal runs two scenarios in parallel at a time.
+        # `-n auto` (= 4 workers on ubuntu-latest) was the previous setting
+        # but reliably OOM-killed the heaviest scenarios
+        # (test_many_traces_one_span_each, test_many_spans_per_trace) when
+        # they ended up co-scheduled with other heavy tests against the
+        # same docker-compose Opik stack on the runner's 7 GB RAM. -n 2
+        # halves concurrent backend pressure and per-runner memory, at the
+        # cost of ~1.5x wall-clock (~32 min -> ~50 min). Each test still
+        # uses a unique project so isolation holds. Worksteal balances the
+        # very uneven per-test durations (spread is window-locked at 600 s,
+        # others run in 1-6 min).
+        run: |
+          cd ${{ github.workspace }}/tests_load
+          pytest suite/python_sdk -n 2 --dist=worksteal --junitxml=${{ github.workspace }}/load_test_results.xml
+
+      - name: Render metrics into job summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import pathlib
+
+          metrics_dir = pathlib.Path("tests_load/.last_run")
+          files = sorted(metrics_dir.glob("*.json")) if metrics_dir.exists() else []
+
+          if not files:
+              print("## Load test metrics\n\n_No metrics produced (suite did not run)._")
+              raise SystemExit
+
+
+          def fmt_seconds(value):
+              if not isinstance(value, (int, float)):
+                  return "—"
+              return f"{value / 60:.1f} m" if value >= 60 else f"{value:.1f} s"
+
+
+          def fmt_count(value):
+              return f"{value:,}" if isinstance(value, (int, float)) else "—"
+
+
+          def submit_seconds(metrics):
+              # The submit phase is timed as "logging" for trace-based tests and
+              # as "insert" for the dataset-versions test.
+              for key in ("logging_seconds", "insert_seconds"):
+                  if isinstance(metrics.get(key), (int, float)):
+                      return metrics[key]
+              return None
+
+
+          def submitted_volume(metrics):
+              # Returns (count, label). Picks the most representative unit per
+              # test type so the table shows what was actually submitted.
+              if "expected_total_items" in metrics:
+                  return metrics["expected_total_items"], (
+                      f"{metrics['expected_total_items']:,} items"
+                  )
+              if "total_traces" in metrics:
+                  return metrics["total_traces"], (
+                      f"{metrics['total_traces']:,} traces"
+                  )
+              trace_count = metrics.get("trace_count")
+              spans_per_trace = metrics.get("spans_per_trace")
+              if isinstance(trace_count, int) and isinstance(spans_per_trace, int):
+                  return trace_count, (
+                      f"{trace_count:,} traces × {spans_per_trace} spans"
+                  )
+              if isinstance(trace_count, int):
+                  return trace_count, f"{trace_count:,} traces"
+              return None, "—"
+
+
+          def submit_rate(count, seconds):
+              if count is None or not isinstance(seconds, (int, float)) or seconds <= 0:
+                  return "—"
+              return f"{count / seconds:,.0f}/s"
+
+
+          def total_seconds(metrics):
+              parts = [
+                  metrics.get(key)
+                  for key in (
+                      "logging_seconds",
+                      "insert_seconds",
+                      "flush_seconds",
+                      "verify_seconds",
+                  )
+              ]
+              parts = [p for p in parts if isinstance(p, (int, float))]
+              return sum(parts) if parts else None
+
+
+          def delivered_count(metrics):
+              for key in ("delivered_trace_count", "delivered_item_count"):
+                  if key in metrics:
+                      return metrics[key]
+              return None
+
+
+          print("## Load test metrics\n")
+          print(
+              "_Submit = time spent calling decorated functions / context managers."
+              " Submit rate = volume ÷ submit time."
+              " Total = submit + flush + verify._\n"
+          )
+          print(
+              "| Test | Volume | Submit | Submit rate"
+              " | Flush | Verify | Total | Delivered |"
+          )
+          print(
+              "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"
+          )
+          payloads = []
+          for path in files:
+              metrics = json.loads(path.read_text())
+              payloads.append(metrics)
+              name = metrics.get("test_name", path.stem)
+              count, volume_label = submitted_volume(metrics)
+              submit_s = submit_seconds(metrics)
+              print(
+                  f"| `{name}`"
+                  f" | {volume_label}"
+                  f" | {fmt_seconds(submit_s)}"
+                  f" | {submit_rate(count, submit_s)}"
+                  f" | {fmt_seconds(metrics.get('flush_seconds'))}"
+                  f" | {fmt_seconds(metrics.get('verify_seconds'))}"
+                  f" | {fmt_seconds(total_seconds(metrics))}"
+                  f" | {fmt_count(delivered_count(metrics))} |"
+              )
+
+          print("\n<details>\n<summary>Per-test metrics (raw JSON)</summary>\n")
+          for metrics in payloads:
+              print(f"\n**{metrics.get('test_name', '?')}**")
+              print("```json")
+              print(json.dumps(metrics, indent=2))
+              print("```")
+          print("\n</details>")
+          PY
+
+      - name: Upload metrics report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: load-test-metrics
+          path: ${{ github.workspace }}/tests_load/.last_run/
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          comment_mode: failures
+          check_name: Load Test Results
+          files: ${{ github.workspace }}/load_test_results.xml
+
+      - name: Keep BE log in case of failure
+        if: failure()
+        run: |
+          docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend.log
+
+      - name: Attach BE log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: opik-backend-log
+          path: ${{ github.workspace }}/opik-backend.log
+
+      - name: Stop opik server
+        if: always()
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --stop

@@ -251,12 +251,14 @@ type TraceDataToolbarProps = {
   dataToView: Trace | Span | undefined;
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isLoading?: boolean;
+  hideAnnotateActions?: boolean;
 };
 
 export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   dataToView,
   setActiveSection,
   isLoading = false,
+  hideAnnotateActions,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread },
@@ -298,15 +300,17 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
 
       <div className="flex-auto" />
 
-      <AddToDropdown
-        getDataForExport={async () => rows}
-        selectedRows={rows}
-        dataType={dataType}
-        buttonVariant="ghost"
-        buttonSize="2xs"
-        disabled={isLoading || !dataToView}
-      />
-      {canAnnotateTraceSpanThread && (
+      {!hideAnnotateActions && (
+        <AddToDropdown
+          getDataForExport={async () => rows}
+          selectedRows={rows}
+          dataType={dataType}
+          buttonVariant="ghost"
+          buttonSize="2xs"
+          disabled={isLoading || !dataToView}
+        />
+      )}
+      {canAnnotateTraceSpanThread && !hideAnnotateActions && (
         <DetailsActionSectionToggle
           activeSection={null}
           setActiveSection={setActiveSection}

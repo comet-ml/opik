@@ -18,12 +18,12 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
-import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.workspaces.Workspace;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -81,19 +81,6 @@ class WorkspaceVersionResourceTest {
     private static final WorkspaceVersion V2_WORKSPACE_VERSION = WorkspaceVersion.builder()
             .opikVersion(OpikVersion.VERSION_2)
             .build();
-
-    private static void verifyEvent(WireMockUtils.WireMockRuntime wireMock, String workspaceId,
-            String versionChanged, String previousVersion, String newVersion) {
-        wireMock.server().verify(
-                postRequestedFor(urlPathEqualTo(ANALYTICS_PATH))
-                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(EVENT_TYPE)))
-                        .withRequestBody(matchingJsonPath("$.event_properties.workspace_id", equalTo(workspaceId)))
-                        .withRequestBody(matchingJsonPath("$.event_properties.version_changed",
-                                equalTo(versionChanged)))
-                        .withRequestBody(matchingJsonPath("$.event_properties.previous_version",
-                                equalTo(previousVersion)))
-                        .withRequestBody(matchingJsonPath("$.event_properties.new_version", equalTo(newVersion))));
-    }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -423,7 +410,6 @@ class WorkspaceVersionResourceTest {
         private WorkspaceResourceClient workspaceClient;
         private DatasetResourceClient datasetClient;
         private PromptResourceClient promptClient;
-        private DashboardResourceClient dashboardClient;
         private AutomationRuleEvaluatorResourceClient evaluatorClient;
         private ExperimentResourceClient experimentClient;
         private OptimizationResourceClient optimizationClient;
@@ -436,7 +422,6 @@ class WorkspaceVersionResourceTest {
             workspaceClient = new WorkspaceResourceClient(clientSupport, baseUrl, podamFactory);
             datasetClient = new DatasetResourceClient(clientSupport, baseUrl);
             promptClient = new PromptResourceClient(clientSupport, baseUrl, podamFactory);
-            dashboardClient = new DashboardResourceClient(clientSupport, baseUrl);
             evaluatorClient = new AutomationRuleEvaluatorResourceClient(clientSupport, baseUrl);
             experimentClient = new ExperimentResourceClient(clientSupport, baseUrl, podamFactory);
             optimizationClient = new OptimizationResourceClient(clientSupport, baseUrl, podamFactory);
@@ -486,7 +471,7 @@ class WorkspaceVersionResourceTest {
             Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
                 assertThat(workspacesService.findById(workspaceId).map(Workspace::lastKnownVersion))
                         .contains(OpikVersion.VERSION_2.getValue());
-                verifyEvent(wireMock, workspaceId, "true", "unknown", "version_2");
+                verifyEvent(wireMock, workspaceId, "unknown", "version_2");
             });
 
             // Version 1 dataset triggers version_1
@@ -500,7 +485,7 @@ class WorkspaceVersionResourceTest {
             Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
                 assertThat(workspacesService.findById(workspaceId).map(Workspace::lastKnownVersion))
                         .contains(OpikVersion.VERSION_1.getValue());
-                verifyEvent(wireMock, workspaceId, "true", "version_2", "version_1");
+                verifyEvent(wireMock, workspaceId, "version_2", "version_1");
             });
         }
 
@@ -511,7 +496,7 @@ class WorkspaceVersionResourceTest {
 
             // Demo prompt without project does not trigger V1
             promptClient.createPrompt(podamFactory.manufacturePojo(Prompt.class).toBuilder()
-                    .name("Demo - Opik SDK Assistant - System Prompt")
+                    .name(DemoData.PROMPTS.getFirst())
                     .projectId(null)
                     .projectName(null)
                     .build(),
@@ -529,21 +514,6 @@ class WorkspaceVersionResourceTest {
                     .projectName(null)
                     .build(),
                     API_KEY, workspaceName);
-            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
-        }
-
-        @Test
-        void workspaceVersion__whenDashboardWithoutProject__returnsVersion1() {
-            var workspaceName = mockWorkspace(wireMock);
-
-            // Dashboard under project does not trigger version_1
-            dashboardClient.create(dashboardClient.createPartialDashboard()
-                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
-                    .build(), API_KEY, workspaceName);
-            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
-
-            // Version 1 dashboard triggers version_1
-            dashboardClient.create(dashboardClient.createPartialDashboard().build(), API_KEY, workspaceName);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
         }
 
@@ -723,5 +693,18 @@ class WorkspaceVersionResourceTest {
         AuthTestUtils.mockTargetWorkspace(
                 wireMock.server(), API_KEY, workspaceName, workspaceId, user, null, opikVersion);
         return workspaceName;
+    }
+
+    private void verifyEvent(
+            WireMockUtils.WireMockRuntime wireMock, String workspaceId, String previousVersion, String newVersion) {
+        wireMock.server().verify(
+                postRequestedFor(urlPathEqualTo(ANALYTICS_PATH))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(EVENT_TYPE)))
+                        .withRequestBody(matchingJsonPath("$.event_properties.workspace_id", equalTo(workspaceId)))
+                        .withRequestBody(matchingJsonPath("$.event_properties.version_changed",
+                                equalTo("true")))
+                        .withRequestBody(matchingJsonPath("$.event_properties.previous_version",
+                                equalTo(previousVersion)))
+                        .withRequestBody(matchingJsonPath("$.event_properties.new_version", equalTo(newVersion))));
     }
 }

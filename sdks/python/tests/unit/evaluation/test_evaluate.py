@@ -5,8 +5,8 @@ from unittest import mock
 import pytest
 
 import opik
-from opik import evaluation, exceptions, url_helpers
-from opik.api_objects import opik_client
+from opik import evaluation, exceptions, rest_api, url_helpers, PromptType
+from opik.api_objects import opik_client, prompt
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.evaluation import (
@@ -57,6 +57,7 @@ def create_mock_experiment() -> tuple[mock.Mock, mock.Mock, mock.Mock]:
         Tuple of (mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id)
     """
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -164,6 +165,7 @@ def test_evaluate__happyflow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -371,6 +373,145 @@ def test_evaluate__happyflow(
         assert_equal(expected_trace, actual_trace)
 
 
+def test_evaluate__prompts_are_attached_to_each_trace(fake_backend):
+    """When prompts are passed to `evaluate`, every trace produced by the
+    evaluation run must carry them in `metadata["opik_prompts"]` so the
+    backend can show prompt linkage on each trace (not only on the
+    experiment row)."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                input={"message": "say bye"},
+                reference="bye",
+            ),
+        ]
+    )
+
+    prompts = [
+        prompt.Prompt.from_fern_prompt_version(
+            name="system_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="You are a helpful assistant.",
+                commit="abc123",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+        prompt.Prompt.from_fern_prompt_version(
+            name="user_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="Say what the user asks.",
+                commit="def456",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+    ]
+    expected_prompts_metadata = [p.__internal_api__to_info_dict__() for p in prompts]
+
+    def say_task(item: Dict[str, Any]):
+        if item["input"]["message"] == "say hello":
+            return {"output": "hello"}
+        return {"output": "bye"}
+
+    (
+        mock_experiment,
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ) = create_mock_experiment()
+    # The engine reads prompts off the experiment object it receives, so the
+    # mocked experiment must expose them (create_experiment is mocked here).
+    mock_experiment.prompts = prompts
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="experiment-with-prompts",
+            scoring_metrics=[metrics.Equals()],
+            prompts=prompts,
+            task_threads=1,
+        )
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="experiment-with-prompts",
+        experiment_config=None,
+        prompts=prompts,
+        tags=None,
+        dataset_version_id=None,
+        project_name=None,
+    )
+
+    assert len(fake_backend.trace_trees) == 2
+    for actual_trace in fake_backend.trace_trees:
+        assert actual_trace.metadata is not None, (
+            "Trace metadata must not be None when prompts are passed to evaluate"
+        )
+        assert actual_trace.metadata.get("opik_prompts") == expected_prompts_metadata
+
+
+def test_evaluate_prompt__prompt_attached_to_each_trace(fake_backend):
+    """`evaluate_prompt` should also attach the prompt to each generated trace."""
+    MODEL_NAME = "gpt-3.5-turbo"
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+        ]
+    )
+
+    prompt_obj = prompt.Prompt.from_fern_prompt_version(
+        name="single_prompt",
+        prompt_version=rest_api.PromptVersionDetail(
+            template="LLM response: {{question}}",
+            commit="cafe01",
+            type=PromptType.MUSTACHE,
+        ),
+    )
+    expected_prompt_metadata = [prompt_obj.__internal_api__to_info_dict__()]
+
+    (
+        mock_experiment,
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ) = create_mock_experiment()
+    # The engine reads prompts off the experiment object it receives, so the
+    # mocked experiment must expose them (create_experiment is mocked here).
+    mock_experiment.prompts = [prompt_obj]
+    mock_models_factory_get, _ = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get=mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[{"role": "user", "content": "LLM response: {{question}}"}],
+            experiment_name="prompt-experiment",
+            model=MODEL_NAME,
+            prompt=prompt_obj,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+        )
+
+    assert len(fake_backend.trace_trees) == 1
+    actual_trace = fake_backend.trace_trees[0]
+    assert actual_trace.metadata is not None
+    assert actual_trace.metadata.get("opik_prompts") == expected_prompt_metadata
+
+
 def test_evaluate_with_scoring_key_mapping(
     fake_backend,
 ):
@@ -419,6 +560,7 @@ def test_evaluate_with_scoring_key_mapping(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -678,6 +820,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -738,6 +881,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         raise Exception("some-error-message")
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -888,6 +1032,7 @@ def test_evaluate__with_random_sampler__happy_flow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -998,6 +1143,7 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1090,6 +1236,7 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1187,6 +1334,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1313,6 +1461,7 @@ def test_evaluate_prompt_happyflow(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1547,6 +1696,7 @@ def test_evaluate__aggregated_metric__happy_flow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1913,6 +2063,7 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2047,6 +2198,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2202,6 +2354,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2477,6 +2630,7 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "experiment-id"
     mock_experiment.name = "test-experiment"
     mock_create_experiment = mock.Mock()
@@ -2815,6 +2969,7 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2880,6 +3035,7 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2951,6 +3107,7 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -3028,6 +3185,7 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 

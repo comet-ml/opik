@@ -39,9 +39,9 @@ jobs:
           id: setup
           run: |
             if [[ "${{inputs.version}}" == ""  ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{github.ref_name}}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{inputs.version}}" | tee -a "$GITHUB_OUTPUT"
             fi
         - name: Checkout
           uses: actions/checkout@v6

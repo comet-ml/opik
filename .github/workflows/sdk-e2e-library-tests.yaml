@@ -49,7 +49,7 @@ jobs:
       - name: Print has secrets into output
         id: init
         run: |
-          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
 
   missed_api_key_warning:
     name: Missed OpenAI API Key Warning
@@ -84,7 +84,7 @@ jobs:
       - name: Make LIBS variable global (workaround for cron)
         id: init
         run: |
-          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
+          echo "LIBS=${{ env.LIBS }}" >> "$GITHUB_OUTPUT"
 
       - name: Run latest Opik server
         env:

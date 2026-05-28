@@ -12,7 +12,7 @@ This module contains all the logic specific to Optimization Studio:
 
 from .config import (
     OPIK_URL,
-    LLM_API_KEYS,
+    OPIK_GATEWAY_BASE_URL,
     OPTIMIZER_RUNTIME_PARAMS,
     DEFAULT_REFERENCE_KEY,
     DEFAULT_CASE_SENSITIVE,
@@ -41,7 +41,7 @@ from .cancellation import CancellationHandle, CancellationMonitor, get_cancellat
 __all__ = [
     # Config
     "OPIK_URL",
-    "LLM_API_KEYS",
+    "OPIK_GATEWAY_BASE_URL",
     "OPTIMIZER_RUNTIME_PARAMS",
     "DEFAULT_REFERENCE_KEY",
     "DEFAULT_CASE_SENSITIVE",

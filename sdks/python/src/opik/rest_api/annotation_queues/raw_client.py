@@ -148,6 +148,7 @@ class RawAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -171,6 +172,8 @@ class RawAnnotationQueuesClient:
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
 
+        annotators_per_item : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -190,6 +193,7 @@ class RawAnnotationQueuesClient:
                 "scope": scope,
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
+                "annotators_per_item": annotators_per_item,
             },
             headers={
                 "content-type": "application/json",
@@ -409,6 +413,7 @@ class RawAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -428,6 +433,8 @@ class RawAnnotationQueuesClient:
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
 
+        annotators_per_item : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -444,6 +451,7 @@ class RawAnnotationQueuesClient:
                 "instructions": instructions,
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
+                "annotators_per_item": annotators_per_item,
             },
             headers={
                 "content-type": "application/json",
@@ -646,6 +654,7 @@ class AsyncRawAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -669,6 +678,8 @@ class AsyncRawAnnotationQueuesClient:
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
 
+        annotators_per_item : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -688,6 +699,7 @@ class AsyncRawAnnotationQueuesClient:
                 "scope": scope,
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
+                "annotators_per_item": annotators_per_item,
             },
             headers={
                 "content-type": "application/json",
@@ -907,6 +919,7 @@ class AsyncRawAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -926,6 +939,8 @@ class AsyncRawAnnotationQueuesClient:
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
 
+        annotators_per_item : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -942,6 +957,7 @@ class AsyncRawAnnotationQueuesClient:
                 "instructions": instructions,
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
+                "annotators_per_item": annotators_per_item,
             },
             headers={
                 "content-type": "application/json",
