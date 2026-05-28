@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.jobs;
 
+import com.comet.opik.infrastructure.ProjectMigrationJobConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -25,7 +26,8 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * Shared lock/metrics/error skeleton for the V1 → V2 project-migration Quartz jobs (experiments,
  * datasets, optimizations, prompts). Each entity-specific subclass keeps its
  * {@code @DisallowConcurrentExecution} annotation and supplies the entity label, metric namespace,
- * config, and the {@code runMigrationCycle()} delegate to its service.
+ * the entity's {@link ProjectMigrationJobConfig}, and the {@code runMigrationCycle()} delegate to
+ * its service.
  *
  * <p>The flow is identical for every subclass: respect the enabled flag, honour the interrupt
  * latch, take the best-effort distributed lock, run one cycle with the configured timeout, and
@@ -77,17 +79,13 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
      */
     protected abstract String metricNamespace();
 
-    /** Configuration flag — short-circuits the cycle when the job is disabled. */
-    protected abstract boolean isEnabled();
-
-    /** Distributed-lock timeout — must be shorter than {@link #jobTimeout()}. */
-    protected abstract Duration lockTimeout();
-
-    /** Max time to wait for the distributed lock when another replica holds it. */
-    protected abstract Duration lockWaitTime();
-
-    /** Per-cycle hard timeout — fires if the migration cycle stalls. */
-    protected abstract Duration jobTimeout();
+    /**
+     * The entity-specific migration job config. Used by the base class to read the enabled flag and
+     * the lock / job timeouts uniformly across subclasses; entity-specific fields
+     * ({@code interval}, {@code startupDelay}, batch sizes, …) stay on the concrete config records
+     * and are read by the call sites that need them.
+     */
+    protected abstract ProjectMigrationJobConfig config();
 
     /**
      * Delegates to the entity-specific migration service's {@code runMigrationCycle()}. Subclasses
@@ -98,7 +96,8 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
 
     @Override
     public void doJob(JobExecutionContext context) {
-        if (!isEnabled()) {
+        var cfg = config();
+        if (!cfg.enabled()) {
             log.debug("Migration job disabled, skipping, entity='{}'", entityLabel());
             return;
         }
@@ -116,7 +115,7 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
                         return Mono.empty();
                     }
                     return runMigrationCycle()
-                            .timeout(jobTimeout())
+                            .timeout(cfg.jobTimeout().toJavaDuration())
                             .doOnSuccess(unused -> {
                                 long durationMillis = System.currentTimeMillis() - startMillis;
                                 cycleDuration.record(durationMillis, resultSuccess);
@@ -132,8 +131,8 @@ public abstract class AbstractProjectMigrationJob extends Job implements Interru
                             entityLabel(), Duration.ofMillis(durationMillis));
                     return Mono.empty();
                 }),
-                lockTimeout(),
-                lockWaitTime(),
+                cfg.lockTimeout().toJavaDuration(),
+                cfg.lockWaitTime().toJavaDuration(),
                 false)
                 // Resume on errors so the recurring job stays alive
                 .onErrorResume(throwable -> {

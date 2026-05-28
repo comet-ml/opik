@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.jobs;
 
+import com.comet.opik.infrastructure.ProjectMigrationJobConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,7 +12,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -27,9 +28,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class AbstractProjectMigrationJobTest {
 
-    private static final Duration JOB_TIMEOUT = Duration.ofSeconds(1);
-    private static final Duration LOCK_TIMEOUT = Duration.ofMillis(500);
-    private static final Duration LOCK_WAIT_TIME = Duration.ofMillis(100);
+    private static final Duration JOB_TIMEOUT = Duration.seconds(1);
+    private static final Duration LOCK_TIMEOUT = Duration.milliseconds(500);
+    private static final Duration LOCK_WAIT_TIME = Duration.milliseconds(100);
 
     @Mock
     private LockService lockService;
@@ -67,7 +68,7 @@ class AbstractProjectMigrationJobTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Mono<Void>> noLockMonoCaptor = ArgumentCaptor.forClass(Mono.class);
         when(lockService.bestEffortLock(any(), any(), noLockMonoCaptor.capture(),
-                eq(LOCK_TIMEOUT), eq(LOCK_WAIT_TIME), eq(false)))
+                eq(LOCK_TIMEOUT.toJavaDuration()), eq(LOCK_WAIT_TIME.toJavaDuration()), eq(false)))
                 .thenAnswer(invocation -> {
                     Mono<Void> noLock = invocation.getArgument(2);
                     return noLock.doOnSubscribe(s -> noLockBranchInvocations.incrementAndGet());
@@ -76,7 +77,7 @@ class AbstractProjectMigrationJobTest {
         // When
         job.doJob(null);
         // Drain async work — the job subscribes on boundedElastic
-        sleepUntil(() -> noLockBranchInvocations.get() > 0, JOB_TIMEOUT);
+        sleepUntil(() -> noLockBranchInvocations.get() > 0, JOB_TIMEOUT.toJavaDuration());
 
         // Then
         verify(lockService, times(1)).bestEffortLock(any(), any(), any(), any(), any(), anyBoolean());
@@ -97,7 +98,7 @@ class AbstractProjectMigrationJobTest {
         assertThat(cycleCalls.get()).isZero();
     }
 
-    private static void sleepUntil(java.util.function.BooleanSupplier condition, Duration timeout) {
+    private static void sleepUntil(java.util.function.BooleanSupplier condition, java.time.Duration timeout) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
         while (System.currentTimeMillis() < deadline) {
             if (condition.getAsBoolean()) {
@@ -115,12 +116,12 @@ class AbstractProjectMigrationJobTest {
     /** Concrete subclass that wires the abstract hooks to controllable test state. */
     private static final class TestProjectMigrationJob extends AbstractProjectMigrationJob {
 
-        private final AtomicBoolean enabled;
+        private final ProjectMigrationJobConfig config;
         private final AtomicInteger cycleCalls;
 
         TestProjectMigrationJob(LockService lockService, AtomicBoolean enabled, AtomicInteger cycleCalls) {
             super(lockService);
-            this.enabled = enabled;
+            this.config = new TestProjectMigrationJobConfig(enabled);
             this.cycleCalls = cycleCalls;
         }
 
@@ -135,28 +136,36 @@ class AbstractProjectMigrationJobTest {
         }
 
         @Override
-        protected boolean isEnabled() {
-            return enabled.get();
-        }
-
-        @Override
-        protected Duration lockTimeout() {
-            return LOCK_TIMEOUT;
-        }
-
-        @Override
-        protected Duration lockWaitTime() {
-            return LOCK_WAIT_TIME;
-        }
-
-        @Override
-        protected Duration jobTimeout() {
-            return JOB_TIMEOUT;
+        protected ProjectMigrationJobConfig config() {
+            return config;
         }
 
         @Override
         protected Mono<Void> runMigrationCycle() {
             return Mono.fromRunnable(cycleCalls::incrementAndGet);
+        }
+    }
+
+    private record TestProjectMigrationJobConfig(AtomicBoolean enabledRef) implements ProjectMigrationJobConfig {
+
+        @Override
+        public boolean enabled() {
+            return enabledRef.get();
+        }
+
+        @Override
+        public Duration lockTimeout() {
+            return LOCK_TIMEOUT;
+        }
+
+        @Override
+        public Duration lockWaitTime() {
+            return LOCK_WAIT_TIME;
+        }
+
+        @Override
+        public Duration jobTimeout() {
+            return JOB_TIMEOUT;
         }
     }
 }
