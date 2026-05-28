@@ -1,42 +1,42 @@
 ---
-headline: Agent Configuration Overview | Opik Documentation
-og:description: An overview of Opik's Agent Configuration system for versioning, managing,
-  and deploying your agent's prompts and parameters without code changes
+headline: Prompt Library Overview | Opik Documentation
+og:description: An overview of Opik's Prompt Library for versioning and managing
+  the prompts behind your AI applications
 og:site_name: Opik Documentation
-og:title: Agent Configuration Overview — Opik
-title: Agent Configuration Overview
+og:title: Prompt Library Overview — Opik
+title: Prompt Library Overview
 ---
 
-Agent Configuration lets you manage your prompts, model settings, and tool definitions outside
-your codebase. Version them, update them without redeploying, and keep a full history of every
-change.
+The Prompt Library is the central place to manage every prompt your agent depends on. Version
+them, iterate on new versions from the Opik UI or the SDK, and link the exact version that
+produced a trace.
 
-## Why use Agent Configuration
+## Why use the Prompt Library
 
-When prompts and parameters are hardcoded, every change requires a deploy. There is no history of
-what changed, no way to roll back quickly, and no clean way to test a different prompt in staging
-vs. production.
+When prompts are hardcoded, every change requires a code change to update. There is no history
+of what changed, no way to roll back quickly, and no clean way to compare alternative versions.
 
-Agent Configuration gives you version control for your agent's parameters. Define them once in
-code, push them to Opik, and update, compare, and promote versions through the UI or SDK.
+The Prompt Library gives you version control for the prompts that drive your agent. Push them to
+Opik once, and from there you can compare versions, fetch a specific one, or always follow the
+latest.
 
 ## Key features
 
-- **Version control** — Every change creates an immutable version. You can always see what changed and roll back.
-- **Environment labels** — Tag a version as `prod` or `staging` in the UI. Your agent picks it up automatically.
-- **Prompt management** — Version text prompts and chat prompts, with `{{variable}}` substitution built in.
-- **Typed parameters** — Store model names, temperatures, tool definitions, and any other string or numeric values alongside your prompts.
-- **Python and TypeScript SDKs** — Define and fetch configs from either language.
+- **Project-scoped prompts** — Every prompt lives inside a project, so different agents can have prompts with the same name without colliding.
+- **Versioning by `v1`, `v2`, `v3`, …** — Each change creates a new immutable, sequentially numbered version. Fetch a specific one with the `version` selector (e.g. `"v3"`), or omit it to fetch the most recent.
+- **Text and chat prompts** — Version simple string templates as well as multi-message chat templates with `{{variable}}` substitution.
+- **Agent configuration in one place** — Prompts live alongside the rest of an agent configuration (model, parameters, tools) so a trace links back to the exact bundle that produced it.
+- **Python and TypeScript SDKs** — Create, fetch, and render prompts from either language.
 
 ## How it works
 
-1. **Define your configuration** — Declare a `Config` subclass (Python) or a plain object (TypeScript) with your fields and defaults, then push it with `create_config` / `createConfig`.
-2. **Fetch it at runtime** — Inside a tracked function, call `get_or_create_config` / `getOrCreateConfig`. The SDK returns the version that matches your requested environment or version. If Opik is temporarily unreachable, it falls back to the defaults you provided.
-
-When you want to change something, create a new version and move the `prod` label to it. Your
-running agent picks up the change on its next fetch — no redeploy needed.
+1. **Define your prompts** — Use `create_prompt` / `create_chat_prompt` to send your prompts to Opik. This becomes `v1`.
+2. **Fetch at runtime** — Call `get_prompt` / `get_chat_prompt` from inside a tracked function. The SDK returns the requested version and links it to the trace automatically.
+3. **Iterate from the UI** — Edit the prompt and save a new version. If your code doesn't pin a `version`, the agent picks up the new version on its next fetch — otherwise update your code to point at the new version name.
 
 ## Next steps
 
-- [Getting started](/development/agent-configuration/getting-started) — Add Agent Configuration to your code in minutes
-- [Concepts](/development/agent-configuration/concepts) — Deep dive into versions, environments, and configuration types
+- [Getting started](/development/prompt-library/getting-started) — Add the Prompt Library to your code in minutes
+- [Text and chat prompts](/development/prompt-library/prompt-types) — When to use each, multimodal content, template engines, and searching
+- [Version control](/development/prompt-library/version-control) — Create and compare versions
+- [Prompt playground](/development/prompt-playground) — Test prompt variants side-by-side across models, without writing code
