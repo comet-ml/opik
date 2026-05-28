@@ -18347,6 +18347,13 @@ components:
           enum:
           - prompt_version
           - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
         environments:
           maxItems: 100
           minItems: 0
@@ -18481,6 +18488,13 @@ components:
           enum:
           - prompt_version
           - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
         environments:
           maxItems: 100
           minItems: 0
@@ -18673,6 +18687,13 @@ components:
           enum:
           - prompt_version
           - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
         environments:
           maxItems: 100
           minItems: 0
