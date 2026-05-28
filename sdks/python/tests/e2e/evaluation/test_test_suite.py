@@ -174,15 +174,11 @@ def test_test_suite__assertion_fails__item_fails(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "2 + 2 equals 4."}
 
-    # opik.run_tests must handle flushing
-    # Pin to gpt-4o-mini: the SDK default `gpt-5-nano` sometimes produces
-    # inconsistent structured output on the failing-run assertion
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        model="gpt-4o-mini",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -239,17 +235,11 @@ def test_test_suite__pass_threshold_not_met__item_fails(
             return {"input": item["input"], "output": "2 + 2 equals 4."}
         return {"input": item["input"], "output": "I don't know."}
 
-    # Pin to gpt-4o-mini: the SDK default `gpt-5-nano` produces
-    # inconsistent structured output on the failing-run assertion
-    # ("I don't know." output vs. "response gives the numeric answer 4"),
-    # writing `score=true` with a `reason` that argues for false.
-    # ("the assertion is not satisfied… Wait: the assertion requires the numeric answer 4. The trace does not contain 4 as the answer. Therefore score should be false.")
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
-        model="gpt-4o-mini",
     )
     verifiers.verify_test_suite_result(
         opik_client=opik_client,

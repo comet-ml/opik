@@ -46,11 +46,9 @@ class ModelCapability:
 _MODEL_CAPABILITIES: Dict[str, ModelCapability] = {
     "gpt-5": ModelCapability(context_window=400_000, single_pass_quality_ok=True),
     "gpt-5-mini": ModelCapability(context_window=400_000, single_pass_quality_ok=True),
-    "gpt-5-nano": ModelCapability(context_window=400_000, single_pass_quality_ok=False),
+    "gpt-5-nano": ModelCapability(context_window=400_000, single_pass_quality_ok=True),
     "gpt-4o": ModelCapability(context_window=128_000, single_pass_quality_ok=True),
-    "gpt-4o-mini": ModelCapability(
-        context_window=128_000, single_pass_quality_ok=False
-    ),
+    "gpt-4o-mini": ModelCapability(context_window=128_000, single_pass_quality_ok=True),
     "claude-opus-4-7": ModelCapability(
         context_window=200_000, single_pass_quality_ok=True
     ),
@@ -58,7 +56,7 @@ _MODEL_CAPABILITIES: Dict[str, ModelCapability] = {
         context_window=200_000, single_pass_quality_ok=True
     ),
     "claude-haiku-4-5": ModelCapability(
-        context_window=200_000, single_pass_quality_ok=False
+        context_window=200_000, single_pass_quality_ok=True
     ),
 }
 
