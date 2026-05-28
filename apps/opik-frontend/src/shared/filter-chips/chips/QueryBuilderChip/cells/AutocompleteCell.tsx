@@ -80,7 +80,6 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
   const commit = useCallback(
     (next: string) => {
       const trimmed = next.trim();
-      if (trimmed === "") return;
       if (trimmed === value.trim()) return;
       onChange(trimmed);
     },

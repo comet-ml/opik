@@ -60,6 +60,7 @@ import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import {
   ChipDefinition,
+  ChipOptionsResult,
   chipOptions,
   chipOptionsValue,
 } from "@/shared/filter-chips/types";
@@ -641,6 +642,132 @@ const SPAN_CHIP_ORDER: string[] = [
 const TRACE_DEFAULT_PINNED_CHIPS = ["with_errors", "tags", "metadata"];
 const SPAN_DEFAULT_PINNED_CHIPS = ["type", "tags", "with_errors", "metadata"];
 
+const buildSharedDynamicChips = ({
+  projectId,
+  type,
+  scoreOptions,
+  feedbackScoresLabel,
+  isGuardrailsEnabled,
+}: {
+  projectId: string;
+  type: TRACE_DATA_TYPE;
+  scoreOptions: ChipOptionsResult;
+  feedbackScoresLabel: string;
+  isGuardrailsEnabled: boolean;
+}): Record<string, ChipDefinition> => {
+  const entityType: "spans" | "traces" =
+    type === TRACE_DATA_TYPE.spans ? "spans" : "traces";
+  const chips: Record<string, ChipDefinition> = {
+    tags: {
+      id: "tags",
+      field: "tags",
+      label: "Tags",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.list,
+      operators: TAGS_OPERATORS,
+      defaultOperator: "contains",
+      value: {
+        placeholder: "Type a tag…",
+        options: chipOptions(useTagsOptions, {
+          projectId,
+          entityType,
+          logsSource: LOGS_SOURCE.sdk,
+        }),
+      },
+      addLabel: "Add tag",
+    },
+    error_type: {
+      id: "error_type",
+      field: "error_type",
+      label: "Error type",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.string,
+      operators: ["contains", "=", "not_contains", "starts_with", "ends_with"],
+      defaultOperator: "contains",
+      value: {
+        placeholder: "Select error type",
+        options: chipOptions(useErrorTypeOptions, {
+          projectId,
+          type,
+          logsSource: LOGS_SOURCE.sdk,
+        }),
+      },
+    },
+    feedback_scores: {
+      id: "feedback_scores",
+      field: COLUMN_FEEDBACK_SCORES_ID,
+      label: feedbackScoresLabel,
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.numberDictionary,
+      operators: FEEDBACK_SCORE_OPERATORS,
+      defaultOperator: ">=",
+      key: {
+        placeholder: "Select score",
+        options: chipOptionsValue(scoreOptions),
+      },
+      value: { type: "numeric", decimals: 2, placeholder: "0" },
+    },
+    metadata: {
+      id: "metadata",
+      field: COLUMN_METADATA_ID,
+      label: "Metadata",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.dictionary,
+      operators: DICTIONARY_OPERATORS,
+      defaultOperator: "contains",
+      key: {
+        placeholder: "key",
+        options: chipOptions(usePathsOptions, {
+          projectId,
+          type,
+          rootKeys: ["metadata"],
+          excludeRoot: true,
+          logsSource: LOGS_SOURCE.sdk,
+        }),
+      },
+      value: { placeholder: "value" },
+    },
+    custom: {
+      id: "custom",
+      field: COLUMN_CUSTOM_ID,
+      label: "Custom filter",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.dictionary,
+      operators: DICTIONARY_OPERATORS,
+      key: {
+        placeholder: "key",
+        options: chipOptions(usePathsOptions, {
+          projectId,
+          type,
+          rootKeys: ["input", "output"],
+          excludeRoot: false,
+          logsSource: LOGS_SOURCE.sdk,
+        }),
+        validate: (k) =>
+          CUSTOM_FILTER_VALIDATION_REGEXP.test(k)
+            ? undefined
+            : 'Key must begin with "input" or "output" (e.g. "input.message")',
+      },
+      value: { placeholder: "value" },
+    },
+  };
+  if (isGuardrailsEnabled) {
+    chips.guardrails = {
+      id: "guardrails",
+      field: "guardrails",
+      label: "Guardrails",
+      kind: "single-select",
+      options: [
+        { value: GuardrailResult.FAILED, label: "Failed" },
+        { value: GuardrailResult.PASSED, label: "Passed" },
+      ],
+      columnType: COLUMN_TYPE.category,
+      operator: "=",
+    };
+  }
+  return chips;
+};
+
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
@@ -817,61 +944,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const traceChipDefinitions = useMemo<ChipDefinition[]>(() => {
     const dynamicChips: Record<string, ChipDefinition> = {
-      tags: {
-        id: "tags",
-        field: "tags",
-        label: "Tags",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.list,
-        operators: TAGS_OPERATORS,
-        defaultOperator: "contains",
-        value: {
-          placeholder: "Type a tag…",
-          options: chipOptions(useTagsOptions, {
-            projectId,
-            entityType: type === TRACE_DATA_TYPE.spans ? "spans" : "traces",
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-        },
-        addLabel: "Add tag",
-      },
-      error_type: {
-        id: "error_type",
-        field: "error_type",
-        label: "Error type",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.string,
-        operators: [
-          "contains",
-          "=",
-          "not_contains",
-          "starts_with",
-          "ends_with",
-        ],
-        defaultOperator: "contains",
-        value: {
-          placeholder: "Select error type",
-          options: chipOptions(useErrorTypeOptions, {
-            projectId,
-            type: TRACE_DATA_TYPE.traces,
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-        },
-      },
-      feedback_scores: {
-        id: "feedback_scores",
-        field: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Trace feedback scores",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.numberDictionary,
-        operators: FEEDBACK_SCORE_OPERATORS,
-        defaultOperator: ">=",
-        key: {
-          placeholder: "Select score",
-          options: chipOptionsValue(traceScoreOptions),
-        },
-        value: { type: "numeric", decimals: 2, placeholder: "0" },
-      },
+      ...buildSharedDynamicChips({
+        projectId,
+        type: TRACE_DATA_TYPE.traces,
+        scoreOptions: traceScoreOptions,
+        feedbackScoresLabel: "Trace feedback scores",
+        isGuardrailsEnabled,
+      }),
       span_feedback_scores: {
         id: "span_feedback_scores",
         field: COLUMN_SPAN_FEEDBACK_SCORES_ID,
@@ -886,76 +965,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
         value: { type: "numeric", decimals: 2, placeholder: "0" },
       },
-      metadata: {
-        id: "metadata",
-        field: COLUMN_METADATA_ID,
-        label: "Metadata",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.dictionary,
-        operators: DICTIONARY_OPERATORS,
-        defaultOperator: "contains",
-        key: {
-          placeholder: "key",
-          options: chipOptions(usePathsOptions, {
-            projectId,
-            type: TRACE_DATA_TYPE.traces,
-            rootKeys: ["metadata"],
-            excludeRoot: true,
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-        },
-        value: { placeholder: "value" },
-      },
-      custom: {
-        id: "custom",
-        field: COLUMN_CUSTOM_ID,
-        label: "Custom filter",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.dictionary,
-        operators: DICTIONARY_OPERATORS,
-        key: {
-          placeholder: "key",
-          options: chipOptions(usePathsOptions, {
-            projectId,
-            type: TRACE_DATA_TYPE.traces,
-            rootKeys: ["input", "output"],
-            excludeRoot: false,
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-          validate: (k) =>
-            CUSTOM_FILTER_VALIDATION_REGEXP.test(k)
-              ? undefined
-              : 'Key must begin with "input" or "output" (e.g. "input.message")',
-        },
-        value: { placeholder: "value" },
-      },
     };
-    if (isGuardrailsEnabled) {
-      dynamicChips.guardrails = {
-        id: "guardrails",
-        field: "guardrails",
-        label: "Guardrails",
-        kind: "single-select",
-        options: [
-          { value: GuardrailResult.FAILED, label: "Failed" },
-          { value: GuardrailResult.PASSED, label: "Passed" },
-        ],
-        columnType: COLUMN_TYPE.category,
-        operator: "=",
-      };
-    }
     const byId: Record<string, ChipDefinition> = {
       ...keyBy(TRACE_CHIP_DEFINITIONS_STATIC, "id"),
       ...dynamicChips,
     };
     return compact(TRACE_CHIP_ORDER.map((id) => byId[id]));
-  }, [
-    isGuardrailsEnabled,
-    projectId,
-    type,
-    traceScoreOptions,
-    spanScoreOptions,
-  ]);
+  }, [isGuardrailsEnabled, projectId, traceScoreOptions, spanScoreOptions]);
 
   const spanChipDefinitions = useMemo<ChipDefinition[]>(() => {
     const dynamicChips: Record<string, ChipDefinition> = {
@@ -968,125 +984,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         columnType: COLUMN_TYPE.category,
         operator: "=",
       },
-      tags: {
-        id: "tags",
-        field: "tags",
-        label: "Tags",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.list,
-        operators: TAGS_OPERATORS,
-        defaultOperator: "contains",
-        value: {
-          placeholder: "Type a tag…",
-          options: chipOptions(useTagsOptions, {
-            projectId,
-            entityType: type === TRACE_DATA_TYPE.spans ? "spans" : "traces",
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-        },
-        addLabel: "Add tag",
-      },
-      error_type: {
-        id: "error_type",
-        field: "error_type",
-        label: "Error type",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.string,
-        operators: [
-          "contains",
-          "=",
-          "not_contains",
-          "starts_with",
-          "ends_with",
-        ],
-        defaultOperator: "contains",
-        value: {
-          placeholder: "Select error type",
-          options: chipOptions(useErrorTypeOptions, {
-            projectId,
-            type: TRACE_DATA_TYPE.spans,
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-        },
-      },
-      feedback_scores: {
-        id: "feedback_scores",
-        field: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback scores",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.numberDictionary,
-        operators: FEEDBACK_SCORE_OPERATORS,
-        defaultOperator: ">=",
-        key: {
-          placeholder: "Select score",
-          options: chipOptionsValue(spanScoreOptions),
-        },
-        value: { type: "numeric", decimals: 2, placeholder: "0" },
-      },
-      metadata: {
-        id: "metadata",
-        field: COLUMN_METADATA_ID,
-        label: "Metadata",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.dictionary,
-        operators: DICTIONARY_OPERATORS,
-        defaultOperator: "contains",
-        key: {
-          placeholder: "key",
-          options: chipOptions(usePathsOptions, {
-            projectId,
-            type: TRACE_DATA_TYPE.spans,
-            rootKeys: ["metadata"],
-            excludeRoot: true,
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-        },
-        value: { placeholder: "value" },
-      },
-      custom: {
-        id: "custom",
-        field: COLUMN_CUSTOM_ID,
-        label: "Custom filter",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.dictionary,
-        operators: DICTIONARY_OPERATORS,
-        key: {
-          placeholder: "key",
-          options: chipOptions(usePathsOptions, {
-            projectId,
-            type: TRACE_DATA_TYPE.spans,
-            rootKeys: ["input", "output"],
-            excludeRoot: false,
-            logsSource: LOGS_SOURCE.sdk,
-          }),
-          validate: (k) =>
-            CUSTOM_FILTER_VALIDATION_REGEXP.test(k)
-              ? undefined
-              : 'Key must begin with "input" or "output" (e.g. "input.message")',
-        },
-        value: { placeholder: "value" },
-      },
+      ...buildSharedDynamicChips({
+        projectId,
+        type: TRACE_DATA_TYPE.spans,
+        scoreOptions: spanScoreOptions,
+        feedbackScoresLabel: "Feedback scores",
+        isGuardrailsEnabled,
+      }),
     };
-    if (isGuardrailsEnabled) {
-      dynamicChips.guardrails = {
-        id: "guardrails",
-        field: "guardrails",
-        label: "Guardrails",
-        kind: "single-select",
-        options: [
-          { value: GuardrailResult.FAILED, label: "Failed" },
-          { value: GuardrailResult.PASSED, label: "Passed" },
-        ],
-        columnType: COLUMN_TYPE.category,
-        operator: "=",
-      };
-    }
     const byId: Record<string, ChipDefinition> = {
       ...keyBy(SPAN_CHIP_DEFINITIONS_STATIC, "id"),
       ...dynamicChips,
     };
     return compact(SPAN_CHIP_ORDER.map((id) => byId[id]));
-  }, [isGuardrailsEnabled, projectId, type, spanScoreOptions]);
+  }, [isGuardrailsEnabled, projectId, spanScoreOptions]);
 
   const chipDefinitions =
     type === TRACE_DATA_TYPE.traces
