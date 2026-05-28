@@ -137,7 +137,7 @@ class TestBackgroundRefresh:
             cache._refresh_stale_entries()
 
             assert callback.call_count >= 1
-            assert cache.get(("p", None, None, "text", None)) is new_prompt
+            assert cache.get(("p", None, None, "text", None, None)) is new_prompt
 
     def test_refresh__non_stale_entry__skips_callback(self):
         p = _make_mock_prompt(commit=None)
@@ -343,7 +343,7 @@ class TestPromptCacheEdgeCases:
             mock_time.monotonic.return_value = base + _get_ttl() + 1
             cache._refresh_stale_entries()
 
-        assert cache.get(("p", None, None, "text", None)) is original
+        assert cache.get(("p", None, None, "text", None, None)) is original
 
     def test_lru_eviction__oldest_entry_removed_when_max_size_exceeded(self):
         cache = PromptCache(max_size=3)
