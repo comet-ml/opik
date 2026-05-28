@@ -5,6 +5,7 @@ import omit from "lodash/omit";
 import { isObjectThread } from "@/lib/traces";
 import { CommentItem, CommentItems } from "@/types/comment";
 import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
+import { formatDate } from "@/lib/date";
 
 export const generateSMEURL = (workspace: string, id: string): string => {
   const basePath = import.meta.env.VITE_BASE_URL || "/";
@@ -100,6 +101,89 @@ export const getCommentsByUser = (
   return comments
     .filter((comment) => comment.created_by === userName)
     .map((comment) => comment.text);
+};
+
+export type AnnotationState = {
+  comment?: { text?: string };
+  scores: TraceFeedbackScore[];
+};
+
+export enum ITEM_STATE {
+  DEFAULT = "default",
+  SCORED = "scored",
+  COMPLETED = "completed",
+}
+
+export const isItemProcessedByUser = (
+  item: Trace | Thread,
+  feedbackScoreNames: string[],
+  userName: string | undefined,
+): boolean => {
+  if (!userName) return false;
+
+  const hasFeedbackScores = (item.feedback_scores || []).some((score) => {
+    if (!feedbackScoreNames.includes(score.name)) return false;
+    return hasValuesByAuthor(score)
+      ? Boolean(findValueByAuthor(score.value_by_author, userName))
+      : score.last_updated_by === userName;
+  });
+
+  const hasComment = (item.comments || []).some(
+    (comment) => comment.created_by === userName,
+  );
+
+  return hasFeedbackScores || hasComment;
+};
+
+export const getDistinctAnnotatorCount = (
+  item: Trace | Thread,
+  feedbackScoreNames: string[],
+): number => {
+  const authors = new Set<string>();
+
+  (item.feedback_scores || []).forEach((score) => {
+    if (!feedbackScoreNames.includes(score.name)) return;
+    if (hasValuesByAuthor(score)) {
+      Object.keys(score.value_by_author).forEach((a) => authors.add(a));
+    } else if (score.last_updated_by) {
+      authors.add(score.last_updated_by);
+    }
+  });
+
+  (item.comments || []).forEach((comment) => {
+    if (comment.created_by) authors.add(comment.created_by);
+  });
+
+  return authors.size;
+};
+
+export const getItemState = (
+  item: Trace | Thread,
+  feedbackScoreNames: string[],
+  userName: string | undefined,
+  annotatorsPerItem: number,
+): ITEM_STATE => {
+  if (
+    getDistinctAnnotatorCount(item, feedbackScoreNames) >= annotatorsPerItem
+  ) {
+    return ITEM_STATE.COMPLETED;
+  }
+  if (isItemProcessedByUser(item, feedbackScoreNames, userName)) {
+    return ITEM_STATE.SCORED;
+  }
+  return ITEM_STATE.DEFAULT;
+};
+
+export const formatThreadDateRange = (
+  startTime?: string,
+  endTime?: string,
+): string | undefined => {
+  const start = startTime
+    ? formatDate(startTime, { format: "MMM D, h:mm A" })
+    : "";
+  const end = endTime ? formatDate(endTime, { format: "h:mm A" }) : "";
+  if (start && end) return `${start} → ${end}`;
+  return start || undefined;
 };
 
 export const formatFeedbackScoresForExport = (

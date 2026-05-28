@@ -138,7 +138,7 @@ const LLMPromptMessages = ({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={messages} strategy={verticalListSortingStrategy}>
-        <div ref={listRef} className="flex flex-col gap-2">
+        <div ref={listRef} className="flex flex-col gap-1.5">
           {messages.map((message, messageIdx) => (
             <LLMPromptMessage
               key={message.id}
@@ -175,7 +175,7 @@ const LLMPromptMessages = ({
         <Button
           variant="ghost"
           size="2xs"
-          className="mt-2 self-start"
+          className="mt-1 self-start px-1"
           onClick={() => {
             onAddMessage();
             requestAnimationFrame(() => {
@@ -192,7 +192,7 @@ const LLMPromptMessages = ({
           }}
           type="button"
         >
-          <Plus className="mr-2 size-4" />
+          <Plus className="mr-1 size-3" />
           Message
         </Button>
       )}

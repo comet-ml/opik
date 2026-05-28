@@ -12,7 +12,7 @@ import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { Prompt } from "@/types/prompts";
 import usePromptDeleteMutation from "@/api/prompts/usePromptDeleteMutation";
-import AddEditPromptDialog from "@/v2/pages/PromptsPage/AddEditPromptDialog";
+import EditPromptDetailsSheet from "@/v2/pages/PromptsPage/EditPromptDetailsSheet";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -46,7 +46,7 @@ export const PromptRowActionsCell: React.FunctionComponent<
       className="justify-end p-0"
       stopClickPropagation
     >
-      <AddEditPromptDialog
+      <EditPromptDetailsSheet
         key={`edit-${resetKeyRef.current}`}
         open={open === 1}
         setOpen={setOpen}

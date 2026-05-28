@@ -11,6 +11,7 @@ const ChatPromptView: React.FC<ChatPromptViewProps> = ({ template }) => {
     <PromptTemplateView
       template={template}
       templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+      hideHeader
     />
   );
 };

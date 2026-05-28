@@ -9,7 +9,7 @@ export const SMEPageLayout = ({
 }: {
   children?: React.ReactNode;
 }) => {
-  const logo = <Logo expanded={false} />;
+  const logo = <Logo expanded={true} />;
 
   return (
     <section className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden">
