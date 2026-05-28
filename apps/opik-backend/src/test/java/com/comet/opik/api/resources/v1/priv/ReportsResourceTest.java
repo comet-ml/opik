@@ -120,6 +120,7 @@ class ReportsResourceTest {
 
             try (var response = reportsResourceClient.getPreference(projectId, API_KEY, TEST_WORKSPACE_NAME)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.readEntity(String.class)).isEmpty();
             }
         }
 
