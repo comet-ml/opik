@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { TagProps } from "@/ui/tag";
 import { cn } from "@/lib/utils";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
@@ -50,6 +50,19 @@ const EnvironmentBadgeList: React.FC<EnvironmentBadgeListProps> = ({
     onMeasure,
   } = useVisibleItemsByWidth(list, OVERFLOW_CONFIG);
 
+  // Distinguish "not measured yet" (initial render, before ChildrenWidthMeasurer
+  // reports) from "measured and nothing fits" (truly narrow container). Without
+  // this flag the fallback below would keep rendering all items + the chip once
+  // the container is too narrow to fit even one — leaking clipped badges.
+  const [hasMeasured, setHasMeasured] = useState(false);
+  const handleMeasure = useCallback(
+    (widths: number[]) => {
+      onMeasure(widths);
+      setHasMeasured(true);
+    },
+    [onMeasure],
+  );
+
   if (list.length === 0) return null;
 
   const renderItem = (name: string) =>
@@ -72,7 +85,7 @@ const EnvironmentBadgeList: React.FC<EnvironmentBadgeListProps> = ({
     );
   }
 
-  const itemsToRender = visibleItems.length > 0 ? visibleItems : list;
+  const itemsToRender = hasMeasured ? visibleItems : list;
 
   return (
     <div
@@ -94,7 +107,7 @@ const EnvironmentBadgeList: React.FC<EnvironmentBadgeListProps> = ({
           maxWidth ? "w-[var(--env-list-width)]" : "inset-0",
         )}
       />
-      <ChildrenWidthMeasurer onMeasure={onMeasure}>
+      <ChildrenWidthMeasurer onMeasure={handleMeasure}>
         {list.map((name) => (
           <div key={name}>{renderItem(name)}</div>
         ))}

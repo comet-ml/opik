@@ -2,7 +2,11 @@ import React from "react";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { getDefaultEnvironmentMeta, resolveEnvironmentColor } from "./helpers";
+import {
+  getContrastingTextColor,
+  getDefaultEnvironmentMeta,
+  resolveEnvironmentColor,
+} from "./helpers";
 
 /**
  * Looks up the environment definition (color, etc.) by display name from
@@ -22,6 +26,7 @@ export const EnvironmentSquare: React.FC<{
 }> = ({ name, color, className }) => {
   const Icon = getDefaultEnvironmentMeta(name)?.icon;
   const resolvedColor = resolveEnvironmentColor(color);
+  const iconColor = getContrastingTextColor(resolvedColor);
 
   return (
     <div
@@ -29,9 +34,9 @@ export const EnvironmentSquare: React.FC<{
         "flex size-4 shrink-0 items-center justify-center rounded-[0.2rem]",
         className,
       )}
-      style={{ backgroundColor: resolvedColor }}
+      style={{ backgroundColor: resolvedColor, color: iconColor }}
     >
-      {Icon && <Icon className="size-2.5 text-white" />}
+      {Icon && <Icon className="size-2.5" />}
     </div>
   );
 };
