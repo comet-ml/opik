@@ -197,6 +197,7 @@ def replay_all_versions(
                 dest_dataset_id=dest_dataset_id,
                 dest_name=dest_name,
                 dest_project_name=dest_project_name,
+                source_dataset_id=source_dataset_id,
                 source_items=curr_items_by_id,
                 source_version=source_version,
             )
@@ -216,9 +217,11 @@ def replay_all_versions(
                 dest_name=dest_name,
                 dest_project_name=dest_project_name,
                 base_version_id=base_version_id,
+                source_dataset_id=source_dataset_id,
+                source_version_id=source_version.id,
+                source_version_label=source_version.version_name or f"v{index + 1}",
                 delta=delta,
                 change_description=source_version.change_description,
-                item_id_remap=result.item_id_remap,
                 suite_evaluators=source_version.evaluators,
                 suite_execution_policy=source_version.execution_policy,
                 clear_suite_execution_policy=clear_suite_execution_policy,
@@ -272,6 +275,7 @@ def _replay_first_version(
     dest_dataset_id: str,
     dest_name: str,
     dest_project_name: str,
+    source_dataset_id: str,
     source_items: Dict[str, _SourceItem],
     source_version: dataset_version_public.DatasetVersionPublic,
 ) -> tuple[str, Dict[str, List[str]], "VersionDelta"]:
@@ -311,6 +315,8 @@ def _replay_first_version(
                 dest_dataset_id=dest_dataset_id,
                 dest_name=dest_name,
                 dest_project_name=dest_project_name,
+                source_dataset_id=source_dataset_id,
+                source_version_id=source_version.id,
                 adds=delta.adds,
                 change_description=source_version.change_description,
                 suite_evaluators=source_version.evaluators,
@@ -341,6 +347,8 @@ def _create_first_version_with_items(
     dest_dataset_id: str,
     dest_name: str,
     dest_project_name: str,
+    source_dataset_id: str,
+    source_version_id: Optional[str],
     adds: List[dataset_item_public.DatasetItemPublic],
     change_description: Optional[str],
     suite_evaluators: Optional[List[evaluator_item_public.EvaluatorItemPublic]],
@@ -453,6 +461,17 @@ def _create_first_version_with_items(
             request["tags"] = list(user_tags)
         if metadata is not None:
             request["metadata"] = dict(metadata)
+        # OPIK-6696: point the BE's carry-forward COPY at source v1 instead of
+        # the destination's just-minted v1. This zero-content follow-up still
+        # triggers a full COPY of dest v1, which is multi-replica-lag-exposed
+        # since we wrote dest v1 moments ago. Source v1 is stable and contains
+        # the same rows.
+        _attach_copy_from_coords(
+            request,
+            source_dataset_id=source_dataset_id,
+            source_version_id=source_version_id,
+            source_version_label="v1",
+        )
         suite_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: rest_client.datasets.apply_dataset_item_changes(
                 id=dest_dataset_id, request=request, override=False
@@ -627,7 +646,7 @@ def _evaluators_payload(
     evaluator overrides), so this helper serves all five sites:
     ``_copy_test_suite_config`` (Slice 1), the three
     ``version_replay`` apply sites (Slice 2), and the per-item
-    ``_added_item_payload`` / ``_edited_item_payload`` (Slice 2).
+    ``_added_item_payload`` (Slice 2).
 
     Gating ("when do we forward this field") is left to each caller —
     Slice 1's ``_copy_test_suite_config`` uses truthy gating
@@ -749,6 +768,40 @@ def _compute_delta(
     return delta
 
 
+def _attach_copy_from_coords(
+    request: Dict[str, Any],
+    *,
+    source_dataset_id: str,
+    source_version_id: Optional[str],
+    source_version_label: str,
+) -> None:
+    """Attach OPIK-6696 copy_from coords to an apply_dataset_item_changes request.
+
+    When set, the BE redirects the carry-forward COPY (and the supporting
+    reads: pool sizing, edit-via-SELECT-INSERT) away from the destination's
+    just-minted prior version onto the supplied (dataset, version) pair —
+    source v_i in migrate's case, which is stable and fully replicated.
+    This is what eliminates the multi-replica read-after-write window in
+    OPIK-6674.
+
+    The BE rejects partial pairs with 400 (both-or-neither). The migrate
+    cascade calls into this on every post-v_1 apply, so a missing
+    ``source_version_id`` (``DatasetVersionPublic.id`` is ``Optional`` in
+    the wire type — a list response without it would silently degrade to
+    the destination-side read) is a hard error: ship without copy_from
+    and we're back in the data-loss window OPIK-6697 is meant to close.
+    """
+    if source_version_id is None:
+        raise ReplayError(
+            f"source version {source_version_label!r} was streamed without an id; "
+            "cannot build copy_from coords for the BE replay call. This is "
+            "structural — without copy_from the chained apply falls back to "
+            "the destination-side read window OPIK-6697 is meant to close."
+        )
+    request["copy_from_dataset_id"] = source_dataset_id
+    request["copy_from_version_id"] = source_version_id
+
+
 def _apply_delta_and_collect_new_ids(
     rest_client: OpikApi,
     *,
@@ -756,9 +809,11 @@ def _apply_delta_and_collect_new_ids(
     dest_name: str,
     dest_project_name: str,
     base_version_id: str,
+    source_dataset_id: str,
+    source_version_id: Optional[str],
+    source_version_label: str,
     delta: VersionDelta,
     change_description: Optional[str],
-    item_id_remap: Dict[str, str],
     suite_evaluators: Optional[List[evaluator_item_public.EvaluatorItemPublic]],
     suite_execution_policy: Optional[execution_policy_public.ExecutionPolicyPublic],
     clear_suite_execution_policy: bool,
@@ -768,56 +823,45 @@ def _apply_delta_and_collect_new_ids(
     """Apply one source version's delta to the destination.
 
     Returns ``(new_target_version_id, hash_to_target_item_id)`` where the
-    second element maps content_hash -> newly-minted target item id, used
-    to populate ``item_id_remap`` for the items we just added.
+    second element maps content_hash → target item ids for adds in
+    ``delta`` — but with the OPIK-6696 copy_from path the BE COPIES rows
+    from source v_i verbatim (same ``dataset_item_id``), so we synthesize
+    the map directly from ``delta.adds`` without a post-write read-back.
 
-    ``item_id_remap`` is the running source-id → target-id map built up
-    across previously-replayed versions. We use it to translate edit/delete
-    payload ids: the BE assigns fresh stable ids on add, so source ids
-    referenced in subsequent versions' modifications/deletions don't exist
-    on the target — translation through the remap is what makes the BE's
-    id-keyed edit/delete dispatch hit the right target rows.
+    Critically, with copy_from set the request carries NO item-level
+    payload (``added_items``/``edited_items``/``deleted_ids`` are all
+    omitted): the BE's COPY of source v_i already contains the v_(i-1)→v_i
+    delta on the source side, so sending the same items as ``added_items``
+    in addition would double-insert them (verified in OPIK-6697's first CI
+    pass — destination v2 row set was ``['Q4', 'Q4', 'Q3', 'Q2', 'Q1']``).
+    The cascade still computes ``delta`` for audit-counter accuracy and
+    for the identity remap below.
 
-    ``suite_evaluators`` / ``suite_execution_policy`` are version-level
-    test-suite config (``EvaluatorItemPublic`` / ``ExecutionPolicyPublic``
-    instances on each ``DatasetVersionPublic``). They're forwarded for
-    every version, including plain datasets where they are typically
-    ``None`` and the BE just inherits from the previous version. Per-item
-    evaluators/policy are forwarded separately by the item payload builders.
-
-    ``user_tags`` are the source version's user-applied tags with the BE's
-    system-managed ``'latest'`` marker filtered out — forwarding it would
-    409 because the marker already lives on a different (the actual latest)
-    target version. Per-item tags are forwarded separately by the item
-    payload builders.
-
-    ``metadata`` is the source version's user-defined ``Map<String, String>``
-    metadata blob, forwarded verbatim.
+    ``suite_evaluators`` / ``suite_execution_policy`` / ``user_tags`` /
+    ``metadata`` / ``change_description`` are version-level fields that
+    still need to be forwarded explicitly so the BE doesn't inherit stale
+    values from the destination's prior version. Per-item evaluators /
+    execution_policy / tags ride along with the copied source rows.
     """
     request: Dict[str, Any] = {"base_version": base_version_id}
 
-    # Display-order preservation: the source streamed adds/modifications
-    # newest-first (ClickHouse ``ORDER BY id DESC`` over UUIDv7), and the BE
-    # assigns UUIDs to each apply payload in list order with later list
-    # entries getting larger UUIDs. To reproduce the source's display order
-    # on the target we send each list in REVERSE so the newest source item
-    # ends up with the largest target UUID and lands at the top of its pool
-    # in the target's display. This mirrors Slice 1's reversal in
-    # ``executor._copy_items`` (same rationale, different write path).
-    # Deletion order does not affect display.
-    if delta.adds:
-        request["added_items"] = [
-            _added_item_payload(item) for item in reversed(delta.adds)
-        ]
-    if delta.modifications:
-        request["edited_items"] = [
-            _edited_item_payload(modification, item_id_remap)
-            for modification in reversed(delta.modifications)
-        ]
-    if delta.deletions:
-        request["deleted_ids"] = [
-            item_id_remap.get(source_id, source_id) for source_id in delta.deletions
-        ]
+    # OPIK-6696: copy_from coords are the source of truth for the new
+    # destination version's row set. The SDK no longer sends item-level
+    # payload here — the BE COPIES source v_i into the destination
+    # (excluding nothing, since deletes/edits are already reflected in
+    # source v_i's row set vs source v_(i-1)). The two side-effects of
+    # this design choice: (1) destination rows carry source's stable
+    # ``dataset_item_id`` (not BE-freshly-assigned), so the identity
+    # remap below skips the post-write read-back; (2) the helper raises
+    # ReplayError if source_version.id is missing — degrading to today's
+    # destination-side read would defeat the whole point of OPIK-6697.
+    _attach_copy_from_coords(
+        request,
+        source_dataset_id=source_dataset_id,
+        source_version_id=source_version_id,
+        source_version_label=source_version_label,
+    )
+
     if change_description:
         request["change_description"] = change_description
     if suite_evaluators is not None:
@@ -856,15 +900,19 @@ def _apply_delta_and_collect_new_ids(
             "cannot continue replay."
         )
 
-    if not delta.adds:
-        return new_version_id, {}
-
-    target_items_by_hash = _read_back_target_items(
-        rest_client,
-        dest_name=dest_name,
-        dest_project_name=dest_project_name,
-        version_hash=new_version.version_hash,
-    )
+    # OPIK-6696 identity remap: with copy_from set the BE COPIES source
+    # v_i's rows verbatim, preserving each row's source-side
+    # ``dataset_item_id``. So for items added in this source version,
+    # remap[source_id] = source_id (identity). Earlier versions' adds
+    # (typically v_1 via ``create_or_update_dataset_items`` — which DOES
+    # mint fresh dest ids) keep their existing remap entries from the
+    # post-write read-back, so the cascade's edit/delete dispatch still
+    # finds them.
+    target_items_by_hash: Dict[str, List[str]] = {}
+    for added in delta.adds:
+        if added.id is None:
+            continue
+        target_items_by_hash.setdefault(_content_hash_for(added), []).append(added.id)
     return new_version_id, target_items_by_hash
 
 
@@ -910,11 +958,23 @@ def _added_item_payload(
     """Build the ``added_items`` payload entry for one source item.
 
     BE-side this maps to ``DatasetItem`` (the API record). Forwards every
-    user-writable field the BE persists: data, trace_id, span_id, source,
-    description, tags, evaluators, execution_policy. The BE assigns the
-    target's stable id regardless of what we send, so we leave id out.
+    user-writable field the BE persists: id, data, trace_id, span_id,
+    source, description, tags, evaluators, execution_policy.
+
+    OPIK-6697: ``id`` is forwarded so the destination's stable
+    ``dataset_item_id`` matches the source's. Without this, v1 items get
+    fresh BE-assigned ids while v2+ items COPY-preserve source ids (the
+    new copy_from path), and a single ``item_id_remap`` can't capture
+    "same source id maps to different dest ids per version" — the
+    experiment cascade then joins experiment_items.dataset_item_id (the
+    remapped v1 id) against dest v_i's items (source ids) and produces
+    a partial outer-join with null data + null source on the unmatched
+    rows. Forwarding ``id`` here makes dest v1 use the source's stable
+    id too, so the remap is identity across all versions.
     """
     payload: Dict[str, Any] = {"data": dict(item.data) if item.data else {}}
+    if item.id is not None:
+        payload["id"] = item.id
     if item.trace_id is not None:
         payload["trace_id"] = item.trace_id
     if item.span_id is not None:
@@ -929,82 +989,4 @@ def _added_item_payload(
         payload["evaluators"] = _evaluators_payload(item.evaluators)
     if item.execution_policy is not None:
         payload["execution_policy"] = _execution_policy_payload(item.execution_policy)
-    return payload
-
-
-def _edited_item_payload(
-    modification: _Modification, item_id_remap: Dict[str, str]
-) -> Dict[str, Any]:
-    """Build the ``edited_items`` payload entry for one modified item.
-
-    The BE matches edits by ``id`` (the stable identifier) against the
-    target dataset, so we translate the source's id through ``item_id_remap``
-    to the target id assigned when this item was first added in a prior
-    replayed version. If the source id is not in the remap (shouldn't
-    happen in practice — every modified item must have been added in some
-    earlier version) the source id is forwarded as-is and the BE will
-    silently no-op the edit.
-
-    "Clear" semantics for per-item overrides — when the source explicitly
-    removed an override between versions, the BE's null-means-inherit
-    behaviour on edit would otherwise leave the stale override in place:
-
-    * ``execution_policy`` (single object): when ``prev`` had one and
-      ``curr`` does not, send ``clear_execution_policy=true``. The BE
-      treats this flag as "drop the per-item override and fall back to
-      the version-level policy."
-    * ``evaluators`` (list): the BE has no clear-flag for this field, but
-      passing ``evaluators=[]`` is a meaningful "replace with empty list"
-      operation per ``DatasetItemVersionDAO.editItemsViaSelectInsert`` — the
-      template adds the column iff ``edit.evaluators() != null``, so an
-      empty list does overwrite. That's effectively the clear-semantics we
-      need: target item ends up with no per-item evaluators, falling back
-      to the suite-level set.
-
-    Other fields (``trace_id``, ``span_id``, ``source``) are accepted by the
-    BE schema on adds but ``DatasetItemEdit`` does not expose write fields
-    for them, so we cannot meaningfully forward them on edit. In practice
-    nothing in the BE / SDK / UI ever edits these mid-version, so this is
-    a known acceptable gap.
-    """
-    item = modification.curr
-    prev = modification.prev
-    source_id = item.id
-    assert source_id is not None  # filtered by _load_version_items
-    target_id = item_id_remap.get(source_id, source_id)
-
-    payload: Dict[str, Any] = {
-        "id": target_id,
-        "data": dict(item.data) if item.data else {},
-    }
-    if item.description is not None:
-        payload["description"] = item.description
-
-    # Per-item tags: forward as-is when present. When previously set and
-    # now cleared, send an empty list — the BE's edit-merge treats omission
-    # as "inherit," so without this the target keeps the stale tag set.
-    if item.tags is not None:
-        payload["tags"] = list(item.tags)
-    elif prev.tags:
-        payload["tags"] = []
-
-    # Per-item evaluators: forward as-is when present. When previously set
-    # and now cleared, send an empty list to overwrite the stale per-item
-    # override. When neither side has them, omit the key entirely so the
-    # BE leaves the (already-absent) override alone.
-    if item.evaluators is not None:
-        payload["evaluators"] = _evaluators_payload(item.evaluators)
-    elif prev.evaluators is not None:
-        payload["evaluators"] = []
-
-    # Per-item execution_policy: forward as-is when present. When previously
-    # set and now cleared, use the BE's dedicated clear flag. ``execution_policy``
-    # is a single object so passing it as ``null`` isn't enough — the BE
-    # treats omission as "inherit," which would silently retain the prior
-    # override.
-    if item.execution_policy is not None:
-        payload["execution_policy"] = _execution_policy_payload(item.execution_policy)
-    elif prev.execution_policy is not None:
-        payload["clear_execution_policy"] = True
-
     return payload
