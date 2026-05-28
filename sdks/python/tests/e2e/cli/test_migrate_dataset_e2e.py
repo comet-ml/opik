@@ -29,6 +29,7 @@ from typing import Iterator
 import pytest
 
 import opik
+from opik import synchronization
 
 from ...conftest import random_chars
 from ...testlib import generate_project_name
@@ -352,4 +353,131 @@ class TestMigrateDatasetVersionReplay:
             destination_trace_ids=dst_trace_ids_sorted,
             source_items_compare=src_items_compare,
             destination_items_compare=dest_items_sorted,
+        )
+
+
+class TestMigrateDatasetEnvironmentPreservation:
+    """OPIK-6695: the cascade must preserve the ``environment`` column on
+    traces, spans, and the BE-materialized ``trace_threads`` row.
+
+    Pre-2026-05-07 rows default to ``''`` in ClickHouse and replay
+    trivially; the regression this guards is the post-migration reset of a
+    non-empty ``environment`` to ``''`` because the re-emit payload didn't
+    carry the field.
+    """
+
+    def test_environment_round_trips_on_traces_spans_and_threads(
+        self,
+        opik_client: opik.Opik,
+        source_project_name: str,
+        target_project_name: str,
+        dataset_name: str,
+        tmp_path: Path,
+    ) -> None:
+        from opik import id_helpers
+        from opik.rest_api.types.dataset_item_write import DatasetItemWrite
+
+        rest = opik_client.rest_client
+
+        # Single-version dataset with two items -> two cascaded traces.
+        source_id = create_dataset_shell(rest, dataset_name, source_project_name)
+        rest.datasets.create_or_update_dataset_items(
+            dataset_id=source_id,
+            items=[
+                DatasetItemWrite(source="manual", data={"q": "Q1", "a": "A1"}),
+                DatasetItemWrite(source="manual", data={"q": "Q2", "a": "A2"}),
+            ],
+            batch_group_id=id_helpers.generate_id(),
+        )
+        v1 = rest.datasets.list_dataset_versions(id=source_id, page=1, size=1).content[
+            0
+        ]
+        v1_items = stream_items_wire(
+            rest,
+            dataset_name=dataset_name,
+            project_name=source_project_name,
+            version_hash=v1.version_hash,
+        )
+        item_ids = [it.id for it in v1_items]
+
+        # Seed: traces tagged environment="production" + grouped into one
+        # thread; spans tagged environment="staging". The trace env and
+        # span env differ deliberately so a single shared value couldn't
+        # mask a per-entity bug, and the thread inherits the trace env.
+        experiment_name = f"e2e-env-{random_chars()}"
+        thread_id = f"env-thread-{random_chars()}"
+        seed_experiment_with_trace_tree(
+            rest,
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            dataset_id=source_id,
+            dataset_version_id=v1.id,
+            project_name=source_project_name,
+            item_ids=item_ids,
+            spans_per_trace=2,
+            trace_environment="production",
+            span_environment="staging",
+            thread_id=thread_id,
+        )
+
+        audit_path = tmp_path / "audit.json"
+        result = run_migrate_cli(
+            ["dataset", dataset_name, "--to-project", target_project_name],
+            audit_log_path=str(audit_path),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+        target = rest.datasets.get_dataset_by_identifier(
+            dataset_name=dataset_name, project_name=target_project_name
+        )
+        dest_exp = find_destination_experiment(
+            rest,
+            destination_dataset_id=target.id,
+            experiment_name=experiment_name,
+        )
+        dest_items = destination_experiment_items(
+            rest,
+            experiment_id=dest_exp.id,
+            dataset_id=target.id,
+        )
+        assert len(dest_items) == len(item_ids)
+
+        # (a) traces and (b) spans keep their source environment verbatim.
+        for dest_item in dest_items:
+            dest_trace = rest.traces.get_trace_by_id(id=dest_item.trace_id)
+            assert dest_trace.environment == "production", (
+                f"trace {dest_item.trace_id} lost environment: "
+                f"got {dest_trace.environment!r}"
+            )
+            dest_spans = destination_spans_for_trace(
+                rest,
+                trace_id=dest_item.trace_id,
+                project_name=target_project_name,
+            )
+            assert dest_spans, f"trace {dest_item.trace_id} has no destination spans"
+            assert all(span.environment == "staging" for span in dest_spans), (
+                "destination spans lost environment: "
+                f"{[span.environment for span in dest_spans]}"
+            )
+
+        # (c) the destination thread row -- materialized by the BE from the
+        # cascaded traces -- inherits the same environment. Polls because
+        # thread materialization is eventually consistent.
+        assert synchronization.until(
+            lambda: bool(
+                opik_client.search_threads(
+                    project_name=target_project_name,
+                    filter_string=f'id = "{thread_id}"',
+                )
+            ),
+            max_try_seconds=30,
+        ), f"destination thread {thread_id!r} never materialized"
+        threads = opik_client.search_threads(
+            project_name=target_project_name,
+            filter_string=f'id = "{thread_id}"',
+        )
+        assert len(threads) == 1
+        assert threads[0].environment == "production", (
+            f"destination thread {thread_id!r} lost environment: "
+            f"got {threads[0].environment!r}"
         )

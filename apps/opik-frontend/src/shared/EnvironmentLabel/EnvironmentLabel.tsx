@@ -1,10 +1,7 @@
 import React from "react";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
-import { DEFAULT_HEX_COLOR, HEX_COLOR_REGEX } from "@/constants/colorVariants";
 import { cn } from "@/lib/utils";
-
-const resolveColor = (color: string | undefined) =>
-  color && HEX_COLOR_REGEX.test(color) ? color : DEFAULT_HEX_COLOR;
+import { resolveEnvironmentColor } from "./helpers";
 
 export const EnvironmentSquare: React.FC<{
   color?: string;
@@ -12,7 +9,7 @@ export const EnvironmentSquare: React.FC<{
 }> = ({ color, className }) => (
   <div
     className={cn("size-2.5 shrink-0 rounded-[0.15rem]", className)}
-    style={{ backgroundColor: resolveColor(color) }}
+    style={{ backgroundColor: resolveEnvironmentColor(color) }}
   />
 );
 

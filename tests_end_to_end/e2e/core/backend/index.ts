@@ -7,4 +7,8 @@ export {
   type ExperimentRefDetail,
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
+  type FeedbackScoreRef,
+  type TraceDetail,
+  type AutomationRuleRef,
 } from './client';
+export { type PollFeedbackScoreOpts } from './poll-feedback-score';

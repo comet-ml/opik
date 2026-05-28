@@ -58,7 +58,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_a_prompt_commit]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_a_prompt_commit],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/development/prompt-library/version-control"),
   },
   [EXPLAINER_ID.what_are_experiment_items]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_experiment_items],
@@ -99,29 +99,23 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_the_prompt_library]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_prompt_library],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/development/prompt-library/overview"),
   },
   [EXPLAINER_ID.how_do_i_use_this_prompt]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.how_do_i_use_this_prompt],
-    docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
-      "#linking-prompts-to-experiments",
-    ),
+    docLink: buildDocsUrl("/development/prompt-library/getting-started"),
   },
   [EXPLAINER_ID.what_are_commits]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_commits],
-    docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
-      "#managing-prompts-stored-in-code",
-    ),
+    docLink: buildDocsUrl("/development/prompt-library/version-control"),
   },
   [EXPLAINER_ID.how_do_i_write_my_prompt]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.how_do_i_write_my_prompt],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/development/prompt-library/prompt-types"),
   },
   [EXPLAINER_ID.what_happens_if_i_edit_my_prompt]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_happens_if_i_edit_my_prompt],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/development/prompt-library/version-control"),
   },
   [EXPLAINER_ID.whats_the_playground]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_playground],
@@ -215,17 +209,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.prompt_generation_learn_more]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_generation_learn_more],
-    docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
-      "#generate",
-    ),
+    docLink: buildDocsUrl("/development/prompt-library/overview"),
   },
   [EXPLAINER_ID.prompt_improvement_learn_more]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_improvement_learn_more],
-    docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
-      "#improve",
-    ),
+    docLink: buildDocsUrl("/development/prompt-library/overview"),
   },
   [EXPLAINER_ID.prompt_improvement_optimizer]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_improvement_optimizer],
