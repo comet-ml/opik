@@ -7,6 +7,12 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.RecentActivity.ActivityType;
 import com.comet.opik.api.RecentActivity.RecentActivityItem;
 import com.comet.opik.api.RecentActivity.RecentActivityPage;
+import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.metrics.MetricType;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.alerts.AlertEventLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -21,6 +27,8 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -54,6 +62,7 @@ public class RecentActivityService {
     private final @NonNull ExperimentService experimentService;
     private final @NonNull OptimizationService optimizationService;
     private final @NonNull AlertEventLogsDAO alertEventLogsDAO;
+    private final @NonNull ProjectMetricsService projectMetricsService;
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -66,8 +75,10 @@ public class RecentActivityService {
         var alertsMono = fetchAlertEvents(projectId, size);
         var datasetsMono = fetchDatasetSources(workspaceId, projectId, size);
         var promptVersionsMono = fetchPromptVersions(workspaceId, projectId, size);
+        var traceDailyMono = fetchTraceDailyCounts(projectId);
 
-        return Mono.zip(experimentsMono, optimizationsMono, alertsMono, datasetsMono, promptVersionsMono)
+        return Mono
+                .zip(experimentsMono, optimizationsMono, alertsMono, datasetsMono, promptVersionsMono, traceDailyMono)
                 .map(tuple -> {
                     var all = new ArrayList<RecentActivityItem>();
                     all.addAll(tuple.getT1());
@@ -75,6 +86,7 @@ public class RecentActivityService {
                     all.addAll(tuple.getT3());
                     all.addAll(tuple.getT4());
                     all.addAll(tuple.getT5());
+                    all.addAll(tuple.getT6());
 
                     all.sort(Comparator.comparing(RecentActivityItem::createdAt).reversed());
 
@@ -185,6 +197,47 @@ public class RecentActivityService {
         })).subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(e -> {
                     log.warn("Failed to fetch recent prompt versions for project '{}'", projectId, e);
+                    return Mono.just(List.of());
+                });
+    }
+
+    private Mono<List<RecentActivityItem>> fetchTraceDailyCounts(UUID projectId) {
+        Instant start = Instant.now().minus(LOOKBACK_DAYS, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
+        var visibilityFilter = TraceFilter.builder()
+                .field(TraceField.VISIBILITY_MODE)
+                .operator(Operator.EQUAL)
+                .value("default")
+                .build();
+        var request = ProjectMetricRequest.builder()
+                .metricType(MetricType.TRACE_COUNT)
+                .interval(TimeInterval.DAILY)
+                .intervalStart(start)
+                .traceFilters(List.of(visibilityFilter))
+                .build();
+
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
+        return projectMetricsService.getProjectMetrics(projectId, request)
+                .map(response -> response.results().stream()
+                        .flatMap(r -> r.data().stream())
+                        .filter(dp -> dp.value() != null && dp.value().longValue() > 0)
+                        .map(dp -> {
+                            boolean isToday = dp.time().atZone(ZoneOffset.UTC).toLocalDate().equals(today);
+                            // Noon keeps the date stable across all timezones when the FE converts to local time
+                            Instant createdAt = isToday
+                                    ? Instant.now()
+                                    : dp.time().atZone(ZoneOffset.UTC).toLocalDate()
+                                            .atTime(12, 0).toInstant(ZoneOffset.UTC);
+                            return RecentActivityItem.builder()
+                                    .type(ActivityType.TRACE_DAILY)
+                                    .id(UUID.nameUUIDFromBytes(dp.time().toString().getBytes()))
+                                    .name(String.valueOf(dp.value().longValue()))
+                                    .createdAt(createdAt)
+                                    .build();
+                        })
+                        .toList())
+                .onErrorResume(e -> {
+                    log.warn("Failed to fetch daily trace counts for project '{}'", projectId, e);
                     return Mono.just(List.of());
                 });
     }

@@ -56,6 +56,7 @@ public class RecentActivity {
     @RequiredArgsConstructor
     @Getter
     public enum ActivityType {
+        TRACE_DAILY("trace_daily"),
         EXPERIMENT("experiment"),
         DATASET_VERSION("dataset_version"),
         TEST_SUITE_VERSION("test_suite_version"),

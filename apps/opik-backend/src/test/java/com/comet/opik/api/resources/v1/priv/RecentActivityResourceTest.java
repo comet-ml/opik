@@ -4,6 +4,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.RecentActivity;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -20,6 +21,7 @@ import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.RecentActivityResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -42,6 +44,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -107,6 +110,7 @@ class RecentActivityResourceTest {
     private DatasetResourceClient datasetResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
     private PromptResourceClient promptResourceClient;
+    private TraceResourceClient traceResourceClient;
     private RecentActivityResourceClient recentActivityResourceClient;
 
     @BeforeAll
@@ -118,7 +122,8 @@ class RecentActivityResourceTest {
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, podamFactory);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, podamFactory);
-        this.promptResourceClient = new PromptResourceClient(client, baseURI);
+        this.promptResourceClient = new PromptResourceClient(client, baseURI, podamFactory);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.recentActivityResourceClient = new RecentActivityResourceClient(client, baseURI);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -175,6 +180,14 @@ class RecentActivityResourceTest {
                     .name(promptName).projectId(projectId)
                     .template("Hello {{name}}").build(), API_KEY, TEST_WORKSPACE_NAME);
 
+            int traceCount = 3;
+            for (int i = 0; i < traceCount; i++) {
+                traceResourceClient.createTrace(Trace.builder()
+                        .projectName(projectName)
+                        .startTime(Instant.now())
+                        .build(), API_KEY, TEST_WORKSPACE_NAME);
+            }
+
             var result = recentActivityResourceClient.getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
 
             var content = result.content();
@@ -191,11 +204,15 @@ class RecentActivityResourceTest {
                     && suiteName.equals(item.name()));
             assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.PROMPT_VERSION
                     && item.name().startsWith(promptName));
+            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.TRACE_DAILY
+                    && item.name().equals(String.valueOf(traceCount)));
 
             content.forEach(item -> {
                 assertThat(item.id()).isNotNull();
                 assertThat(item.createdAt()).isNotNull();
-                assertThat(item.createdBy()).isEqualTo(USER);
+                if (item.type() != RecentActivity.ActivityType.TRACE_DAILY) {
+                    assertThat(item.createdBy()).isEqualTo(USER);
+                }
             });
 
             assertThat(content)
