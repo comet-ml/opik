@@ -1524,7 +1524,7 @@ def test_prompt_environments__create_set_move_clear__happyflow(
 
     # Step 2: add second_environment_name; both envs must be visible on the same version.
     opik_client.set_prompt_environments(
-        prompt_name, [environment_name, second_environment_name], commit=v1.commit
+        prompt_name, [environment_name, second_environment_name], version=v1.version
     )
     by_first = opik_client.get_prompt(
         name=prompt_name, environment=environment_name, no_cache=True
