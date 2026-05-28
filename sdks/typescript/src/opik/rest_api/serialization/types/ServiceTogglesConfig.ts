@@ -35,8 +35,8 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     v1WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     forceWorkspaceVersion: core.serialization.string(),
     defaultPageSize: core.serialization.number().optional(),
-    v1WorkspaceAllowlist: core.serialization.string().optional(),
     v2WorkspaceAllowlist: core.serialization.string().optional(),
+    v1WorkspaceAllowlist: core.serialization.string().optional(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -68,7 +68,7 @@ export declare namespace ServiceTogglesConfig {
         v1WorkspaceAllowlistIds: string[];
         forceWorkspaceVersion: string;
         defaultPageSize?: number | null;
-        v1WorkspaceAllowlist?: string | null;
         v2WorkspaceAllowlist?: string | null;
+        v1WorkspaceAllowlist?: string | null;
     }
 }

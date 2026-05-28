@@ -28,6 +28,6 @@ export interface ServiceTogglesConfig {
     v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
     defaultPageSize?: number;
-    v1WorkspaceAllowlist?: string;
     v2WorkspaceAllowlist?: string;
+    v1WorkspaceAllowlist?: string;
 }
