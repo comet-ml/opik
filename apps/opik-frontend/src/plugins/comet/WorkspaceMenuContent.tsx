@@ -209,7 +209,7 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
           setSearchText={setSearch}
           placeholder="Search"
           variant="ghost"
-          size="sm"
+          dimension="sm"
         />
       </div>
 
