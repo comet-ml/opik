@@ -4,6 +4,9 @@ import com.comet.opik.api.Source;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadsCreated;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.TraceThreadFilterEvaluationService;
 import com.comet.opik.domain.threads.TraceThreadModel;
@@ -182,19 +185,103 @@ class TraceThreadOnlineScoringSamplerListenerTest {
         }
     }
 
+    @Nested
+    class RuleFilteringTests {
+
+        @Test
+        void skipsDisabledEvaluators() {
+            var thread = createThread(Source.SDK);
+            var evaluator = createEvaluatorWithFilters(false, 1.0f, List.of());
+            var event = new TraceThreadsCreated(List.of(thread), projectId, workspaceId, userName);
+
+            doReturn(List.of(evaluator))
+                    .when(ruleEvaluatorService).findAll(projectId, workspaceId);
+            when(traceThreadService.updateThreadSampledValue(eq(projectId), any()))
+                    .thenReturn(Mono.empty());
+
+            listener.onTraceThreadOnlineScoringSampled(event);
+
+            ArgumentCaptor<List<TraceThreadSampling>> captor = ArgumentCaptor.forClass(List.class);
+            verify(traceThreadService).updateThreadSampledValue(eq(projectId), captor.capture());
+            assertThat(captor.getValue())
+                    .allSatisfy(sampling -> assertThat(sampling.samplingPerRule().values())
+                            .containsOnly(false));
+        }
+
+        @Test
+        void skipsThreadsThatDontMatchEvaluatorFilters() {
+            var thread = createThread(Source.SDK);
+            var nonMatchingFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.DURATION)
+                    .operator(Operator.GREATER_THAN)
+                    .value("999999")
+                    .build();
+            var evaluator = createEvaluatorWithFilters(true, 1.0f, List.of(nonMatchingFilter));
+            var event = new TraceThreadsCreated(List.of(thread), projectId, workspaceId, userName);
+
+            doReturn(List.of(evaluator))
+                    .when(ruleEvaluatorService).findAll(projectId, workspaceId);
+            when(filterEvaluationService.matchesAllFilters(any(), any(TraceThreadModel.class)))
+                    .thenReturn(false);
+            when(traceThreadService.updateThreadSampledValue(eq(projectId), any()))
+                    .thenReturn(Mono.empty());
+
+            listener.onTraceThreadOnlineScoringSampled(event);
+
+            ArgumentCaptor<List<TraceThreadSampling>> captor = ArgumentCaptor.forClass(List.class);
+            verify(traceThreadService).updateThreadSampledValue(eq(projectId), captor.capture());
+            assertThat(captor.getValue())
+                    .allSatisfy(sampling -> assertThat(sampling.samplingPerRule().values())
+                            .containsOnly(false));
+        }
+
+        @Test
+        void processesThreadsThatMatchEvaluatorFilters() {
+            var thread = createThread(Source.SDK);
+            var matchingFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.DURATION)
+                    .operator(Operator.GREATER_THAN)
+                    .value("0")
+                    .build();
+            var evaluator = createEvaluatorWithFilters(true, 1.0f, List.of(matchingFilter));
+            var event = new TraceThreadsCreated(List.of(thread), projectId, workspaceId, userName);
+
+            doReturn(List.of(evaluator))
+                    .when(ruleEvaluatorService).findAll(projectId, workspaceId);
+            when(filterEvaluationService.matchesAllFilters(any(), any(TraceThreadModel.class)))
+                    .thenReturn(true);
+            when(traceThreadService.updateThreadSampledValue(eq(projectId), any()))
+                    .thenReturn(Mono.empty());
+
+            listener.onTraceThreadOnlineScoringSampled(event);
+
+            ArgumentCaptor<List<TraceThreadSampling>> captor = ArgumentCaptor.forClass(List.class);
+            verify(traceThreadService).updateThreadSampledValue(eq(projectId), captor.capture());
+            assertThat(captor.getValue())
+                    .allSatisfy(sampling -> assertThat(sampling.samplingPerRule().get(evaluator.getId()))
+                            .isTrue());
+        }
+    }
+
     private TraceThreadModel createThread(Source source) {
         return podamFactory.manufacturePojo(TraceThreadModel.class).toBuilder()
                 .projectId(projectId)
                 .source(source)
+                .duration(30_000.0)
                 .build();
     }
 
     private AutomationRuleEvaluatorTraceThreadLlmAsJudge createEvaluator() {
+        return createEvaluatorWithFilters(true, 1.0f, List.of());
+    }
+
+    private AutomationRuleEvaluatorTraceThreadLlmAsJudge createEvaluatorWithFilters(
+            boolean enabled, float samplingRate, List<TraceThreadFilter> filters) {
         return podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
                 .projects(toProjects(Set.of(projectId)))
-                .samplingRate(1.0f)
-                .enabled(true)
-                .filters(List.of())
+                .samplingRate(samplingRate)
+                .enabled(enabled)
+                .filters(filters)
                 .build();
     }
 }
