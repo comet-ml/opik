@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { Button } from "@/ui/button";
+import { PopoverClose } from "@/ui/popover";
 import { cn, padDecimalsString } from "@/lib/utils";
 import { Filter, FilterOperator } from "@/types/filters";
 import { createFilter } from "@/lib/filters";
 import { NO_VALUE_OPERATORS } from "@/constants/filters";
-import { QueryFilterShell } from "@/shared/filter-chips/chips/QueryBuilderChip/QueryFilterShell";
+import { FilterRow } from "@/shared/filter-chips/chips/QueryBuilderChip/FilterRow";
 import { OperatorCell } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/OperatorCell";
 import { AutocompleteCell } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/AutocompleteCell";
 import { TextCell } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/TextCell";
@@ -24,6 +27,8 @@ interface QueryBuilderChipPopoverContentProps {
   onApply: (value: QueryBuilderChipValue) => void;
   onClear: () => void;
 }
+
+type FocusedField = { rowId: string; kind: "key" | "value" } | null;
 
 const isRowApplied =
   (
@@ -64,14 +69,28 @@ const QueryBuilderChipPopoverContent: React.FC<
   const defaultOperator: FilterOperator =
     definition.defaultOperator ?? definition.operators[0];
 
-  const [rows, setRows] = useState<Filter[]>(() => value?.rows ?? []);
-  const [focusValueRowId, setFocusValueRowId] = useState<string | null>(null);
+  const initialDraft = useMemo(
+    () => createFilter({ operator: defaultOperator }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const [rows, setRows] = useState<Filter[]>(() => {
+    const existing = value?.rows ?? [];
+    return existing.length > 0 ? existing : [initialDraft];
+  });
+
+  const [focusedField, setFocusedField] = useState<FocusedField>(() => {
+    const existing = value?.rows ?? [];
+    if (existing.length > 0) return null;
+    return { rowId: initialDraft.id, kind: keyConfig ? "key" : "value" };
+  });
 
   useEffect(() => {
-    if (focusValueRowId === null) return;
-    const raf = requestAnimationFrame(() => setFocusValueRowId(null));
+    if (focusedField === null) return;
+    const raf = requestAnimationFrame(() => setFocusedField(null));
     return () => cancelAnimationFrame(raf);
-  }, [focusValueRowId]);
+  }, [focusedField]);
 
   const rowAppliedCheck = useMemo(
     () =>
@@ -90,14 +109,10 @@ const QueryBuilderChipPopoverContent: React.FC<
     else onApply({ rows: next });
   };
 
-  const handleAddRow = (picked: string) => {
-    const blank = createFilter({
-      key: keyConfig ? picked : "",
-      operator: defaultOperator,
-      value: keyConfig ? "" : picked,
-    });
+  const handleAddEmpty = () => {
+    const blank = createFilter({ operator: defaultOperator });
     commit([...rows, blank]);
-    if (keyConfig) setFocusValueRowId(blank.id);
+    setFocusedField({ rowId: blank.id, kind: keyConfig ? "key" : "value" });
   };
 
   const updateRow = (id: string, patch: Partial<Filter>) =>
@@ -107,104 +122,135 @@ const QueryBuilderChipPopoverContent: React.FC<
     commit(rows.filter((_, i) => i !== index));
 
   const handleClearAll = () => {
-    setRows([]);
+    const blank = createFilter({ operator: defaultOperator });
+    setRows([blank]);
     onClear();
   };
 
   const isNumericValue = valueConfig?.type === "numeric";
 
-  const searchOptions = keyConfig?.options ? keyOptions : valueOptions;
-  const searchPlaceholder = keyConfig?.options
-    ? keyConfig.placeholder ?? `Filter by ${definition.label.toLowerCase()}…`
-    : valueConfig?.placeholder ??
-      `Filter by ${definition.label.toLowerCase()}…`;
-  const searchItemNoun = definition.label.toLowerCase();
+  const renderRow = (row: Filter) => {
+    const op = (row.operator || defaultOperator) as FilterOperator;
+    const showValue = operatorNeedsValue(op);
+    const keyError =
+      keyConfig?.validate && row.key ? keyConfig.validate(row.key) : undefined;
+    const focusKey =
+      focusedField?.rowId === row.id && focusedField.kind === "key";
+    const focusValue =
+      focusedField?.rowId === row.id && focusedField.kind === "value";
+    return (
+      <>
+        {keyConfig && (
+          <AutocompleteCell
+            grow
+            value={row.key ?? ""}
+            placeholder={keyConfig.placeholder ?? "key"}
+            options={keyOptions}
+            itemNoun={definition.label.toLowerCase()}
+            autoFocus={focusKey}
+            hasError={Boolean(keyError)}
+            onChange={(next) => updateRow(row.id, { key: next })}
+            onPick={() => setFocusedField({ rowId: row.id, kind: "value" })}
+          />
+        )}
+        <OperatorCell
+          value={op}
+          options={operatorOptions}
+          onSelect={(next) => {
+            const patch: Partial<Filter> = { operator: next };
+            if (!operatorNeedsValue(next)) patch.value = "";
+            updateRow(row.id, patch);
+          }}
+          ariaLabel="Operator"
+        />
+        {showValue &&
+          (isNumericValue ? (
+            <NumericCell
+              value={String(row.value ?? "")}
+              placeholder={valueConfig?.placeholder ?? "0"}
+              autoFocus={focusValue}
+              onChange={(next) => updateRow(row.id, { value: next })}
+              onBlur={(event) => {
+                const padded = padDecimalsString(
+                  event.target.value,
+                  valueConfig?.decimals ?? 2,
+                );
+                if (padded !== event.target.value)
+                  updateRow(row.id, { value: padded });
+              }}
+              className={cn("text-right")}
+            />
+          ) : valueConfig?.options ? (
+            <AutocompleteCell
+              grow={!keyConfig}
+              value={String(row.value ?? "")}
+              placeholder={valueConfig.placeholder ?? "value"}
+              options={valueOptions}
+              itemNoun={definition.label.toLowerCase()}
+              autoFocus={focusValue}
+              onChange={(next) => updateRow(row.id, { value: next })}
+            />
+          ) : (
+            <TextCell
+              grow={!keyConfig}
+              value={String(row.value ?? "")}
+              placeholder={valueConfig?.placeholder ?? "value"}
+              autoFocus={focusValue}
+              onChange={(next) => updateRow(row.id, { value: next })}
+            />
+          ))}
+      </>
+    );
+  };
+
+  const appliedCount = rows.filter(rowAppliedCheck).length;
+  const addLabel =
+    definition.addLabel ?? `Add ${definition.label.toLowerCase()}`;
 
   return (
-    <QueryFilterShell<Filter>
-      rows={rows}
-      renderRow={(row) => {
-        const op = (row.operator || defaultOperator) as FilterOperator;
-        const showValue = operatorNeedsValue(op);
-        const keyError =
-          keyConfig?.validate && row.key
-            ? keyConfig.validate(row.key)
-            : undefined;
-        const focusThisValue = focusValueRowId === row.id;
-        return (
-          <>
-            {keyConfig && (
-              <AutocompleteCell
-                grow
-                value={row.key ?? ""}
-                placeholder={keyConfig.placeholder ?? "key"}
-                options={keyOptions}
-                itemNoun={definition.label.toLowerCase()}
-                hasError={Boolean(keyError)}
-                onChange={(next) => updateRow(row.id, { key: next })}
-                onPick={() => setFocusValueRowId(row.id)}
-              />
-            )}
-            <OperatorCell
-              value={op}
-              options={operatorOptions}
-              onSelect={(next) => {
-                const patch: Partial<Filter> = { operator: next };
-                if (!operatorNeedsValue(next)) patch.value = "";
-                updateRow(row.id, patch);
-              }}
-              ariaLabel="Operator"
-            />
-            {showValue &&
-              (isNumericValue ? (
-                <NumericCell
-                  value={String(row.value ?? "")}
-                  placeholder={valueConfig?.placeholder ?? "0"}
-                  autoFocus={focusThisValue}
-                  onChange={(next) => updateRow(row.id, { value: next })}
-                  onBlur={(event) => {
-                    const padded = padDecimalsString(
-                      event.target.value,
-                      valueConfig?.decimals ?? 2,
-                    );
-                    if (padded !== event.target.value)
-                      updateRow(row.id, { value: padded });
-                  }}
-                  className={cn("text-right")}
-                />
-              ) : valueConfig?.options ? (
-                <AutocompleteCell
-                  grow={!keyConfig}
-                  value={String(row.value ?? "")}
-                  placeholder={valueConfig.placeholder ?? "value"}
-                  options={valueOptions}
-                  itemNoun={definition.label.toLowerCase()}
-                  autoFocus={focusThisValue}
-                  onChange={(next) => updateRow(row.id, { value: next })}
-                />
-              ) : (
-                <TextCell
-                  grow={!keyConfig}
-                  value={String(row.value ?? "")}
-                  placeholder={valueConfig?.placeholder ?? "value"}
-                  autoFocus={focusThisValue}
-                  onChange={(next) => updateRow(row.id, { value: next })}
-                />
-              ))}
-          </>
-        );
-      }}
-      isRowApplied={rowAppliedCheck}
-      onRemoveRow={handleRemove}
-      onAddRow={(picked) => {
-        handleAddRow(picked);
-      }}
-      onClearAll={handleClearAll}
-      searchPlaceholder={searchPlaceholder}
-      searchOptions={searchOptions}
-      searchItemNoun={searchItemNoun}
-      addLabel={definition.addLabel ?? `Add ${definition.label.toLowerCase()}`}
-    />
+    <div
+      className={cn("flex flex-col gap-2 p-3", "min-w-[360px] max-w-[800px]")}
+    >
+      <ul className="mb-2 flex flex-col gap-2">
+        {rows.map((row, index) => (
+          <li key={row.id}>
+            <FilterRow
+              onRemove={() => handleRemove(index)}
+              disableRemove={rows.length === 1}
+            >
+              {renderRow(row)}
+            </FilterRow>
+          </li>
+        ))}
+      </ul>
+
+      <Button
+        variant="ghost"
+        size="2xs"
+        onClick={handleAddEmpty}
+        className="self-start px-0 text-foreground hover:text-primary"
+      >
+        <Plus className="mr-1 size-3" />
+        {addLabel}
+      </Button>
+
+      <div className="flex flex-col">
+        <div className="border-t border-border" />
+        <div className="flex items-center pt-2">
+          <PopoverClose asChild>
+            <Button
+              variant="ghost"
+              size="2xs"
+              onClick={handleClearAll}
+              disabled={appliedCount === 0}
+              className="px-0 text-foreground hover:text-primary"
+            >
+              Clear{appliedCount > 0 ? ` (${appliedCount})` : ""}
+            </Button>
+          </PopoverClose>
+        </div>
+      </div>
+    </div>
   );
 };
 

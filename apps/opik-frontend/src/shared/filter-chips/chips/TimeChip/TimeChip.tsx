@@ -8,7 +8,7 @@ interface TimeChipProps {
   definition: TimeChipDefinition;
   value: TimeChipValue | undefined;
   onApply: (value: TimeChipValue) => void;
-  onClear: () => void;
+  onClear: (source?: "chip_x") => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

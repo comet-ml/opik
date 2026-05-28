@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { FormErrorSkeleton } from "@/ui/form";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
@@ -35,6 +35,16 @@ const OPERATOR_OPTIONS: FilterOperatorOption<NumericChipMode>[] = [
   { value: "between", label: "Is between" },
 ];
 
+const pickFirstEmptyValue = (
+  mode: NumericChipMode,
+  from: string,
+  to: string,
+): "from" | "to" => {
+  if (trimValue(from) === "") return "from";
+  if (mode === "between" && trimValue(to) === "") return "to";
+  return "from";
+};
+
 const initialFromDraft = (value: NumericChipValue | undefined): string => {
   if (!value) return "";
   if (value.mode === "exactly") return String(value.exact);
@@ -59,6 +69,10 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
   );
   const [toDraft, setToDraft] = useState<string>(() => initialToDraft(value));
   const format = resolveNumericFormat(definition);
+
+  const inputFromRef = useRef<HTMLInputElement>(null);
+  const inputToRef = useRef<HTMLInputElement>(null);
+  const pendingValueFocusRef = useRef<"from" | "to" | null>(null);
 
   const apply = (next: {
     mode?: NumericChipMode;
@@ -96,6 +110,19 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
   const handleModeChange = (next: NumericChipMode) => {
     setMode(next);
     apply({ mode: next });
+    pendingValueFocusRef.current = pickFirstEmptyValue(
+      next,
+      fromDraft,
+      toDraft,
+    );
+  };
+
+  const handleOperatorMenuClose = (event: Event) => {
+    event.preventDefault();
+    const target = pendingValueFocusRef.current;
+    pendingValueFocusRef.current = null;
+    if (target === "from") inputFromRef.current?.focus();
+    else if (target === "to") inputToRef.current?.focus();
   };
 
   const handleFromChange = (
@@ -149,6 +176,7 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
         value={mode}
         options={OPERATOR_OPTIONS}
         onChange={handleModeChange}
+        onCloseAutoFocus={handleOperatorMenuClose}
       />
 
       {mode === "between" ? (
@@ -159,6 +187,8 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
               value={fromDraft}
               format={format}
               hasError={betweenError}
+              autoFocus
+              inputRef={inputFromRef}
               onValueChange={handleFromChange}
               onBlur={(event) => padDraftOnBlur("from", event)}
             />
@@ -167,6 +197,7 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
               value={toDraft}
               format={format}
               hasError={betweenError}
+              inputRef={inputToRef}
               onValueChange={handleToChange}
               onBlur={(event) => padDraftOnBlur("to", event)}
             />
@@ -181,6 +212,8 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
         <NumericInputField
           value={fromDraft}
           format={format}
+          autoFocus
+          inputRef={inputFromRef}
           onValueChange={handleFromChange}
           onBlur={(event) => padDraftOnBlur("from", event)}
         />
@@ -199,6 +232,8 @@ interface NumericInputFieldProps {
   value: string;
   format: NumericFormat;
   hasError?: boolean;
+  autoFocus?: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
   onValueChange: (raw: string | number | readonly string[] | undefined) => void;
   onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
 }
@@ -208,6 +243,8 @@ const NumericInputField: React.FC<NumericInputFieldProps> = ({
   value,
   format,
   hasError = false,
+  autoFocus,
+  inputRef,
   onValueChange,
   onBlur,
 }) => (
@@ -227,9 +264,11 @@ const NumericInputField: React.FC<NumericInputFieldProps> = ({
         </span>
       )}
       <DebounceInput
+        ref={inputRef}
         type="number"
         dimension="sm"
         step={format.integerOnly ? "1" : "any"}
+        autoFocus={autoFocus}
         value={value}
         onValueChange={onValueChange}
         onBlur={onBlur}

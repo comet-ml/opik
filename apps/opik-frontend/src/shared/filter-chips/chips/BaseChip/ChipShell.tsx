@@ -7,7 +7,7 @@ export interface ChipShellProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   applied?: boolean;
   isOpen?: boolean;
-  onClear?: () => void;
+  onClear?: (source?: "chip_x") => void;
 }
 
 const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
@@ -55,7 +55,7 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              onClear?.();
+              onClear?.("chip_x");
             }}
             aria-label="Clear filter"
             className={cn(

@@ -16,7 +16,7 @@ interface SingleSelectChipProps {
   definition: SingleSelectChipDefinition;
   value: SingleSelectChipValue | undefined;
   onApply: (value: SingleSelectChipValue) => void;
-  onClear: () => void;
+  onClear: (source?: "chip_x") => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

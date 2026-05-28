@@ -23,19 +23,22 @@ interface TimeChipDateInputProps {
   slot: Slot;
   invalid?: boolean;
   autoFocus?: boolean;
+  inputRef: React.RefObject<HTMLInputElement>;
   calendarDefaultTime: SimpleTime;
   onChange: (patch: SlotPatch) => void;
+  onPicked?: () => void;
 }
 
 const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
   slot,
   invalid,
   autoFocus,
+  inputRef,
   calendarDefaultTime,
   onChange,
+  onPicked,
 }) => {
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const ignoreNextFocusRef = useRef(false);
   const justPickedRef = useRef(false);
@@ -109,8 +112,12 @@ const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
     event.preventDefault();
     if (justPickedRef.current) {
       justPickedRef.current = false;
-      ignoreNextFocusRef.current = true;
-      inputRef.current?.focus();
+      if (onPicked) {
+        onPicked();
+      } else {
+        ignoreNextFocusRef.current = true;
+        inputRef.current?.focus();
+      }
     }
   };
 

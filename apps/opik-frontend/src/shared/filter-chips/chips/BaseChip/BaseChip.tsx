@@ -9,7 +9,7 @@ export interface BaseChipProps
   valueSummary?: string | null;
   valueSummaryFull?: string | null;
   isOpen?: boolean;
-  onClear?: () => void;
+  onClear?: (source?: "chip_x") => void;
 }
 
 const BaseChip = forwardRef<HTMLElement, BaseChipProps>(

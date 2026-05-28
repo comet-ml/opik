@@ -11,7 +11,7 @@ interface QueryBuilderChipProps {
   definition: QueryBuilderChipDefinition;
   value: QueryBuilderChipValue | undefined;
   onApply: (value: QueryBuilderChipValue) => void;
-  onClear: () => void;
+  onClear: (source?: "chip_x") => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -34,11 +34,7 @@ const QueryBuilderChip: React.FC<QueryBuilderChipProps> = ({
       open={open}
       onOpenChange={onOpenChange}
       onClear={onClear}
-      contentProps={{
-        onOpenAutoFocus: (event) => {
-          if (value?.rows && value.rows.length > 0) event.preventDefault();
-        },
-      }}
+      contentProps={{ onOpenAutoFocus: (event) => event.preventDefault() }}
     >
       <QueryBuilderChipPopoverContent
         definition={definition}

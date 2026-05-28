@@ -16,6 +16,8 @@ import { ExternalLink } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import keyBy from "lodash/keyBy";
+import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
   DATE_RANGE_PRESET_ALLTIME,
@@ -264,19 +266,9 @@ const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
 
 const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
   {
-    id: "duration",
-    field: "duration",
-    label: "Duration",
-    group: "Time",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.duration,
-    format: "duration",
-  },
-  {
     id: "start_time",
     field: "start_time",
     label: "Start time",
-    group: "Time",
     kind: "time",
     columnType: COLUMN_TYPE.time,
   },
@@ -284,15 +276,21 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     id: "end_time",
     field: "end_time",
     label: "End time",
-    group: "Time",
     kind: "time",
     columnType: COLUMN_TYPE.time,
+  },
+  {
+    id: "duration",
+    field: "duration",
+    label: "Duration",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.duration,
+    format: "duration",
   },
   {
     id: "number_of_messages",
     field: "number_of_messages",
     label: "Message count",
-    group: "Performance",
     kind: "numeric",
     columnType: COLUMN_TYPE.number,
     format: "integer",
@@ -301,7 +299,6 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     id: "first_message",
     field: "first_message",
     label: "First message",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -310,7 +307,6 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     id: "last_message",
     field: "last_message",
     label: "Last message",
-    group: "Content",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.string,
@@ -319,7 +315,6 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     id: "id",
     field: "id",
     label: "Thread ID",
-    group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "equals",
     columnType: COLUMN_TYPE.string,
@@ -328,11 +323,23 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     id: "annotation_queue_ids",
     field: "annotation_queue_ids",
     label: "Annotation queue ID",
-    group: "Identifiers",
     kind: "pseudo-search",
     searchMode: "contains",
     columnType: COLUMN_TYPE.list,
   },
+];
+
+const THREAD_CHIP_ORDER: string[] = [
+  "start_time",
+  "end_time",
+  "duration",
+  "number_of_messages",
+  "first_message",
+  "last_message",
+  "tags",
+  "id",
+  "annotation_queue_ids",
+  "feedback_scores",
 ];
 
 const THREAD_DEFAULT_PINNED_CHIPS = ["tags", "duration", "start_time"];
@@ -435,37 +442,28 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   );
 
   const threadChipDefinitions = useMemo<ChipDefinition[]>(() => {
-    const tagsChip: ChipDefinition = {
-      id: "tags",
-      field: "tags",
-      label: "Tags",
-      group: "Identifiers",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.list,
-      operators: TAGS_OPERATORS,
-      defaultOperator: "contains",
-      value: {
-        placeholder: "Type a tag…",
-        options: chipOptions(useTagsOptions, {
-          projectId,
-          entityType: "threads",
-        }),
+    const dynamicChips: Record<string, ChipDefinition> = {
+      tags: {
+        id: "tags",
+        field: "tags",
+        label: "Tags",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.list,
+        operators: TAGS_OPERATORS,
+        defaultOperator: "contains",
+        value: {
+          placeholder: "Type a tag…",
+          options: chipOptions(useTagsOptions, {
+            projectId,
+            entityType: "threads",
+          }),
+        },
+        addLabel: "Add tag",
       },
-      addLabel: "Add tag",
-    };
-    const idIndex = THREAD_CHIP_DEFINITIONS.findIndex((d) => d.id === "id");
-    const withTags = [
-      ...THREAD_CHIP_DEFINITIONS.slice(0, idIndex),
-      tagsChip,
-      ...THREAD_CHIP_DEFINITIONS.slice(idIndex),
-    ];
-    return [
-      ...withTags,
-      {
+      feedback_scores: {
         id: "feedback_scores",
         field: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores",
-        group: "Scoring",
         kind: "query-builder",
         columnType: COLUMN_TYPE.numberDictionary,
         operators: FEEDBACK_SCORE_OPERATORS,
@@ -476,7 +474,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         },
         value: { type: "numeric", decimals: 2, placeholder: "0" },
       },
-    ];
+    };
+    const byId: Record<string, ChipDefinition> = {
+      ...keyBy(THREAD_CHIP_DEFINITIONS, "id"),
+      ...dynamicChips,
+    };
+    return compact(THREAD_CHIP_ORDER.map((id) => byId[id]));
   }, [projectId, threadScoreOptions]);
 
   const {

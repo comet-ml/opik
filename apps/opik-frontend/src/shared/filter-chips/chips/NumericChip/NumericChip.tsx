@@ -11,7 +11,7 @@ interface NumericChipProps {
   definition: NumericChipDefinition;
   value: NumericChipValue | undefined;
   onApply: (value: NumericChipValue) => void;
-  onClear: () => void;
+  onClear: (source?: "chip_x") => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -30,6 +30,7 @@ const NumericChip: React.FC<NumericChipProps> = ({
     open={open}
     onOpenChange={onOpenChange}
     onClear={onClear}
+    contentProps={{ onOpenAutoFocus: (event) => event.preventDefault() }}
   >
     <NumericChipPopoverContent
       definition={definition}

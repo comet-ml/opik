@@ -5,12 +5,13 @@ import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
 import { COLUMN_TYPE } from "@/types/shared";
-import { BaseTraceData } from "@/types/traces";
+import { BaseTraceData, LOGS_SOURCE } from "@/types/traces";
 import { ChipOptionsResult } from "@/shared/filter-chips/types";
 
 interface UseErrorTypeOptionsArgs {
   projectId: string | "";
   type?: TRACE_DATA_TYPE;
+  logsSource?: LOGS_SOURCE;
 }
 
 const ERROR_FILTER = [
@@ -28,7 +29,7 @@ const SAMPLE_SIZE = 100;
 export const useErrorTypeOptions = (
   args: UseErrorTypeOptionsArgs,
 ): ChipOptionsResult => {
-  const { projectId, type = TRACE_DATA_TYPE.traces } = args;
+  const { projectId, type = TRACE_DATA_TYPE.traces, logsSource } = args;
   const hasProjectId = Boolean(projectId);
 
   const { data, isPending } = useTracesOrSpansList(
@@ -40,6 +41,7 @@ export const useErrorTypeOptions = (
       truncate: true,
       stripAttachments: true,
       filters: ERROR_FILTER,
+      logsSource,
     },
     { enabled: hasProjectId },
   );
