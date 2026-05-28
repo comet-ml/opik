@@ -33,21 +33,21 @@ class ModelCapability:
 
 
 MODEL_CAPABILITIES: List[ModelCapability] = [
+    ModelCapability("gpt-5.5", context_window=1_000_000, single_pass_quality_ok=True),
+    ModelCapability("gpt-5.4", context_window=1_000_000, single_pass_quality_ok=True),
+    ModelCapability("gpt-5.3", context_window=400_000, single_pass_quality_ok=True),
+    ModelCapability("gpt-5.2", context_window=400_000, single_pass_quality_ok=True),
+    ModelCapability("gpt-5.1", context_window=400_000, single_pass_quality_ok=True),
     ModelCapability("gpt-5", context_window=400_000, single_pass_quality_ok=True),
     ModelCapability("gpt-5-mini", context_window=400_000, single_pass_quality_ok=True),
     ModelCapability("gpt-5-nano", context_window=400_000, single_pass_quality_ok=True),
-    ModelCapability("gpt-5.1", context_window=400_000, single_pass_quality_ok=True),
-    ModelCapability("gpt-5.2", context_window=400_000, single_pass_quality_ok=True),
-    ModelCapability("gpt-5.3", context_window=400_000, single_pass_quality_ok=True),
-    ModelCapability("gpt-5.4", context_window=1_000_000, single_pass_quality_ok=True),
-    ModelCapability("gpt-5.5", context_window=1_000_000, single_pass_quality_ok=True),
     ModelCapability("gpt-4o", context_window=128_000, single_pass_quality_ok=True),
     ModelCapability("gpt-4o-mini", context_window=128_000, single_pass_quality_ok=True),
     ModelCapability(
-        "claude-opus-4-6", context_window=1_000_000, single_pass_quality_ok=True
+        "claude-opus-4-7", context_window=1_000_000, single_pass_quality_ok=True
     ),
     ModelCapability(
-        "claude-opus-4-7", context_window=1_000_000, single_pass_quality_ok=True
+        "claude-opus-4-6", context_window=1_000_000, single_pass_quality_ok=True
     ),
     ModelCapability(
         "claude-sonnet-4-6", context_window=1_000_000, single_pass_quality_ok=True
