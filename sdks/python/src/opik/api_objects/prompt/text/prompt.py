@@ -69,6 +69,7 @@ class Prompt(base_prompt.BasePrompt):
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
         self._project_name = project_name
+        self._environments: Optional[List[str]] = None
 
         self._commit: Optional[str] = None
         self._version: Optional[str] = None
@@ -117,6 +118,7 @@ class Prompt(base_prompt.BasePrompt):
             self._id = prompt_version.id
             self._change_description = prompt_version.change_description
             self._tags = prompt_version.tags
+            self._environments = prompt_version.environments
             self._synced = True
             return True
         except (rest_api_core.ApiError, httpx.ConnectError, httpx.TimeoutException):
@@ -204,6 +206,12 @@ class Prompt(base_prompt.BasePrompt):
     def project_name(self) -> Optional[str]:
         """The name of the project this prompt belongs to."""
         return self._project_name
+
+    @property
+    @override
+    def environments(self) -> Optional[List[str]]:
+        """The environments that currently own this prompt version, or ``None`` if unowned."""
+        return copy.copy(self._environments) if self._environments is not None else None
 
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
@@ -298,5 +306,6 @@ class Prompt(base_prompt.BasePrompt):
         prompt._change_description = prompt_version.change_description
         prompt._tags = copy.copy(prompt_version.tags) if prompt_version.tags else []
         prompt._project_name = project_name
+        prompt._environments = prompt_version.environments
         prompt._synced = True
         return prompt
