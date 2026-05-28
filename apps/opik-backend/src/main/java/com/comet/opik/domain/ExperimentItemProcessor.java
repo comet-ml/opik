@@ -74,6 +74,7 @@ public class ExperimentItemProcessor {
                                             .datasetId(message.datasetId())
                                             .versionHash(message.versionHash())
                                             .datasetItemId(datasetItem.id())
+                                            .opikPrompts(message.opikPrompts())
                                             .build()));
                 });
     }

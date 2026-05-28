@@ -1,5 +1,9 @@
 import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
+import {
+  pollTraceForFeedbackScore,
+  type PollFeedbackScoreOpts,
+} from './poll-feedback-score';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -36,6 +40,26 @@ export interface TestSuiteItemRef {
   data: Record<string, unknown>;
 }
 
+export interface FeedbackScoreRef {
+  name: string;
+  value: number;
+  reason: string | null;
+  source: string;
+}
+
+export interface TraceDetail {
+  id: string;
+  name: string;
+  projectId: string;
+  feedbackScores: FeedbackScoreRef[];
+}
+
+export interface AutomationRuleRef {
+  id: string;
+  name: string;
+  projectIds: string[];
+}
+
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
@@ -46,6 +70,28 @@ export function makeBackendClient(apiKey: string | null = null) {
     workspaceName: env.workspace,
     apiUrl: env.apiBaseUrl,
   });
+
+  // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
+  // depending on the not-yet-constructed return object.
+  const localGetTrace = async (traceId: string): Promise<TraceDetail | null> => {
+    try {
+      const t = await opik.api.traces.getTraceById(traceId);
+      return {
+        id: String(t.id),
+        name: t.name ?? '',
+        projectId: String(t.projectId ?? ''),
+        feedbackScores: (t.feedbackScores ?? []).map((fs) => ({
+          name: fs.name,
+          value: Number(fs.value),
+          reason: fs.reason ?? null,
+          source: String(fs.source),
+        })),
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  };
 
   return {
     async createProject(name: string, description?: string): Promise<void> {
@@ -200,6 +246,41 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(item.id),
         data: (item.data ?? {}) as Record<string, unknown>,
       }));
+    },
+
+    getTrace: localGetTrace,
+
+    async pollTraceForFeedbackScore(
+      traceId: string,
+      scoreName: string,
+      opts: PollFeedbackScoreOpts = {},
+    ): Promise<FeedbackScoreRef> {
+      return pollTraceForFeedbackScore(localGetTrace, traceId, scoreName, opts);
+    },
+
+    async listAutomationRulesForProject(projectId: string): Promise<AutomationRuleRef[]> {
+      const page = await opik.api.automationRuleEvaluators.findEvaluators({
+        projectId,
+        size: 500,
+      });
+      const content = page.content ?? [];
+      return content.map((r) => ({
+        id: String(r.id),
+        name: r.name,
+        projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
+      }));
+    },
+
+    async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
+      try {
+        await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({
+          projectId,
+          body: { ids: [ruleId] },
+        });
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
     },
   };
 }

@@ -23,6 +23,7 @@ export const AnnotationQueuePublic: core.serialization.ObjectSchema<
         "feedback_definition_names",
         core.serialization.list(core.serialization.string()).optional(),
     ),
+    annotatorsPerItem: core.serialization.property("annotators_per_item", core.serialization.number().optional()),
     reviewers: core.serialization.list(AnnotationQueueReviewerPublic).optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
@@ -46,6 +47,7 @@ export declare namespace AnnotationQueuePublic {
         scope: AnnotationQueuePublicScope.Raw;
         comments_enabled?: boolean | null;
         feedback_definition_names?: string[] | null;
+        annotators_per_item?: number | null;
         reviewers?: AnnotationQueueReviewerPublic.Raw[] | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
         items_count?: number | null;

@@ -48,6 +48,15 @@ public class FilterUtils {
                 .toList();
     }
 
+    /**
+     * Reverses {@link #generateUuidPool}'s sizing ({@code count × UUID_POOL_MULTIPLIER}, floor 1)
+     * to recover the expected row count from a pool. A pool size of 1 or less maps to count 0
+     * (the {@code Math.max(1, ...)} floor kicked in for an empty input).
+     */
+    public static int expectedRowsFromPool(List<UUID> pool) {
+        return pool.size() <= 1 ? 0 : pool.size() / UUID_POOL_MULTIPLIER;
+    }
+
     public static DataSourceFactory filterProperties(DataSourceFactory dataSourceFactory) {
         var filteredProperties = dataSourceFactory.getProperties()
                 .entrySet()

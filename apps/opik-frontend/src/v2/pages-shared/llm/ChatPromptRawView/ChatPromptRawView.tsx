@@ -1,9 +1,8 @@
-import React, { useState, useCallback } from "react";
+import React, { useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 
-import { Description } from "@/ui/description";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { LLMMessage, LLM_MESSAGE_ROLE } from "@/types/llm";
 
@@ -103,6 +102,11 @@ interface ChatPromptRawViewProps {
   onMessagesChange: (messages: LLMMessage[]) => void;
   onRawValueChange: (value: string) => void;
   onValidationChange?: (isValid: boolean) => void;
+  /**
+   * Render without the inner border so the editor can slot into a parent
+   * container (e.g. the form `FormFieldCard`) without double borders.
+   */
+  bare?: boolean;
 }
 
 const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
@@ -110,16 +114,19 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
   onMessagesChange,
   onRawValueChange,
   onValidationChange,
+  bare = false,
 }) => {
+  // In bare mode the editor slots into a parent container (FormFieldCard),
+  // so use a transparent bg to inherit the container color instead of
+  // stacking a second `--codemirror-background` panel.
   const theme = useCodemirrorTheme({
     editable: true,
+    transparent: bare,
   });
-  const [isValid, setIsValid] = useState(true);
 
   const processWithValidation = useCallback(
     (jsonValue: string) => {
       const result = validateAndParseJson(jsonValue);
-      setIsValid(result.isValid);
       onValidationChange?.(result.isValid);
 
       if (result.isValid && result.messages) {
@@ -129,34 +136,26 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
     [onMessagesChange, onValidationChange],
   );
 
+  const editor = (
+    <CodeMirror
+      theme={theme}
+      value={value}
+      onChange={(newValue) => {
+        // Update the raw value immediately for smooth typing
+        onRawValueChange(newValue);
+        // Validate and update messages if valid
+        processWithValidation(newValue);
+      }}
+      extensions={[jsonLanguage, EditorView.lineWrapping]}
+      basicSetup={CODEMIRROR_BASIC_SETUP}
+    />
+  );
+
+  if (bare) return editor;
   return (
-    <>
-      <div className="max-h-[400px] overflow-y-auto rounded-md border">
-        <CodeMirror
-          theme={theme}
-          value={value}
-          onChange={(newValue) => {
-            // Update the raw value immediately for smooth typing
-            onRawValueChange(newValue);
-            // Validate and update messages if valid
-            processWithValidation(newValue);
-          }}
-          extensions={[jsonLanguage, EditorView.lineWrapping]}
-          basicSetup={CODEMIRROR_BASIC_SETUP}
-        />
-      </div>
-      {!isValid && (
-        <p className="mt-2 text-sm text-destructive" role="alert">
-          Message format is invalid.
-        </p>
-      )}
-      <Description>
-        Edit the raw JSON representation of chat messages. Must be a valid JSON
-        array with at least one object. Each object must have a &quot;role&quot;
-        field (system/user/assistant) and a &quot;content&quot; field (string or
-        array of objects).
-      </Description>
-    </>
+    <div className="max-h-[400px] overflow-y-auto rounded-md border">
+      {editor}
+    </div>
   );
 };
 

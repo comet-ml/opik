@@ -161,6 +161,70 @@ def test_create_trace_message__environment_field_default_is_none_for_backwards_c
     assert msg.environment is None
 
 
+def test_update_environment__colour_on_builtin_raises_error():
+    from opik.exceptions import EnvironmentConfigurationError
+
+    client = opik_client.Opik(project_name="test-project")
+
+    for env_name in ("production", "staging", "development"):
+        try:
+            client.update_environment(env_name, color="#ff0000")
+            assert False, f"expected EnvironmentConfigurationError for {env_name!r}"
+        except EnvironmentConfigurationError as e:
+            assert env_name in str(e)
+
+
+def test_update_environment__colour_on_builtin_not_called_when_no_colour():
+    from unittest.mock import patch
+    from opik.rest_api.types.environment_public import EnvironmentPublic
+
+    client = opik_client.Opik(project_name="test-project")
+
+    fake_env = EnvironmentPublic(id="abc", name="production")
+    with (
+        patch.object(client, "_find_environment_by_name", return_value=fake_env),
+        patch.object(
+            client._rest_client.environments,
+            "update_environment",
+            return_value=None,
+        ) as mock_update,
+        patch.object(
+            client._rest_client.environments,
+            "get_environment_by_id",
+            return_value=fake_env,
+        ),
+    ):
+        result = client.update_environment("production", description="new desc")
+        mock_update.assert_called_once()
+        assert result == fake_env
+
+
+def test_update_environment__colour_on_custom_env_is_allowed():
+    from unittest.mock import patch
+    from opik.rest_api.types.environment_public import EnvironmentPublic
+
+    client = opik_client.Opik(project_name="test-project")
+
+    fake_env = EnvironmentPublic(id="xyz", name="my-custom-env")
+    with (
+        patch.object(client, "_find_environment_by_name", return_value=fake_env),
+        patch.object(
+            client._rest_client.environments,
+            "update_environment",
+            return_value=None,
+        ) as mock_update,
+        patch.object(
+            client._rest_client.environments,
+            "get_environment_by_id",
+            return_value=fake_env,
+        ),
+    ):
+        result = client.update_environment("my-custom-env", color="#123456")
+        assert result == fake_env
+        mock_update.assert_called_once()
+        assert mock_update.call_args.kwargs.get("color") == "#123456"
+
+
 def test_create_environment__conflict_raises_environment_already_exists():
     from unittest.mock import patch
     from opik.exceptions import EnvironmentAlreadyExists

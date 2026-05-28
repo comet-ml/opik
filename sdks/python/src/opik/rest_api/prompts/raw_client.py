@@ -1137,7 +1137,7 @@ class RawPromptsClient:
         self,
         version_id: str,
         *,
-        environment: typing.Optional[str] = OMIT,
+        environments: typing.Sequence[str],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1151,7 +1151,7 @@ class RawPromptsClient:
         ----------
         version_id : str
 
-        environment : typing.Optional[str]
+        environments : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1164,7 +1164,7 @@ class RawPromptsClient:
             f"v1/private/prompts/versions/{jsonable_encoder(version_id)}/environments",
             method="PATCH",
             json={
-                "environment": environment,
+                "environments": environments,
             },
             headers={
                 "content-type": "application/json",
@@ -2313,7 +2313,7 @@ class AsyncRawPromptsClient:
         self,
         version_id: str,
         *,
-        environment: typing.Optional[str] = OMIT,
+        environments: typing.Sequence[str],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2327,7 +2327,7 @@ class AsyncRawPromptsClient:
         ----------
         version_id : str
 
-        environment : typing.Optional[str]
+        environments : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2340,7 +2340,7 @@ class AsyncRawPromptsClient:
             f"v1/private/prompts/versions/{jsonable_encoder(version_id)}/environments",
             method="PATCH",
             json={
-                "environment": environment,
+                "environments": environments,
             },
             headers={
                 "content-type": "application/json",

@@ -3,11 +3,19 @@ import { diffLines, diffWords, Change } from "diff";
 import { cn } from "@/lib/utils";
 
 type DiffMode = "lines" | "words";
+type DiffSide = "base" | "diff" | "both";
 
 type CodeDiffProps = {
   content1: string;
   content2: string;
   mode?: DiffMode;
+  /**
+   * Restricts which side of the diff is rendered:
+   * - "base" shows base content with removals highlighted (no additions)
+   * - "diff" shows diff content with additions highlighted (no removals)
+   * - "both" (default) renders the full unified diff
+   */
+  side?: DiffSide;
 };
 
 /**
@@ -36,12 +44,16 @@ const WordChange: React.FC<{ change: Change }> = ({ change }) => {
  */
 const LineChange: React.FC<{ change: Change }> = ({ change }) => {
   if (!change.added && !change.removed) {
-    return <span className="text-muted-foreground">{change.value}</span>;
+    return (
+      <span className="whitespace-pre-wrap text-muted-foreground">
+        {change.value}
+      </span>
+    );
   }
 
   return (
     <span
-      className={cn("block rounded-[2px] p-0.5", {
+      className={cn("block whitespace-pre-wrap rounded-[2px] p-0.5", {
         "text-diff-removed-text bg-diff-removed-bg line-through":
           change.removed,
         "text-diff-added-text bg-diff-added-bg": change.added,
@@ -208,6 +220,7 @@ const TextDiff: React.FunctionComponent<CodeDiffProps> = ({
   content1,
   content2,
   mode = "lines",
+  side = "both",
 }) => {
   const result = useMemo(() => {
     if (mode === "words") {
@@ -241,12 +254,41 @@ const TextDiff: React.FunctionComponent<CodeDiffProps> = ({
         {result.segments.map((seg, i) => {
           if (seg.type === "unchanged") {
             return (
-              <span key={`${seg.type}-${i}`} className="text-muted-foreground">
+              <span
+                key={`${seg.type}-${i}`}
+                className="whitespace-pre-wrap text-muted-foreground"
+              >
                 {seg.value}
               </span>
             );
           }
           if (seg.type === "refined") {
+            if (side === "base") {
+              return (
+                <LineChange
+                  key={`refined-base-${i}`}
+                  change={{
+                    value: seg.removedLine + "\n",
+                    removed: true,
+                    added: false,
+                    count: 1,
+                  }}
+                />
+              );
+            }
+            if (side === "diff") {
+              return (
+                <LineChange
+                  key={`refined-diff-${i}`}
+                  change={{
+                    value: seg.addedLine + "\n",
+                    removed: false,
+                    added: true,
+                    count: 1,
+                  }}
+                />
+              );
+            }
             return (
               <RefinedLineDiff
                 key={`${seg.type}-${i}`}
@@ -255,6 +297,9 @@ const TextDiff: React.FunctionComponent<CodeDiffProps> = ({
               />
             );
           }
+          // line-change segment
+          if (side === "base" && seg.change.added) return null;
+          if (side === "diff" && seg.change.removed) return null;
           return <LineChange key={`line-change-${i}`} change={seg.change} />;
         })}
       </div>
@@ -263,14 +308,18 @@ const TextDiff: React.FunctionComponent<CodeDiffProps> = ({
 
   return (
     <div className="flex w-fit flex-col gap-[3px]">
-      {result.lineChanges.map((change, index) => (
-        <LineChange
-          key={`${
-            change.added ? "add" : change.removed ? "rem" : "eq"
-          }-${index}`}
-          change={change}
-        />
-      ))}
+      {result.lineChanges.map((change, index) => {
+        if (side === "base" && change.added) return null;
+        if (side === "diff" && change.removed) return null;
+        return (
+          <LineChange
+            key={`${
+              change.added ? "add" : change.removed ? "rem" : "eq"
+            }-${index}`}
+            change={change}
+          />
+        );
+      })}
     </div>
   );
 };
