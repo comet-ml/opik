@@ -112,11 +112,20 @@ public class OpenTelemetryMappingUtils {
      */
     public static Optional<BigDecimal> extractCost(@NonNull AnyValue value) {
         return switch (value.getValueCase()) {
-            case DOUBLE_VALUE -> Optional.of(BigDecimal.valueOf(value.getDoubleValue()));
+            case DOUBLE_VALUE -> {
+                // BigDecimal.valueOf throws NumberFormatException for NaN / Infinity, which would
+                // abort span enrichment for the whole batch. Treat non-finite values as unsupported.
+                double d = value.getDoubleValue();
+                if (!Double.isFinite(d)) {
+                    log.warn("Non-finite cost value, skipping: '{}'", d);
+                    yield Optional.empty();
+                }
+                yield Optional.of(BigDecimal.valueOf(d));
+            }
             case INT_VALUE -> Optional.of(BigDecimal.valueOf(value.getIntValue()));
             case STRING_VALUE -> parseCostString(value.getStringValue());
             default -> {
-                log.warn("Unsupported value type for cost extraction: {}", value.getValueCase());
+                log.warn("Unsupported value type for cost extraction: '{}'", value.getValueCase());
                 yield Optional.empty();
             }
         };
