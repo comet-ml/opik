@@ -949,3 +949,79 @@ class TestPromptEnvironment:
             ), "entries for unrelated prompts must not be evicted"
         finally:
             cache.clear()
+
+    # Regression: passing ``environments=[]`` clears ownership on the backend,
+    # which still changes the env→version mapping. The cache must be invalidated
+    # the same way as for a non-empty list — earlier ``if environments:`` was
+    # falsy for ``[]`` and silently kept stale entries around.
+    @pytest.mark.parametrize("environments", [[], ["staging"]])
+    def test_create_prompt__environments_argument__invalidates_cache(
+        self, mock_rest_client, environments
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
+        mock_rest_client.prompts.create_prompt_version.return_value = (
+            _make_mock_version(environments=environments)
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+        resolved_project = opik_client._resolve_project_name(None)
+
+        cache = prompt_cache.get_global_cache()
+        cache.clear()
+        try:
+            sentinel = mock.MagicMock()
+            cache.get_or_fetch(
+                key=("env-prompt", None, resolved_project, "text", "staging"),
+                fetch_fn=lambda: sentinel,
+                ttl_seconds=None,
+            )
+
+            opik_client.create_prompt(
+                name="env-prompt",
+                prompt="hello",
+                environments=environments,
+            )
+
+            assert (
+                cache.get(("env-prompt", None, resolved_project, "text", "staging"))
+                is None
+            ), (
+                "cache must be evicted whenever the caller touches environments "
+                "(including clearing them with [])"
+            )
+        finally:
+            cache.clear()
+
+    def test_create_prompt__no_environments_argument__keeps_cache(
+        self, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
+        mock_rest_client.prompts.create_prompt_version.return_value = (
+            _make_mock_version()
+        )
+
+        opik_client = opik_client_module.Opik()
+        opik_client._rest_client = mock_rest_client
+        resolved_project = opik_client._resolve_project_name(None)
+
+        cache = prompt_cache.get_global_cache()
+        cache.clear()
+        try:
+            sentinel = mock.MagicMock()
+            cache.get_or_fetch(
+                key=("env-prompt", None, resolved_project, "text", "staging"),
+                fetch_fn=lambda: sentinel,
+                ttl_seconds=None,
+            )
+
+            opik_client.create_prompt(name="env-prompt", prompt="hello")
+
+            # Default ``environments=None`` means the caller did not touch
+            # ownership, so unrelated cache entries must be preserved.
+            assert (
+                cache.get(("env-prompt", None, resolved_project, "text", "staging"))
+                is sentinel
+            ), "cache must not be evicted when environments is not provided"
+        finally:
+            cache.clear()

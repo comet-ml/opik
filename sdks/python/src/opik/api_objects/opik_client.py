@@ -2216,7 +2216,10 @@ class Opik:
             project_name=project_name,
             environments=environments,
         )
-        if environments:
+        # Invalidate whenever the caller touched env ownership — including
+        # passing ``environments=[]`` to clear it, which still changes the
+        # env→version mapping and would otherwise leave stale cache entries.
+        if environments is not None:
             prompt_cache.invalidate_for_prompt(name=name, project_name=project_name)
         return prompt_module.Prompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
@@ -2279,7 +2282,10 @@ class Opik:
             project_name=project_name,
             environments=environments,
         )
-        if environments:
+        # Invalidate whenever the caller touched env ownership — including
+        # passing ``environments=[]`` to clear it, which still changes the
+        # env→version mapping and would otherwise leave stale cache entries.
+        if environments is not None:
             prompt_cache.invalidate_for_prompt(name=name, project_name=project_name)
         return prompt_module.ChatPrompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name

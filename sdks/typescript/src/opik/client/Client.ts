@@ -1415,9 +1415,11 @@ export class OpikClient {
    * @param options.commit - **Deprecated.** Use `version` instead.
    * @param options.projectName - Optional project scope.
    * @param options.environment - Optional environment name. Resolves to the version
-   *   currently owned by that workspace environment. Mutually exclusive with `commit`.
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
    * @returns Promise resolving to Prompt or null if not found
-   * @throws Error if both `commit` and `version` are provided
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
    */
   public getPrompt = async (
@@ -1445,9 +1447,11 @@ export class OpikClient {
    * @param options.commit - **Deprecated.** Use `version` instead.
    * @param options.projectName - Optional project scope.
    * @param options.environment - Optional environment name. Resolves to the version
-   *   currently owned by that workspace environment. Mutually exclusive with `commit`.
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
    * @returns Promise resolving to ChatPrompt or null if not found
-   * @throws Error if both `commit` and `version` are provided
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
    *
    * @example

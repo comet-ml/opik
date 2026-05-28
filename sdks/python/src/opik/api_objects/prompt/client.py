@@ -213,6 +213,34 @@ class PromptClient:
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         return self.get_prompt(name=name, commit=None, project_name=project_name)
 
+    @staticmethod
+    def _validate_prompt_pin(
+        commit: Optional[str],
+        version: Optional[str],
+        environment: Optional[str],
+    ) -> None:
+        """Reject mutually-exclusive prompt selectors before hitting the REST API.
+
+        The wire-level ``retrieve_prompt_version`` endpoint accepts ``commit``,
+        ``version_number`` and ``environment``, but at most one may be set;
+        otherwise the backend silently picks one. ``commit`` is also deprecated
+        in favour of ``version``. Centralizing the check here keeps
+        ``get_prompt`` and ``get_prompt_with_cache`` in sync.
+        """
+        if commit is not None and version is not None:
+            raise ValueError(
+                "Provide either `commit` or `version`, not both. "
+                "Prefer `version` — `commit` is deprecated."
+            )
+        if commit and environment:
+            raise ValueError(
+                "'commit' and 'environment' are mutually exclusive; pass at most one."
+            )
+        if version and environment:
+            raise ValueError(
+                "'version' and 'environment' are mutually exclusive; pass at most one."
+            )
+
     def get_prompt(
         self,
         name: str,
@@ -240,19 +268,7 @@ class PromptClient:
         Returns:
             Prompt: The details of the specified prompt.
         """
-        if commit is not None and version is not None:
-            raise ValueError(
-                "Provide either `commit` or `version`, not both. "
-                "Prefer `version` — `commit` is deprecated."
-            )
-        if commit and environment:
-            raise ValueError(
-                "'commit' and 'environment' are mutually exclusive; pass at most one."
-            )
-        if version and environment:
-            raise ValueError(
-                "'version' and 'environment' are mutually exclusive; pass at most one."
-            )
+        self._validate_prompt_pin(commit, version, environment)
         try:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
@@ -298,19 +314,7 @@ class PromptClient:
         version: Optional[str] = None,
         environment: Optional[str] = None,
     ) -> Optional[_PromptT]:
-        if commit is not None and version is not None:
-            raise ValueError(
-                "Provide either `commit` or `version`, not both. "
-                "Prefer `version` — `commit` is deprecated."
-            )
-        if commit and environment:
-            raise ValueError(
-                "'commit' and 'environment' are mutually exclusive; pass at most one."
-            )
-        if version and environment:
-            raise ValueError(
-                "'version' and 'environment' are mutually exclusive; pass at most one."
-            )
+        self._validate_prompt_pin(commit, version, environment)
 
         def _fetch(mask_id: Optional[str] = None) -> Optional[_PromptT]:
             if mask_id is not None:
