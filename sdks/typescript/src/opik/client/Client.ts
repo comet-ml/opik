@@ -1262,9 +1262,7 @@ export class OpikClient {
    * - Uses create_prompt_version endpoint (not create_prompt which is for containers)
    * - Synchronous: Returns immediately with the created/retrieved version
    *
-   * @param options - Prompt configuration. To assign the resulting version
-   *   to one or more workspace environments, call
-   *   {@link setPromptEnvironments} after creation.
+   * @param options - Prompt configuration
    * @returns Promise resolving to Prompt instance
    * @throws PromptValidationError if parameters invalid
    */
@@ -1306,9 +1304,7 @@ export class OpikClient {
    * Chat prompts use message arrays instead of string templates.
    * Idempotent: returns existing version if messages, metadata, and type match.
    *
-   * @param options - Chat prompt configuration with messages array. To assign
-   *   the resulting version to one or more workspace environments, call
-   *   {@link setPromptEnvironments} after creation.
+   * @param options - Chat prompt configuration with messages array
    * @returns Promise resolving to ChatPrompt instance
    * @throws PromptTemplateStructureMismatch if a text prompt with same name exists
    *

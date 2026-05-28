@@ -2181,9 +2181,6 @@ class Opik:
         Creates a new text prompt with the given name and template.
         If a text prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
 
-        To assign the resulting version to one or more workspace environments,
-        call :meth:`set_prompt_environments` after creation.
-
         Parameters:
             name: The name of the prompt.
             prompt: The template content of the prompt.
@@ -2234,9 +2231,6 @@ class Opik:
         """
         Creates a new chat prompt with the given name and message templates.
         If a chat prompt with the same name already exists, it will create a new version if the messages differ.
-
-        To assign the resulting version to one or more workspace environments,
-        call :meth:`set_prompt_environments` after creation.
 
         Parameters:
             name: The name of the chat prompt.

@@ -41,7 +41,6 @@ class ChatPrompt(base_prompt.BasePrompt):
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-        environments: Optional[List[str]] = None,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -58,7 +57,6 @@ class ChatPrompt(base_prompt.BasePrompt):
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
             project_name: Optional project name for the prompt.
-            environments: Optional list of environment names that should own this prompt version.
 
         Raises:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
@@ -87,7 +85,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
         self._project_name = project_name
-        self._environments = environments
+        self._environments: Optional[List[str]] = None
         self._commit: Optional[str] = None
         self._version: Optional[str] = None
         self.__internal_api__prompt_id__: Optional[str] = None
@@ -137,7 +135,6 @@ class ChatPrompt(base_prompt.BasePrompt):
                 change_description=self._change_description,
                 tags=self._tags,
                 project_name=self._project_name,
-                environments=self._environments,
             )
 
             self._commit = prompt_version.commit
