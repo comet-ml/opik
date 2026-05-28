@@ -1795,7 +1795,7 @@ export class OpikClient {
    * cleared. Existing prompt objects already in memory are not mutated —
    * re-fetch with `client.getPrompt(...)` to see the change.
    *
-   * @param options.name - Name of the prompt
+   * @param options.promptName - Name of the prompt
    * @param options.environments - Environments to assign. Each must already be registered in the workspace. Pass `[]` to clear.
    * @param options.commit - 8-char short commit hash to target a specific version. Defaults to the latest version.
    * @param options.projectName - Project the prompt belongs to. Defaults to the client's project.
@@ -1805,7 +1805,7 @@ export class OpikClient {
    */
   public setPromptEnvironments = async (
     options: {
-      name: string;
+      promptName: string;
       environments: string[];
       commit?: string;
       projectName?: string;
@@ -1815,7 +1815,7 @@ export class OpikClient {
     try {
       version = await this.api.prompts.retrievePromptVersion(
         {
-          name: options.name,
+          name: options.promptName,
           commit: options.commit,
           projectName: this.resolveProjectName(options.projectName),
         },
@@ -1825,11 +1825,11 @@ export class OpikClient {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         if (options.commit !== undefined) {
           throw new PromptNotFoundError(
-            `No version with commit '${options.commit}' found for prompt '${options.name}'.`,
+            `No version with commit '${options.commit}' found for prompt '${options.promptName}'.`,
           );
         }
         throw new PromptNotFoundError(
-          `No prompt found with name '${options.name}'.`,
+          `No prompt found with name '${options.promptName}'.`,
         );
       }
       throw error;
@@ -1856,7 +1856,7 @@ export class OpikClient {
     }
 
     getGlobalCache().invalidateForPrompt(
-      options.name,
+      options.promptName,
       this.resolveProjectName(options.projectName),
     );
   };

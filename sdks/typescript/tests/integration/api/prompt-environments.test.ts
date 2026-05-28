@@ -95,7 +95,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
 
     // Step 2: expand to both envs on v1's commit.
     await client.setPromptEnvironments({
-      name: promptName,
+      promptName,
       environments: [envA, envB],
       commit: v1.commit,
     });
@@ -111,7 +111,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(fromA?.environments).toContain(envB);
 
     // Step 3: move ownership exclusively to envB.
-    await client.setPromptEnvironments({ name: promptName, environments: [envB] });
+    await client.setPromptEnvironments({ promptName, environments: [envB] });
     getGlobalCache().clear();
 
     const afterMove = await client.getPrompt({ name: promptName });
@@ -120,7 +120,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(afterMove?.environments).not.toContain(envA);
 
     // Step 4: clear all environments.
-    await client.setPromptEnvironments({ name: promptName, environments: [] });
+    await client.setPromptEnvironments({ promptName, environments: [] });
     getGlobalCache().clear();
 
     const afterClear = await client.getPrompt({ name: promptName });
@@ -144,7 +144,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
     expect(v2.commit).not.toBe(v1Commit);
 
     await client.setPromptEnvironments({
-      name: promptName,
+      promptName,
       environments: [envName],
       commit: v1Commit,
     });
@@ -193,7 +193,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Environments Integration", () => {
 
     await expect(
       client.setPromptEnvironments({
-        name: prompt.name,
+        promptName: prompt.name,
         environments: [`does-not-exist-${ts}`],
       }),
     ).rejects.toBeInstanceOf(EnvironmentNotFoundError);

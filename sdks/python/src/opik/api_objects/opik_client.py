@@ -2377,7 +2377,7 @@ class Opik:
 
     def set_prompt_environments(
         self,
-        name: str,
+        prompt_name: str,
         environments: List[str],
         *,
         commit: Optional[str] = None,
@@ -2393,7 +2393,7 @@ class Opik:
         see the change.
 
         Parameters:
-            name: The name of the prompt.
+            prompt_name: The name of the prompt.
             environments: Environments to assign. Each must already be registered in the
                 workspace. Pass ``[]`` to clear.
             commit: 8-char short commit hash to target a specific version. Defaults to the
@@ -2410,7 +2410,7 @@ class Opik:
         resolved_project_name = self._resolve_project_name(project_name)
         try:
             version = self._rest_client.prompts.retrieve_prompt_version(
-                name=name,
+                name=prompt_name,
                 commit=commit,
                 project_name=resolved_project_name,
             )
@@ -2418,10 +2418,10 @@ class Opik:
             if e.status_code == 404:
                 if commit is not None:
                     raise exceptions.PromptNotFoundError(
-                        f"No version with commit {commit!r} found for prompt {name!r}."
+                        f"No version with commit {commit!r} found for prompt {prompt_name!r}."
                     ) from e
                 raise exceptions.PromptNotFoundError(
-                    f"No prompt found with name {name!r}."
+                    f"No prompt found with name {prompt_name!r}."
                 ) from e
             raise
 
@@ -2441,7 +2441,7 @@ class Opik:
             raise
 
         prompt_cache.invalidate_for_prompt(
-            name=name, project_name=resolved_project_name
+            name=prompt_name, project_name=resolved_project_name
         )
 
     def get_prompt_history(

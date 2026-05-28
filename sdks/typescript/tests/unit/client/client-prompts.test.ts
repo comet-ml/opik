@@ -13,7 +13,8 @@ import {
 } from "../../mockUtils";
 import * as OpikApi from "@/rest_api/api";
 import { PromptTemplateStructure } from "@/prompt/types";
-import { getGlobalCache } from "@/prompt/promptCache";
+import { buildCacheKey, getGlobalCache, getOrFetch } from "@/prompt/promptCache";
+import type { BasePrompt } from "@/prompt/BasePrompt";
 import { trackStorage } from "@/decorators/track";
 import { Trace } from "@/tracer/Trace";
 import { Span } from "@/tracer/Span";
@@ -1302,7 +1303,7 @@ describe("Opik prompt operations", () => {
 
       await expect(
         client.setPromptEnvironments({
-          name: "missing-prompt",
+          promptName: "missing-prompt",
           environments: ["staging"],
         })
       ).rejects.toMatchObject({
@@ -1318,7 +1319,7 @@ describe("Opik prompt operations", () => {
 
       await expect(
         client.setPromptEnvironments({
-          name: "env-prompt",
+          promptName: "env-prompt",
           environments: ["staging"],
           commit: "deadbeef",
         })
@@ -1328,35 +1329,43 @@ describe("Opik prompt operations", () => {
       });
     });
 
-    it("maps 404 on set_prompt_version_environment to EnvironmentNotFoundError", async () => {
-      retrievePromptVersionSpy.mockImplementation(() =>
-        createMockHttpResponsePromise(versionResponse)
-      );
-      const setEnvSpy = vi
-        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
-        .mockImplementation(() => {
-          throw new OpikApiError({ message: "Not found", statusCode: 404 });
-        });
+    it.each([
+      ["404", 404],
+      // The backend reports an unknown environment as 409 from the workspace-
+      // registry check; the SDK must surface it as EnvironmentNotFoundError too.
+      ["409", 409],
+    ])(
+      "maps %s on set_prompt_version_environment to EnvironmentNotFoundError",
+      async (_label, statusCode) => {
+        retrievePromptVersionSpy.mockImplementation(() =>
+          createMockHttpResponsePromise(versionResponse)
+        );
+        const setEnvSpy = vi
+          .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+          .mockImplementation(() => {
+            throw new OpikApiError({ message: "Not found", statusCode });
+          });
 
-      try {
-        await expect(
-          client.setPromptEnvironments({
-            name: "env-prompt",
-            environments: ["unknown-env"],
-          })
-        ).rejects.toThrow(EnvironmentNotFoundError);
-        await expect(
-          client.setPromptEnvironments({
-            name: "env-prompt",
-            environments: ["unknown-env"],
-          })
-        ).rejects.toMatchObject({
-          message: expect.stringContaining("unknown-env"),
-        });
-      } finally {
-        setEnvSpy.mockRestore();
+        try {
+          await expect(
+            client.setPromptEnvironments({
+              promptName: "env-prompt",
+              environments: ["unknown-env"],
+            })
+          ).rejects.toThrow(EnvironmentNotFoundError);
+          await expect(
+            client.setPromptEnvironments({
+              promptName: "env-prompt",
+              environments: ["unknown-env"],
+            })
+          ).rejects.toMatchObject({
+            message: expect.stringContaining("unknown-env"),
+          });
+        } finally {
+          setEnvSpy.mockRestore();
+        }
       }
-    });
+    );
 
     it("rethrows non-mapped errors unchanged", async () => {
       retrievePromptVersionSpy.mockImplementationOnce(() =>
@@ -1375,11 +1384,185 @@ describe("Opik prompt operations", () => {
       try {
         await expect(
           client.setPromptEnvironments({
-            name: "env-prompt",
+            promptName: "env-prompt",
             environments: ["staging"],
           })
         ).rejects.toBe(apiError);
         expect(setEnvSpy).toHaveBeenCalledOnce();
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("dedupes environments and forwards the resolved version id", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(undefined as unknown as void)
+        );
+
+      try {
+        await client.setPromptEnvironments({
+          promptName: "env-prompt",
+          // Duplicates in the input must collapse before reaching the API —
+          // the backend uses REPLACE semantics on the resolved set.
+          environments: ["staging", "production", "staging"],
+        });
+
+        expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: "env-prompt",
+            projectName: "opik-sdk-typescript",
+            commit: undefined,
+          }),
+          client.api.requestOptions
+        );
+        expect(setEnvSpy).toHaveBeenCalledTimes(1);
+        expect(setEnvSpy).toHaveBeenCalledWith(
+          "version-id",
+          { environments: ["staging", "production"] },
+          client.api.requestOptions
+        );
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("invalidates cached entries for the same prompt + project scope on success", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(undefined as unknown as void)
+        );
+
+      // Pre-seed the cache: one entry for the prompt we're updating (must be
+      // evicted) and one for an unrelated prompt in the same project (must be
+      // preserved).
+      const project = "opik-sdk-typescript";
+      const targetPrompt = {
+        name: "env-prompt",
+        commit: "abc12345",
+        id: "prompt-id",
+      } as unknown as BasePrompt;
+      const otherPrompt = {
+        name: "other-prompt",
+        commit: "def67890",
+        id: "other-id",
+      } as unknown as BasePrompt;
+
+      try {
+        await getOrFetch(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          async () => targetPrompt,
+          300,
+          undefined,
+          undefined,
+          "staging"
+        );
+        await getOrFetch(
+          "other-prompt",
+          undefined,
+          project,
+          "text",
+          async () => otherPrompt,
+          300,
+          undefined,
+          undefined,
+          "staging"
+        );
+
+        const targetKey = buildCacheKey(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          undefined,
+          undefined,
+          "staging"
+        );
+        const otherKey = buildCacheKey(
+          "other-prompt",
+          undefined,
+          project,
+          "text",
+          undefined,
+          undefined,
+          "staging"
+        );
+        expect(getGlobalCache().get(targetKey)).toBe(targetPrompt);
+        expect(getGlobalCache().get(otherKey)).toBe(otherPrompt);
+
+        await client.setPromptEnvironments({
+          promptName: "env-prompt",
+          environments: ["production"],
+        });
+
+        expect(getGlobalCache().get(targetKey)).toBeNull();
+        // Unrelated prompts in the same project must not be touched.
+        expect(getGlobalCache().get(otherKey)).toBe(otherPrompt);
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("does not invalidate the cache when the API call fails", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementationOnce(() => {
+          throw new OpikApiError({ message: "Boom", statusCode: 500 });
+        });
+
+      const project = "opik-sdk-typescript";
+      const cached = {
+        name: "env-prompt",
+        commit: "abc12345",
+        id: "prompt-id",
+      } as unknown as BasePrompt;
+
+      try {
+        await getOrFetch(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          async () => cached,
+          300,
+          undefined,
+          undefined,
+          "staging"
+        );
+        const key = buildCacheKey(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          undefined,
+          undefined,
+          "staging"
+        );
+
+        await expect(
+          client.setPromptEnvironments({
+            promptName: "env-prompt",
+            environments: ["production"],
+          })
+        ).rejects.toThrow();
+
+        // A failed write must leave the cache untouched — invalidation only
+        // runs after a successful PATCH.
+        expect(getGlobalCache().get(key)).toBe(cached);
       } finally {
         setEnvSpy.mockRestore();
       }
@@ -1397,7 +1580,7 @@ describe("Opik prompt operations", () => {
       try {
         await expect(
           client.setPromptEnvironments({
-            name: "missing-prompt",
+            promptName: "missing-prompt",
             environments: ["staging"],
           })
         ).rejects.toThrow(PromptNotFoundError);

@@ -879,14 +879,17 @@ class TestPromptEnvironment:
 
         mock_rest_client.prompts.set_prompt_version_environment.assert_not_called()
 
+    # The backend reports an unknown environment as 404 or 409 from the
+    # workspace-registry check; both must surface as EnvironmentNotFoundError.
+    @pytest.mark.parametrize("status_code", [404, 409])
     def test_set_prompt_environments__environment_not_found__raises_environment_not_found(
-        self, mock_rest_client
+        self, mock_rest_client, status_code
     ):
         mock_rest_client.prompts.retrieve_prompt_version.return_value = (
             _make_mock_version()
         )
         mock_rest_client.prompts.set_prompt_version_environment.side_effect = (
-            rest_api_core.ApiError(status_code=404, body=None)
+            rest_api_core.ApiError(status_code=status_code, body=None)
         )
 
         opik_client = opik_client_module.Opik()
