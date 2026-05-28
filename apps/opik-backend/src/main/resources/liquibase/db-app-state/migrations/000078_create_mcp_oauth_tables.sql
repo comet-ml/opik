@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset avinahradau:000077_create_mcp_oauth_tables
+--changeset avinahradau:000078_create_mcp_oauth_tables
 --comment: OAuth 2.1 Authorization Server tables for Opik MCP. Opaque tokens (sha256-hashed), PKCE S256, refresh-token rotation with family revocation. Keyed on user_name/workspace_name to match opik-backend's existing string-identifier convention; no scopes column (tokens grant the user's full workspace role, gated by @RequiredPermissions on each call).
 
 -- Registry of MCP host apps allowed to request tokens. Populated by the opik-mcp-local seed below,
