@@ -27,7 +27,7 @@ const FilterChipPopover: React.FC<FilterChipPopoverProps> = ({
   contentProps,
   children,
 }) => (
-  <Popover open={open} onOpenChange={onOpenChange}>
+  <Popover open={open} onOpenChange={onOpenChange} modal>
     <PopoverTrigger asChild>
       <BaseChip
         label={label}
