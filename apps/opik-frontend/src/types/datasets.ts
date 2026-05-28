@@ -120,6 +120,7 @@ export interface ExperimentOutputColumn {
 export interface ExperimentPromptVersion {
   id: string;
   commit: string;
+  version_number?: string;
   prompt_id: string;
   prompt_name: string;
 }

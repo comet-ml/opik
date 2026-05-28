@@ -4059,6 +4059,7 @@ class ExperimentsResourceTest {
         return PromptVersionLink.builder()
                 .id(promptVersion.id())
                 .commit(promptVersion.commit())
+                .versionNumber(promptVersion.versionNumber())
                 .promptId(promptVersion.promptId())
                 .promptName(promptName)
                 .build();
@@ -4750,7 +4751,7 @@ class ExperimentsResourceTest {
             var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
             var versionLink = new PromptVersionLink(promptVersion.id(), promptVersion.commit(),
-                    promptVersion.promptId(), promptName);
+                    promptVersion.versionNumber(), promptVersion.promptId(), promptName);
 
             var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(versionLink)
@@ -4818,7 +4819,8 @@ class ExperimentsResourceTest {
         @Test
         void createWithInvalidPromptVersionId() {
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate(), null))
+                    .promptVersion(
+                            new PromptVersionLink(GENERATOR.generate(), null, null, GENERATOR.generate(), null))
                     .datasetVersionId(null)
                     .datasetVersionSummary(null)
                     .build();

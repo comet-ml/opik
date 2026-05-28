@@ -155,7 +155,7 @@ const EditPromptSheet: React.FC<EditPromptSheetProps> = ({
             disabled={!isValid || isSaving}
             onClick={handleClickEditPrompt}
           >
-            Create new commit
+            Create new version
           </Button>
         </div>
       </SheetContent>

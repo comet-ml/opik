@@ -1,19 +1,11 @@
-name: E2E Tests - Post Merge
-run-name: "E2E Tests (${{ github.event.inputs.suite || 'happypaths' }}) - ${{ github.event_name == 'push' && format('Post-merge {0}', github.sha) || format('Manual run by @{0}', github.actor) }}"
+name: E2E Tests - Post Merge [DEPRECATED — v1]
+run-name: "E2E Tests v1 (${{ github.event.inputs.suite || 'happypaths' }}) - Manual run by @${{ github.actor }}"
+
+# DEPRECATED: replaced by e2e_tests_post_merge_v2.yml (OPIK-6707).
+# push-to-main and self-pull_request triggers removed; left dispatchable for
+# grace-period manual runs against the v1 suite.
 
 on:
-  push:
-    branches:
-      - 'main'
-    # Skip workflow if only documentation or unrelated files changed
-    paths-ignore:
-      - '**.md'
-      - 'apps/opik-documentation/**'
-
-  pull_request:
-    paths:
-      - '.github/workflows/e2e_tests_post_merge.yml'
-
   workflow_dispatch:
     inputs:
       suite:
