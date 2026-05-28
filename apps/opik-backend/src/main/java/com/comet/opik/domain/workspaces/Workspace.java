@@ -22,8 +22,6 @@ public record Workspace(
         Instant firstTraceReportedAt,
         Instant experimentProjectMigrationSkippedAt,
         String experimentProjectMigrationSkipReason,
-        Instant datasetProjectMigrationSkippedAt,
-        String datasetProjectMigrationSkipReason,
         Instant optimizationProjectMigrationSkippedAt,
         String optimizationProjectMigrationSkipReason,
         Instant promptProjectMigrationSkippedAt,

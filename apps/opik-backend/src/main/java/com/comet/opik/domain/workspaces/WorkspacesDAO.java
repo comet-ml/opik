@@ -136,49 +136,6 @@ public interface WorkspacesDAO {
     List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
-     * Atomic NULL → timestamp transition for the dataset-project-migration-skipped flag. Returns 1 only when
-     * this caller flipped {@code dataset_project_migration_skipped_at} from NULL to {@code :skippedAt}; returns
-     * 0 if no row exists or the column was already non-null. Pair with {@link #insertDatasetProjectMigrationSkipped}
-     * for the missing-row case.
-     */
-    @SqlUpdate("""
-            UPDATE workspaces
-            SET dataset_project_migration_skipped_at = :skippedAt,
-                dataset_project_migration_skip_reason = :reason,
-                last_updated_by = :userName
-            WHERE id = :id AND dataset_project_migration_skipped_at IS NULL
-            """)
-    int updateDatasetProjectMigrationSkippedIfNull(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    /**
-     * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
-     * branch via the {@link #updateDatasetProjectMigrationSkippedIfNull} attempt that precedes it.
-     */
-    @SqlUpdate("""
-            INSERT INTO workspaces (id, dataset_project_migration_skipped_at, dataset_project_migration_skip_reason, created_by, last_updated_by)
-            VALUES (:id, :skippedAt, :reason, :userName, :userName)
-            """)
-    void insertDatasetProjectMigrationSkipped(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    @SqlQuery("SELECT id FROM workspaces WHERE dataset_project_migration_skipped_at IS NOT NULL")
-    List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
-
-    @SqlQuery("""
-            SELECT dataset_project_migration_skip_reason AS reason, COUNT(*) AS count
-            FROM workspaces
-            WHERE dataset_project_migration_skipped_at IS NOT NULL
-            GROUP BY dataset_project_migration_skip_reason
-            """)
-    @RegisterConstructorMapper(MigrationSkipReasonCount.class)
-    List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
-
-    /**
      * Atomic NULL → timestamp transition for the optimization-project-migration-skipped flag.
      * Returns 1 only when this caller flipped {@code optimization_project_migration_skipped_at}
      * from NULL to {@code :skippedAt}; returns 0 if no row exists or the column was already

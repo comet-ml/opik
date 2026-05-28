@@ -64,19 +64,6 @@ public interface WorkspacesService {
 
     /**
      * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
-     * are stamped with the system user — this is the dataset migration job's call site, never a
-     * direct user action.
-     *
-     * @return {@code true} when this caller flipped the flag; {@code false} when it was already set
-     */
-    boolean markDatasetProjectMigrationSkipped(String workspaceId, String reason);
-
-    List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
-
-    List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
-
-    /**
-     * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
      * are stamped with the system user — this is the optimization migration job's call site, never
      * a direct user action.
      *
@@ -169,24 +156,9 @@ class WorkspacesServiceImpl implements WorkspacesService {
      */
     @Override
     public boolean markExperimentProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            if (dao.updateExperimentProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
-                return true;
-            }
-            try {
-                dao.insertExperimentProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
-                return true;
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updateExperimentProjectMigrationSkippedIfNull(workspaceId, now, reason,
-                            SYSTEM_USER) > 0;
-                }
-                throw exception;
-            }
-        });
+        return markMigrationSkipped(workspaceId, reason,
+                WorkspacesDAO::updateExperimentProjectMigrationSkippedIfNull,
+                WorkspacesDAO::insertExperimentProjectMigrationSkipped);
     }
 
     @Override
@@ -197,23 +169,9 @@ class WorkspacesServiceImpl implements WorkspacesService {
 
     @Override
     public boolean markPromptProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            if (dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
-                return true;
-            }
-            try {
-                dao.insertPromptProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
-                return true;
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
-                }
-                throw exception;
-            }
-        });
+        return markMigrationSkipped(workspaceId, reason,
+                WorkspacesDAO::updatePromptProjectMigrationSkippedIfNull,
+                WorkspacesDAO::insertPromptProjectMigrationSkipped);
     }
 
     @Override
@@ -224,68 +182,51 @@ class WorkspacesServiceImpl implements WorkspacesService {
 
     /**
      * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
-     * to the {@code dataset_project_migration_skipped_at} flag. Idempotent: returns {@code false}
-     * when this caller loses the race or the workspace was already trapped.
-     */
-    @Override
-    public boolean markDatasetProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            if (dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
-                return true;
-            }
-            try {
-                dao.insertDatasetProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
-                return true;
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updateDatasetProjectMigrationSkippedIfNull(workspaceId, now, reason,
-                            SYSTEM_USER) > 0;
-                }
-                throw exception;
-            }
-        });
-    }
-
-    @Override
-    public List<String> findDatasetProjectMigrationSkippedWorkspaceIds() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).findDatasetProjectMigrationSkippedWorkspaceIds());
-    }
-
-    @Override
-    public List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countDatasetProjectMigrationSkippedByReason());
-    }
-
-    /**
-     * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
      * to the {@code optimization_project_migration_skipped_at} flag. Idempotent: returns
      * {@code false} when this caller loses the race or the workspace was already trapped.
      */
     @Override
     public boolean markOptimizationProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return markMigrationSkipped(workspaceId, reason,
+                WorkspacesDAO::updateOptimizationProjectMigrationSkippedIfNull,
+                WorkspacesDAO::insertOptimizationProjectMigrationSkipped);
+    }
+
+    /**
+     * Shared UPDATE-if-null → INSERT → retry-UPDATE flow used by every {@code mark*MigrationSkipped}
+     * call site. Caller passes the column-specific DAO update and insert references so the locking
+     * logic stays in one place.
+     */
+    private boolean markMigrationSkipped(String workspaceId, String reason,
+            UpdateSkippedIfNullDaoCall updateIfNull,
+            InsertSkippedDaoCall insert) {
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(WorkspacesDAO.class);
             var now = Instant.now();
-            if (dao.updateOptimizationProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+            if (updateIfNull.call(dao, workspaceId, now, reason, SYSTEM_USER) > 0) {
                 return true;
             }
             try {
-                dao.insertOptimizationProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                insert.call(dao, workspaceId, now, reason, SYSTEM_USER);
                 return true;
             } catch (UnableToExecuteStatementException exception) {
                 if (exception.getCause() instanceof SQLException sql
                         && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updateOptimizationProjectMigrationSkippedIfNull(workspaceId, now, reason,
-                            SYSTEM_USER) > 0;
+                    return updateIfNull.call(dao, workspaceId, now, reason, SYSTEM_USER) > 0;
                 }
                 throw exception;
             }
         });
+    }
+
+    @FunctionalInterface
+    private interface UpdateSkippedIfNullDaoCall {
+        int call(WorkspacesDAO dao, String workspaceId, Instant now, String reason, String userName);
+    }
+
+    @FunctionalInterface
+    private interface InsertSkippedDaoCall {
+        void call(WorkspacesDAO dao, String workspaceId, Instant now, String reason, String userName);
     }
 
     @Override
