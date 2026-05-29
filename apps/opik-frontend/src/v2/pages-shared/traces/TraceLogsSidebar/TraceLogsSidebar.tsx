@@ -11,7 +11,6 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
@@ -78,7 +77,6 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
-import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
@@ -89,10 +87,7 @@ import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import {
-  DetailsActionSectionParam,
-  DetailsActionSectionValue,
-} from "@/v2/pages-shared/traces/DetailsActionSection";
+import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { Filter } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 
@@ -424,22 +419,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     null,
   );
 
-  const [traceId = "", setTraceId] = useQueryParam(
-    `${TLS_QUERY_PREFIX}trace`,
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
-  const [spanId = "", setSpanId] = useQueryParam(
-    `${TLS_QUERY_PREFIX}span`,
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
   const [page = 1, setPage] = useQueryParam(
     `${TLS_QUERY_PREFIX}page`,
     NumberParam,
@@ -457,14 +436,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     queryParamConfig: NumberParam,
     syncQueryWithLocalStorageOnInit: true,
   });
-
-  const [, setLastSection] = useQueryParam(
-    `${TLS_QUERY_PREFIX}lastSection`,
-    DetailsActionSectionParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
@@ -786,18 +757,18 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     return allRows.filter((row) => selectedIds.includes(row.id)) as Trace[];
   }, [refetchExportData, rowSelection]);
 
-  const handleRowClick = useCallback(
-    (row?: Trace, lastSection?: DetailsActionSectionValue) => {
-      if (!row) return;
-      setTraceId((state) => (row.id === state ? "" : row.id));
-      setSpanId("");
-
-      if (lastSection) {
-        setLastSection(lastSection);
-      }
+  const { traceId, handleRowClick, panels } = useTraceThreadPanelsState<Trace>({
+    rows,
+    type: "trace",
+    queryPrefix: TLS_QUERY_PREFIX,
+    manageLastSection: true,
+    traceDetailsPanelProps: { projectId, container: sheetContentRef },
+    threadDetailsPanelProps: {
+      projectId,
+      projectName,
+      container: sheetContentRef,
     },
-    [setTraceId, setSpanId, setLastSection],
-  );
+  });
 
   const columns = useMemo(() => {
     return [
@@ -843,20 +814,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   }, [columns, selectedColumns]);
 
   const activeRowId = traceId;
-  const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
-
-  const hasNext = rowIndex >= 0 ? rowIndex < rows.length - 1 : false;
-  const hasPrevious = rowIndex >= 0 ? rowIndex > 0 : false;
-
-  const handleRowChange = useCallback(
-    (shift: number) => handleRowClick(rows[rowIndex + shift]),
-    [handleRowClick, rowIndex, rows],
-  );
-
-  const handleClose = useCallback(() => {
-    setTraceId("");
-    setSpanId("");
-  }, [setSpanId, setTraceId]);
 
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
@@ -1053,18 +1010,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             />
           </div>
         </div>
-        <TraceDetailsPanel
-          projectId={projectId}
-          traceId={traceId!}
-          spanId={spanId!}
-          setSpanId={setSpanId}
-          hasPreviousRow={hasPrevious}
-          hasNextRow={hasNext}
-          open={Boolean(traceId)}
-          onClose={handleClose}
-          onRowChange={handleRowChange}
-          container={sheetContentRef}
-        />
+        {panels}
       </SheetContent>
     </Sheet>
   );
