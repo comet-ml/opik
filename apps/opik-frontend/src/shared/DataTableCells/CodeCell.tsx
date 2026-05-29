@@ -3,6 +3,7 @@ import { ROW_HEIGHT } from "@/types/shared";
 import JsonView from "react18-json-view";
 import { safelyParseJSON } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import EmptyCellPlaceholder from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 
@@ -10,15 +11,7 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
   const value = context.getValue() as string;
   const jsonViewTheme = useJsonViewTheme();
 
-  if (!value)
-    return (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-      >
-        -
-      </CellWrapper>
-    );
+  if (!value) return <EmptyCellPlaceholder context={context} />;
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??

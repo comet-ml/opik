@@ -6,6 +6,7 @@ import { formatNumericData, toString } from "@/lib/utils";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 
@@ -27,12 +28,20 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
     >
       {isLarge ? (
         <div className="h-full overflow-y-auto whitespace-pre-wrap break-words">
-          {isEmpty ? "-" : <LinkifyText>{value}</LinkifyText>}
+          {isEmpty ? (
+            EMPTY_CELL_PLACEHOLDER
+          ) : (
+            <LinkifyText>{value}</LinkifyText>
+          )}
         </div>
       ) : (
         <CellTooltipWrapper content={toString(value)}>
           <span className="truncate">
-            {isEmpty ? "-" : <LinkifyText>{value}</LinkifyText>}
+            {isEmpty ? (
+              EMPTY_CELL_PLACEHOLDER
+            ) : (
+              <LinkifyText>{value}</LinkifyText>
+            )}
           </span>
         </CellTooltipWrapper>
       )}
@@ -55,7 +64,7 @@ const TextAggregationCell = <TData,>(context: CellContext<TData, string>) => {
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = "-";
+  let value = EMPTY_CELL_PLACEHOLDER;
 
   if (isNumber(rawValue)) {
     value = dataFormatter(rawValue);
