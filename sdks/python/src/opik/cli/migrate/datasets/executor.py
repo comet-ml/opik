@@ -389,9 +389,19 @@ def _cascade_experiments(
     # BEFORE ``apply_fn`` so the per-action ``ok`` record can't carry
     # post-apply counters; a summary record after the cascade is the
     # cleanest additive surface.
+    # Summary status flips to "failed" when any skip counter is non-zero so
+    # a programmatic consumer doing ``jq '.actions[] | select(.status ==
+    # "failed")'`` picks it up. Per-(experiment, reason) ``skip`` records
+    # emitted by the cascade itself carry ``status="skipped"`` and the
+    # affected source ids; this summary aggregates the totals (OPIK-6599).
+    has_skips = (
+        result.experiments_skipped
+        + result.items_skipped_missing_trace
+        + result.items_skipped_missing_item
+    ) > 0
     audit.record(
         type="cascade_experiments_summary",
-        status="ok",
+        status="failed" if has_skips else "ok",
         details={
             "source_dataset_id": action.source_dataset_id,
             "to_dataset": action.dest_name,
