@@ -1802,7 +1802,7 @@ public class ExperimentDAO {
             SELECT
                 e.id AS experiment_id,
                 any(if(length(per_experiment_ranked.ranked) > 0, per_experiment_ranked.ranked[1].3, '')) AS project_id,
-                any(length(per_experiment_ranked.ranked)) AS distinct_project_count,
+                any(ifNull(length(per_experiment_ranked.ranked), 0)) AS distinct_project_count,
                 any(ifNull(per_experiment_ranked.project_breakdown, '')) AS project_breakdown
             FROM experiments e
             LEFT JOIN per_experiment_ranked ON e.id = per_experiment_ranked.experiment_id
