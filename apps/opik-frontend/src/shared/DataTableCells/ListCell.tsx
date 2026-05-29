@@ -6,6 +6,7 @@ import { ROW_HEIGHT } from "@/types/shared";
 import { ROW_HEIGHT_MAP } from "@/constants/shared";
 import ColoredTag from "@/shared/ColoredTag/ColoredTag";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import EmptyCellPlaceholder from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import TagListTooltipContent from "@/shared/TagListTooltipContent/TagListTooltipContent";
 import ChildrenWidthMeasurer from "@/shared/ChildrenWidthMeasurer/ChildrenWidthMeasurer";
@@ -54,7 +55,7 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
   }, [isSmall, rowHeight, itemsPerRow]);
 
   if (isEmpty) {
-    return null;
+    return <EmptyCellPlaceholder context={context} />;
   }
 
   const displayedItems = sortedList.slice(0, maxVisibleItems);

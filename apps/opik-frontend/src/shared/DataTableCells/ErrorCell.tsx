@@ -1,5 +1,6 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import EmptyCellPlaceholder from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { BaseTraceDataErrorInfo } from "@/types/traces";
 import CellTooltipWrapper from "./CellTooltipWrapper";
 import { Tag } from "@/ui/tag";
@@ -11,7 +12,7 @@ const ErrorCell = <TData,>(
 ) => {
   const value = context.getValue();
 
-  if (!value) return null;
+  if (!value) return <EmptyCellPlaceholder context={context} />;
 
   const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 

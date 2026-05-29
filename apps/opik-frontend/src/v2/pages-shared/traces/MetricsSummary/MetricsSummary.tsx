@@ -57,7 +57,7 @@ const METRIC_CARDS: MetricCardDef[] = [
     icon: AlertTriangle,
     label: "Error rate",
     formatter: (v: number) =>
-      `${parseFloat((v < 1 ? v.toFixed(2) : v.toFixed(1)))}%`,
+      `${parseFloat(v < 1 ? v.toFixed(2) : v.toFixed(1))}%`,
     trend: "inverted",
     deltaUnit: "pp",
   },
@@ -330,7 +330,6 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
         {filteredCards.map((card, index) => {
           const metric = metricsMap.get(card.type);
           const currentValue = metric?.current_value ?? 0;
-          const previousValue = metric?.previous_value ?? 0;
           const label = card.type === "count" ? countLabel : card.label;
           const isFirst = index === 0;
           const isLast = index === filteredCards.length - 1;
@@ -341,8 +340,10 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
               icon={card.icon}
               label={label}
               value={showData ? card.formatter(currentValue) : "N/A"}
-              currentRaw={showData ? (metric?.current_value ?? null) : undefined}
-              previousRaw={showData ? (metric?.previous_value ?? null) : undefined}
+              currentRaw={showData ? metric?.current_value ?? null : undefined}
+              previousRaw={
+                showData ? metric?.previous_value ?? null : undefined
+              }
               trend={card.trend}
               selected={showData && selectedMetric === card.type}
               onClick={() => handleSelectMetric(card.type)}

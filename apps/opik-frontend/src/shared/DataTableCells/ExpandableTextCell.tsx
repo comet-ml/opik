@@ -3,6 +3,7 @@ import { CellContext, TableMeta } from "@tanstack/react-table";
 import { OnChangeFn } from "@/types/shared";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import { Button } from "@/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const ExpandableTextCell = <TData,>(context: CellContext<TData, string>) => {
     setExpandedState((prev) => ({ ...prev, [cellKey]: newExpanded }));
   };
 
+  const isEmpty = value === null || value === undefined || value === "";
   const shortValue = getShortValue?.(value) ?? value;
   const isExpandable = getIsExpandable?.(value) ?? false;
 
@@ -48,10 +50,10 @@ const ExpandableTextCell = <TData,>(context: CellContext<TData, string>) => {
             isExpanded ? "whitespace-pre-wrap break-all" : "truncate",
           )}
         >
-          {isExpanded ? value : shortValue}
+          {isEmpty ? EMPTY_CELL_PLACEHOLDER : isExpanded ? value : shortValue}
         </span>
       </CellTooltipWrapper>
-      {isExpandable && (
+      {!isEmpty && isExpandable && (
         <Button
           size="2xs"
           variant="ghost"

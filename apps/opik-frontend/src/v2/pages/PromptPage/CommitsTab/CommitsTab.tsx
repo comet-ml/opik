@@ -92,7 +92,7 @@ export const DEFAULT_COLUMNS: ColumnData<PromptVersion>[] = [
   },
   {
     id: "created_at",
-    label: "Created at",
+    label: "Created",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
   },
@@ -149,7 +149,7 @@ export const FILTER_COLUMNS: ColumnData<PromptVersion>[] = [
   },
   {
     id: "created_at",
-    label: "Created at",
+    label: "Created",
     type: COLUMN_TYPE.time,
   },
   {

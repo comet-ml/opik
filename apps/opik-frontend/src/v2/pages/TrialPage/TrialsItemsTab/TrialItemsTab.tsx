@@ -94,7 +94,7 @@ export const FILTER_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Optimizations scores",
+    label: "Optimization scores",
     type: COLUMN_TYPE.numberDictionary,
   },
 ];
@@ -396,7 +396,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       return [
         {
           id: "score_passed",
-          label: "passed",
+          label: "Passed",
           type: COLUMN_TYPE.string,
           cell: TrialPassedCell as never,
           customMeta: {
@@ -516,7 +516,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         columnHelper.group({
           id: "scores",
           meta: {
-            header: "Optimizations scores",
+            header: "Optimization scores",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
@@ -578,7 +578,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         onOrderChange: setOutputColumnsOrder,
       },
       {
-        title: "Optimizations scores",
+        title: "Optimization scores",
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,

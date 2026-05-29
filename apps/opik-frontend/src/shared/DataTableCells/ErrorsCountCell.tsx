@@ -1,6 +1,7 @@
 import { CellContext } from "@tanstack/react-table";
 import { Tag } from "@/ui/tag";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import EmptyCellPlaceholder from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { TriangleAlert, ZoomIn } from "lucide-react";
 import CellTooltipWrapper from "./CellTooltipWrapper";
 import { ProjectErrorCount } from "@/types/projects";
@@ -38,7 +39,7 @@ const ErrorsCountCell = (context: CellContext<unknown, ProjectErrorCount>) => {
   const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   if (!error?.count) {
-    return null;
+    return <EmptyCellPlaceholder context={context} />;
   }
 
   const deviationCopy = getErrorDeviationCopy(error);

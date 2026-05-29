@@ -2,6 +2,7 @@ import { CellContext } from "@tanstack/react-table";
 import ColoredTag from "@/shared/ColoredTag/ColoredTag";
 import { Tag, TagProps } from "@/ui/tag";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 
 type CustomMeta = {
@@ -21,7 +22,9 @@ const TagCell = (context: CellContext<unknown, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {colored ? (
+      {!value ? (
+        EMPTY_CELL_PLACEHOLDER
+      ) : colored ? (
         <ColoredTag label={value} variant={fixedVariant} size={tagSize} />
       ) : (
         <Tag size={tagSize}>{value}</Tag>

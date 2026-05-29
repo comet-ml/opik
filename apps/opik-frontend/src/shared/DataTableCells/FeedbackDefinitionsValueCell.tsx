@@ -6,6 +6,7 @@ import {
   FeedbackDefinition,
 } from "@/types/feedback-definitions";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 
 const FeedbackDefinitionsValueCell = (
@@ -40,7 +41,9 @@ const FeedbackDefinitionsValueCell = (
       tableMetadata={context.table.options.meta}
     >
       <CellTooltipWrapper content={tooltipContent}>
-        <div className="min-w-0 truncate">{items}</div>
+        <div className="min-w-0 truncate">
+          {items || EMPTY_CELL_PLACEHOLDER}
+        </div>
       </CellTooltipWrapper>
     </CellWrapper>
   );

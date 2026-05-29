@@ -1,5 +1,6 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import EmptyCellPlaceholder from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { SPAN_TYPE } from "@/types/traces";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
@@ -7,15 +8,7 @@ import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataT
 const SpanTypeCell = (context: CellContext<unknown, string>) => {
   const value = context.getValue() as SPAN_TYPE;
 
-  if (!value)
-    return (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-      >
-        -
-      </CellWrapper>
-    );
+  if (!value) return <EmptyCellPlaceholder context={context} />;
 
   return (
     <CellWrapper

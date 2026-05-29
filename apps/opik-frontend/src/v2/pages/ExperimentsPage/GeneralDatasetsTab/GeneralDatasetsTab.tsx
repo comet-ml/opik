@@ -225,7 +225,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: "Avg duration",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: withRunningSkeleton(DurationCell) as never,
@@ -294,7 +294,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: "total_estimated_cost_avg",
-        label: "Cost per trace (avg.)",
+        label: "Avg cost",
         type: COLUMN_TYPE.cost,
         cell: withRunningSkeleton(CostCell) as never,
         aggregatedCell: CostCell.Aggregation as never,
@@ -316,7 +316,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback Scores",
+        label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
         cell: withRunningSkeleton(FeedbackScoreListCell) as never,
@@ -326,7 +326,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           areAggregatedScores: true,
           aggregationKey: "feedback_scores",
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,

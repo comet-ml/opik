@@ -5,6 +5,7 @@ import isNumber from "lodash/isNumber";
 
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { formatDuration } from "@/lib/date";
 import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
@@ -20,7 +21,7 @@ const DurationCell = <TData,>(context: CellContext<TData, number>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {formatDuration(value)}
+      {isNumber(value) ? formatDuration(value) : EMPTY_CELL_PLACEHOLDER}
     </CellWrapper>
   );
 };
@@ -33,7 +34,9 @@ const CompareDurationCell: React.FC<
   const renderContent: SplitCellRenderContent = (
     item: ExperimentItem | undefined,
   ) => {
-    const formatted = formatDuration(item?.duration);
+    const formatted = isNumber(item?.duration)
+      ? formatDuration(item?.duration)
+      : EMPTY_CELL_PLACEHOLDER;
     if (!isAggregatedItem(item)) return formatted;
 
     return (
@@ -73,7 +76,7 @@ const DurationTextAggregationCell = <TData,>(
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = "-";
+  let value = EMPTY_CELL_PLACEHOLDER;
 
   if (isNumber(rawValue)) {
     value = dataFormatter(rawValue);

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import EmptyCellPlaceholder from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { cn } from "@/lib/utils";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import {
@@ -49,14 +50,7 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
     getGuardrailComputedResult(guardrailValidations);
 
   if (!guardrailValidations.length) {
-    return (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-      >
-        -
-      </CellWrapper>
-    );
+    return <EmptyCellPlaceholder context={context} />;
   }
 
   return (
