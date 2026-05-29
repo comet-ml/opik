@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -62,7 +62,7 @@ import { ExternalLink } from "lucide-react";
 import { LOGS_TYPE } from "@/constants/traces";
 import useThreadsList from "@/api/traces/useThreadsList";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import { generateTracesURL } from "@/lib/annotation-queues";
+import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import useAppStore from "@/store/AppStore";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
@@ -405,21 +405,16 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
-  // TODO: Temporary workaround to open in new tab until sidebars are integrated in the page
-  const handleRowClick = useCallback(
-    (row: Thread) => {
-      if (!row) return;
-
-      const url = generateTracesURL(
-        workspaceName,
-        annotationQueue.project_id,
-        "threads",
-        row.id,
-      );
-      window.open(url, "_blank");
-    },
-    [workspaceName, annotationQueue.project_id],
-  );
+  const { threadId, handleRowClick, panels } =
+    useTraceThreadPanelsState<Thread>({
+      rows,
+      type: "thread",
+      traceDetailsPanelProps: { projectId: annotationQueue.project_id },
+      threadDetailsPanelProps: {
+        projectId: annotationQueue.project_id,
+        projectName: annotationQueue.project_name,
+      },
+    });
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
@@ -533,6 +528,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         columns={columns}
         data={rows}
         onRowClick={handleRowClick}
+        activeRowId={threadId}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -583,6 +579,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
+      {panels}
     </>
   );
 };
