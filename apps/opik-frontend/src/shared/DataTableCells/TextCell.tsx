@@ -6,7 +6,10 @@ import { formatNumericData, toString } from "@/lib/utils";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
+import {
+  EMPTY_CELL_PLACEHOLDER,
+  isCellValueEmpty,
+} from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 
@@ -19,7 +22,7 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
     ROW_HEIGHT.small;
 
   const isLarge = rowHeight === ROW_HEIGHT.large;
-  const isEmpty = value === null || value === undefined || value === "";
+  const isEmpty = isCellValueEmpty(value);
 
   return (
     <CellWrapper

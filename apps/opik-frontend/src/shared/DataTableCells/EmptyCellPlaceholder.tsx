@@ -8,6 +8,10 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
  */
 export const EMPTY_CELL_PLACEHOLDER = "-";
 
+/** Whether a string-typed cell value should render the empty placeholder. */
+export const isCellValueEmpty = (value: unknown): boolean =>
+  value === null || value === undefined || value === "";
+
 type EmptyCellPlaceholderProps<TData, TValue> = {
   context: CellContext<TData, TValue>;
   className?: string;
