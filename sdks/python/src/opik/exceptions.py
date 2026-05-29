@@ -108,6 +108,24 @@ class EmptyExperiment(OpikException):
     pass
 
 
+class ExperimentNotResumable(OpikException):
+    """Raised when an experiment cannot be safely resumed via ``evaluate_resume``."""
+
+
+class LocalCheckpointMissing(ExperimentNotResumable):
+    """
+    Raised when an experiment was created with a non-deterministic iteration
+    config (custom sampler or explicit ``dataset_item_ids``) and the local
+    checkpoint file with the resolved item ids cannot be found.
+
+    The checkpoint is written next to the calling machine's opik state
+    (``~/.opik/resume/<experiment_id>.json``) at evaluation time, so resume
+    is a same-machine operation by default. Users hitting this from a
+    different machine should re-supply the original ``dataset_item_ids``
+    explicitly.
+    """
+
+
 class DatasetNotFound(OpikException):
     pass
 

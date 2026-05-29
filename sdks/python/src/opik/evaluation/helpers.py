@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ..api_objects import opik_client
 from ..api_objects.dataset import dataset, dataset_item
@@ -61,54 +61,23 @@ def merge_blueprint_into_config(
     return experiment_config
 
 
-def _calculate_total_items(
-    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
-    nb_samples: Optional[int],
-    dataset_item_ids: Optional[List[str]],
-) -> Optional[int]:
-    """Calculate the total number of items that will be evaluated."""
-    if dataset_item_ids is not None:
-        return len(dataset_item_ids)
-
-    if nb_samples is not None:
-        if dataset_.dataset_items_count is not None:
-            return min(nb_samples, dataset_.dataset_items_count)
-        return nb_samples
-
-    return dataset_.dataset_items_count
-
-
-def resolve_dataset_items_generator(
+def resolve_dataset_items(
     dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
     nb_samples: Optional[int],
     dataset_item_ids: Optional[List[str]],
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     dataset_filter_string: Optional[str],
-) -> Tuple[Iterator[dataset_item.DatasetItem], Optional[int]]:
+) -> List[dataset_item.DatasetItem]:
     """
-    Resolve dataset items for evaluation.
+    Materialize the dataset items to evaluate.
 
-    Handles streaming vs sampling, and calculates total item count.
-
-    Returns:
-        Tuple of (items iterator, total item count or None).
+    The full list is returned so callers can compute ``len(items)`` directly
+    and snapshot resolved ids for resume without an inversion-of-control hook.
+    Evaluation workloads are dominated by per-item LLM cost, so the memory
+    saved by lazy streaming was negligible compared to the complexity it
+    pushed onto callers (separate iterator / total / materialization hook).
     """
-    if dataset_sampler is None:
-        items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
-            filter_string=dataset_filter_string,
-        )
-        total = _calculate_total_items(
-            dataset_=dataset_,
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-        )
-        return items_iter, total
-
-    LOGGER.info("Dataset streaming disabled due to sampler")
-    items_list = list(
+    items = list(
         dataset_.__internal_api__stream_items_as_dataclasses__(
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
@@ -116,5 +85,13 @@ def resolve_dataset_items_generator(
             filter_string=dataset_filter_string,
         )
     )
-    items_list = dataset_sampler.sample(items_list)
-    return iter(items_list), len(items_list)
+    if dataset_sampler is None:
+        return items
+
+    sampled = dataset_sampler.sample(items)
+    if not isinstance(sampled, list):
+        raise TypeError(
+            "BaseDatasetSampler.sample() must return a list; got "
+            f"{type(sampled).__name__}. Streaming samplers are not supported."
+        )
+    return sampled

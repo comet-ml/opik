@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, TYPE_CHECKING
+from typing import List, Optional, Dict, Set, TYPE_CHECKING
 from collections import defaultdict
 import logging
 
@@ -6,11 +6,90 @@ import dataclasses
 
 from . import score_statistics, test_result
 from .metrics import score_result
+from .resume import merge as resume_merge
 
 if TYPE_CHECKING:
-    pass
+    from .resume import context as resume_context_module
+    from .types import ExperimentScoreFunction
 
 LOGGER = logging.getLogger(__name__)
+
+
+def compute_experiment_scores(
+    experiment_scoring_functions: List["ExperimentScoreFunction"],
+    test_results: List[test_result.TestResult],
+) -> List[score_result.ScoreResult]:
+    """Run experiment-level scoring functions over a list of test results."""
+    if not experiment_scoring_functions or not test_results:
+        return []
+
+    all_scores: List[score_result.ScoreResult] = []
+    for score_function in experiment_scoring_functions:
+        try:
+            scores = score_function(test_results)
+            # Handle Union[ScoreResult, List[ScoreResult]]
+            if isinstance(scores, list):
+                all_scores.extend(scores)
+            else:
+                all_scores.append(scores)
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to compute experiment score: %s",
+                e,
+                exc_info=True,
+            )
+
+    return all_scores
+
+
+def merge_resume_results(
+    *,
+    new_result: "EvaluationResult",
+    context: "resume_context_module.ResumeContext",
+    fully_completed_dataset_item_ids: Set[str],
+    experiment_scoring_functions: List["ExperimentScoreFunction"],
+) -> "EvaluationResult":
+    """
+    Fold previously-completed items into ``new_result`` so the returned
+    ``EvaluationResult`` reflects the whole experiment.
+
+    Only *fully-completed* items (every expected trial done) are
+    reconstructed. Partial items are intentionally excluded — the resume
+    call redoes their trials from scratch, so their old experiment items
+    must not appear in the merged result.
+    """
+    if not fully_completed_dataset_item_ids:
+        return new_result
+
+    previous_test_results = resume_merge.reconstruct_previous_test_results(
+        experiment=context.experiment,
+        dataset_=context.dataset,
+        fully_completed_dataset_item_ids=fully_completed_dataset_item_ids,
+    )
+    merged_test_results = previous_test_results + list(new_result.test_results)
+
+    merged_experiment_scores = compute_experiment_scores(
+        experiment_scoring_functions=experiment_scoring_functions,
+        test_results=merged_test_results,
+    )
+    if merged_experiment_scores:
+        context.experiment.log_experiment_scores(
+            score_results=merged_experiment_scores
+        )
+
+    return EvaluationResult(
+        dataset_id=new_result.dataset_id,
+        experiment_id=new_result.experiment_id,
+        experiment_name=new_result.experiment_name,
+        test_results=merged_test_results,
+        experiment_url=new_result.experiment_url,
+        trial_count=new_result.trial_count,
+        experiment_scores=(
+            merged_experiment_scores
+            if merged_experiment_scores
+            else new_result.experiment_scores
+        ),
+    )
 
 
 @dataclasses.dataclass

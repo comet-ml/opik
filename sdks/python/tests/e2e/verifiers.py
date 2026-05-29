@@ -360,6 +360,44 @@ def verify_experiment(
         )
 
 
+def verify_experiment_items_completed(
+    opik_client: opik.Opik,
+    experiment_id: str,
+    *,
+    expected_completed_dataset_item_ids: Set[str],
+    timeout: float = 15,
+) -> None:
+    """
+    Assert that the set of dataset item ids with at least one successfully
+    completed experiment item matches ``expected_completed_dataset_item_ids``
+    exactly.
+
+    A dataset item is considered completed when at least one experiment item
+    has a non-null ``evaluation_task_output``. Failed task attempts produce
+    experiment items with null output and are not counted, so this check
+    captures the user-visible "did this item finish" signal — useful for
+    resume tests where partial / repeated runs leave a mix of successful
+    and failed experiment items.
+    """
+    experiment = opik_client.get_experiment_by_id(experiment_id)
+
+    def _completed_ids() -> Set[str]:
+        return {
+            item.dataset_item_id
+            for item in experiment.get_items()
+            if item.evaluation_task_output is not None
+        }
+
+    assert synchronization.until(
+        lambda: _completed_ids() == expected_completed_dataset_item_ids,
+        max_try_seconds=timeout,
+    ), (
+        f"Expected completed dataset item ids "
+        f"{sorted(expected_completed_dataset_item_ids)}; got "
+        f"{sorted(_completed_ids())} after {timeout}s"
+    )
+
+
 def verify_attachments(
     opik_client: opik.Opik,
     entity_type: Literal["trace", "span"],

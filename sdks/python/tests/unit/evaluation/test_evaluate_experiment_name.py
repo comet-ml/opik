@@ -148,7 +148,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="explicit-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -282,7 +282,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name=None,
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -529,10 +529,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="explicit-prompt-experiment-name",
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": MODEL_NAME,
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -678,10 +675,7 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name=None,
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": MODEL_NAME,
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
