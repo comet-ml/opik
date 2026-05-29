@@ -88,7 +88,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { LOGS_TYPE } from "@/constants/traces";
 import { useHotkeys } from "react-hotkeys-hook";
 
-type ThreadDetailsPanelProps = {
+export type ThreadDetailsPanelProps = {
   projectId: string;
   projectName: string;
   threadId: string;
