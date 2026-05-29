@@ -1,0 +1,138 @@
+---
+headline: Migrate data between projects | Opik Documentation
+og:description: Move datasets and prompts — with their full version history and
+  attached data — between projects with the opik migrate CLI command.
+og:site_name: Opik Documentation
+og:title: Migrate data between projects with Opik
+title: Migrate data
+---
+
+`opik migrate` moves an entity — and everything attached to it — from one project to another **in the same workspace**. It copies the entity's full version history and its related data into the destination project.
+
+It has two subcommands:
+
+- **`opik migrate dataset`** — a dataset (or test suite) with its full version history, plus the experiments, traces, spans, feedback scores, assertion results, comments, and optimizations attached to it.
+- **`opik migrate prompt`** — a prompt and its full version history.
+
+Use it to consolidate or re-home an entity and its history under a different project.
+
+<Note>
+  These commands move data **between projects in a single workspace**. To move data between
+  separate Opik installations or environments, use [`opik export` / `opik import`](/tracing/advanced/export-data#command-line-tools) instead.
+</Note>
+
+<Warning>
+  The migration **renames the source** to `<name>_v1` and gives the destination the original
+  name. Preview with `--dry-run` first to see exactly what will change.
+</Warning>
+
+## Options
+
+The `--workspace` and `--api-key` flags go on the `opik migrate` group, **before** the subcommand. The rest are shared by both `dataset` and `prompt`.
+
+| Flag                       | Default                                         | Description                                                                                   |
+| -------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `NAME` (argument)          | —                                               | Exact name of the source dataset or prompt to migrate.                                        |
+| `--to-project`             | — (**required**)                                | Destination project. It must already exist — create it first if needed.                       |
+| `--from-project`           | whole workspace                                 | Optional hint for which project the source lives in. Omit to search the whole workspace.      |
+| `--dry-run`                | `false`                                         | Preview what would happen without making any changes. See [Previewing a migration](#previewing-a-migration). |
+| `--workspace` (group flag) | `OPIK_WORKSPACE` → `~/.opik.config` → `default` | Workspace to operate in.                                                                       |
+| `--api-key` (group flag)   | `OPIK_API_KEY` → `~/.opik.config`               | Opik API key.                                                                                  |
+
+## Previewing a migration
+
+Add `--dry-run` to any migration to see exactly what it would do **without changing anything** — nothing is renamed and nothing is copied. The command resolves the source, prints the plan it would run step by step, then exits.
+
+```bash
+opik migrate dataset "MyDataset" --to-project="production" --dry-run
+```
+
+Use the preview to confirm the source resolved to the right entity and that the destination project is correct. When the plan looks right, run the same command again without `--dry-run` to apply it.
+
+## `opik migrate dataset`
+
+```bash
+opik migrate dataset NAME --to-project=DESTINATION_PROJECT [OPTIONS]
+```
+
+`NAME` is the exact name of the source dataset. Both plain datasets and test suites are supported. [Preview with `--dry-run`](#previewing-a-migration) before applying.
+
+### What gets copied
+
+| Entity                | What comes across                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------- |
+| **Dataset**           | Name, description, visibility, tags, and type (dataset or test suite).                             |
+| **Version history**   | Every version, in order, with the same items and ordering as the source.                           |
+| **Items**             | Each item's data, description, tags, evaluators, execution policy, and source.                     |
+| **Experiments**       | Name, type, evaluation method, tags, and metadata.                                                 |
+| **Traces**            | Input, output, metadata, tags, timing, thread, errors, and environment.                            |
+| **Spans**             | The full span tree, inputs and outputs, metadata, model, provider, usage, cost, tags, and errors.  |
+| **Feedback scores**   | On traces and spans.                                                                               |
+| **Assertion results** | For test suites.                                                                                   |
+| **Comments**          | On traces and spans.                                                                               |
+| **Optimizations**     | Optimizations linked to the dataset, with their experiments re-linked on the destination.          |
+
+### What happens when you run it
+
+The same steps appear in the `--dry-run` plan:
+
+| #   | Step                  | What it does                                                          |
+| --- | --------------------- | -------------------------------------------------------------------- |
+| 1   | Rename source         | Renames the source to `<name>_v1` to free up its name.               |
+| 2   | Create destination    | Creates the dataset under `--to-project` with the original name.     |
+| 3   | Replay versions       | Replays every version onto the destination, in order.                |
+| 4   | Copy optimizations    | Recreates any optimizations linked to the dataset.                   |
+| 5   | Copy experiments      | Recreates the experiments, along with their traces and spans.        |
+
+### What is not copied
+
+- **Prompt snapshots on experiments** — migrate prompts separately with `opik migrate prompt`.
+- **Attachments on traces and spans** — files like images and audio are not copied.
+- **Thread tags, status, feedback scores, and comments** — the traces themselves (including their environment) do come across, but these thread-level fields don't yet.
+
+### Examples
+
+```bash
+# Migrate a dataset (with its experiments, traces, and spans)
+opik migrate dataset "MyDataset" --to-project="production"
+
+# Preview without making any changes
+opik migrate dataset "MyDataset" --to-project="production" --dry-run
+
+# Tell it which project the source is in
+opik migrate dataset "MyDataset" --to-project="production" --from-project="staging"
+```
+
+## `opik migrate prompt`
+
+```bash
+opik migrate prompt NAME --to-project=DESTINATION_PROJECT [OPTIONS]
+```
+
+`NAME` is the exact name of the source prompt. This subcommand migrates the prompt and its version history only — it does not copy experiments, traces, or spans. [Preview with `--dry-run`](#previewing-a-migration) before applying.
+
+### What gets copied
+
+- **Prompt** — name, description, tags, and template structure.
+- **Version history** — every version, oldest first, with its template, metadata, type, change description, and tags.
+- **Commit hashes** — each version's commit hash is preserved, so the history matches the source exactly.
+
+It renames the source to `<name>_v1`, creates the destination prompt under `--to-project`, and replays every version.
+
+### Examples
+
+```bash
+# Migrate a prompt and its full version history
+opik migrate prompt "MyPrompt" --to-project="production"
+
+# Preview without making any changes
+opik migrate prompt "MyPrompt" --to-project="production" --dry-run
+```
+
+## Troubleshooting
+
+- **Name already used** — the rename target `<name>_v1` already exists. Rename or delete the conflicting entity and re-run:
+
+  ```
+  Cannot rename source to 'MyDataset_v1' — that name is already used by a dataset in project 'staging'. Rename or delete the conflicting dataset and re-run.
+  ```
