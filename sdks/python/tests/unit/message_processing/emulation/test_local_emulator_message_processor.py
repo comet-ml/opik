@@ -521,7 +521,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             expected=EXCPECTED_TRACE_TREE, actual=trace_trees[0]
         )
 
-    def test_trace_trees__orphan_span_trace_link__is_skipped(self, capture_log):
+    def test_trace_trees__orphan_span_trace_link__is_skipped(self, capture_log_debug):
         trace_message = messages.CreateTraceMessage(
             trace_id="trace_1",
             project_name="test_project",
@@ -566,7 +566,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
 
         assert len(trace_trees) == 1
         assert trace_trees[0].id == "trace_1"
-        assert "orphan span-to-trace link" in capture_log.text
+        assert "orphan span-to-trace link" in capture_log_debug.text
 
     def test_trace_trees_with_nested_span_hierarchy(self):
         trace_message = messages.CreateTraceMessage(
@@ -1958,3 +1958,180 @@ class TestLocalEmulatorMessageProcessorDuplicateCreateMessages:
         processor.process(self._start_trace_message())
 
         assert len(processor.trace_trees) == 2
+
+
+class TestEmulatorMessageProcessorPublicReadAPI:
+    """Covers the flat-lookup contract: get_trace / get_span / spans_for_trace.
+
+    These methods are the public surface used by agentic-judge tooling
+    (suite_evaluators/agentic/context.py); they must keep working without
+    triggering `trace_trees`-style tree-building side effects.
+    """
+
+    def setup_method(self):
+        self.processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
+        self.start_time = datetime_helpers.local_timestamp()
+        self.later_time = self.start_time + datetime.timedelta(seconds=1)
+        self.latest_time = self.start_time + datetime.timedelta(seconds=2)
+
+    def _trace_message(self, trace_id: str, name: str = "t"):
+        return messages.CreateTraceMessage(
+            trace_id=trace_id,
+            project_name="test_project",
+            name=name,
+            start_time=self.start_time,
+            end_time=self.later_time,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=self.later_time,
+            source="sdk",
+        )
+
+    def _span_message(
+        self,
+        span_id: str,
+        trace_id: str,
+        parent_span_id=None,
+        start_time=None,
+    ):
+        return messages.CreateSpanMessage(
+            span_id=span_id,
+            trace_id=trace_id,
+            project_name="test_project",
+            parent_span_id=parent_span_id,
+            name=span_id,
+            start_time=start_time or self.start_time,
+            end_time=None,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+    def test_get_trace__trace_processed__returns_trace_model(self):
+        self.processor.process(self._trace_message("trace_1", name="hello"))
+
+        trace = self.processor.get_trace("trace_1")
+
+        assert trace is not None
+        assert trace.id == "trace_1"
+        assert trace.name == "hello"
+
+    def test_get_trace__unknown_id__returns_none(self):
+        assert self.processor.get_trace("missing") is None
+
+    def test_get_trace__does_not_trigger_tree_build_side_effects(self):
+        # Calling get_trace must not stitch children onto trace.spans the
+        # way `trace_trees` does. The caller depends on flat semantics.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        trace = self.processor.get_trace("trace_1")
+
+        assert trace is not None
+        assert trace.spans == []
+
+    def test_get_span__span_processed__returns_span_model(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        span = self.processor.get_span("span_1")
+
+        assert span is not None
+        assert span.id == "span_1"
+
+    def test_get_span__unknown_id__returns_none(self):
+        assert self.processor.get_span("missing") is None
+
+    def test_spans_for_trace__no_spans__returns_empty_list(self):
+        self.processor.process(self._trace_message("trace_1"))
+
+        assert self.processor.spans_for_trace("trace_1") == []
+
+    def test_spans_for_trace__unknown_trace_id__returns_empty_list(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        assert self.processor.spans_for_trace("other_trace") == []
+
+    def test_spans_for_trace__returns_flat_list_sorted_by_start_time(self):
+        # Both root and nested spans belong to the same trace. The returned
+        # list must be flat (parent + child as siblings), not nested, and
+        # ordered by start_time regardless of insertion order.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(
+            self._span_message(
+                "child", "trace_1", parent_span_id="parent", start_time=self.latest_time
+            )
+        )
+        self.processor.process(
+            self._span_message("parent", "trace_1", start_time=self.later_time)
+        )
+
+        spans = self.processor.spans_for_trace("trace_1")
+
+        assert [s.id for s in spans] == ["parent", "child"]
+
+    def test_spans_for_trace__filters_by_trace_id(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._trace_message("trace_2"))
+        self.processor.process(self._span_message("span_a", "trace_1"))
+        self.processor.process(self._span_message("span_b", "trace_2"))
+
+        spans_1 = self.processor.spans_for_trace("trace_1")
+        spans_2 = self.processor.spans_for_trace("trace_2")
+
+        assert [s.id for s in spans_1] == ["span_a"]
+        assert [s.id for s in spans_2] == ["span_b"]
+
+    def test_parent_span_ids_for_trace__resolves_parent_links_flat(self):
+        # Mapping must reflect the parent links set at message-process time,
+        # without depending on `_build_spans_tree` having run.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("root", "trace_1"))
+        self.processor.process(
+            self._span_message("child", "trace_1", parent_span_id="root")
+        )
+
+        mapping = self.processor.parent_span_ids_for_trace("trace_1")
+
+        assert mapping == {"root": None, "child": "root"}
+
+    def test_parent_span_ids_for_trace__filters_by_trace_id(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._trace_message("trace_2"))
+        self.processor.process(self._span_message("span_a", "trace_1"))
+        self.processor.process(self._span_message("span_b", "trace_2"))
+
+        assert self.processor.parent_span_ids_for_trace("trace_1") == {"span_a": None}
+        assert self.processor.parent_span_ids_for_trace("trace_2") == {"span_b": None}
+
+    def test_parent_span_ids_for_trace__unknown_trace_id__returns_empty(self):
+        assert self.processor.parent_span_ids_for_trace("missing") == {}
+
+    def test_spans_for_trace__does_not_mutate_trace_observation(self):
+        # `trace_trees` mutates trace.spans as a side effect; spans_for_trace
+        # must not. Otherwise, the caller can't rely on flat-vs-tree semantics
+        # depending on which access path was used.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        self.processor.spans_for_trace("trace_1")
+        trace = self.processor.get_trace("trace_1")
+
+        assert trace is not None
+        assert trace.spans == []
