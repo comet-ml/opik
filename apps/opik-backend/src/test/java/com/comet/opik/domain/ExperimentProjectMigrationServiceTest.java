@@ -20,7 +20,6 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -209,25 +208,14 @@ class ExperimentProjectMigrationServiceTest {
     }
 
     /**
-     * Single workspace covering all four classifier buckets in one cycle:
-     * <ul>
-     *   <li><b>certain</b> — one trace in a single alive project => migrates to inferred project.</li>
-     *   <li><b>certain-deleted</b> — one trace in a project later deleted in MySQL => migrates to
-     *       Default Project.</li>
-     *   <li><b>no-inference</b> — orphan experiment with no experiment_items => migrates to Default
-     *       Project.</li>
-     *   <li><b>ambiguous</b> — two traces in two different projects => skipped.</li>
-     * </ul>
-     * Also covers the demo-name filter: an experiment named like a demo is eligible-shaped but
-     * filtered by {@code WHERE e.name NOT IN :demo_experiment_names} in {@code FIND_ELIGIBLE} and
-     * {@code COMPUTE_MAPPING}; demo data is invisible to the V1 entity check, so the gap can only
-     * be detected at the experiment level.
-     *
-     * <p>Outcome: workspace stays V1 because of the remaining ambiguous orphan, gets trapped with
-     * {@code all_ambiguous}, and the demo experiment's empty project_id is preserved.
+     * One workspace exercising all migration buckets: certain (single project), multi-project
+     * resolved by dominant assignment, certain-deleted, no-inference, demo. No bucket traps the
+     * workspace — every non-demo orphan is migrated, the workspace flips to V2, and the demo
+     * experiment is left untouched (filtered out at the {@code WHERE e.name NOT IN
+     * :demo_experiment_names} guard before it can reach the classifier).
      */
     @Test
-    void mixedWorkspaceMigratesAcrossBucketsAndTrapsOnAmbiguous(WorkspacesService workspacesService) {
+    void mixedWorkspaceMigratesAllBucketsIncludingMultiProjectAsDominant() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -242,19 +230,21 @@ class ExperimentProjectMigrationServiceTest {
         var certainExperimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
         linkExperimentToTraces(apiKey, workspaceName, certainExperimentId, certainTraceId);
 
-        // Ambiguous: two traces in two different projects => skipped.
-        var ambiguousProjectName1 = randomName("project");
-        var ambiguousProjectName2 = randomName("project");
-        createProject(apiKey, workspaceName, ambiguousProjectName1);
-        createProject(apiKey, workspaceName, ambiguousProjectName2);
-        var ambiguousTrace1Id = createTrace(apiKey, workspaceName, ambiguousProjectName1);
-        var ambiguousTrace2Id = createTrace(apiKey, workspaceName, ambiguousProjectName2);
-        var ambiguousExperimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
-        linkExperimentToTraces(apiKey, workspaceName, ambiguousExperimentId,
-                ambiguousTrace1Id, ambiguousTrace2Id);
+        // Multi-project (dominant): two traces in the winner, one in the runner-up => migrates to the
+        // winner. Previously this bucket was the "ambiguous" trap source.
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var runnerUpProjectName = randomName("project");
+        createProject(apiKey, workspaceName, runnerUpProjectName);
+        var dominantTrace1Id = createTrace(apiKey, workspaceName, dominantProjectName);
+        var dominantTrace2Id = createTrace(apiKey, workspaceName, dominantProjectName);
+        var runnerUpTraceId = createTrace(apiKey, workspaceName, runnerUpProjectName);
+        var dominantExperimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
+        linkExperimentToTraces(apiKey, workspaceName, dominantExperimentId,
+                dominantTrace1Id, dominantTrace2Id, runnerUpTraceId);
 
-        // Certain-deleted: one trace in a single project that is then deleted in MySQL.
-        // Was: skipped. Now: migrates to Default Project.
+        // Certain-deleted: one trace in a single project that is then deleted in MySQL =>
+        // migrates to Default Project.
         var deletedProjectName = randomName("project");
         var deletedProjectId = createProject(apiKey, workspaceName, deletedProjectName);
         var deletedTraceId = createTrace(apiKey, workspaceName, deletedProjectName);
@@ -277,7 +267,7 @@ class ExperimentProjectMigrationServiceTest {
         linkExperimentToTraces(apiKey, workspaceName, demoExperimentId, demoTraceId);
 
         var certainBefore = experimentResourceClient.getExperiment(certainExperimentId, apiKey, workspaceName);
-        var ambiguousBefore = experimentResourceClient.getExperiment(ambiguousExperimentId, apiKey, workspaceName);
+        var dominantBefore = experimentResourceClient.getExperiment(dominantExperimentId, apiKey, workspaceName);
         var deletedBefore = experimentResourceClient.getExperiment(deletedExperimentId, apiKey, workspaceName);
         var noInferenceBefore = experimentResourceClient.getExperiment(
                 noInferenceExperimentId, apiKey, workspaceName);
@@ -285,18 +275,16 @@ class ExperimentProjectMigrationServiceTest {
 
         migrationService.runMigrationCycle().block();
 
-        // Ambiguous keeps the workspace pinned to V1; the cycle migrates the other three buckets
-        // and traps the workspace with all_ambiguous.
-        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1);
+        // Every non-demo orphan resolves to a project this cycle; workspace flips to V2.
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
 
         assertExperimentMigrated(apiKey, workspaceName, certainExperimentId, certainBefore,
                 certainProjectId, certainProjectName);
+        assertExperimentMigrated(apiKey, workspaceName, dominantExperimentId, dominantBefore,
+                dominantProjectId, dominantProjectName);
         assertExperimentMigratedToDefault(apiKey, workspaceName, deletedExperimentId, deletedBefore);
         assertExperimentMigratedToDefault(apiKey, workspaceName, noInferenceExperimentId, noInferenceBefore);
-        assertExperimentUnchanged(apiKey, workspaceName, ambiguousExperimentId, ambiguousBefore);
         assertExperimentUnchanged(apiKey, workspaceName, demoExperimentId, demoBefore);
-
-        assertWorkspaceTrapped(workspacesService, workspaceId, "all_ambiguous");
     }
 
     @Test
@@ -348,58 +336,159 @@ class ExperimentProjectMigrationServiceTest {
     }
 
     /**
-     * Workspace whose only orphan is ambiguous: the early {@code validated.isEmpty()} short-circuit
-     * in {@code migrateValidatedMappings} traps the workspace before any writes happen. Distinct
-     * from the post-write trap covered by {@link #mixedWorkspaceMigratesAcrossBucketsAndTrapsOnAmbiguous},
-     * which goes through the full batch-update / reaggregation / cache-evict chain first.
+     * Dominant-project assignment by trace count: the project with more referencing traces wins.
+     * Verifies the primary key of the SQL ranker ({@code count DESC}).
      */
     @Test
-    void trapWorkspaceWithOnlyAmbiguousExperiments(WorkspacesService workspacesService) {
+    void migrateMultiProjectExperimentToDominantProjectByCount() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        var projectName1 = randomName("project");
-        var projectName2 = randomName("project");
-        createProject(apiKey, workspaceName, projectName1);
-        createProject(apiKey, workspaceName, projectName2);
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var runnerUpProjectName = randomName("project");
+        createProject(apiKey, workspaceName, runnerUpProjectName);
+
         var datasetName = randomName("dataset");
-        createDatasetWithProject(apiKey, workspaceName, datasetName,
-                createProject(apiKey, workspaceName, randomName("project")));
-        var trace1Id = createTrace(apiKey, workspaceName, projectName1);
-        var trace2Id = createTrace(apiKey, workspaceName, projectName2);
+        createDatasetWithProject(apiKey, workspaceName, datasetName, dominantProjectId);
+
+        var dominantTraceA = createTrace(apiKey, workspaceName, dominantProjectName);
+        var dominantTraceB = createTrace(apiKey, workspaceName, dominantProjectName);
+        var runnerUpTrace = createTrace(apiKey, workspaceName, runnerUpProjectName);
+
         var experimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
-        linkExperimentToTraces(apiKey, workspaceName, experimentId, trace1Id, trace2Id);
+        linkExperimentToTraces(apiKey, workspaceName, experimentId,
+                dominantTraceA, dominantTraceB, runnerUpTrace);
 
         var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
 
         migrationService.runMigrationCycle().block();
 
-        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1);
-        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
-        assertWorkspaceTrapped(workspacesService, workspaceId, "all_ambiguous");
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
+        assertExperimentMigrated(apiKey, workspaceName, experimentId, beforeMigration,
+                dominantProjectId, dominantProjectName);
     }
 
+    /**
+     * Dominant-project recency tiebreaker: equal trace counts across two projects, the
+     * most-recently-updated trace's project wins ({@code last_activity DESC}).
+     */
     @Test
-    void skipPreMarkedTrappedWorkspaces(WorkspacesService workspacesService) {
-        // Explicitly tests the trap exclusion: pre-mark a workspace as skipped, seed an eligible
-        // experiment, run the cycle, and assert it was excluded (V1 + unchanged).
+    void migrateMultiProjectExperimentToMostRecentProjectWhenCountTies() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        workspacesService.markExperimentProjectMigrationSkipped(workspaceId, "test-pre-marked-trap");
+        var olderProjectName = randomName("project");
+        createProject(apiKey, workspaceName, olderProjectName);
+        var recentProjectName = randomName("project");
+        var recentProjectId = createProject(apiKey, workspaceName, recentProjectName);
 
-        var seeded = seedCertainExperiment(apiKey, workspaceName, randomName("project"));
-        var experimentId = seeded.getLeft();
+        var datasetName = randomName("dataset");
+        createDatasetWithProject(apiKey, workspaceName, datasetName, recentProjectId);
+
+        var olderTrace = createTrace(apiKey, workspaceName, olderProjectName);
+        // Cushion against batched writes sharing an insert tick — keeps the recency contrast unambiguous.
+        TestUtils.waitForMillis(20);
+        var recentTrace = createTrace(apiKey, workspaceName, recentProjectName);
+
+        var experimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
+        linkExperimentToTraces(apiKey, workspaceName, experimentId, olderTrace, recentTrace);
+
         var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
 
         migrationService.runMigrationCycle().block();
 
-        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1);
-        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
+        assertExperimentMigrated(apiKey, workspaceName, experimentId, beforeMigration,
+                recentProjectId, recentProjectName);
+    }
+
+    /**
+     * Dominant project is deleted before the cycle runs: validation drops it and the experiment
+     * falls back to Default Project — it is not reassigned to the surviving lower-count project,
+     * and it does not count as a dominant assignment.
+     */
+    @Test
+    void migrateMultiProjectExperimentToDefaultProjectWhenDominantProjectWasDeleted() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var minorityProjectName = randomName("project");
+        createProject(apiKey, workspaceName, minorityProjectName);
+
+        var datasetName = randomName("dataset");
+        createDatasetWithProject(apiKey, workspaceName, datasetName, dominantProjectId);
+
+        var experimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
+        linkExperimentToTraces(apiKey, workspaceName, experimentId,
+                createTrace(apiKey, workspaceName, dominantProjectName),
+                createTrace(apiKey, workspaceName, dominantProjectName),
+                createTrace(apiKey, workspaceName, minorityProjectName));
+
+        // Delete the dominant project: the query still infers it, but validation drops it.
+        projectResourceClient.deleteProject(dominantProjectId, apiKey, workspaceName);
+
+        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
+        assertExperimentMigratedToDefault(apiKey, workspaceName, experimentId, beforeMigration);
+    }
+
+    /**
+     * Re-running the cycle on an already-migrated multi-project experiment is a no-op:
+     * eligibility query reports no orphans, and the {@code project_id = ''} guard on
+     * {@code BATCH_SET_PROJECT_ID} would block a write even if reached. {@code lastUpdatedAt}
+     * stability confirms idempotency.
+     */
+    @Test
+    void multiProjectExperimentSecondCycleIsNoop() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var runnerUpProjectName = randomName("project");
+        createProject(apiKey, workspaceName, runnerUpProjectName);
+
+        var datasetName = randomName("dataset");
+        createDatasetWithProject(apiKey, workspaceName, datasetName, dominantProjectId);
+
+        linkExperimentToTraces(apiKey, workspaceName,
+                createOrphanExperiment(apiKey, workspaceName, datasetName),
+                createTrace(apiKey, workspaceName, dominantProjectName),
+                createTrace(apiKey, workspaceName, dominantProjectName),
+                createTrace(apiKey, workspaceName, runnerUpProjectName));
+
+        var experimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
+        linkExperimentToTraces(apiKey, workspaceName, experimentId,
+                createTrace(apiKey, workspaceName, dominantProjectName),
+                createTrace(apiKey, workspaceName, dominantProjectName),
+                createTrace(apiKey, workspaceName, runnerUpProjectName));
+
+        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+        migrationService.runMigrationCycle().block();
+        var afterFirstCycle = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+        assertExperimentMigrated(apiKey, workspaceName, experimentId, beforeMigration,
+                dominantProjectId, dominantProjectName);
+
+        migrationService.runMigrationCycle().block();
+        var afterSecondCycle = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+
+        assertThat(afterSecondCycle.lastUpdatedAt()).isEqualTo(afterFirstCycle.lastUpdatedAt());
+        assertExperimentEqual(afterSecondCycle, afterFirstCycle);
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
     }
 
     @Test
@@ -518,11 +607,5 @@ class ExperimentProjectMigrationServiceTest {
         var actual = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
         assertExperimentEqual(actual, beforeMigration);
         assertThat(actual.lastUpdatedAt()).isEqualTo(beforeMigration.lastUpdatedAt());
-    }
-
-    private void assertWorkspaceTrapped(WorkspacesService workspacesService, String workspaceId, String reason) {
-        assertThat(workspacesService.findExperimentProjectMigrationSkippedWorkspaceIds()).contains(workspaceId);
-        assertThat(workspacesService.findById(workspaceId))
-                .hasValueSatisfying(w -> assertThat(w.experimentProjectMigrationSkipReason()).isEqualTo(reason));
     }
 }
