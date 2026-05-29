@@ -39,6 +39,7 @@ public class ExperimentEntityData {
             String workspaceId,
             UUID id,
             UUID datasetId,
+            UUID projectId,
             String name,
             String createdAt,
             String lastUpdatedAt,
