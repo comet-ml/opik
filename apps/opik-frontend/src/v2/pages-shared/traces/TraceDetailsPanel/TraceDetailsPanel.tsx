@@ -88,7 +88,7 @@ const TraceDataSkeleton: React.FC = () => (
   </div>
 );
 
-type TraceDetailsPanelProps = {
+export type TraceDetailsPanelProps = {
   projectId?: string;
   traceId: string;
   spanId: string;
