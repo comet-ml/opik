@@ -367,6 +367,24 @@ class DatasetsJsonUploadResourceTest {
     }
 
     @Test
+    @DisplayName("Lowercase format value (Fern-generated SDK contract) is accepted")
+    void uploadJsonArray__lowercaseFormat__accepted() {
+        UUID datasetId = createDataset();
+
+        String jsonContent = """
+                [{"input": "q1", "expected_output": "a1"}]
+                """;
+
+        try (var response = uploadJsonFile(datasetId, jsonContent, "json")) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
+        }
+
+        assertProcessingThenCompletedWithItems(datasetId, 1, items -> {
+            assertThat(items.get(0).data().get("input").asText()).isEqualTo("q1");
+        });
+    }
+
+    @Test
     @DisplayName("Explicit format=JSONL forces line-based parsing even for .json content")
     void uploadJsonArray__withJsonlFormat__rejected() {
         UUID datasetId = createDataset();
