@@ -9,8 +9,15 @@ from .kpi_metric_type import KpiMetricType
 
 class KpiMetric(UniversalBaseModel):
     type: typing.Optional[KpiMetricType] = None
-    current_value: typing.Optional[float] = None
-    previous_value: typing.Optional[float] = None
+    current_value: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Metric value for the current period. Unit depends on `type`: `count` is an integer count; `errors` is a percentage in [0, 100]; `avg_duration` is milliseconds; `total_cost` is in USD.
+    """
+
+    previous_value: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Metric value for the immediately preceding period of equal length. Same unit as `current_value`.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

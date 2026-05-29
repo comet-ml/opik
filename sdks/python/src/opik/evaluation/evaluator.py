@@ -35,6 +35,10 @@ from . import resume as resume_module
 from .resume import integration as resume_integration
 from .resume import iteration as resume_iteration
 from .metrics import base_metric, score_result
+from .suite_evaluators.llm_judge import (
+    metric as suite_evaluators_llm_judge_metric,
+    strategy_selector as suite_evaluators_strategy,
+)
 from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
 from . import test_result
@@ -289,6 +293,9 @@ def __internal_api__run_test_suite__(
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
     blueprint_id: Optional[str] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Internal function that runs the full test suite evaluation pipeline:
@@ -375,6 +382,7 @@ def __internal_api__run_test_suite__(
         task_threads=task_threads,
         evaluator_model=evaluator_model,
         source=source,  # type: ignore[arg-type]
+        scoring_tool_strategy=scoring_tool_strategy,
     )
 
     suite_result = suite_result_constructor.build_suite_result(
@@ -421,6 +429,9 @@ def run_tests(
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
     blueprint_id: Optional[str] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Run a test suite against a task function.
@@ -446,6 +457,11 @@ def run_tests(
         model: Optional model name for checking assertions.
         generate_report: Whether to generate a JSON report file.
         report_output_path: Optional file path for the report.
+        scoring_tool_strategy: Optional override applied to every LLMJudge
+            evaluator in the suite. One of ``"auto"`` (size+capability
+            heuristic), ``"always"`` (force agentic tool loop) or
+            ``"never"`` (force one-shot). When ``None``, each judge's own
+            configured strategy is used.
 
     Returns:
         TestSuiteResult with pass/fail status based on execution policy.
@@ -482,6 +498,7 @@ def run_tests(
         generate_report=generate_report,
         report_output_path=report_output_path,
         blueprint_id=blueprint_id,
+        scoring_tool_strategy=scoring_tool_strategy,
     )
 
 
@@ -575,6 +592,22 @@ def _evaluate_task(
     return evaluation_result_
 
 
+def _apply_scoring_tool_strategy_override(
+    scoring_metrics: List[base_metric.BaseMetric],
+    scoring_tool_strategy: suite_evaluators_strategy.ScoringToolStrategyMode,
+) -> None:
+    """Replace each LLMJudge's strategy selector with the suite-level override.
+
+    Walks the resolved evaluator list once; non-LLMJudge metrics are left
+    alone. Done after `dataset.get_evaluators(...)` returns so users keep
+    the precedence: explicit `run_tests(scoring_tool_strategy=...)` wins over
+    each judge's per-instance configuration.
+    """
+    for metric in scoring_metrics:
+        if isinstance(metric, suite_evaluators_llm_judge_metric.LLMJudge):
+            metric.set_scoring_tool_strategy(scoring_tool_strategy)
+
+
 def _evaluate_test_suite_task(
     *,
     client: opik_client.Opik,
@@ -587,31 +620,68 @@ def _evaluate_test_suite_task(
     task_threads: int,
     source: TraceSource,
     evaluator_model: Optional[str],
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> Tuple[evaluation_result.EvaluationResult, float]:
+    from opik.message_processing.processors import message_processors_chain
+
     start_time = time.time()
 
-    with asyncio_support.async_http_connections_expire_immediately():
-        scoring_metrics = dataset.get_evaluators(evaluator_model)
-        execution_policy = dataset.get_execution_policy()
+    # Activate the local emulator so suite-level LLMJudge assertions get
+    # access to the full trace tree via the agentic tool loop. The
+    # emulator caches every trace/span logged in-process; it stays
+    # inactive at idle. We toggle for the duration of the suite run and
+    # restore prior state in `finally` so concurrent (foreign) uses of
+    # the emulator aren't disturbed.
+    # `getattr` with a default keeps this MagicMock-friendly:
+    # MagicMock auto-rejects attribute names that look like dunders
+    # (start and end with `__`), so plain attribute access raises
+    # AttributeError on mocked clients used by unit tests. Production
+    # clients always have this attribute, so the default never fires.
+    chain = getattr(client, "__internal_api__message_processor__", None)
+    emulator_was_active = False
+    if chain is not None:
+        emulator = message_processors_chain.get_local_emulator_message_processor(chain)
+        if emulator is not None:
+            emulator_was_active = emulator.is_active()
+            if not emulator_was_active:
+                message_processors_chain.toggle_local_emulator_message_processor(
+                    active=True, chain=chain, reset=True
+                )
 
-        evaluation_engine = engine.EvaluationEngine(
-            client=client,
-            project_name=project_name,
-            workers=task_threads,
-            verbose=verbose,
-            source=source,
-        )
-        test_results = evaluation_engine.run_and_score(
-            dataset_items=iter(items),
-            task=task,
-            scoring_metrics=scoring_metrics,
-            scoring_key_mapping=None,
-            evaluator_model=evaluator_model,
-            experiment_=experiment,
-            default_execution_policy=execution_policy,
-            total_items=len(items),
-            show_scores_in_progress_bar=False,
-        )
+    try:
+        with asyncio_support.async_http_connections_expire_immediately():
+            scoring_metrics = dataset.get_evaluators(evaluator_model)
+            if scoring_tool_strategy is not None:
+                _apply_scoring_tool_strategy_override(
+                    scoring_metrics, scoring_tool_strategy
+                )
+            execution_policy = dataset.get_execution_policy()
+
+            evaluation_engine = engine.EvaluationEngine(
+                client=client,
+                project_name=project_name,
+                workers=task_threads,
+                verbose=verbose,
+                source=source,
+            )
+            test_results = evaluation_engine.run_and_score(
+                dataset_items=iter(items),
+                task=task,
+                scoring_metrics=scoring_metrics,
+                scoring_key_mapping=None,
+                evaluator_model=evaluator_model,
+                experiment_=experiment,
+                default_execution_policy=execution_policy,
+                total_items=len(items),
+                show_scores_in_progress_bar=False,
+            )
+    finally:
+        if chain is not None and not emulator_was_active:
+            message_processors_chain.toggle_local_emulator_message_processor(
+                active=False, chain=chain, reset=True
+            )
 
     total_time = time.time() - start_time
 

@@ -247,6 +247,7 @@ def test_evaluate__happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -326,6 +327,7 @@ def test_evaluate__happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -643,6 +645,7 @@ def test_evaluate_with_scoring_key_mapping(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -726,6 +729,7 @@ def test_evaluate_with_scoring_key_mapping(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -1563,6 +1567,7 @@ def test_evaluate_prompt_happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input=ANY_BUT_NONE,
                     output=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
@@ -1622,6 +1627,7 @@ def test_evaluate_prompt_happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input=ANY_BUT_NONE,
                     output=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
@@ -1783,6 +1789,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -1908,6 +1915,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -3673,6 +3681,7 @@ def test_evaluate_optimization_trial__trace_tree_source_experiment_and_spans_sou
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="metrics_calculation",
+                tags=["__opik_eval_internal__"],
                 type="general",
                 input=ANY_BUT_NONE,
                 output=ANY_BUT_NONE,

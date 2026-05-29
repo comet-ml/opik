@@ -33,6 +33,10 @@ navigation:
             path: ../docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
+          - page: Upgrading to Opik 2.0
+            path: ../docs-v2/opik_v2_upgrade.mdx
+            slug: /opik-v2-upgrade
+            icon: fa-regular fa-circle-up
           - page: Ollie Agent
             path: ../docs-v2/ollie.mdx
             slug: ollie
@@ -87,6 +91,9 @@ navigation:
               - page: Export data
                 path: ../docs-v2/observability/export_data.mdx
                 slug: export-data
+              - page: Migrate data
+                path: ../docs-v2/observability/migrate_data.mdx
+                slug: migrate-data
               - page: SDK configuration
                 path: ../docs-v2/tracing/advanced/sdk_configuration.mdx
                 slug: sdk_configuration
@@ -722,6 +729,9 @@ navigation:
               - page: OpenAI
                 path: ../docs-v2/integrations/openai.mdx
                 slug: openai
+              - page: Qianfan
+                path: ../docs-v2/integrations/qianfan.mdx
+                slug: qianfan
               - page: Predibase
                 path: ../docs-v2/integrations/predibase.mdx
                 slug: predibase

@@ -25,7 +25,7 @@ const NEW_PROMPT_VALUE = "new-prompt";
 interface PromptsSelectBoxProps {
   projectId: string;
   value?: string;
-  onValueChange: (value?: string) => void;
+  onValueChange: (value?: string, versionId?: string) => void;
   onClear?: () => void;
   onOpenChange?: (value: boolean) => void;
   clearable?: boolean;
@@ -37,6 +37,13 @@ interface PromptsSelectBoxProps {
   promptName?: string;
   loadedVersionId?: string;
   compact?: boolean;
+  /**
+   * Only meaningful in compact mode. When true, the prompt-library popover
+   * shows a hover submenu of versions and forwards the picked versionId via
+   * `onValueChange`. Default is false so callers that can't plumb versionId
+   * through their state don't silently drop the user's pick.
+   */
+  enableVersionSelect?: boolean;
 }
 
 const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
@@ -54,6 +61,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   promptName,
   loadedVersionId,
   compact = false,
+  enableVersionSelect = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -168,12 +176,11 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
       <PromptLibraryMenu
         projectId={projectId}
         filterByTemplateStructure={filterByTemplateStructure}
-        onSelect={({ promptId }) => onValueChange(promptId)}
+        onSelect={({ promptId, versionId }) =>
+          onValueChange(promptId, versionId)
+        }
         onOpenChange={onOpenChangeHandler}
-        // Compact mode only forwards promptId to its callers, so we hide the
-        // version submenu — otherwise version picks would be silently dropped
-        // and the latest version would load instead.
-        enableVersionSelect={false}
+        enableVersionSelect={enableVersionSelect}
         trigger={
           <div>
             <TooltipWrapper content="Load prompt">

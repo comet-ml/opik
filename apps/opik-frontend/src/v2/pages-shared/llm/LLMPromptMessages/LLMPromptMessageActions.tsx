@@ -84,7 +84,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
   const selectedPromptIdRef = useRef<string | undefined>();
+  const selectedVersionIdRef = useRef<string | undefined>();
   const tempPromptIdRef = useRef<string | undefined>();
+  const tempVersionIdRef = useRef<string | undefined>();
   const isPromptSelectBoxOpenedRef = useRef<boolean>(false);
   const [showImproveWizard, setShowImproveWizard] = useState(false);
 
@@ -189,14 +191,16 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   ]);
 
   const handleUpdateExternalPromptId = useCallback(
-    (selectedPromptId?: string) => {
+    (selectedPromptId?: string, selectedVersionId?: string) => {
       if (selectedPromptId) {
         selectedPromptIdRef.current = selectedPromptId;
+        selectedVersionIdRef.current = selectedVersionId;
         setIsLoading(true);
       }
 
       onChangeMessage({
         promptId: selectedPromptId,
+        promptVersionId: selectedVersionId,
       });
     },
     [onChangeMessage, setIsLoading],
@@ -250,7 +254,10 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const confirmConfig = useMemo(() => {
     return {
       onConfirm: () => {
-        handleUpdateExternalPromptId(tempPromptIdRef.current);
+        handleUpdateExternalPromptId(
+          tempPromptIdRef.current,
+          tempVersionIdRef.current,
+        );
       },
       title: "Load prompt",
       description:
@@ -267,10 +274,21 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       selectedPromptIdRef.current === promptId &&
       selectedPromptIdRef.current === promptData?.id
     ) {
-      selectedPromptIdRef.current = undefined;
+      const requestedVersionId = selectedVersionIdRef.current;
+      // When a specific version was requested, wait until that version's data
+      // arrives so we apply its template — otherwise we'd briefly load latest.
+      if (requestedVersionId && loadedVersionData?.id !== requestedVersionId) {
+        return;
+      }
 
-      const template = promptData.latest_version?.template ?? "";
-      const versionId = promptData.latest_version?.id;
+      selectedPromptIdRef.current = undefined;
+      selectedVersionIdRef.current = undefined;
+
+      const sourceVersion = requestedVersionId
+        ? loadedVersionData
+        : promptData.latest_version;
+      const template = sourceVersion?.template ?? "";
+      const versionId = sourceVersion?.id;
       const isChatPrompt =
         promptData.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
 
@@ -295,8 +313,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         onClearOtherPromptLinks();
       }
       onChangeMessage({
-        content: parsePromptVersionContent(promptData.latest_version),
-        promptVersionId: promptData.latest_version?.id,
+        content: parsePromptVersionContent(sourceVersion),
+        promptVersionId: versionId,
         promptId: promptData.id,
       });
       setIsLoading(false);
@@ -305,6 +323,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     onChangeMessage,
     promptData,
     promptId,
+    loadedVersionData,
     setIsLoading,
     onReplaceWithChatPrompt,
     onClearOtherPromptLinks,
@@ -346,17 +365,19 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
         <PromptsSelectBox
           compact
+          enableVersionSelect
           projectId={activeProjectId!}
           refetchOnMount
           value={promptId}
-          onValueChange={(id) => {
-            if (id !== promptId) {
+          onValueChange={(id, versionId) => {
+            if (id !== promptId || versionId !== promptVersionId) {
               if (content === "" || isUndefined(id)) {
-                handleUpdateExternalPromptId(id);
+                handleUpdateExternalPromptId(id, versionId);
               } else {
                 setOpen("load");
                 resetKeyRef.current = resetKeyRef.current + 1;
                 tempPromptIdRef.current = id;
+                tempVersionIdRef.current = versionId;
               }
             }
           }}

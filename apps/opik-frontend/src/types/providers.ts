@@ -106,6 +106,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
+  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -144,6 +145,8 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_OPUS_4_6_FAST = "anthropic/claude-opus-4.6-fast",
   ANTHROPIC_CLAUDE_OPUS_4_7 = "anthropic/claude-opus-4.7",
   ANTHROPIC_CLAUDE_OPUS_4_7_FAST = "anthropic/claude-opus-4.7-fast",
+  ANTHROPIC_CLAUDE_OPUS_4_8 = "anthropic/claude-opus-4.8",
+  ANTHROPIC_CLAUDE_OPUS_4_8_FAST = "anthropic/claude-opus-4.8-fast",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
@@ -555,6 +558,7 @@ export enum PROVIDER_MODEL_TYPE {
   STEPFUN_AI_STEP3 = "stepfun-ai/step3",
   STEPFUN_STEP_3_5_FLASH = "stepfun/step-3.5-flash",
   STEPFUN_STEP_3_5_FLASH_FREE = "stepfun/step-3.5-flash:free",
+  STEPFUN_STEP_3_7_FLASH = "stepfun/step-3.7-flash",
   SWITCHPOINT_ROUTER = "switchpoint/router",
   TENCENT_HUNYUAN_A13B_INSTRUCT = "tencent/hunyuan-a13b-instruct",
   TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
@@ -642,6 +646,8 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_3_PRO_IMAGE = "gemini-3-pro-image",
+  GEMINI_3_1_FLASH_IMAGE = "gemini-3.1-flash-image",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

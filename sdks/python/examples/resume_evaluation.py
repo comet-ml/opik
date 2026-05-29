@@ -21,6 +21,7 @@ with a small sleep so the run feels like real work.
 """
 
 import time
+from typing import Dict
 
 import opik
 from opik.evaluation import metrics
@@ -60,6 +61,9 @@ REVIEWS = [
 CRASH_ON_INDEX = 12
 
 
+CRASH_REVIEW_TEXT = REVIEWS[CRASH_ON_INDEX][0]
+
+
 def make_dataset(opik_client: opik.Opik) -> opik.Dataset:
     """Recreate the demo dataset from scratch so the script is idempotent."""
     try:
@@ -71,11 +75,10 @@ def make_dataset(opik_client: opik.Opik) -> opik.Dataset:
     dataset.insert(
         [
             {
-                "id": f"review-{i}",
                 "input": {"review": text},
                 "expected_sentiment": expected,
             }
-            for i, (text, expected) in enumerate(REVIEWS)
+            for text, expected in REVIEWS
         ]
     )
     return dataset
@@ -91,10 +94,15 @@ def classify_review(review_text: str) -> str:
 
 
 def flaky_task(item):
-    """Original task: crashes on a specific item to simulate an outage."""
-    if item["id"] == f"review-{CRASH_ON_INDEX}":
+    """Original task: crashes on a specific review to simulate an outage.
+
+    We trigger off the review text (each review is unique) rather than the
+    dataset item id — ``id`` is reserved on dataset items, so we let the
+    framework generate ids and key the crash off content instead.
+    """
+    if item["input"]["review"] == CRASH_REVIEW_TEXT:
         raise RuntimeError(
-            f"Simulated outage processing {item['id']} "
+            f"Simulated outage processing {item['input']['review']!r} "
             "(imagine an LLM rate limit or a network blip)"
         )
     return {"output": classify_review(item["input"]["review"])}
@@ -105,13 +113,13 @@ def healthy_task(item):
     return {"output": classify_review(item["input"]["review"])}
 
 
-def completed_item_ids(experiment) -> set:
-    """Dataset item ids with at least one successful experiment item."""
-    return {
-        item.dataset_item_id
+def completed_count(experiment) -> int:
+    """Number of experiment items with at least one successful run."""
+    return sum(
+        1
         for item in experiment.get_items()
         if item.evaluation_task_output is not None
-    }
+    )
 
 
 def main() -> None:
@@ -129,7 +137,7 @@ def main() -> None:
     print("=" * 60)
     print("STAGE 2 — running evaluate() with a flaky task")
     print("=" * 60)
-    print(f"Task will crash on item 'review-{CRASH_ON_INDEX}' ...")
+    print(f"Task will crash on review #{CRASH_ON_INDEX}: {CRASH_REVIEW_TEXT!r} ...")
     try:
         opik.evaluate(
             dataset=dataset,
@@ -149,11 +157,9 @@ def main() -> None:
     experiment_id = experiments[-1].id
     experiment = opik_client.get_experiment_by_id(experiment_id)
 
-    completed = completed_item_ids(experiment)
     print()
-    print(f"Experiment id: {experiment_id}")
-    print(f"Completed so far: {len(completed)}/{len(REVIEWS)} items")
-    print(f"Completed ids   : {sorted(completed)}")
+    print(f"Experiment id    : {experiment_id}")
+    print(f"Completed so far : {completed_count(experiment)}/{len(REVIEWS)} items")
 
     # ----- 4. Resume -----------------------------------------------------
     print()
@@ -168,13 +174,20 @@ def main() -> None:
         verbose=0,
     )
 
-    print(f"Resume processed {len(resume_result.test_results)} items:")
+    # ``resume_result.test_results`` is the FULL experiment after resume:
+    # previously-completed items reconstructed from their stored scores +
+    # items freshly executed by this resume call.
+    print(
+        f"Resume returned {len(resume_result.test_results)} test results "
+        f"(reconstructed previous + freshly executed)."
+    )
+    score_counts: Dict[str, int] = {}
     for test_result in resume_result.test_results:
-        score = test_result.score_results[0]
-        print(
-            f"  - {test_result.test_case.dataset_item_id}: "
-            f"{score.name} = {score.value}"
-        )
+        score_value = test_result.score_results[0].value
+        bucket = "1.0" if score_value == 1.0 else f"{score_value}"
+        score_counts[bucket] = score_counts.get(bucket, 0) + 1
+    for bucket, count in sorted(score_counts.items()):
+        print(f"  equals_metric={bucket}: {count} items")
 
     # ----- 5. Verify convergence -----------------------------------------
     print()
@@ -182,9 +195,7 @@ def main() -> None:
     print("STAGE 4 — final state")
     print("=" * 60)
     experiment = opik_client.get_experiment_by_id(experiment_id)
-    completed = completed_item_ids(experiment)
-    print(f"Completed now: {len(completed)}/{len(REVIEWS)} items")
-    print(f"Completed ids: {sorted(completed)}")
+    print(f"Completed now : {completed_count(experiment)}/{len(REVIEWS)} items")
     print(f"Experiment URL: {resume_result.experiment_url}")
 
 
