@@ -130,9 +130,7 @@ Prompt engineering is rarely a one-shot process. Continuous iteration is key. A 
 
   prompter = MetaPromptOptimizer( # Note: often aliased as 'prompter' in examples
       model="openai/gpt-4", # Evaluation model
-      reasoning_model="openai/gpt-4-turbo", # Model for generating prompt suggestions
-      max_rounds=5,
-      num_prompts_per_round=3
+      prompts_per_round=3
   )
   ```
 
