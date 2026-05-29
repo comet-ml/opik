@@ -221,9 +221,17 @@ def test_experiment_scoring_functions__classification_metrics__computed_and_logg
         expected_recall, abs=0.0001
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_id(
-        evaluation_result.experiment_id
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata={"model_name": "test-model"},
+        feedback_scores_amount=0,
+        traces_amount=3,
+        experiment_scores={
+            "classification_f1_macro": expected_f1,
+            "classification_precision_macro": expected_precision,
+            "classification_recall_macro": expected_recall,
+        },
+        project_name=PROJECT_NAME,
     )
-    experiment_data = retrieved_experiment.get_experiment_data()
-    assert experiment_data.experiment_scores is not None
-    assert len(experiment_data.experiment_scores) == 3

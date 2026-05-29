@@ -8,7 +8,7 @@ try:
 except ImportError:  # pragma: no cover
     sklearn_metrics = None
 
-_ALLOWED_AVERAGES = {"micro", "macro", "weighted"}
+_ALLOWED_AVERAGES = {"binary", "micro", "macro", "weighted"}
 _ZeroDivisionType = Union[int, float, str]
 
 
@@ -27,13 +27,16 @@ def _resolve_label_value(
 ) -> Tuple[bool, Any]:
     mapped_inputs = case.mapped_scoring_inputs
     if mapped_inputs is not None and key in mapped_inputs:
-        return True, mapped_inputs[key]
+        value = mapped_inputs[key]
+        return (value is not None), value
 
     if key in case.task_output:
-        return True, case.task_output[key]
+        value = case.task_output[key]
+        return (value is not None), value
 
     if key in case.dataset_item_content:
-        return True, case.dataset_item_content[key]
+        value = case.dataset_item_content[key]
+        return (value is not None), value
 
     return False, None
 
