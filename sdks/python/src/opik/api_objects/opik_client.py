@@ -1827,6 +1827,21 @@ class Opik:
         timeout = timeout if timeout is not None else self._flush_timeout
         return self._streamer.flush(timeout)
 
+    def __internal_api__drain_to_processors__(
+        self, timeout: Optional[float] = None
+    ) -> bool:
+        """Drain pending messages so in-process chained processors
+        (notably the local emulator) have applied every message
+        submitted so far.
+
+        Lighter than `flush(...)`: skips file-upload and replay flushes
+        because the caller only cares about local processor state, not
+        backend delivery. Used by the evaluation engine before invoking
+        the agentic LLM judge — see
+        `EvaluationEngine._build_trace_tool_context` for the rationale.
+        """
+        return self._streamer.drain_to_processors(timeout)
+
     def __internal_api__failed_uploads__(self, timeout: Optional[float] = None) -> int:
         """Returns the number of failed file uploads after flush. Blocking - waits for all uploads to complete."""
         return self._streamer.__internal_api__failed_uploads__(timeout=timeout)
