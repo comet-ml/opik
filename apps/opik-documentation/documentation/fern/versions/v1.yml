@@ -552,6 +552,9 @@ navigation:
               - page: OpenAI
                 path: ../docs/tracing/integrations/openai.mdx
                 slug: openai
+              - page: Qianfan
+                path: ../docs/tracing/integrations/qianfan.mdx
+                slug: qianfan
               - page: Predibase
                 path: ../docs/tracing/integrations/predibase.mdx
                 slug: predibase
