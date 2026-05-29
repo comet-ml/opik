@@ -3,6 +3,7 @@ import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Tag } from "@/ui/tag";
 import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
@@ -41,7 +42,7 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
           </Tag>
         </TooltipWrapper>
       ) : (
-        <span className="truncate">-</span>
+        <span className="truncate">{EMPTY_CELL_PLACEHOLDER}</span>
       )}
     </CellWrapper>
   );
@@ -89,7 +90,9 @@ const PassRateAggregationCell = <TData,>(
           </Tag>
         </TooltipWrapper>
       ) : (
-        <span className="truncate text-light-slate">-</span>
+        <span className="truncate text-light-slate">
+          {EMPTY_CELL_PLACEHOLDER}
+        </span>
       )}
     </CellWrapper>
   );

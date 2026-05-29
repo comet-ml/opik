@@ -3,6 +3,7 @@ import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
 import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 import { prettifyMessage } from "@/lib/traces";
@@ -28,7 +29,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const value = context.getValue() as string | object | undefined | null;
 
   const displayMessage = useMemo(() => {
-    if (!value) return "-";
+    if (!value) return EMPTY_CELL_PLACEHOLDER;
 
     const pretty = prettifyMessage(value, { type: fieldType });
 

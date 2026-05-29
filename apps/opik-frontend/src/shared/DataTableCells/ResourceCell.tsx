@@ -6,6 +6,7 @@ import { CellContext } from "@tanstack/react-table";
 
 import { Explainer } from "@/types/shared";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ResourceLink, {
   RESOURCE_TYPE,
@@ -56,7 +57,7 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
           isDeleted={isDeleted}
         />
       ) : (
-        "-"
+        EMPTY_CELL_PLACEHOLDER
       )}
     </CellWrapper>
   );
@@ -122,7 +123,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
           isDeleted={isDeleted}
         />
       ) : (
-        <div>-</div>
+        <div>{EMPTY_CELL_PLACEHOLDER}</div>
       )}
       <div className="flex shrink-0 items-center">
         {countText}

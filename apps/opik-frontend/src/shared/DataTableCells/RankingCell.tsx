@@ -2,6 +2,7 @@ import { CellContext } from "@tanstack/react-table";
 import { Medal } from "lucide-react";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { cn } from "@/lib/utils";
 
 const MEDAL_COLORS: Record<number, string> = {
@@ -35,7 +36,7 @@ const RankingCell = <TData extends RowWithId>(
     >
       <div className="flex items-center justify-center">
         {rank === undefined ? (
-          <span className="text-slate-400">—</span>
+          <span className="text-slate-400">{EMPTY_CELL_PLACEHOLDER}</span>
         ) : (
           <>
             {medalColor && (

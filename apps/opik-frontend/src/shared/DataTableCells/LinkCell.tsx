@@ -4,6 +4,7 @@ import { Copy } from "lucide-react";
 import copy from "clipboard-copy";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useToast } from "@/ui/use-toast";
@@ -85,7 +86,7 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
           </div>
         </TooltipWrapper>
       ) : (
-        "-"
+        EMPTY_CELL_PLACEHOLDER
       )}
     </CellWrapper>
   );

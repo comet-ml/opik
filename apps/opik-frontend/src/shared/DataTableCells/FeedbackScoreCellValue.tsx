@@ -8,6 +8,7 @@ import {
 } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 
 const FeedbackScoreCellValue = ({
   isUserFeedbackColumn = false,
@@ -28,7 +29,7 @@ const FeedbackScoreCellValue = ({
   const [openHoverCard, setOpenHoverCard] = useState(false);
 
   // If no feedback score and not editable, show dash
-  if (!feedbackScore && !isUserFeedbackColumn) return "-";
+  if (!feedbackScore && !isUserFeedbackColumn) return EMPTY_CELL_PLACEHOLDER;
 
   const shouldShowEditDropdown = isUserFeedbackColumn && onValueChange;
 
@@ -43,7 +44,7 @@ const FeedbackScoreCellValue = ({
             size={size}
           />
         )}
-        <span>-</span>
+        <span>{EMPTY_CELL_PLACEHOLDER}</span>
       </div>
     );
   }

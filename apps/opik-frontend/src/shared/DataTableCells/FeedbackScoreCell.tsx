@@ -6,6 +6,7 @@ import isFunction from "lodash/isFunction";
 
 import { cn } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { TraceFeedbackScore, Thread, Span } from "@/types/traces";
 import {
@@ -122,7 +123,7 @@ const FeedbackScoreAggregationCell = <TData,>(
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = isFunction(accessorFn) ? accessorFn(data) : undefined;
-  let value = "-";
+  let value = EMPTY_CELL_PLACEHOLDER;
 
   if (isNumber(rawValue)) {
     value = dataFormatter(rawValue);

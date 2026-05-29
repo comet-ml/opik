@@ -56,7 +56,7 @@ export const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
   },
   {
     id: "created_at",
-    label: "Created at",
+    label: "Created",
     type: COLUMN_TYPE.time,
   },
   {

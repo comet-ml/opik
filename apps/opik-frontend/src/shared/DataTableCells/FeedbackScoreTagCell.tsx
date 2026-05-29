@@ -8,6 +8,7 @@ import {
   FEEDBACK_SCORE_TAG_SIZE_MAP,
 } from "@/constants/shared";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import FeedbackScoreTag from "@/shared/FeedbackScoreTag/FeedbackScoreTag";
 
 const FeedbackScoreTagCell = (context: CellContext<unknown, unknown>) => {
@@ -29,7 +30,7 @@ const FeedbackScoreTagCell = (context: CellContext<unknown, unknown>) => {
           size={tagSize}
         />
       ) : (
-        "-"
+        EMPTY_CELL_PLACEHOLDER
       )}
     </CellWrapper>
   );

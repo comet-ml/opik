@@ -6,6 +6,7 @@ import { useMediaTypeDetection } from "@/hooks/useMediaTypeDetection";
 import { isParsedMediaData } from "@/lib/images";
 import ImagesListWrapper from "@/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 
 const MediaCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -28,7 +29,9 @@ const MediaCell = <TData,>(context: CellContext<TData, unknown>) => {
   const mediaData = alreadyParsed ? value : detectedMedia;
 
   const getContent = () => {
-    const displayValue = isString(value) ? value : mediaData?.url || "-";
+    const displayValue = isString(value)
+      ? value
+      : mediaData?.url || EMPTY_CELL_PLACEHOLDER;
 
     if (!isBig) {
       return (

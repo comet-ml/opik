@@ -1,6 +1,7 @@
 import React, { useCallback } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { useTablePopover } from "@/shared/DataTable/DataTableTooltipContext";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 
 type CellTooltipWrapperProps = {
   content?: string;
@@ -21,7 +22,9 @@ const CellTooltipWrapper: React.FC<CellTooltipWrapperProps> = ({
   }, [content, showPopover]);
 
   const showTooltip =
-    content && content !== "-" && content.length > MIN_CHARACTERS_FOR_TOOLTIP;
+    content &&
+    content !== EMPTY_CELL_PLACEHOLDER &&
+    content.length > MIN_CHARACTERS_FOR_TOOLTIP;
   return showTooltip ? (
     <Slot
       ref={triggerRef}

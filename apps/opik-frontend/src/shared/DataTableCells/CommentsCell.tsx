@@ -2,6 +2,7 @@ import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { CommentItems } from "@/types/comment";
 import UserCommentAvatar from "@/shared/UserComment/UserCommentAvatar";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
@@ -26,7 +27,7 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
   const isLocalComments = isLocalCommentCheck(commentsList[0]?.created_by);
 
   if (!commentsCount) {
-    return <div className="px-3 py-2">-</div>;
+    return <div className="px-3 py-2">{EMPTY_CELL_PLACEHOLDER}</div>;
   }
 
   if (commentsCount === 1) {

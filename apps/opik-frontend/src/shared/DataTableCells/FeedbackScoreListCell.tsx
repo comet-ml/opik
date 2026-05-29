@@ -6,6 +6,7 @@ import isArray from "lodash/isArray";
 
 import { cn } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "../FeedbackScoreTag/FeedbackScoreTag";
 import FeedbackScoreHoverCard from "../FeedbackScoreTag/FeedbackScoreHoverCard";
@@ -79,7 +80,7 @@ const FeedbackScoreListCell = <TData,>(
       className="py-1 pr-1"
     >
       {isEmpty ? (
-        "-"
+        EMPTY_CELL_PLACEHOLDER
       ) : (
         <div ref={cellRef} className="w-full min-w-0 flex-1 overflow-hidden">
           <FeedbackScoreHoverCard
@@ -181,7 +182,9 @@ const FeedbackScoreListAggregationCell = <TData,>(
     return scores.map(
       (item) =>
         `${item.name}: ${
-          isNumber(item.value) ? dataFormatter(item.value) : "-"
+          isNumber(item.value)
+            ? dataFormatter(item.value)
+            : EMPTY_CELL_PLACEHOLDER
         }`,
     );
   };

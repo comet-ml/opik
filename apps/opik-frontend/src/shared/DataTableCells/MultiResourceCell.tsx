@@ -4,6 +4,7 @@ import isFunction from "lodash/isFunction";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 
 import ResourceLink, {
   RESOURCE_TYPE,
@@ -59,7 +60,7 @@ const MultiResourceCell = (context: CellContext<unknown, string>) => {
       className="overflow-hidden py-1.5"
     >
       {isEmpty
-        ? "-"
+        ? EMPTY_CELL_PLACEHOLDER
         : list.map<React.ReactNode>((item, idx) => (
             <React.Fragment key={`${item[idKey]}`}>
               {renderSeparator(idx)}

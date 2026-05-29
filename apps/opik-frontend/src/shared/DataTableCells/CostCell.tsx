@@ -5,6 +5,7 @@ import isNumber from "lodash/isNumber";
 
 import { formatCost, FormatCostOptions } from "@/lib/money";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
@@ -42,7 +43,7 @@ const CompareCostCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
 
   const renderContent: SplitCellRenderContent = (item?: ExperimentItem) => {
     const value = get(item, accessor);
-    if (!isNumber(value)) return "-";
+    if (!isNumber(value)) return EMPTY_CELL_PLACEHOLDER;
 
     const tooltipContent = isAggregatedItem(item)
       ? `${formatCost(value, { modifier: "full" })} | ${getTrialAvgTooltip(
@@ -85,7 +86,7 @@ const CostAggregationCell = <TData,>(context: CellContext<TData, string>) => {
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = "-";
+  let value = EMPTY_CELL_PLACEHOLDER;
 
   if (isNumber(rawValue)) {
     value = dataFormatter(rawValue, {});

@@ -1,5 +1,6 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 
@@ -31,7 +32,7 @@ const TimeCell = <TData,>(context: CellContext<TData, string>) => {
           <span className="truncate">{displayValue}</span>
         </TooltipWrapper>
       ) : (
-        "-"
+        EMPTY_CELL_PLACEHOLDER
       )}
     </CellWrapper>
   );
