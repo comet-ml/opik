@@ -4,6 +4,8 @@ import type * as OpikApi from "../index.js";
 
 export interface KpiMetric {
     type?: OpikApi.KpiMetricType;
+    /** Metric value for the current period. Unit depends on `type`: `count` is an integer count; `errors` is a percentage in [0, 100]; `avg_duration` is milliseconds; `total_cost` is in USD. */
     currentValue?: number;
+    /** Metric value for the immediately preceding period of equal length. Same unit as `current_value`. */
     previousValue?: number;
 }
