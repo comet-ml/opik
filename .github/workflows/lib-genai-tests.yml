@@ -33,8 +33,18 @@ jobs:
 
     strategy:
       fail-fast: true
+      # Cap concurrent matrix jobs so a future matrix expansion can't quietly
+      # re-multiply concurrent Vertex AI calls and bring back the 429s.
+      max-parallel: 2
       matrix:
-        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        # Run only the oldest and newest supported Python versions. The full
+        # PYTHON_VERSIONS matrix multiplies live Vertex AI calls by 5×, which
+        # routinely tips the project's Gemini quota into 429 RESOURCE_EXHAUSTED
+        # — and intermediate Python versions almost never surface GenAI-specific
+        # regressions that the bookends miss. The ADK suite shares the same
+        # opik-sdk-tests GCP project, so any uncapped suite re-multiplies their
+        # contention too.
+        python_version: ["3.10", "3.14"]
 
     steps:
       - name: Check out code
