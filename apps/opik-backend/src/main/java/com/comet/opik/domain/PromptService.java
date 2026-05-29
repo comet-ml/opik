@@ -547,7 +547,8 @@ class PromptServiceImpl implements PromptService {
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
         PromptVersion savedVersion = getById(workspaceId, promptVersion.id());
-        trackPromptVersionCreated(savedVersion, projectId, workspaceId);
+        Schedulers.boundedElastic()
+                .schedule(() -> trackPromptVersionCreated(savedVersion, projectId, workspaceId));
         return savedVersion;
     }
 
@@ -564,7 +565,7 @@ class PromptServiceImpl implements PromptService {
             properties.put("project_id", projectId.toString());
         }
 
-        analyticsService.trackEvent("prompt_version_created", properties);
+        analyticsService.trackEvent("prompt_version_created", properties, promptVersion.createdBy());
     }
 
     private PromptVersion getById(String workspaceId, UUID id) {

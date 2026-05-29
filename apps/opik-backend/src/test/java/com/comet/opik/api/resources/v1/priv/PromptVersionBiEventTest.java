@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionType;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -133,7 +134,8 @@ class PromptVersionBiEventTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
-        Mockito.verify(analyticsService).trackEvent(Mockito.eq("prompt_version_created"), propsCaptor.capture());
+        Mockito.verify(analyticsService, Mockito.timeout(2000))
+                .trackEvent(Mockito.eq("prompt_version_created"), propsCaptor.capture(), Mockito.eq(USER));
 
         Map<String, String> props = propsCaptor.getValue();
         assertThat(props).containsEntry("prompt_id", promptId.toString());
@@ -161,7 +163,8 @@ class PromptVersionBiEventTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
-        Mockito.verify(analyticsService).trackEvent(Mockito.eq("prompt_version_created"), propsCaptor.capture());
+        Mockito.verify(analyticsService, Mockito.timeout(2000))
+                .trackEvent(Mockito.eq("prompt_version_created"), propsCaptor.capture(), Mockito.eq(USER));
 
         Map<String, String> props = propsCaptor.getValue();
         assertThat(props).containsEntry("prompt_id", promptId.toString());
@@ -184,6 +187,7 @@ class PromptVersionBiEventTest {
                 .id(null)
                 .commit(null)
                 .environments(null)
+                .versionType(PromptVersionType.PROMPT_VERSION)
                 .build();
 
         CreatePromptVersion request = CreatePromptVersion.builder()
@@ -197,7 +201,8 @@ class PromptVersionBiEventTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
-        Mockito.verify(analyticsService).trackEvent(Mockito.eq("prompt_version_created"), propsCaptor.capture());
+        Mockito.verify(analyticsService, Mockito.timeout(2000))
+                .trackEvent(Mockito.eq("prompt_version_created"), propsCaptor.capture(), Mockito.eq(USER));
 
         Map<String, String> props = propsCaptor.getValue();
         assertThat(props).containsEntry("prompt_id", promptId.toString());
