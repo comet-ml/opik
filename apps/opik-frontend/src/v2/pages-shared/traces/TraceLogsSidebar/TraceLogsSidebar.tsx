@@ -763,6 +763,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     queryPrefix: TLS_QUERY_PREFIX,
     manageLastSection: true,
     traceDetailsPanelProps: { projectId, container: sheetContentRef },
+    threadDetailsPanelProps: {
+      projectId,
+      projectName,
+      container: sheetContentRef,
+    },
   });
 
   const columns = useMemo(() => {
