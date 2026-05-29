@@ -48,15 +48,21 @@ public class RecentActivity {
             @NonNull String datasetType, @NonNull Instant createdAt, @NonNull String createdBy) {
     }
 
+    @Builder(toBuilder = true)
+    public record RecentPromptVersion(@NonNull UUID promptId, @NonNull String promptName,
+            String versionNumber, @NonNull Instant createdAt, @NonNull String createdBy) {
+    }
+
     @RequiredArgsConstructor
     @Getter
     public enum ActivityType {
+        TRACE_DAILY("trace_daily"),
         EXPERIMENT("experiment"),
         DATASET_VERSION("dataset_version"),
         TEST_SUITE_VERSION("test_suite_version"),
         ALERT_EVENT("alert_event"),
         OPTIMIZATION("optimization"),
-        AGENT_CONFIG_VERSION("agent_config_version");
+        PROMPT_VERSION("prompt_version");
 
         @JsonValue
         private final String value;

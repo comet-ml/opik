@@ -75,25 +75,29 @@ export const formatLocalTimeAsUtc = (localTime: string): string => {
   return dayjs(`${today}T${localTime}`).utc().format("HH:mm:ss");
 };
 
-export const formatRelativeDateTime = (value: string): string => {
+export const formatRelativeDateTime = (
+  value: string,
+  includeTime = true,
+): string => {
   if (!isString(value)) return "";
 
   const date = dayjs(value);
   if (!date.isValid()) return "";
 
   const now = dayjs();
+  const fallback = includeTime ? formatDate(value) : date.format("D MMM YYYY");
 
-  if (date.isAfter(now)) return formatDate(value);
+  if (date.isAfter(now)) return fallback;
 
-  const time = date.format("h:mm A");
+  const time = includeTime ? `, ${date.format("h:mm A")}` : "";
 
-  if (date.isSame(now, "day")) return `Today, ${time}`;
-  if (date.isSame(now.subtract(1, "day"), "day")) return `Yesterday, ${time}`;
+  if (date.isSame(now, "day")) return `Today${time}`;
+  if (date.isSame(now.subtract(1, "day"), "day")) return `Yesterday${time}`;
 
   const diffDays = now.diff(date, "day");
-  if (diffDays <= 7) return `${diffDays} days ago, ${time}`;
+  if (diffDays <= 7) return `${diffDays} days ago${time}`;
 
-  return formatDate(value);
+  return fallback;
 };
 
 export const makeStartOfMinute = (value: string) => {

@@ -66,6 +66,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean ollieEnabled;
     @JsonProperty
+    @NotNull boolean projectHomepageEnabled;
+    @JsonProperty
     @NotNull boolean agenticToolsEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
