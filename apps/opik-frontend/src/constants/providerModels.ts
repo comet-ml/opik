@@ -107,6 +107,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8,
+      label: "Claude Opus 4.8",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
       label: "Claude Opus 4.7",
     },
@@ -280,6 +284,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
       label: "anthropic/claude-opus-4.7-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8,
+      label: "anthropic/claude-opus-4.8",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8_FAST,
+      label: "anthropic/claude-opus-4.8-fast",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
@@ -1926,6 +1938,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_5_FLASH_FREE,
       label: "stepfun/step-3.5-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_7_FLASH,
+      label: "stepfun/step-3.7-flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.SWITCHPOINT_ROUTER,
