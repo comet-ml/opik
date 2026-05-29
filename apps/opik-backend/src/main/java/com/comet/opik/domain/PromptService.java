@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -124,6 +125,7 @@ class PromptServiceImpl implements PromptService {
 
     private static final String ALREADY_EXISTS = "Prompt id or name already exists";
     private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
+    private static final String BI_EVENT_PROMPT_VERSION_CREATED = "prompt_version_created";
     private static final String PROMPT_NOT_FOUND = "Prompt not found";
     private static final String PROMPT_VERSION_NOT_FOUND = "Prompt version not found";
     private static final String PROMPT_VERSION_LOCK = "prompt_version:%s:%s";
@@ -547,25 +549,27 @@ class PromptServiceImpl implements PromptService {
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
         PromptVersion savedVersion = getById(workspaceId, promptVersion.id());
-        Schedulers.boundedElastic()
-                .schedule(() -> trackPromptVersionCreated(savedVersion, projectId, workspaceId));
+        trackPromptVersionCreated(savedVersion, projectId, workspaceId);
         return savedVersion;
     }
 
     private void trackPromptVersionCreated(PromptVersion promptVersion, UUID projectId, String workspaceId) {
-        Map<String, String> properties = new HashMap<>();
-        properties.put("prompt_version_id", promptVersion.id().toString());
-        properties.put("prompt_id", promptVersion.promptId().toString());
-        properties.put("workspace_id", workspaceId);
-        properties.put("user_name", promptVersion.createdBy());
-        properties.put("version_type",
-                Optional.ofNullable(promptVersion.versionType()).orElse(PromptVersionType.PROMPT_VERSION).getValue());
-        properties.put("date", Instant.now().toString());
-        if (projectId != null) {
-            properties.put("project_id", projectId.toString());
-        }
+        Schedulers.boundedElastic().schedule(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("prompt_version_id", Objects.toString(promptVersion.id(), ""));
+            properties.put("prompt_id", Objects.toString(promptVersion.promptId(), ""));
+            properties.put("workspace_id", Objects.toString(workspaceId, ""));
+            properties.put("user_name", Objects.toString(promptVersion.createdBy(), ""));
+            properties.put("version_type",
+                    Optional.ofNullable(promptVersion.versionType()).orElse(PromptVersionType.PROMPT_VERSION)
+                            .getValue());
+            properties.put("date", Instant.now().toString());
+            if (projectId != null) {
+                properties.put("project_id", projectId.toString());
+            }
 
-        analyticsService.trackEvent("prompt_version_created", properties, promptVersion.createdBy());
+            analyticsService.trackEvent(BI_EVENT_PROMPT_VERSION_CREATED, properties, promptVersion.createdBy());
+        });
     }
 
     private PromptVersion getById(String workspaceId, UUID id) {

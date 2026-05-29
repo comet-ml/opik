@@ -988,6 +988,25 @@ class PromptResourceTest {
         }
     }
 
+    private void assertPromptVersionCreatedEvent(UUID promptId, UUID promptVersionId, String workspaceId,
+            String userName) {
+        var event = AnalyticsService.EVENT_PREFIX + "prompt_version_created";
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(
+                () -> {
+                    var requestBody = matchingJsonPath("$.event_type", equalTo(event))
+                            .and(matchingJsonPath("$.event_properties.prompt_id", equalTo(promptId.toString())))
+                            .and(matchingJsonPath("$.event_properties.workspace_id", equalTo(workspaceId)))
+                            .and(matchingJsonPath("$.event_properties.user_name", equalTo(userName)))
+                            .and(matchingJsonPath("$.event_properties.version_type", equalTo("prompt_version")));
+                    if (promptVersionId != null) {
+                        requestBody = requestBody.and(matchingJsonPath("$.event_properties.prompt_version_id",
+                                equalTo(promptVersionId.toString())));
+                    }
+                    wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(requestBody));
+                });
+    }
+
     private CreatePromptVersion createPromptVersionRequest(String name, PromptVersion version,
             TemplateStructure templateStructure) {
         return CreatePromptVersion.builder()
@@ -1034,17 +1053,7 @@ class PromptResourceTest {
 
             assertThat(promptId).isNotNull();
 
-            var event = AnalyticsService.EVENT_PREFIX + "prompt_version_created";
-            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(
-                    () -> wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(event))
-                                    .and(matchingJsonPath("$.event_properties.prompt_id",
-                                            equalTo(promptId.toString())))
-                                    .and(matchingJsonPath("$.event_properties.workspace_id",
-                                            equalTo(WORKSPACE_ID)))
-                                    .and(matchingJsonPath("$.event_properties.user_name", equalTo(USER)))
-                                    .and(matchingJsonPath("$.event_properties.version_type",
-                                            equalTo("prompt_version"))))));
+            assertPromptVersionCreatedEvent(promptId, null, WORKSPACE_ID, USER);
         }
 
         @ParameterizedTest
@@ -2044,19 +2053,7 @@ class PromptResourceTest {
 
             assertPromptVersion(actualPromptVersion, expectedPromptVersion, promptId);
 
-            var event = AnalyticsService.EVENT_PREFIX + "prompt_version_created";
-            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(
-                    () -> wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(event))
-                                    .and(matchingJsonPath("$.event_properties.prompt_id",
-                                            equalTo(promptId.toString())))
-                                    .and(matchingJsonPath("$.event_properties.prompt_version_id",
-                                            equalTo(actualPromptVersion.id().toString())))
-                                    .and(matchingJsonPath("$.event_properties.workspace_id",
-                                            equalTo(WORKSPACE_ID)))
-                                    .and(matchingJsonPath("$.event_properties.user_name", equalTo(USER)))
-                                    .and(matchingJsonPath("$.event_properties.version_type",
-                                            equalTo("prompt_version"))))));
+            assertPromptVersionCreatedEvent(promptId, actualPromptVersion.id(), WORKSPACE_ID, USER);
         }
 
         @Test
