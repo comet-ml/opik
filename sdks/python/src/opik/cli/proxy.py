@@ -91,3 +91,8 @@ def proxy(
     uvicorn.run(
         app, host=host, port=port, log_level="error"
     )  # Reduce uvicorn logging to keep output clean
+
+# Add API key handling
+api_key = click.prompt("Enter your API key", hide_input=True)
+if not api_key:
+    raise click.ClickException("API key is required. Please provide a valid API key.")
