@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.BatchResult;
+import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.fallbackLabelProjectId;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -88,34 +89,38 @@ public class ExperimentAggregatesService {
     }
 
     /**
-     * Populate experiment item aggregates in batches using cursor pagination with {@code Mono.expand()}.
-     *
-     * @param experimentId the experiment ID
-     * @param batchSize the number of items to process per batch
-     * @return Mono that completes when all batches are processed
+     * Populate experiment_item_aggregates in cursor-paginated batches. Resolves a single
+     * {@code labelProjectId} once per population (see
+     * {@link ExperimentAggregatesUtils#resolveLabelProjectId}) and threads it through every
+     * batch. Short-circuits when no project_ids resolve — nothing to aggregate.
      */
     private Mono<Void> populateExperimentItemsInBatches(UUID experimentId, int batchSize) {
-        return experimentAggregatesDAO.getProjectId(experimentId)
-                .flatMap(projectId -> experimentAggregatesDAO
-                        .populateExperimentItemAggregates(experimentId, projectId, null, batchSize)
-                        .expand(result -> {
-                            log.info("Processed experiment items in this batch, experimentId='{}', batchSize='{}'",
-                                    experimentId, result.processedCount());
-                            if (result.lastCursor() == null) {
-                                return Mono.empty();
-                            }
-                            log.debug(
-                                    "Batch processed, continuing with next batch, experimentId='{}', cursor='{}'",
-                                    experimentId, result.lastCursor());
-                            return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, projectId,
-                                    result.lastCursor(), batchSize);
-                        })
-                        .map(BatchResult::processedCount)
-                        .reduce(0L, Long::sum)
-                        .doOnSuccess(total -> log.info(
-                                "Finished processing all experiment items, experimentId='{}', totalProcessed='{}'",
-                                experimentId, total))
-                        .then());
+        return experimentAggregatesDAO.getProjectIds(experimentId)
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(projectIds -> experimentAggregatesDAO.getExperimentProjectId(experimentId)
+                        .switchIfEmpty(Mono.fromSupplier(() -> fallbackLabelProjectId(projectIds)))
+                        .flatMap(labelProjectId -> experimentAggregatesDAO
+                                .populateExperimentItemAggregates(
+                                        experimentId, projectIds, labelProjectId, null, batchSize)
+                                .expand(result -> {
+                                    log.info(
+                                            "Processed experiment items in this batch, experimentId='{}', batchSize='{}'",
+                                            experimentId, result.processedCount());
+                                    if (result.lastCursor() == null) {
+                                        return Mono.empty();
+                                    }
+                                    log.debug(
+                                            "Batch processed, continuing with next batch, experimentId='{}', cursor='{}'",
+                                            experimentId, result.lastCursor());
+                                    return experimentAggregatesDAO.populateExperimentItemAggregates(
+                                            experimentId, projectIds, labelProjectId, result.lastCursor(), batchSize);
+                                })
+                                .map(BatchResult::processedCount)
+                                .reduce(0L, Long::sum)
+                                .doOnSuccess(total -> log.info(
+                                        "Finished processing all experiment items, experimentId='{}', totalProcessed='{}'",
+                                        experimentId, total))
+                                .then()));
     }
 
     /**
