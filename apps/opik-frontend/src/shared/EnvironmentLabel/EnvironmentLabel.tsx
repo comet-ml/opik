@@ -77,7 +77,9 @@ const EnvironmentLabel: React.FC<EnvironmentLabelProps> = ({
   return (
     <div className={cn("flex min-w-0 items-center gap-1.5", className)}>
       <EnvironmentSquare name={name} color={env?.color} />
-      <span className="truncate">{name}</span>
+      <TooltipWrapper content={name}>
+        <span className="truncate">{name}</span>
+      </TooltipWrapper>
     </div>
   );
 };

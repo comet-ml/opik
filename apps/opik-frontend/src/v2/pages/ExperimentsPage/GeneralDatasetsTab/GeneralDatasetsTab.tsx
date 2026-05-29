@@ -326,7 +326,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           areAggregatedScores: true,
           aggregationKey: "feedback_scores",
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,
