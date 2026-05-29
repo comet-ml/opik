@@ -1,12 +1,19 @@
+import functools
 import statistics
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 import pytest
+from sklearn import metrics as sklearn_metrics
 
 import opik
 from opik.evaluation import metrics
 from opik.evaluation import test_result
 from opik.evaluation.metrics import score_result
+from opik.evaluation.scoring_functions import (
+    classification_f1_score,
+    classification_precision_score,
+    classification_recall_score,
+)
 from .. import verifiers
 from ...testlib import generate_project_name
 
@@ -136,3 +143,87 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         f"Expected experiment score value {expected_stdev} in backend, but got {experiment_data.experiment_scores[0].value}. "
         f"Full score object: {experiment_data.experiment_scores[0]}"
     )
+
+
+def test_experiment_scoring_functions__classification_metrics__computed_and_logged(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+
+    dataset.insert(
+        [
+            {"input": {"text": "first"}, "reference": "cat"},
+            {"input": {"text": "second"}, "reference": "dog"},
+            {"input": {"text": "third"}, "reference": "cat"},
+        ]
+    )
+
+    def task(item: Dict[str, Any]):
+        if item["input"] == {"text": "first"}:
+            return {"output": "cat"}
+        if item["input"] == {"text": "second"}:
+            return {"output": "cat"}
+        if item["input"] == {"text": "third"}:
+            return {"output": "cat"}
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item['input']}"
+        )
+
+    average = "macro"
+    f1_fn = functools.partial(classification_f1_score, average=average)
+    precision_fn = functools.partial(classification_precision_score, average=average)
+    recall_fn = functools.partial(classification_recall_score, average=average)
+
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[],
+        experiment_name=experiment_name,
+        experiment_config={"model_name": "test-model"},
+        experiment_scoring_functions=[f1_fn, precision_fn, recall_fn],
+        project_name=PROJECT_NAME,
+    )
+
+    expected_y_true = ["cat", "dog", "cat"]
+    expected_y_pred = ["cat", "cat", "cat"]
+    expected_f1 = sklearn_metrics.f1_score(
+        expected_y_true,
+        expected_y_pred,
+        average=average,
+    )
+    expected_precision = sklearn_metrics.precision_score(
+        expected_y_true,
+        expected_y_pred,
+        average=average,
+    )
+    expected_recall = sklearn_metrics.recall_score(
+        expected_y_true,
+        expected_y_pred,
+        average=average,
+    )
+
+    assert len(evaluation_result.experiment_scores) == 3, (
+        f"Expected 3 experiment scores, got {len(evaluation_result.experiment_scores)}. "
+        f"Scores: {evaluation_result.experiment_scores}"
+    )
+
+    scores_by_name = {
+        score.name: score for score in evaluation_result.experiment_scores
+    }
+    assert scores_by_name["classification_f1_macro"].value == pytest.approx(
+        expected_f1, abs=0.0001
+    )
+    assert scores_by_name["classification_precision_macro"].value == pytest.approx(
+        expected_precision, abs=0.0001
+    )
+    assert scores_by_name["classification_recall_macro"].value == pytest.approx(
+        expected_recall, abs=0.0001
+    )
+
+    retrieved_experiment = opik_client.get_experiment_by_id(
+        evaluation_result.experiment_id
+    )
+    experiment_data = retrieved_experiment.get_experiment_data()
+    assert experiment_data.experiment_scores is not None
+    assert len(experiment_data.experiment_scores) == 3
