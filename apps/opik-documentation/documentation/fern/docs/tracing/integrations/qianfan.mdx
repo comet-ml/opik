@@ -38,8 +38,8 @@ from openai import OpenAI
 # Initialize the OpenAI client with your Qianfan base URL
 client = OpenAI(
     base_url="https://api.baiduqianfan.ai/v1",
-    api_key="bce-v3/ALTAK-XXXXXXXX/XXXXXXXXXXXXXXXX",  # Qianfan bearer token
-    default_headers={"appid": "app-xxxxxx"}  # Optional Qianfan appid
+    api_key="<QIANFAN_BEARER_TOKEN>",  # Qianfan bearer token
+    default_headers={"appid": "<QIANFAN_APP_ID>"}  # Optional Qianfan appid
 )
 client = track_openai(client)
 
@@ -69,8 +69,8 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="https://api.baiduqianfan.ai/v1",
-    api_key="bce-v3/ALTAK-XXXXXXXX/XXXXXXXXXXXXXXXX",  # Qianfan bearer token
-    default_headers={"appid": "app-xxxxxx"}  # Optional Qianfan appid
+    api_key="<QIANFAN_BEARER_TOKEN>",  # Qianfan bearer token
+    default_headers={"appid": "<QIANFAN_APP_ID>"}  # Optional Qianfan appid
 )
 client = track_openai(client)
 
