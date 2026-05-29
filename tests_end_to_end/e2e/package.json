@@ -6,8 +6,8 @@
   "scripts": {
     "test": "playwright test --pass-with-no-tests",
     "test:t1": "playwright test --grep @t1-smoke",
-    "test:t2": "playwright test --grep @t2-cuj",
-    "test:t3": "playwright test --grep @t3-nightly",
+    "test:t2": "playwright test --grep \"@t1-smoke|@t2-cuj\"",
+    "test:t3": "playwright test --grep \"@t1-smoke|@t2-cuj|@t3-nightly\"",
     "test:headed": "playwright test --headed",
     "report": "playwright show-report"
   },

@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import VersionTagList from "./VersionTagList";
 import type { VersionHistoryItem } from "./VersionHistoryTimeline";
 
@@ -58,6 +59,13 @@ const DiffVersionMenu: React.FC<DiffVersionMenuProps> = ({
                   {version.label}
                 </span>
                 <VersionTagList tags={version.tags} size="sm" maxWidth={120} />
+                <EnvironmentBadgeList
+                  names={version.environments}
+                  size="sm"
+                  withOverflow
+                  compact
+                  maxWidth={60}
+                />
               </div>
               <span className="comet-body-xs flex shrink-0 items-center gap-1 text-muted-slate">
                 <Clock className="size-3 shrink-0" />

@@ -130,6 +130,8 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-opus-4-8"
+    label: "Claude Opus 4.8"
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
     structuredOutput: true
@@ -202,10 +204,12 @@ gemini:
     structuredOutput: true
   - id: "gemini-2.5-flash-image"
     structuredOutput: true
+  - id: "gemini-3-pro-image"
   - id: "gemini-3-pro-image-preview"
     structuredOutput: true
   - id: "gemini-3-pro-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-image"
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
@@ -334,6 +338,10 @@ openrouter:
     structuredOutput: true
   - id: "anthropic/claude-opus-4.7-fast"
     label: "anthropic/claude-opus-4.7-fast"
+  - id: "anthropic/claude-opus-4.8"
+    label: "anthropic/claude-opus-4.8"
+  - id: "anthropic/claude-opus-4.8-fast"
+    label: "anthropic/claude-opus-4.8-fast"
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
@@ -1251,6 +1259,8 @@ openrouter:
     label: "stepfun/step-3.5-flash"
   - id: "stepfun/step-3.5-flash:free"
     label: "stepfun/step-3.5-flash:free"
+  - id: "stepfun/step-3.7-flash"
+    label: "stepfun/step-3.7-flash"
   - id: "switchpoint/router"
     label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"

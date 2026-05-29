@@ -14420,6 +14420,10 @@ components:
         commit:
           type: string
           readOnly: true
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         prompt_id:
           type: string
           format: uuid

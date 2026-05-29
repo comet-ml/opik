@@ -1,9 +1,11 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AxiosError } from "axios";
 
 import useEnvironmentCreateMutation from "@/api/environments/useEnvironmentCreateMutation";
 import useEnvironmentUpdateMutation from "@/api/environments/useEnvironmentUpdateMutation";
 import ColorPicker from "@/shared/ColorPicker/ColorPicker";
+import { getDefaultEnvironmentMeta } from "@/shared/EnvironmentLabel/helpers";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 import {
   Dialog,
@@ -72,6 +74,21 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
     }
     return "";
   }, [trimmedName]);
+
+  // Color is locked while the name matches a seeded default (development /
+  // staging / production) so the badge icon + color stay consistent with what
+  // the backend seeds in migration 000066. Renaming away from the default
+  // unlocks the picker.
+  const lockedDefault = getDefaultEnvironmentMeta(trimmedName);
+  const isColorLocked = lockedDefault !== null;
+
+  useEffect(() => {
+    if (lockedDefault && color !== lockedDefault.color) {
+      setColor(lockedDefault.color);
+    }
+  }, [lockedDefault, color]);
+
+  const LockedIcon = lockedDefault?.icon;
 
   const isEdit = mode === "edit";
   const title =
@@ -145,19 +162,31 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="environmentName">Name</Label>
             <div className="flex items-center">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Change color"
-                    className="size-10 shrink-0 rounded-l-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+              {isColorLocked ? (
+                <TooltipWrapper content="Color is reserved for the default environment">
+                  <div
+                    aria-label="Default environment color (locked)"
+                    className="flex size-10 shrink-0 cursor-not-allowed items-center justify-center rounded-l-md"
                     style={{ backgroundColor: color }}
-                  />
-                </PopoverTrigger>
-                <PopoverContent className="w-auto" align="start">
-                  <ColorPicker value={color} onChange={handleColorChange} />
-                </PopoverContent>
-              </Popover>
+                  >
+                    {LockedIcon && <LockedIcon className="size-5 text-white" />}
+                  </div>
+                </TooltipWrapper>
+              ) : (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Change color"
+                      className="size-10 shrink-0 rounded-l-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                      style={{ backgroundColor: color }}
+                    />
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto" align="start">
+                    <ColorPicker value={color} onChange={handleColorChange} />
+                  </PopoverContent>
+                </Popover>
+              )}
               <Input
                 id="environmentName"
                 className="flex-1 rounded-l-none"

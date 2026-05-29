@@ -39,13 +39,14 @@ export interface PromptVersion {
   template: string;
   metadata: object;
   commit: string;
+  version_number?: string;
   change_description?: string;
   prompt_id: string;
   created_at: string;
   tags?: string[];
   type?: PROMPT_TYPE;
   version_type?: PROMPT_VERSION_TYPE;
-  environment?: string | null;
+  environments?: string[] | null;
 }
 
 export interface PromptCommitInfo {
