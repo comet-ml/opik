@@ -24,8 +24,6 @@ favicon: img/logo.svg
 js:
   - path: ./add_cookbook_banner.js
     strategy: afterInteractive
-  - path: ./v1_noindex.js
-    strategy: afterInteractive
 css: ./styles.css
 
 analytics:
