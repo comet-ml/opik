@@ -48,7 +48,7 @@ PROJECT_NAME = generate_project_name("e2e", __name__)
 # OpenAI allow-list entry. If you change this, re-run all three tests:
 # nano will pass the first two (structural assertions) but reliably
 # fail the third (it never calls `read` on truncated content).
-AGENTIC_JUDGE_MODEL = "gpt-4o-mini"
+AGENTIC_JUDGE_MODEL = "gpt-5-mini"  #
 
 
 @pytest.mark.skipif(
