@@ -180,7 +180,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         scoring_tool_strategy: Union[
             _strategy_selector.ScoringToolStrategyMode,
             _strategy_selector.ScoringToolStrategySelector,
-        ] = "auto",
+        ] = "never",
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 

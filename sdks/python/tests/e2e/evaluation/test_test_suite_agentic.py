@@ -95,6 +95,7 @@ def test_test_suite_agentic__assertion_about_span_name__passes(
         experiment_name=experiment_name,
         verbose=0,
         model=AGENTIC_JUDGE_MODEL,
+        scoring_tool_strategy="auto",
     )
 
     # The one assertion must surface in the feedback scores.
@@ -174,6 +175,7 @@ def test_test_suite_agentic__assertion_about_span_error__detects_failure(
         experiment_name=experiment_name,
         verbose=0,
         model=AGENTIC_JUDGE_MODEL,
+        scoring_tool_strategy="auto",
     )
 
     # The assertion is TRUE — the inner step did raise a RuntimeError
@@ -292,6 +294,7 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
         experiment_name=experiment_name,
         verbose=0,
         model=AGENTIC_JUDGE_MODEL,
+        scoring_tool_strategy="auto",
     )
 
     # If the judge stayed at the overview level, it would have seen the
