@@ -757,7 +757,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     return allRows.filter((row) => selectedIds.includes(row.id)) as Trace[];
   }, [refetchExportData, rowSelection]);
 
-  const { traceId, handleRowClick, panels } = useTraceThreadPanelsState<Trace>({
+  const {
+    traceId,
+    handleRowClick,
+    handleClose: clearPanelsState,
+    panels,
+  } = useTraceThreadPanelsState<Trace>({
     rows,
     type: "trace",
     queryPrefix: TLS_QUERY_PREFIX,
@@ -818,10 +823,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       if (!isOpen) {
+        clearPanelsState();
         onClose();
       }
     },
-    [onClose],
+    [clearPanelsState, onClose],
   );
 
   const sortConfig = useMemo(
