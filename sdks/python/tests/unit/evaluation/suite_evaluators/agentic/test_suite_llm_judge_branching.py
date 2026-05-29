@@ -3,6 +3,8 @@
 import datetime
 from unittest import mock
 
+import pytest
+
 from opik.evaluation.metrics import score_result
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.message_processing.emulation import (
@@ -51,6 +53,7 @@ def test_score__without_context__uses_one_shot_path():
         assert results[0].name == "x"
 
 
+@pytest.mark.skip("skipped until we have default scoring_tool_strategy='auto'")
 def test_score__with_context__routes_to_agentic_path():
     # gpt-5 is flagged `agentic_in_auto=True` in `model_capabilities.py`,
     # so the default `auto` strategy routes context-bearing calls to

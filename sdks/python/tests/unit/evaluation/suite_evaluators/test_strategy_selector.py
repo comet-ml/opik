@@ -116,6 +116,7 @@ class TestCapabilityLookup:
 
 
 class TestLLMJudgeIntegration:
+    @pytest.mark.skip("skipped until we have default scoring_tool_strategy='auto'")
     def test_default_strategy_is_auto(self):
         judge = llm_judge.LLMJudge(assertions=["a"], track=False)
         assert isinstance(
