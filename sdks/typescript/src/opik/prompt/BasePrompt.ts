@@ -24,6 +24,8 @@ export interface BasePromptData {
   templateStructure?: PromptTemplateStructure;
   synced?: boolean;
   projectName?: string;
+  /** Optional environments that own this prompt version. */
+  environments?: string[];
 }
 
 /**
@@ -39,6 +41,7 @@ export abstract class BasePrompt {
   private _changeDescription: string | undefined;
 
   private _projectName: string | undefined;
+  private _environments: string[];
 
   public readonly type: PromptType;
   public readonly templateStructure: PromptTemplateStructure;
@@ -62,6 +65,11 @@ export abstract class BasePrompt {
   get synced(): boolean { return this._synced; }
   get changeDescription(): string | undefined { return this._changeDescription; }
   get projectName(): string | undefined { return this._projectName; }
+  /**
+   * The environments that own this prompt version. Returns an empty array
+   * if the version is not associated with any environment.
+   */
+  get environments(): readonly string[] { return Object.freeze([...this._environments]); }
 
 
   constructor(data: BasePromptData, opik?: OpikClient) {
@@ -79,6 +87,7 @@ export abstract class BasePrompt {
     this._metadata = data.metadata;
     this.opik = opik ?? getGlobalClient();
     this._projectName = data.projectName;
+    this._environments = data.environments ? [...data.environments] : [];
   }
 
   /**
@@ -92,6 +101,7 @@ export abstract class BasePrompt {
     changeDescription?: string;
     tags?: string[];
     projectName?: string;
+    environments?: string[];
   }): void {
     this._id = result.promptId;
     this._versionId = result.versionId;
@@ -104,6 +114,7 @@ export abstract class BasePrompt {
     if (result.projectName !== undefined) {
       this._projectName = result.projectName;
     }
+    this._environments = result.environments ? [...result.environments] : [];
     this._synced = true;
   }
 
@@ -154,6 +165,7 @@ export abstract class BasePrompt {
           changeDescription: result.changeDescription,
           tags: result.tags ? Array.from(result.tags) : undefined,
           projectName: result.projectName,
+          environments: result.environments ? Array.from(result.environments) : undefined,
         });
       } else {
         logger.warn(

@@ -28,6 +28,35 @@ class PromptSearchResult:
     project_name: Optional[str]
 
 
+def _validate_prompt_pin(
+    commit: Optional[str],
+    version: Optional[str],
+    environment: Optional[str],
+) -> None:
+    """Reject mutually-exclusive prompt selectors before hitting the REST API.
+
+    The wire-level ``retrieve_prompt_version`` endpoint accepts ``commit``,
+    ``version_number`` and ``environment``, but at most one may be set;
+    otherwise the backend silently picks one. ``commit`` is also deprecated
+    in favour of ``version``. Centralizing the check here keeps
+    ``PromptClient.get_prompt`` and ``PromptClient.get_prompt_with_cache``
+    in sync.
+    """
+    if commit is not None and version is not None:
+        raise ValueError(
+            "Provide either `commit` or `version`, not both. "
+            "Prefer `version` — `commit` is deprecated."
+        )
+    if commit and environment:
+        raise ValueError(
+            "'commit' and 'environment' are mutually exclusive; pass at most one."
+        )
+    if version and environment:
+        raise ValueError(
+            "'version' and 'environment' are mutually exclusive; pass at most one."
+        )
+
+
 class PromptClient:
     def __init__(self, client: rest_client.OpikApi):
         self._rest_client = client
@@ -189,6 +218,7 @@ class PromptClient:
         raise_if_not_template_structure: Optional[str] = None,
         project_name: Optional[str] = None,
         version: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve the prompt detail for a given prompt name, optionally
@@ -202,20 +232,19 @@ class PromptClient:
             commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             raise_if_not_template_structure: Optional template structure validation. If provided and doesn't match, raises PromptTemplateStructureMismatch.
             project_name: The name of the project to which the prompt belongs. If not provided, the default project is used.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``commit``.
 
         Returns:
             Prompt: The details of the specified prompt.
         """
-        if commit is not None and version is not None:
-            raise ValueError(
-                "Provide either `commit` or `version`, not both. "
-                "Prefer `version` — `commit` is deprecated."
-            )
+        _validate_prompt_pin(commit, version, environment)
         try:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
                 version_number=version,
+                environment=environment,
                 project_name=project_name,
             )
 
@@ -253,12 +282,9 @@ class PromptClient:
         prompt_cls: Type[_PromptT],
         no_cache: bool = False,
         version: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> Optional[_PromptT]:
-        if commit is not None and version is not None:
-            raise ValueError(
-                "Provide either `commit` or `version`, not both. "
-                "Prefer `version` — `commit` is deprecated."
-            )
+        _validate_prompt_pin(commit, version, environment)
 
         def _fetch(mask_id: Optional[str] = None) -> Optional[_PromptT]:
             if mask_id is not None:
@@ -272,6 +298,7 @@ class PromptClient:
                     raise_if_not_template_structure=template_structure,
                     project_name=project_name,
                     version=version,
+                    environment=environment,
                 )
             if prompt_version is None:
                 return None
@@ -292,6 +319,7 @@ class PromptClient:
                 fetch_fn=lambda: _fetch(mask_id=mask_id),
                 mask_id=mask_id,
                 version=version,
+                environment=environment,
             )
 
         unmasked = _cached_fetch()
@@ -438,7 +466,7 @@ class PromptClient:
                         template=version.template,
                         type=version.type,
                         version_type=version.version_type,
-                        environment=version.environment,
+                        environments=version.environments,
                         metadata=version.metadata,
                         commit=version.commit,
                         version_number=version.version_number,

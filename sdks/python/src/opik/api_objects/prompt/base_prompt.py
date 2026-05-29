@@ -92,6 +92,12 @@ class BasePrompt(ABC):
         """The name of the project this prompt belongs to."""
         pass
 
+    @property
+    @abstractmethod
+    def environments(self) -> Optional[List[str]]:
+        """The environments that currently own this prompt version, or ``None`` if unowned."""
+        pass
+
     # Internal API fields for backend synchronization
     __internal_api__prompt_id__: Optional[str]
     __internal_api__version_id__: Optional[str]
