@@ -11,6 +11,7 @@ import {
   isCellValueEmpty,
 } from "@/shared/DataTableCells/EmptyCellPlaceholder";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
+import { getAggregatedCellValue } from "@/shared/DataTableCells/aggregationUtils";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 
 const TextCell = <TData,>(context: CellContext<TData, string>) => {
@@ -62,16 +63,11 @@ const TextAggregationCell = <TData,>(context: CellContext<TData, string>) => {
   const { aggregationKey, dataFormatter = formatNumericData } = (custom ??
     {}) as CustomMeta;
 
-  const rowId = context.row.id;
-  const { aggregationMap } = context.table.options.meta ?? {};
-
-  const data = aggregationMap?.[rowId] ?? {};
-  const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = EMPTY_CELL_PLACEHOLDER;
-
-  if (isNumber(rawValue)) {
-    value = dataFormatter(rawValue);
-  }
+  const { value } = getAggregatedCellValue(
+    context,
+    aggregationKey,
+    dataFormatter,
+  );
 
   return (
     <CellWrapper

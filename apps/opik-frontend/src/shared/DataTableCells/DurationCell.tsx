@@ -1,11 +1,11 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
-import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
+import { getAggregatedCellValue } from "@/shared/DataTableCells/aggregationUtils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { formatDuration } from "@/lib/date";
 import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
@@ -71,16 +71,11 @@ const DurationTextAggregationCell = <TData,>(
   const { aggregationKey, dataFormatter = formatDuration } = (custom ??
     {}) as CustomMeta;
 
-  const rowId = context.row.id;
-  const { aggregationMap } = context.table.options.meta ?? {};
-
-  const data = aggregationMap?.[rowId] ?? {};
-  const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = EMPTY_CELL_PLACEHOLDER;
-
-  if (isNumber(rawValue)) {
-    value = dataFormatter(rawValue);
-  }
+  const { value } = getAggregatedCellValue(
+    context,
+    aggregationKey,
+    dataFormatter,
+  );
 
   return (
     <CellWrapper

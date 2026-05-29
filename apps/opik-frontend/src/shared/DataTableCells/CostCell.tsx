@@ -6,6 +6,7 @@ import isNumber from "lodash/isNumber";
 import { formatCost, FormatCostOptions } from "@/lib/money";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { EMPTY_CELL_PLACEHOLDER } from "@/shared/DataTableCells/EmptyCellPlaceholder";
+import { getAggregatedCellValue } from "@/shared/DataTableCells/aggregationUtils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
@@ -81,16 +82,11 @@ const CostAggregationCell = <TData,>(context: CellContext<TData, string>) => {
   const { aggregationKey, dataFormatter = formatCost } = (custom ??
     {}) as CustomMeta;
 
-  const rowId = context.row.id;
-  const { aggregationMap } = context.table.options.meta ?? {};
-
-  const data = aggregationMap?.[rowId] ?? {};
-  const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = EMPTY_CELL_PLACEHOLDER;
-
-  if (isNumber(rawValue)) {
-    value = dataFormatter(rawValue, {});
-  }
+  const { rawValue, value } = getAggregatedCellValue(
+    context,
+    aggregationKey,
+    (v) => dataFormatter(v, {}),
+  );
 
   return (
     <CellWrapper
