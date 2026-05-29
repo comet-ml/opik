@@ -88,7 +88,13 @@ sdks/python/uv.lock
 .vscode
 
 # Claude Code
-.claude/
+# Selectively ignore personal/volatile parts of .claude/.
+# Shared rules (.claude/rules/) ARE tracked so teammates auto-load them.
+.claude/agents/
+.claude/commands/
+.claude/skills/
+.claude/worktrees/
+.claude/settings.local.json
 .mcp.json
 CLAUDE.md
 .codex
