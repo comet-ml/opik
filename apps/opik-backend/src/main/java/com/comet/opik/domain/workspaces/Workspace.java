@@ -24,8 +24,6 @@ public record Workspace(
         String experimentProjectMigrationSkipReason,
         Instant promptProjectMigrationSkippedAt,
         String promptProjectMigrationSkipReason,
-        Instant optimizationProjectMigrationSkippedAt,
-        String optimizationProjectMigrationSkipReason,
         boolean hasLegacyScores,
         Instant createdAt,
         String createdBy,

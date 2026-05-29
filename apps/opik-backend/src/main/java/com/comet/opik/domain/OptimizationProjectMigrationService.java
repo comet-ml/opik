@@ -1,9 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
-import com.comet.opik.domain.workspaces.MigrationSkipReasonCount;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.comet.opik.infrastructure.OptimizationProjectMigrationConfig;
 import com.google.common.collect.Lists;
@@ -30,12 +28,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -43,8 +39,8 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 /**
  * D3 of the V1 → V2 workspace migration. Backfills {@code optimizations.project_id} in ClickHouse
  * from {@code ''} (orphan) to a real project. Mirrors D1 (experiments) and D2 (datasets) — same
- * Quartz job + Managed service + dedicated reactor scheduler + persisted skip-state shape — with
- * two inference paths instead of one:
+ * Quartz job + Managed service + dedicated reactor scheduler shape — with two inference paths
+ * instead of one:
  *
  * <ul>
  *   <li><b>Path A (primary)</b>: read distinct {@code experiment.project_id} values for the
@@ -53,24 +49,22 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  *       optimization's {@code dataset_id}. Used only when Path A yields no signal.
  * </ul>
  *
- * <p>Path A wins on disagreement (a dataset is shared across many uses; the optimization's own
- * experiments reflect its specific run). When neither path yields a single project, the
- * optimization is classified into one of five buckets:
+ * <p>Path A wins over Path B on disagreement (the optimization's own trials reflect its specific
+ * run, while a dataset can be shared across many uses). When Path A returns several distinct
+ * projects, the dominant project wins — ordered by {@code (count DESC, last_activity DESC,
+ * project_id ASC)} so repeated runs produce the same result. This matches the dataset migration
+ * (OPIK-6701); the per-product analysis lives in the "Optimization Project Migration — Options
+ * Review" Notion doc.
+ *
+ * <p>Classification buckets:
  *
  * <table>
  *   <tr><th>Bucket</th><th>Action</th></tr>
- *   <tr><td>Certain via experiments (Path A, 1 project)</td><td>Assign inferred</td></tr>
+ *   <tr><td>Certain via experiments (Path A, ≥ 1 project)</td><td>Assign dominant</td></tr>
  *   <tr><td>Certain via dataset (Path B, 1 project)</td><td>Assign inferred</td></tr>
  *   <tr><td>Certain but project deleted</td><td>Assign to Default Project</td></tr>
  *   <tr><td>No inference (Path A=0, Path B=null)</td><td>Assign to Default Project</td></tr>
- *   <tr><td>Ambiguous (Path A &gt;1)</td><td>Skip</td></tr>
  * </table>
- *
- * <p>Trap conditions persisted in {@code workspaces.optimization_project_migration_skip_reason}:
- * {@code all_ambiguous} (every remaining orphan is ambiguous). {@code deleted_project} and
- * {@code default_project_missing} are kept as defensive constants — after the policy alignment
- * with D1/D2, neither is emitted by the active code paths (deleted projects reroute to Default
- * Project, missing Default Project is auto-provisioned).
  *
  * <p>The cycle refuses to run when D1 (experiments) or D2 (datasets) have V1 work pending for a
  * given workspace, unless {@code allowBeforeDependencies} is set. The runbook documents the order
@@ -88,16 +82,7 @@ public class OptimizationProjectMigrationService implements Managed {
 
     private static final Attributes RESULT_MIGRATED = Attributes.of(RESULT_KEY, "migrated");
     private static final Attributes RESULT_NO_ACTIONABLE = Attributes.of(RESULT_KEY, "no_actionable");
-    private static final Attributes RESULT_ALL_SKIPPED_AMBIGUOUS = Attributes.of(RESULT_KEY, "all_skipped_ambiguous");
     private static final Attributes RESULT_DEPENDENCIES_PENDING = Attributes.of(RESULT_KEY, "dependencies_pending");
-
-    // Skip-reason labels for the `optimizations.skipped` counter. Only `ambiguous` is emitted
-    // today; `deleted_project` is kept as a defensive constant in case a future code path needs
-    // it (e.g. a dry-run tool that distinguishes "would have been deleted" from "would have been
-    // assigned to default").
-    @SuppressWarnings("unused")
-    private static final Attributes SKIP_REASON_DELETED_PROJECT = Attributes.of(stringKey("reason"), "deleted_project");
-    private static final Attributes SKIP_REASON_AMBIGUOUS = Attributes.of(stringKey("reason"), "ambiguous");
 
     // Reason labels for the `optimizations.assigned_to_default` counter — diagnoses why an
     // optimization ended up in Default Project (inferred project was deleted vs. no inference at
@@ -106,25 +91,25 @@ public class OptimizationProjectMigrationService implements Managed {
             "deleted_project");
     private static final Attributes ASSIGNED_REASON_NO_INFERENCE = Attributes.of(stringKey("reason"), "no_inference");
 
+    /**
+     * Label on the {@code optimizations.assigned_to_dominant_project} counter that breaks the
+     * count down by the number of projects an optimization's experiments referenced.
+     */
+    private static final AttributeKey<String> DISTINCT_PROJECT_COUNT_KEY = stringKey("distinct_project_count");
+
+    /**
+     * Upper bound applied to the {@link #DISTINCT_PROJECT_COUNT_KEY} label value so that an
+     * unexpectedly large project count cannot create an unbounded number of metric series. Counts
+     * at or above this value share a single label.
+     */
+    private static final int DISTINCT_PROJECT_COUNT_MAX = 50;
+
     // Inference-path labels for the `inference.path` diagnostic counter — diagnoses whether Path
     // B (dataset fallback) is doing useful work or Path A (experiments) handles everything in
-    // practice. Incremented once per migrated optimization (not for ambiguous or no-inference).
+    // practice. Incremented once per migrated optimization (not for no-inference fall-throughs).
     private static final AttributeKey<String> INFERENCE_PATH_KEY = stringKey("path");
     private static final Attributes INFERENCE_PATH_EXPERIMENTS = Attributes.of(INFERENCE_PATH_KEY, "experiments");
     private static final Attributes INFERENCE_PATH_DATASET = Attributes.of(INFERENCE_PATH_KEY, "dataset");
-
-    private static final String TRAPPED_REASON_ALL_AMBIGUOUS = "all_ambiguous";
-    // Defensive constants — neither is emitted by the active code paths after the policy
-    // alignment with D1/D2 (Default Project is auto-created via getOrCreate; certain-deleted
-    // optimizations get reassigned to Default Project rather than trapping the workspace).
-    // Surfaced through the gauge tag set so legacy rows persisted before any future policy
-    // change still bucket.
-    private static final String TRAPPED_REASON_DELETED_PROJECT = "deleted_project";
-    private static final String TRAPPED_REASON_DEFAULT_PROJECT_MISSING = "default_project_missing";
-
-    private static final AttributeKey<String> TRAP_REASON_KEY = stringKey("reason");
-    private static final Set<String> KNOWN_TRAP_REASONS = Set.of(
-            TRAPPED_REASON_DELETED_PROJECT, TRAPPED_REASON_ALL_AMBIGUOUS, TRAPPED_REASON_DEFAULT_PROJECT_MISSING);
 
     private static final String DEFAULT_PROJECT_NAME = ProjectService.DEFAULT_PROJECT;
 
@@ -133,16 +118,14 @@ public class OptimizationProjectMigrationService implements Managed {
     private final @NonNull DatasetService datasetService;
     private final @NonNull ProjectService projectService;
     private final @NonNull WorkspaceVersionService workspaceVersionService;
-    private final @NonNull WorkspacesService workspacesService;
     private final @NonNull OptimizationProjectMigrationConfig config;
     private final @NonNull MigrationConfig migrationConfig;
 
     private final LongHistogram cycleEligibleWorkspaces;
-    private final LongGauge cycleTrappedWorkspaces;
     private final LongGauge cycleEnvExcludedWorkspaces;
     private final LongHistogram workspaceDuration;
-    private final LongCounter optimizationsSkipped;
     private final LongCounter optimizationsAssignedToDefault;
+    private final LongCounter optimizationsAssignedToDominantProject;
     private final LongCounter inferencePath;
     private final LongHistogram batchSize;
 
@@ -161,7 +144,6 @@ public class OptimizationProjectMigrationService implements Managed {
             @NonNull DatasetService datasetService,
             @NonNull ProjectService projectService,
             @NonNull WorkspaceVersionService workspaceVersionService,
-            @NonNull WorkspacesService workspacesService,
             @NonNull @Config("optimizationProjectMigration") OptimizationProjectMigrationConfig config,
             @NonNull @Config("migration") MigrationConfig migrationConfig) {
         this.optimizationDAO = optimizationDAO;
@@ -169,7 +151,6 @@ public class OptimizationProjectMigrationService implements Managed {
         this.datasetService = datasetService;
         this.projectService = projectService;
         this.workspaceVersionService = workspaceVersionService;
-        this.workspacesService = workspacesService;
         this.config = config;
         this.migrationConfig = migrationConfig;
 
@@ -179,34 +160,28 @@ public class OptimizationProjectMigrationService implements Managed {
                 .setDescription("Number of workspaces with eligible optimizations found per cycle")
                 .ofLongs()
                 .build();
-        this.cycleTrappedWorkspaces = meter
-                .gaugeBuilder("%s.cycle.trapped_workspaces".formatted(METRIC_NAMESPACE))
-                .setDescription(
-                        "Number of workspaces locally skipped because of a persisted trap, tagged by reason "
-                                + "(all_ambiguous / deleted_project / default_project_missing / other)")
-                .ofLongs()
-                .build();
         this.cycleEnvExcludedWorkspaces = meter
                 .gaugeBuilder("%s.cycle.env_excluded_workspaces".formatted(METRIC_NAMESPACE))
                 .setDescription(
-                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var. Mirrors trapped_workspaces so the dashboard can show both exclusion paths side by side.")
+                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var.")
                 .ofLongs()
                 .build();
         this.workspaceDuration = meter
                 .histogramBuilder("%s.workspace.duration".formatted(METRIC_NAMESPACE))
                 .setDescription(
-                        "Duration of a single workspace migration, tagged by result (migrated / no_actionable / all_skipped_ambiguous / dependencies_pending / error)")
+                        "Duration of a single workspace migration, tagged by result (migrated / no_actionable / dependencies_pending / error)")
                 .setUnit("ms")
                 .ofLongs()
-                .build();
-        this.optimizationsSkipped = meter
-                .counterBuilder("%s.optimizations.skipped".formatted(METRIC_NAMESPACE))
-                .setDescription("Total number of optimizations skipped during migration, tagged by reason")
                 .build();
         this.optimizationsAssignedToDefault = meter
                 .counterBuilder("%s.optimizations.assigned_to_default".formatted(METRIC_NAMESPACE))
                 .setDescription(
                         "Total number of orphan optimizations assigned to the workspace's Default Project. Diagnostic for the no-inference and deleted-project buckets.")
+                .build();
+        this.optimizationsAssignedToDominantProject = meter
+                .counterBuilder("%s.optimizations.assigned_to_dominant_project".formatted(METRIC_NAMESPACE))
+                .setDescription(
+                        "Total number of orphan optimizations whose experiments referenced multiple projects and were assigned to the dominant one (most referencing experiments). Tagged by distinct_project_count for the multi-project distribution.")
                 .build();
         this.inferencePath = meter
                 .counterBuilder("%s.inference.path".formatted(METRIC_NAMESPACE))
@@ -245,18 +220,13 @@ public class OptimizationProjectMigrationService implements Managed {
 
     public Mono<Void> runMigrationCycle() {
         return Mono.fromCallable(() -> {
-            var skippedWorkspaceIds = workspacesService.findOptimizationProjectMigrationSkippedWorkspaceIds();
             var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
-            recordTrappedWorkspacesByReason(workspacesService.countOptimizationProjectMigrationSkippedByReason());
             cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
             log.info(
-                    "Starting optimization project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}', envExcludedWorkspaces='{}', allowBeforeDependencies='{}'",
-                    config.workspacesPerRun(), config.optimizationBatchSize(), skippedWorkspaceIds.size(),
+                    "Starting optimization project migration cycle, workspacesPerRun='{}', batchSize='{}', envExcludedWorkspaces='{}', allowBeforeDependencies='{}'",
+                    config.workspacesPerRun(), config.optimizationBatchSize(),
                     envExcludedWorkspaceIds.size(), config.allowBeforeDependencies());
-            return Stream.concat(
-                    envExcludedWorkspaceIds.stream(),
-                    skippedWorkspaceIds.stream())
-                    .collect(Collectors.toUnmodifiableSet());
+            return envExcludedWorkspaceIds;
         })
                 .subscribeOn(migrationScheduler)
                 .flatMapMany(excludedWorkspaceIds -> findEligibleWorkspaces(excludedWorkspaceIds)
@@ -342,9 +312,9 @@ public class OptimizationProjectMigrationService implements Managed {
     }
 
     /**
-     * Five-bucket classification: certain-via-experiments / certain-via-dataset / certain-deleted
-     * → Default / no-inference → Default / ambiguous → skip. Path A wins over Path B on
-     * disagreement.
+     * Four-bucket classification: certain-via-experiments (dominant) / certain-via-dataset /
+     * certain-deleted → Default / no-inference → Default. Path A wins over Path B on disagreement;
+     * Path A returning multiple projects routes to the dominant one (mirroring OPIK-6701).
      */
     private Mono<Boolean> classifyAndMigrate(
             String workspaceId, List<OrphanOptimization> orphans, long workspaceStartMillis) {
@@ -376,29 +346,22 @@ public class OptimizationProjectMigrationService implements Managed {
                         OptimizationProjectMapping::optimizationId, Function.identity(),
                         (a, b) -> a));
 
-        // Bucket 1: certain via experiments (Path A, distinct = 1) — collect with their inference path.
-        // Bucket 5: ambiguous (Path A, distinct > 1) — accumulate count, skip.
-        // For everything else (Path A absent), fall through to Path B.
+        // Bucket 1: certain via experiments (Path A) — collect with their inference path. Any
+        // Path A row counts as certain; multi-project rows already carry the dominant project
+        // chosen by the COMPUTE_OPTIMIZATION_PROJECT_MAPPING_VIA_EXPERIMENTS ranking.
+        // Everything else (no Path A row) falls through to Path B.
         var certainViaExperiments = new ArrayList<InferredMapping>();
         var pathBCandidateOptimizations = new HashSet<UUID>();
-        int ambiguousAcc = 0;
         for (var optimizationId : orphanIds) {
             var pathA = pathAByOptimization.get(optimizationId);
             if (pathA == null) {
                 pathBCandidateOptimizations.add(optimizationId);
-            } else if (pathA.distinctProjectCount() == 1) {
+            } else {
                 certainViaExperiments.add(new InferredMapping(optimizationId, pathA.projectId(),
                         InferencePath.EXPERIMENTS));
-            } else {
-                ambiguousAcc++;
             }
         }
-        final int ambiguousCount = ambiguousAcc;
-        if (ambiguousCount > 0) {
-            optimizationsSkipped.add(ambiguousCount, SKIP_REASON_AMBIGUOUS);
-            log.info("Skipping ambiguous optimizations (multi-project), workspaceId='{}', count='{}'",
-                    workspaceId, ambiguousCount);
-        }
+        recordDominantAssignments(workspaceId, pathAResults);
 
         // Path B: bulk MySQL lookup of datasets.project_id for the remaining orphans.
         var pathBDatasetIds = pathBCandidateOptimizations.stream()
@@ -425,8 +388,30 @@ public class OptimizationProjectMigrationService implements Managed {
                     allCertain.addAll(certainViaExperiments);
                     allCertain.addAll(certainViaDataset);
                     return validateAndMigrate(workspaceId, orphanIds.size(), allCertain, noInferenceIds,
-                            ambiguousCount, workspaceStartMillis);
+                            workspaceStartMillis);
                 });
+    }
+
+    /**
+     * For each multi-project Path A result, increments
+     * {@code optimizations.assigned_to_dominant_project} (labeled by distinct_project_count,
+     * capped at {@link #DISTINCT_PROJECT_COUNT_MAX}) and logs the chosen project together with
+     * the per-project counts that determined it. Mirrors
+     * {@code DatasetProjectMigrationService.recordDominantAssignments}.
+     */
+    private void recordDominantAssignments(String workspaceId, List<OptimizationProjectMapping> pathAResults) {
+        for (var mapping : pathAResults) {
+            if (mapping.distinctProjectCount() <= 1) {
+                continue;
+            }
+            long boundedCount = Math.min(mapping.distinctProjectCount(), DISTINCT_PROJECT_COUNT_MAX);
+            optimizationsAssignedToDominantProject.add(1,
+                    Attributes.of(DISTINCT_PROJECT_COUNT_KEY, Long.toString(boundedCount)));
+            log.info(
+                    "Assigning dominant project to optimization, workspaceId='{}', optimizationId='{}', chosenProjectId='{}', distinctProjectCount='{}', projectBreakdown='{}'",
+                    workspaceId, mapping.optimizationId(), mapping.projectId(), mapping.distinctProjectCount(),
+                    mapping.projectBreakdown());
+        }
     }
 
     /**
@@ -440,7 +425,6 @@ public class OptimizationProjectMigrationService implements Managed {
             int totalOrphans,
             List<InferredMapping> certainCandidates,
             List<UUID> noInferenceIds,
-            int ambiguousCount,
             long workspaceStartMillis) {
 
         return Mono.fromCallable(() -> {
@@ -464,15 +448,15 @@ public class OptimizationProjectMigrationService implements Managed {
                             .toList();
                     return resolveDefaultProjectAndMigrate(
                             workspaceId, totalOrphans, validatedCertain, certainDeletedMappings,
-                            noInferenceIds, ambiguousCount, workspaceStartMillis);
+                            noInferenceIds, workspaceStartMillis);
                 });
     }
 
     /**
      * Reroutes certain-deleted and no-inference orphans to the workspace's Default Project. Uses
      * {@link ProjectService#getOrCreate} (the same path trace ingestion uses), so a missing
-     * Default Project is provisioned in-line rather than trapping the workspace. The lookup is
-     * skipped entirely when neither bucket has rows.
+     * Default Project is provisioned in-line. The lookup is skipped entirely when neither bucket
+     * has rows.
      */
     private Mono<Boolean> resolveDefaultProjectAndMigrate(
             String workspaceId,
@@ -480,7 +464,6 @@ public class OptimizationProjectMigrationService implements Managed {
             List<InferredMapping> validatedCertain,
             List<InferredMapping> certainDeletedMappings,
             List<UUID> noInferenceIds,
-            int ambiguousCount,
             long workspaceStartMillis) {
 
         int needsDefault = certainDeletedMappings.size() + noInferenceIds.size();
@@ -489,7 +472,7 @@ public class OptimizationProjectMigrationService implements Managed {
             // getOrCreate call entirely so we never auto-provision a Default Project for
             // workspaces that don't need one.
             return finalizeWorkspace(workspaceId, totalOrphans, new ArrayList<>(validatedCertain),
-                    certainDeletedMappings.size(), ambiguousCount, 0, workspaceStartMillis);
+                    certainDeletedMappings.size(), 0, workspaceStartMillis);
         }
         return Mono
                 .fromCallable(() -> projectService.getOrCreate(workspaceId, DEFAULT_PROJECT_NAME, SYSTEM_USER).id())
@@ -522,7 +505,7 @@ public class OptimizationProjectMigrationService implements Managed {
                                 workspaceId, noInferenceIds.size());
                     }
                     return finalizeWorkspace(workspaceId, totalOrphans, allMappings,
-                            certainDeletedMappings.size(), ambiguousCount, needsDefault, workspaceStartMillis);
+                            certainDeletedMappings.size(), needsDefault, workspaceStartMillis);
                 });
     }
 
@@ -531,7 +514,6 @@ public class OptimizationProjectMigrationService implements Managed {
             int totalOrphans,
             List<InferredMapping> mappings,
             int certainDeleted,
-            int ambiguousCount,
             int assignedToDefault,
             long workspaceStartMillis) {
 
@@ -539,25 +521,14 @@ public class OptimizationProjectMigrationService implements Managed {
                 .flatMap(migrated -> migrated
                         ? evictWorkspaceVersionCache(workspaceId).thenReturn(true)
                         : Mono.just(false))
-                .flatMap(__ -> resolveTrapReason(totalOrphans, mappings, ambiguousCount)
-                        .map(trap -> Mono.fromRunnable(
-                                () -> workspacesService.markOptimizationProjectMigrationSkipped(
-                                        workspaceId, trap.reason()))
-                                .subscribeOn(migrationScheduler)
-                                .doOnSubscribe(s -> log.info(
-                                        "Trapping workspace, workspaceId='{}', reason='{}', certainDeleted='{}', ambiguous='{}'",
-                                        workspaceId, trap.reason(), certainDeleted, ambiguousCount))
-                                .then(Mono.just(trap.resultAttrs())))
-                        .orElseGet(() -> Mono.just(mappings.isEmpty()
-                                ? RESULT_NO_ACTIONABLE
-                                : RESULT_MIGRATED)))
+                .map(__ -> mappings.isEmpty() ? RESULT_NO_ACTIONABLE : RESULT_MIGRATED)
                 .doOnSuccess(resultAttrs -> {
                     var duration = Duration.ofMillis(System.currentTimeMillis() - workspaceStartMillis);
                     int validatedCertainCount = mappings.size() - assignedToDefault;
                     log.info(
-                            "Workspace migration completed, workspaceId='{}', migrated='{}' (certain='{}', defaultProject='{}'), skippedDeletedProject='{}', skippedAmbiguous='{}', duration='{}'",
-                            workspaceId, mappings.size(), validatedCertainCount, assignedToDefault,
-                            certainDeleted, ambiguousCount, duration);
+                            "Workspace migration completed, workspaceId='{}', totalOrphans='{}', migrated='{}' (certain='{}', defaultProject='{}'), skippedDeletedProject='{}', duration='{}'",
+                            workspaceId, totalOrphans, mappings.size(), validatedCertainCount, assignedToDefault,
+                            certainDeleted, duration);
                     recordWorkspaceDuration(resultAttrs, workspaceStartMillis);
                 })
                 .thenReturn(true);
@@ -603,30 +574,6 @@ public class OptimizationProjectMigrationService implements Managed {
         }
     }
 
-    /**
-     * Picks a trap reason if the workspace cannot make further progress next cycle, else empty.
-     * After the policy alignment with D1/D2, certain-deleted and no-inference both reroute to
-     * Default Project (auto-provisioned), so the only remaining trap is {@code all_ambiguous} —
-     * workspaces where every un-migrated orphan has experiments across multiple projects and the
-     * CLI/UI tooling is required to disambiguate.
-     */
-    private Optional<TrapDecision> resolveTrapReason(
-            int totalOrphans, List<InferredMapping> mappings, int ambiguousCount) {
-        if (mappings.isEmpty() && ambiguousCount == totalOrphans) {
-            return Optional.of(new TrapDecision(TRAPPED_REASON_ALL_AMBIGUOUS, RESULT_ALL_SKIPPED_AMBIGUOUS));
-        }
-        // Post-migration: every remaining orphan is ambiguous → trap so we don't re-query CH
-        // every cycle for a workspace that has nothing actionable left.
-        int remaining = totalOrphans - mappings.size();
-        if (remaining > 0 && ambiguousCount == remaining) {
-            return Optional.of(new TrapDecision(TRAPPED_REASON_ALL_AMBIGUOUS, RESULT_ALL_SKIPPED_AMBIGUOUS));
-        }
-        return Optional.empty();
-    }
-
-    private record TrapDecision(String reason, Attributes resultAttrs) {
-    }
-
     private enum InferencePath {
         EXPERIMENTS,
         DATASET
@@ -637,20 +584,6 @@ public class OptimizationProjectMigrationService implements Managed {
 
     private void recordWorkspaceDuration(Attributes resultAttributes, long startMillis) {
         workspaceDuration.record(System.currentTimeMillis() - startMillis, resultAttributes);
-    }
-
-    // Always emits one measurement per known reason (zero when absent) so dashboards see a stable
-    // series. Unknown reasons collapse to `other` to bound cardinality.
-    private void recordTrappedWorkspacesByReason(List<MigrationSkipReasonCount> counts) {
-        var byReason = counts.stream().collect(Collectors.toMap(
-                c -> KNOWN_TRAP_REASONS.contains(c.reason()) ? c.reason() : "other",
-                MigrationSkipReasonCount::count,
-                Long::sum));
-        for (var knownReason : KNOWN_TRAP_REASONS) {
-            cycleTrappedWorkspaces.set(byReason.getOrDefault(knownReason, 0L),
-                    Attributes.of(TRAP_REASON_KEY, knownReason));
-        }
-        cycleTrappedWorkspaces.set(byReason.getOrDefault("other", 0L), Attributes.of(TRAP_REASON_KEY, "other"));
     }
 
     private Mono<Boolean> evictWorkspaceVersionCache(String workspaceId) {

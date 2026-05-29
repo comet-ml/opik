@@ -136,51 +136,6 @@ public interface WorkspacesDAO {
     List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
-     * Atomic NULL → timestamp transition for the optimization-project-migration-skipped flag.
-     * Returns 1 only when this caller flipped {@code optimization_project_migration_skipped_at}
-     * from NULL to {@code :skippedAt}; returns 0 if no row exists or the column was already
-     * non-null. Pair with {@link #insertOptimizationProjectMigrationSkipped} for the missing-row
-     * case.
-     */
-    @SqlUpdate("""
-            UPDATE workspaces
-            SET optimization_project_migration_skipped_at = :skippedAt,
-                optimization_project_migration_skip_reason = :reason,
-                last_updated_by = :userName
-            WHERE id = :id AND optimization_project_migration_skipped_at IS NULL
-            """)
-    int updateOptimizationProjectMigrationSkippedIfNull(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    /**
-     * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
-     * branch via the {@link #updateOptimizationProjectMigrationSkippedIfNull} attempt that precedes
-     * it.
-     */
-    @SqlUpdate("""
-            INSERT INTO workspaces (id, optimization_project_migration_skipped_at, optimization_project_migration_skip_reason, created_by, last_updated_by)
-            VALUES (:id, :skippedAt, :reason, :userName, :userName)
-            """)
-    void insertOptimizationProjectMigrationSkipped(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    @SqlQuery("SELECT id FROM workspaces WHERE optimization_project_migration_skipped_at IS NOT NULL")
-    List<String> findOptimizationProjectMigrationSkippedWorkspaceIds();
-
-    @SqlQuery("""
-            SELECT optimization_project_migration_skip_reason AS reason, COUNT(*) AS count
-            FROM workspaces
-            WHERE optimization_project_migration_skipped_at IS NOT NULL
-            GROUP BY optimization_project_migration_skip_reason
-            """)
-    @RegisterConstructorMapper(MigrationSkipReasonCount.class)
-    List<MigrationSkipReasonCount> countOptimizationProjectMigrationSkippedByReason();
-
-    /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the
      * workspace row doesn't exist yet — callers treat it as TRUE (safe-include UNION), same as
      * the column default. An admin/backfill flow flips workspaces with no legacy data to FALSE

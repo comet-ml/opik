@@ -146,32 +146,52 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     /**
-     * Path A inference: for each orphan optimization in {@code :optimization_ids}, returns the set
-     * of distinct {@code project_id}s carried by its experiments (deduped against
-     * ReplacingMergeTree versions via {@code argMax(project_id, last_updated_at)} per experiment).
-     * Experiments whose latest {@code project_id} is still {@code ''} (D1 left them V1) are
-     * filtered out — they count as no-signal at the optimization level, which the service then
-     * routes to Path B (dataset lookup) and ultimately to the workspace's Default Project if Path
-     * B is also empty.
+     * Path A inference: for each orphan optimization in {@code :optimization_ids}, returns the
+     * inferred {@code project_id}, the {@code distinct_project_count} of referencing projects, and a
+     * sorted {@code project_breakdown} ({@code projectId=count,...}) included in the log entry for
+     * each assignment.
      *
-     * <p>{@code distinctProjectCount = 1} → certain via experiments; {@code > 1} → ambiguous
-     * (skip). Optimizations with zero rows in the result are absent (no signal) and fall through
-     * to Path B.
+     * <p>Inference reads {@code experiments.project_id} (set by D1's experiment-project migration);
+     * experiments still at {@code project_id = ''} are excluded, so an optimization whose
+     * experiments are all unmigrated does not appear in the result and the service treats it as
+     * no-inference (falling through to Path B and ultimately to the workspace's Default Project).
+     * With one referencing project the choice is unambiguous; with several, the dominant project
+     * wins, ordered by {@code (count DESC, last_activity DESC, project_id ASC)} so repeated runs
+     * produce the same result — mirroring the dataset migration (OPIK-6701).
+     *
+     * <p>The inner {@code argMax(project_id, last_updated_at) GROUP BY id} removes duplicate
+     * ReplacingMergeTree row versions: while a migration is in progress the table can briefly hold
+     * both the previous and the updated row for an experiment, and taking the latest keeps the
+     * outer aggregates from counting it twice.
      */
     private static final String COMPUTE_OPTIMIZATION_PROJECT_MAPPING_VIA_EXPERIMENTS = """
+            WITH arraySort(proj -> (-proj.1, -proj.2, proj.3),
+                    groupArray((per_proj_count, per_proj_last_activity_nanos, experiment_project_id))) AS ranked
             SELECT
                 optimization_id AS optimization_id,
-                count(DISTINCT experiment_project_id) AS distinct_project_count,
-                any(experiment_project_id) AS project_id
+                length(ranked) AS distinct_project_count,
+                ranked[1].3 AS project_id,
+                arrayStringConcat(
+                    arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked), ','
+                ) AS project_breakdown
             FROM (
                 SELECT
                     optimization_id,
-                    argMax(project_id, last_updated_at) AS experiment_project_id
-                FROM experiments
-                WHERE workspace_id = :workspace_id
-                AND optimization_id IN :optimization_ids
-                GROUP BY workspace_id, id, optimization_id
-                HAVING experiment_project_id != ''
+                    experiment_project_id,
+                    count() AS per_proj_count,
+                    toUnixTimestamp64Nano(max(experiment_last_updated_at)) AS per_proj_last_activity_nanos
+                FROM (
+                    SELECT
+                        optimization_id,
+                        argMax(project_id, last_updated_at) AS experiment_project_id,
+                        max(last_updated_at) AS experiment_last_updated_at
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND optimization_id IN :optimization_ids
+                    GROUP BY workspace_id, id, optimization_id
+                    HAVING experiment_project_id != ''
+                )
+                GROUP BY optimization_id, experiment_project_id
             )
             GROUP BY optimization_id
             SETTINGS log_comment = '<log_comment>'
@@ -1074,6 +1094,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                                 .optimizationId(UUID.fromString(row.get("optimization_id", String.class)))
                                 .projectId(UUID.fromString(projectId))
                                 .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                                .projectBreakdown(row.get("project_breakdown", String.class))
                                 .build())))
                 .flatMap(Mono::justOrEmpty);
     }
