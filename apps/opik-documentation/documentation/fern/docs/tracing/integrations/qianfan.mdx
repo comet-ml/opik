@@ -1,0 +1,115 @@
+---
+description: Start here to integrate Opik into your Qianfan-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: Qianfan | Opik Documentation
+og:description: Learn to integrate Opik with Qianfan using the OpenAI SDK for
+  OpenAI-compatible endpoints.
+og:site_name: Opik Documentation
+og:title: Integrate Opik with Qianfan for AI Observability
+title: Observability for Qianfan with Opik
+---
+
+[Baidu Qianfan](https://cloud.baidu.com/doc/qianfan/index.html) provides OpenAI-compatible
+API endpoints for hosted model access. This guide shows how to use the OpenAI SDK with
+Opik to trace and evaluate Qianfan calls.
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+You will need a Qianfan API key and an OpenAI-compatible base URL. The Qianfan
+OpenAI-compatible base URL is:
+
+`https://api.baiduqianfan.ai/v1`
+
+Refer to the [Qianfan documentation](https://intl.cloud.baidu.com/en/doc/qianfan/s/qm8qxemze-intl-en)
+for the latest setup steps and model list.
+
+## Tracking Qianfan API calls
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize the OpenAI client with your Qianfan base URL
+client = OpenAI(
+    base_url="https://api.baiduqianfan.ai/v1",
+    api_key="<QIANFAN_BEARER_TOKEN>",  # Qianfan bearer token
+    default_headers={"appid": "<QIANFAN_APP_ID>"}  # Optional Qianfan appid
+)
+client = track_openai(client)
+
+response = client.chat.completions.create(
+    model="ernie-4.0-turbo-8k",  # Use a model name from Qianfan
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+    temperature=0.7,
+    max_tokens=100
+)
+
+print(response.choices[0].message.content)
+```
+
+## Advanced Usage
+
+### Using with @track decorator
+
+You can combine the tracked client with Opik's `@track` decorator for
+end-to-end tracing:
+
+```python
+from opik import track
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.baiduqianfan.ai/v1",
+    api_key="<QIANFAN_BEARER_TOKEN>",  # Qianfan bearer token
+    default_headers={"appid": "<QIANFAN_APP_ID>"}  # Optional Qianfan appid
+)
+client = track_openai(client)
+
+@track
+def summarize_report(text: str) -> str:
+    response = client.chat.completions.create(
+        model="ernie-4.0-turbo-8k",
+        messages=[
+            {"role": "user", "content": text}
+        ]
+    )
+
+    return response.choices[0].message.content
+
+summary = summarize_report("Summarize this report in 3 bullets.")
+print(summary)
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**: Confirm your API key is valid and has access to Qianfan
+2. **Model Not Found**: Verify the model name matches one available in Qianfan
+3. **Base URL Issues**: Ensure you are using the OpenAI-compatible endpoint from Qianfan
+
+### Getting Help
+
+- Review the [Qianfan documentation](https://cloud.baidu.com/doc/qianfan/index.html)
+- Check Opik tracing docs for setup details: [/v1/tracing/sdk_configuration](/v1/tracing/sdk_configuration)
+
+## Next Steps
+
+Once you have Qianfan integrated with Opik, you can:
+
+- [Evaluate your LLM applications](/v1/evaluation/overview)
+- [Create datasets](/v1/evaluation/manage_datasets)
+- [Collect feedback](/v1/tracing/annotate_traces)
+- [Monitor traces](/v1/tracing/concepts)
+
+For more information about OpenAI-compatible APIs, see the
+[OpenAI integration guide](/v1/integrations/openai).
