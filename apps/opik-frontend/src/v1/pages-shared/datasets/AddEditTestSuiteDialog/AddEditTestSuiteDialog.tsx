@@ -5,6 +5,9 @@ import get from "lodash/get";
 
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
+import useDatasetItemsFromJsonMutation, {
+  JsonUploadFormat,
+} from "@/api/datasets/useDatasetItemsFromJsonMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import { Button } from "@/ui/button";
 import { Description } from "@/ui/description";
@@ -24,12 +27,25 @@ import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import { buildDocsUrl } from "@/v1/lib/utils";
-import { getCsvFilenameWithoutExtension } from "@/lib/file";
+import { getDatasetUploadFilenameWithoutExtension } from "@/lib/file";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 
-const ACCEPTED_TYPE = ".csv";
+const ACCEPTED_TYPE = ".csv,.json,.jsonl,.ndjson";
 
 const FILE_SIZE_LIMIT_IN_MB = 2000;
+
+type UploadFormat = "csv" | JsonUploadFormat;
+
+const detectUploadFormat = (filename: string): UploadFormat | null => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".csv")) return "csv";
+  if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "jsonl";
+  if (lower.endsWith(".json")) return "json";
+  return null;
+};
+
+const formatToHumanLabel = (format: UploadFormat): string =>
+  format === "csv" ? "CSV" : format === "jsonl" ? "JSONL" : "JSON";
 
 type AddEditTestSuiteDialogProps = {
   dataset?: Dataset;
@@ -53,10 +69,15 @@ const AddEditTestSuiteDialog = ({
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
+  const { mutate: createItemsFromJsonMutate } =
+    useDatasetItemsFromJsonMutation();
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
+  const [uploadFormat, setUploadFormat] = useState<UploadFormat | undefined>(
+    undefined,
+  );
 
   const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.DATASET);
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
@@ -72,6 +93,7 @@ const AddEditTestSuiteDialog = ({
     if (!open) {
       setCsvFile(undefined);
       setCsvError(undefined);
+      setUploadFormat(undefined);
       setType(DATASET_TYPE.DATASET);
       if (!dataset) {
         setName("");
@@ -98,42 +120,52 @@ const AddEditTestSuiteDialog = ({
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
-      if (hasValidCsvFile && csvFile && newDataset.id) {
-        createItemsFromCsvMutate(
-          {
-            datasetId: newDataset.id,
-            csvFile,
+      if (hasValidCsvFile && csvFile && uploadFormat && newDataset.id) {
+        const label = formatToHumanLabel(uploadFormat);
+        const handlers = {
+          onSuccess: () => {
+            toast({
+              title: `${label} upload accepted`,
+              description: `Your ${label} file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.`,
+            });
           },
-          {
-            onSuccess: () => {
-              toast({
-                title: "CSV upload accepted",
-                description:
-                  "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
-              });
-            },
-            onError: (error: unknown) => {
-              console.error("Error uploading CSV file:", error);
-              const errorMessage =
-                (
-                  error as { response?: { data?: { errors?: string[] } } }
-                ).response?.data?.errors?.join(", ") ||
-                (error as { message?: string }).message ||
-                "Failed to upload CSV file";
-              toast({
-                title: "Error uploading CSV file",
-                description: errorMessage,
-                variant: "destructive",
-              });
-            },
-            onSettled: () => {
-              setOpen(false);
-              if (onDatasetCreated) {
-                onDatasetCreated(newDataset);
-              }
-            },
+          onError: (error: unknown) => {
+            console.error(`Error uploading ${label} file:`, error);
+            const errorMessage =
+              (
+                error as { response?: { data?: { errors?: string[] } } }
+              ).response?.data?.errors?.join(", ") ||
+              (error as { message?: string }).message ||
+              `Failed to upload ${label} file`;
+            toast({
+              title: `Error uploading ${label} file`,
+              description: errorMessage,
+              variant: "destructive",
+            });
           },
-        );
+          onSettled: () => {
+            setOpen(false);
+            if (onDatasetCreated) {
+              onDatasetCreated(newDataset);
+            }
+          },
+        };
+
+        if (uploadFormat === "csv") {
+          createItemsFromCsvMutate(
+            { datasetId: newDataset.id, csvFile },
+            handlers,
+          );
+        } else {
+          createItemsFromJsonMutate(
+            {
+              datasetId: newDataset.id,
+              jsonFile: csvFile,
+              format: uploadFormat,
+            },
+            handlers,
+          );
+        }
       } else {
         setOpen(false);
         if (onDatasetCreated) {
@@ -144,7 +176,9 @@ const AddEditTestSuiteDialog = ({
     [
       hasValidCsvFile,
       csvFile,
+      uploadFormat,
       createItemsFromCsvMutate,
+      createItemsFromJsonMutate,
       onDatasetCreated,
       setOpen,
       toast,
@@ -222,6 +256,7 @@ const AddEditTestSuiteDialog = ({
     (file?: File) => {
       setCsvError(undefined);
       setCsvFile(undefined);
+      setUploadFormat(undefined);
 
       if (!file) {
         return;
@@ -232,15 +267,17 @@ const AddEditTestSuiteDialog = ({
         return;
       }
 
-      if (!file.name.toLowerCase().endsWith(".csv")) {
-        setCsvError("File must be in .csv format");
+      const format = detectUploadFormat(file.name);
+      if (!format) {
+        setCsvError("File must be .csv, .json, .jsonl, or .ndjson");
         return;
       }
 
       setCsvFile(file);
+      setUploadFormat(format);
 
       if (!name.trim()) {
-        setName(getCsvFilenameWithoutExtension(file.name));
+        setName(getDatasetUploadFilenameWithoutExtension(file.name));
       }
     },
     [fileSizeLimit, name],
@@ -295,10 +332,11 @@ const AddEditTestSuiteDialog = ({
           </div>
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV</Label>
+              <Label>Upload a CSV or JSON file</Label>
               <Description className="tracking-normal">
-                Your CSV file can be up to {fileSizeLimit}MB in size. The file
-                will be processed in the background.
+                Supported formats: .csv, .json, .jsonl/.ndjson. File can be up
+                to {fileSizeLimit}MB in size and will be processed in the
+                background.
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}
@@ -312,12 +350,14 @@ const AddEditTestSuiteDialog = ({
               </Description>
               <UploadField
                 disabled={isEdit}
-                description="Drop a CSV file to upload or"
+                description="Drop a CSV or JSON file to upload or"
                 accept={ACCEPTED_TYPE}
                 onFileSelect={handleFileSelect}
                 errorText={csvError}
                 successText={
-                  csvFile && !csvError ? "CSV file ready to upload" : undefined
+                  csvFile && !csvError && uploadFormat
+                    ? `${formatToHumanLabel(uploadFormat)} file ready to upload`
+                    : undefined
                 }
               />
             </div>

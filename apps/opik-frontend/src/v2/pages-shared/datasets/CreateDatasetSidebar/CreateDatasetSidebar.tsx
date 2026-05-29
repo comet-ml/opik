@@ -36,7 +36,7 @@ import {
   PASS_CRITERIA_DESCRIPTION,
 } from "@/constants/test-suites";
 
-const ACCEPTED_TYPE = ".csv";
+const ACCEPTED_TYPE = ".csv,.json,.jsonl,.ndjson";
 
 enum Step {
   NAME_DESCRIPTION,
@@ -114,6 +114,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
     thresholdInput,
     csvFile,
     csvError,
+    uploadFormat,
     confirmOpen,
     setConfirmOpen,
     fileSizeLimit,
@@ -237,10 +238,10 @@ const CreateDatasetSidebar: React.FunctionComponent<
         </p>
       </div>
       <div className="mb-4">
-        <Label className="mb-2 block">Upload CSV</Label>
+        <Label className="mb-2 block">Upload CSV or JSON</Label>
         <Description className="mb-2 tracking-normal">
-          Your CSV file can be up to {fileSizeLimit}MB in size. The file will be
-          processed in the background.
+          Supported formats: .csv, .json, .jsonl/.ndjson. File can be up to{" "}
+          {fileSizeLimit}MB in size and will be processed in the background.
           <Button variant="link" size="sm" className="h-5 px-1" asChild>
             <a
               href={buildDocsUrl("/evaluation/advanced/manage_datasets")}
@@ -253,12 +254,20 @@ const CreateDatasetSidebar: React.FunctionComponent<
           </Button>
         </Description>
         <UploadField
-          description="Drop a CSV file to upload or"
+          description="Drop a CSV or JSON file to upload or"
           accept={ACCEPTED_TYPE}
           onFileSelect={handleFileSelect}
           errorText={csvError}
           successText={
-            csvFile && !csvError ? "CSV file ready to upload" : undefined
+            csvFile && !csvError && uploadFormat
+              ? `${
+                  uploadFormat === "csv"
+                    ? "CSV"
+                    : uploadFormat === "jsonl"
+                      ? "JSONL"
+                      : "JSON"
+                } file ready to upload`
+              : undefined
           }
         />
       </div>

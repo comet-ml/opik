@@ -5,10 +5,13 @@ import get from "lodash/get";
 import { useActiveProjectId } from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
+import useDatasetItemsFromJsonMutation, {
+  JsonUploadFormat,
+} from "@/api/datasets/useDatasetItemsFromJsonMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
 import { useToast } from "@/ui/use-toast";
-import { getCsvFilenameWithoutExtension } from "@/lib/file";
+import { getDatasetUploadFilenameWithoutExtension } from "@/lib/file";
 import { packAssertions } from "@/lib/assertion-converters";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
@@ -16,6 +19,19 @@ import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const FILE_SIZE_LIMIT_IN_MB = 2000;
+
+type UploadFormat = "csv" | JsonUploadFormat;
+
+const detectUploadFormat = (filename: string): UploadFormat | null => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".csv")) return "csv";
+  if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "jsonl";
+  if (lower.endsWith(".json")) return "json";
+  return null;
+};
+
+const formatToHumanLabel = (format: UploadFormat): string =>
+  format === "csv" ? "CSV" : format === "jsonl" ? "JSONL" : "JSON";
 
 type UseDatasetFormParams = {
   dataset?: Dataset;
@@ -48,11 +64,16 @@ const useDatasetForm = ({
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
+  const { mutate: createItemsFromJsonMutate } =
+    useDatasetItemsFromJsonMutation();
   const { mutate: changesMutate } = useDatasetItemChangesMutation();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
+  const [uploadFormat, setUploadFormat] = useState<UploadFormat | undefined>(
+    undefined,
+  );
 
   const [type, setType] = useState<DATASET_TYPE>(datasetType);
   const [name, setName] = useState(dataset ? dataset.name : "");
@@ -91,6 +112,7 @@ const useDatasetForm = ({
       const timeout = setTimeout(() => {
         setCsvFile(undefined);
         setCsvError(undefined);
+        setUploadFormat(undefined);
         setType(datasetType);
         setRunsPerItem(1);
         setPassThreshold(1);
@@ -173,39 +195,51 @@ const useDatasetForm = ({
 
   const uploadItems = useCallback(
     (datasetId: string, onDone: () => void) => {
-      if (!csvFile) {
+      if (!csvFile || !uploadFormat) {
         onDone();
         return;
       }
-      createItemsFromCsvMutate(
-        { datasetId, csvFile },
-        {
-          onSuccess: () => {
-            toast({
-              title: "CSV upload accepted",
-              description:
-                "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
-            });
-          },
-          onError: (error: unknown) => {
-            console.error("Error uploading CSV file:", error);
-            const errorMessage =
-              (
-                error as { response?: { data?: { errors?: string[] } } }
-              ).response?.data?.errors?.join(", ") ||
-              (error as { message?: string }).message ||
-              "Failed to upload CSV file";
-            toast({
-              title: "Error uploading CSV file",
-              description: errorMessage,
-              variant: "destructive",
-            });
-          },
-          onSettled: onDone,
+      const label = formatToHumanLabel(uploadFormat);
+      const handlers = {
+        onSuccess: () => {
+          toast({
+            title: `${label} upload accepted`,
+            description: `Your ${label} file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.`,
+          });
         },
-      );
+        onError: (error: unknown) => {
+          console.error(`Error uploading ${label} file:`, error);
+          const errorMessage =
+            (
+              error as { response?: { data?: { errors?: string[] } } }
+            ).response?.data?.errors?.join(", ") ||
+            (error as { message?: string }).message ||
+            `Failed to upload ${label} file`;
+          toast({
+            title: `Error uploading ${label} file`,
+            description: errorMessage,
+            variant: "destructive",
+          });
+        },
+        onSettled: onDone,
+      };
+
+      if (uploadFormat === "csv") {
+        createItemsFromCsvMutate({ datasetId, csvFile }, handlers);
+      } else {
+        createItemsFromJsonMutate(
+          { datasetId, jsonFile: csvFile, format: uploadFormat },
+          handlers,
+        );
+      }
     },
-    [csvFile, createItemsFromCsvMutate, toast],
+    [
+      csvFile,
+      uploadFormat,
+      createItemsFromCsvMutate,
+      createItemsFromJsonMutate,
+      toast,
+    ],
   );
 
   const onCreateSuccessHandler = useCallback(
@@ -214,7 +248,8 @@ const useDatasetForm = ({
         trackEvent(OpikEvent.EVAL_SUITE_UI_CONFIGURED, {
           eval_suite_id: newDataset.id,
           eval_suite_name: newDataset.name,
-          has_csv_upload: hasValidCsvFile,
+          has_csv_upload: hasValidCsvFile && uploadFormat === "csv",
+          upload_format: hasValidCsvFile ? uploadFormat : undefined,
           num_assertions: assertions.filter((a) => a.trim()).length,
           runs_per_item: runsPerItem,
         });
@@ -242,6 +277,7 @@ const useDatasetForm = ({
       applyEvaluationCriteria,
       uploadItems,
       hasValidCsvFile,
+      uploadFormat,
       onDatasetCreated,
       onCreateSuccess,
       setOpen,
@@ -326,6 +362,7 @@ const useDatasetForm = ({
     (file?: File) => {
       setCsvError(undefined);
       setCsvFile(undefined);
+      setUploadFormat(undefined);
 
       if (!file) return;
 
@@ -333,13 +370,15 @@ const useDatasetForm = ({
         setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
         return;
       }
-      if (!file.name.toLowerCase().endsWith(".csv")) {
-        setCsvError("File must be in .csv format");
+      const format = detectUploadFormat(file.name);
+      if (!format) {
+        setCsvError("File must be .csv, .json, .jsonl, or .ndjson");
         return;
       }
       setCsvFile(file);
+      setUploadFormat(format);
       if (!name.trim()) {
-        setName(getCsvFilenameWithoutExtension(file.name));
+        setName(getDatasetUploadFilenameWithoutExtension(file.name));
       }
     },
     [fileSizeLimit, name],
@@ -359,6 +398,7 @@ const useDatasetForm = ({
     thresholdInput,
     csvFile,
     csvError,
+    uploadFormat,
     isEdit,
     isValid,
     confirmOpen,

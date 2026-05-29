@@ -124,3 +124,14 @@ export const validateFileSize = (
 export const getCsvFilenameWithoutExtension = (filename: string): string => {
   return filename.replace(/\.csv$/i, "");
 };
+
+/**
+ * Extracts filename without any supported dataset-upload extension
+ * (.csv, .json, .jsonl, .ndjson). Used to seed the dataset name from
+ * the picked file.
+ */
+export const getDatasetUploadFilenameWithoutExtension = (
+  filename: string,
+): string => {
+  return filename.replace(/\.(csv|jsonl|ndjson|json)$/i, "");
+};

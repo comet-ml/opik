@@ -20,7 +20,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import type useDatasetForm from "./useDatasetForm";
 
-const ACCEPTED_TYPE = ".csv";
+const ACCEPTED_TYPE = ".csv,.json,.jsonl,.ndjson";
 
 type AddEditDatasetDialogWrapperProps = {
   open: boolean;
@@ -43,6 +43,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
     setDescription,
     csvFile,
     csvError,
+    uploadFormat,
     isEdit,
     isValid,
     confirmOpen,
@@ -105,10 +106,11 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
           {children}
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV</Label>
+              <Label>Upload a CSV or JSON file</Label>
               <Description className="tracking-normal">
-                Your CSV file can be up to {fileSizeLimit}MB in size. The file
-                will be processed in the background.
+                Supported formats: .csv, .json, .jsonl/.ndjson. File can be up
+                to {fileSizeLimit}MB in size and will be processed in the
+                background.
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/advanced/manage_datasets")}
@@ -122,12 +124,20 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
               </Description>
               <UploadField
                 disabled={isEdit}
-                description="Drop a CSV file to upload or"
+                description="Drop a CSV or JSON file to upload or"
                 accept={ACCEPTED_TYPE}
                 onFileSelect={handleFileSelect}
                 errorText={csvError}
                 successText={
-                  csvFile && !csvError ? "CSV file ready to upload" : undefined
+                  csvFile && !csvError && uploadFormat
+                    ? `${
+                        uploadFormat === "csv"
+                          ? "CSV"
+                          : uploadFormat === "jsonl"
+                            ? "JSONL"
+                            : "JSON"
+                      } file ready to upload`
+                    : undefined
                 }
               />
             </div>
