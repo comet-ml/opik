@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
-import { Command, CommandItem, CommandList } from "@/ui/command";
+import { Command, CommandGroup, CommandItem, CommandList } from "@/ui/command";
 import { cn } from "@/lib/utils";
 import { ChipOptionsResult } from "@/shared/filter-chips/types";
 import { cellInput } from "./cellBase";
@@ -105,7 +105,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
   };
 
   const itemClass = cn(
-    "comet-body-s rounded-[4px] px-2 py-1.5",
+    "comet-body-s-accented flex h-8 items-center rounded-[4px] px-4",
     "data-[selected=true]:bg-primary-foreground",
   );
 
@@ -151,32 +151,39 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
             {isLoading && (
               <div className="comet-body-s p-2 text-light-slate">Loading…</div>
             )}
-            {showResults &&
-              filtered.map((item) => (
-                <CommandItem
-                  key={item}
-                  value={item}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onSelect={() => pick(item)}
-                  className={cn(itemClass, "text-foreground")}
-                >
-                  <span className="block break-all">
-                    {highlightMatch(item, draft)}
-                  </span>
-                </CommandItem>
-              ))}
+            {showResults && (
+              <CommandGroup
+                heading="Recently used"
+                className="p-0 [&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-light-slate"
+              >
+                {filtered.map((item) => (
+                  <CommandItem
+                    key={item}
+                    value={item}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onSelect={() => pick(item)}
+                    className={cn(itemClass, "text-foreground")}
+                  >
+                    <span className="block break-all">
+                      {highlightMatch(item, draft)}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             {showNoMatch && (
               <CommandItem
                 value={draft}
                 onMouseDown={(event) => event.preventDefault()}
-                onSelect={() => {
-                  commit(draft);
-                  inputRef.current?.blur();
-                }}
-                className={cn(itemClass, "text-light-slate")}
+                onSelect={() => pick(draft)}
+                className={cn(
+                  itemClass,
+                  "h-auto min-h-8 py-1.5 font-normal text-light-slate data-[selected=true]:text-light-slate",
+                )}
               >
                 <span>
-                  No match in recent {itemNoun} — press Enter to search all
+                  No match in recent {itemNoun} - type your {itemNoun} to search
+                  all
                 </span>
               </CommandItem>
             )}

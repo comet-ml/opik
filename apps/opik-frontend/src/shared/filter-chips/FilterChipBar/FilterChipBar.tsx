@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Plus } from "lucide-react";
+import { ListFilter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FilterManagerPopover, {
   chipHasAppliedValue,
@@ -158,9 +158,9 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
         onUnpinChip={onUnpinChip}
         onRequestOpenChip={onOpenChipIdChange}
         trigger={
-          <ChipShell isOpen={managerOpen}>
-            <Plus className="size-3 shrink-0" />
-            <span>Add filter</span>
+          <ChipShell isOpen={managerOpen} className="pr-2">
+            <ListFilter className="size-3 shrink-0" />
+            <span>All filters</span>
           </ChipShell>
         }
       />

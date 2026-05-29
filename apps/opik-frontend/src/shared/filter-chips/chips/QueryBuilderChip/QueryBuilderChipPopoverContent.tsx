@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import upperFirst from "lodash/upperFirst";
 import { Plus } from "lucide-react";
 import { Button } from "@/ui/button";
 import { PopoverClose } from "@/ui/popover";
@@ -59,11 +60,14 @@ const QueryBuilderChipPopoverContent: React.FC<
 
   const operatorOptions = useMemo(
     () =>
-      definition.operators.map((op) => ({
-        label: getOperatorLabel(op),
-        value: op,
-      })),
-    [definition.operators],
+      definition.operators.map((op) => {
+        const label = getOperatorLabel(op);
+        return {
+          label: keyConfig ? label : upperFirst(label),
+          value: op,
+        };
+      }),
+    [definition.operators, keyConfig],
   );
 
   const defaultOperator: FilterOperator =
@@ -214,10 +218,7 @@ const QueryBuilderChipPopoverContent: React.FC<
       <ul className="mb-2 flex flex-col gap-2">
         {rows.map((row, index) => (
           <li key={row.id}>
-            <FilterRow
-              onRemove={() => handleRemove(index)}
-              disableRemove={rows.length === 1}
-            >
+            <FilterRow onRemove={() => handleRemove(index)}>
               {renderRow(row)}
             </FilterRow>
           </li>

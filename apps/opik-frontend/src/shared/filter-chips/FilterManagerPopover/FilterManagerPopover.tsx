@@ -151,7 +151,7 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
                         {def.label}
                         {isActive && " (active)"}
                       </span>
-                      <span className="flex size-4 shrink-0 items-center justify-center text-light-slate">
+                      <span className="flex size-4 shrink-0 items-center justify-center text-light-slate transition-colors group-hover:text-foreground">
                         <Pin className="size-4 group-hover:hidden" />
                         <PinOff className="hidden size-4 group-hover:block" />
                       </span>
@@ -167,23 +167,16 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
             </>
           )}
 
-          {visibleUnpinned.length > 0 && (
-            <>
-              <DropdownMenuLabel className="text-light-slate">
-                All filters
-              </DropdownMenuLabel>
-              {visibleUnpinned.map((def) => (
-                <DropdownMenuItem
-                  key={def.id}
-                  size="sm"
-                  onSelect={() => handleSelectUnpinned(def)}
-                  className="px-4 text-foreground"
-                >
-                  {def.label}
-                </DropdownMenuItem>
-              ))}
-            </>
-          )}
+          {visibleUnpinned.map((def) => (
+            <DropdownMenuItem
+              key={def.id}
+              size="sm"
+              onSelect={() => handleSelectUnpinned(def)}
+              className="px-4 text-foreground"
+            >
+              {def.label}
+            </DropdownMenuItem>
+          ))}
 
           {!hasResults && (
             <div className="comet-body-s flex h-32 w-full items-center justify-center text-muted-slate">
