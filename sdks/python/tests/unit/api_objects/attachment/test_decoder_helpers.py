@@ -16,8 +16,9 @@ class TestDetectMimeType:
 
     def test_detect_jpeg(self):
         """Test JPEG image detection using magic bytes."""
-        # JPEG magic bytes: FF D8 at start, FF D9 at end
-        jpeg_data = b"\xff\xd8" + b"\x00" * 100 + b"\xff\xd9"
+        # Real JPEG SOI (FFD8) followed by an APP0/JFIF marker (FFE0), then
+        # body bytes, then FFD9 end marker.
+        jpeg_data = b"\xff\xd8\xff\xe0" + b"\x00" * 100 + b"\xff\xd9"
         assert decoder_helpers.detect_mime_type(jpeg_data) == "image/jpeg"
 
     def test_detect_jpeg_without_end_marker(self):
