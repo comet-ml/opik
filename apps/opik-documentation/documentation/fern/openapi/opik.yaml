@@ -17900,9 +17900,14 @@ components:
           - total_cost
         current_value:
           type: number
+          description: "Metric value for the current period. Unit depends on `type`:\
+            \ `count` is an integer count; `errors` is a percentage in [0, 100]; `avg_duration`\
+            \ is milliseconds; `total_cost` is in USD."
           format: double
         previous_value:
           type: number
+          description: Metric value for the immediately preceding period of equal
+            length. Same unit as `current_value`.
           format: double
     KpiCardRequest:
       required:
