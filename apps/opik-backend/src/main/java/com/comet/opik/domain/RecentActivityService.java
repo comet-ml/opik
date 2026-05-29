@@ -75,7 +75,7 @@ public class RecentActivityService {
         var alertsMono = fetchAlertEvents(projectId, size);
         var datasetsMono = fetchDatasetSources(workspaceId, projectId, size);
         var promptVersionsMono = fetchPromptVersions(workspaceId, projectId, size);
-        var traceDailyMono = fetchTraceDailyCounts(projectId);
+        var traceDailyMono = fetchTraceDailyCounts(projectId, size);
 
         return Mono
                 .zip(experimentsMono, optimizationsMono, alertsMono, datasetsMono, promptVersionsMono, traceDailyMono)
@@ -201,7 +201,7 @@ public class RecentActivityService {
                 });
     }
 
-    private Mono<List<RecentActivityItem>> fetchTraceDailyCounts(UUID projectId) {
+    private Mono<List<RecentActivityItem>> fetchTraceDailyCounts(UUID projectId, int size) {
         Instant start = Instant.now().minus(LOOKBACK_DAYS, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
         var visibilityFilter = TraceFilter.builder()
                 .field(TraceField.VISIBILITY_MODE)
@@ -221,6 +221,8 @@ public class RecentActivityService {
                 .map(response -> response.results().stream()
                         .flatMap(r -> r.data().stream())
                         .filter(dp -> dp.value() != null && dp.value().longValue() > 0)
+                        .sorted((a, b) -> b.time().compareTo(a.time()))
+                        .limit(size)
                         .map(dp -> {
                             boolean isToday = dp.time().atZone(ZoneOffset.UTC).toLocalDate().equals(today);
                             // Noon keeps the date stable across all timezones when the FE converts to local time
