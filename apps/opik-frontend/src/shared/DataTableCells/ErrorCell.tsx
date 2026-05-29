@@ -11,7 +11,15 @@ const ErrorCell = <TData,>(
 ) => {
   const value = context.getValue();
 
-  if (!value) return null;
+  if (!value)
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        -
+      </CellWrapper>
+    );
 
   const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 

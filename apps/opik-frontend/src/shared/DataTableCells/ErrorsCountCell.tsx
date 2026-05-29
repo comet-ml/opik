@@ -38,7 +38,14 @@ const ErrorsCountCell = (context: CellContext<unknown, ProjectErrorCount>) => {
   const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   if (!error?.count) {
-    return null;
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        -
+      </CellWrapper>
+    );
   }
 
   const deviationCopy = getErrorDeviationCopy(error);

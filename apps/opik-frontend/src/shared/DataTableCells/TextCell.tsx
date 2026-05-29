@@ -18,6 +18,7 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
     ROW_HEIGHT.small;
 
   const isLarge = rowHeight === ROW_HEIGHT.large;
+  const isEmpty = value === null || value === undefined || value === "";
 
   return (
     <CellWrapper
@@ -26,12 +27,12 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
     >
       {isLarge ? (
         <div className="h-full overflow-y-auto whitespace-pre-wrap break-words">
-          <LinkifyText>{value}</LinkifyText>
+          {isEmpty ? "-" : <LinkifyText>{value}</LinkifyText>}
         </div>
       ) : (
         <CellTooltipWrapper content={toString(value)}>
           <span className="truncate">
-            <LinkifyText>{value}</LinkifyText>
+            {isEmpty ? "-" : <LinkifyText>{value}</LinkifyText>}
           </span>
         </CellTooltipWrapper>
       )}

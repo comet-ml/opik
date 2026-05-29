@@ -10,7 +10,15 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
   const value = context.getValue() as string;
   const jsonViewTheme = useJsonViewTheme();
 
-  if (!value) return "";
+  if (!value)
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        -
+      </CellWrapper>
+    );
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??

@@ -94,7 +94,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
   },
   {
     id: "created_at",
-    label: "Created at",
+    label: "Created",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
   },

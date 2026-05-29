@@ -54,7 +54,14 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
   }, [isSmall, rowHeight, itemsPerRow]);
 
   if (isEmpty) {
-    return null;
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        -
+      </CellWrapper>
+    );
   }
 
   const displayedItems = sortedList.slice(0, maxVisibleItems);
