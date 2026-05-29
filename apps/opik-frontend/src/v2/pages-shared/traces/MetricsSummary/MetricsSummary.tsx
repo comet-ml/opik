@@ -201,6 +201,17 @@ const getCardMode = (perCardWidth: number): CardMode => {
   return "icon-only";
 };
 
+// Raw current/previous values feed the period-over-period delta in MetricCard.
+// While there's no data, return undefined so the delta is hidden instead of
+// being computed against empty values.
+const getDeltaValue = (
+  showData: boolean,
+  value: number | null | undefined,
+): number | null | undefined => {
+  if (!showData) return undefined;
+  return value ?? null;
+};
+
 export type MetricsSummaryProps = {
   projectId: string;
   entityType: KpiEntityType;
@@ -340,10 +351,8 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
               icon={card.icon}
               label={label}
               value={showData ? card.formatter(currentValue) : "N/A"}
-              currentRaw={showData ? metric?.current_value ?? null : undefined}
-              previousRaw={
-                showData ? metric?.previous_value ?? null : undefined
-              }
+              currentRaw={getDeltaValue(showData, metric?.current_value)}
+              previousRaw={getDeltaValue(showData, metric?.previous_value)}
               trend={card.trend}
               selected={showData && selectedMetric === card.type}
               onClick={() => handleSelectMetric(card.type)}
