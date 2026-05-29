@@ -7,6 +7,7 @@ import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.comet.opik.infrastructure.OptimizationProjectMigrationConfig;
 import com.google.common.collect.Lists;
+import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -20,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -75,7 +78,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  */
 @Slf4j
 @Singleton
-public class OptimizationProjectMigrationService extends AbstractProjectMigrationService {
+public class OptimizationProjectMigrationService implements Managed {
 
     public static final String METRIC_NAMESPACE = "opik.migration.optimization_project";
 
@@ -142,6 +145,14 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
     private final LongCounter optimizationsAssignedToDefault;
     private final LongCounter inferencePath;
     private final LongHistogram batchSize;
+
+    /**
+     * Dedicated bounded-elastic scheduler isolating the migration's blocking JDBC work and its
+     * post-collect CPU-heavy lambdas from the shared {@link Schedulers#boundedElastic()} and from
+     * the reactive client (R2DBC/Redisson) event loops. Sized for the sequential concatMap flow;
+     * daemon threads so JVM shutdown is never blocked by the migration pool.
+     */
+    private volatile Scheduler migrationScheduler;
 
     @Inject
     public OptimizationProjectMigrationService(
@@ -210,13 +221,26 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
     }
 
     @Override
-    protected String schedulerName() {
-        return "optimization-project-migration-service";
+    public void start() {
+        if (migrationScheduler == null) {
+            migrationScheduler = Schedulers.newBoundedElastic(
+                    config.schedulerThreadCap(),
+                    config.schedulerQueuedTaskCap(),
+                    "optimization-project-migration-service",
+                    (int) config.schedulerThreadTtl().toJavaDuration().toSeconds(),
+                    true);
+            log.info(
+                    "Initialized optimization project migration scheduler, threadCap='{}', queuedTaskCap='{}', threadTtl='{}'",
+                    config.schedulerThreadCap(), config.schedulerQueuedTaskCap(), config.schedulerThreadTtl());
+        }
     }
 
     @Override
-    protected OptimizationProjectMigrationConfig jobConfig() {
-        return config;
+    public void stop() {
+        if (migrationScheduler != null && !migrationScheduler.isDisposed()) {
+            migrationScheduler.dispose();
+            log.info("Optimization project migration scheduler disposed");
+        }
     }
 
     public Mono<Void> runMigrationCycle() {
@@ -234,7 +258,7 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
                     skippedWorkspaceIds.stream())
                     .collect(Collectors.toUnmodifiableSet());
         })
-                .subscribeOn(migrationScheduler())
+                .subscribeOn(migrationScheduler)
                 .flatMapMany(excludedWorkspaceIds -> findEligibleWorkspaces(excludedWorkspaceIds)
                         .collectList()
                         .flatMapMany(eligibleWorkspaces -> {
@@ -256,7 +280,7 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
 
     private Flux<EligibleOptimizationWorkspace> findEligibleWorkspaces(Set<String> excludedWorkspaceIds) {
         return optimizationDAO.findEligibleOptimizationWorkspaces(excludedWorkspaceIds, config.workspacesPerRun())
-                .publishOn(migrationScheduler());
+                .publishOn(migrationScheduler);
     }
 
     private Mono<Boolean> migrateWorkspace(String workspaceId, long optimizationsCount) {
@@ -307,13 +331,13 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
                         return Mono.just(false);
                     }
                     return Mono.fromCallable(() -> !datasetService.hasVersion1Datasets(workspaceId))
-                            .subscribeOn(migrationScheduler());
+                            .subscribeOn(migrationScheduler);
                 });
     }
 
     private Mono<List<OrphanOptimization>> findOrphanOptimizations(String workspaceId) {
         return optimizationDAO.findOrphanOptimizationsInWorkspace(workspaceId)
-                .publishOn(migrationScheduler())
+                .publishOn(migrationScheduler)
                 .collectList();
     }
 
@@ -333,7 +357,7 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
                         OrphanOptimization::optimizationId, OrphanOptimization::datasetId, (a, b) -> a));
 
         return optimizationDAO.computeOptimizationProjectMappingViaExperiments(workspaceId, orphanIds)
-                .publishOn(migrationScheduler())
+                .publishOn(migrationScheduler)
                 .collectList()
                 .flatMap(pathAResults -> classifyWithPathAResults(
                         workspaceId, orphanIds, orphanDatasetByOptimization,
@@ -382,7 +406,7 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
                 .collect(Collectors.toUnmodifiableSet());
 
         return Mono.fromCallable(() -> datasetService.findProjectIdsByDatasetIds(pathBDatasetIds, workspaceId))
-                .subscribeOn(migrationScheduler())
+                .subscribeOn(migrationScheduler)
                 .flatMap(datasetProjectByDataset -> {
                     var certainViaDataset = new ArrayList<InferredMapping>();
                     var noInferenceIds = new ArrayList<UUID>();
@@ -433,7 +457,7 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
                     .filter(mapping -> existingProjectIds.contains(mapping.projectId()))
                     .toList();
         })
-                .subscribeOn(migrationScheduler())
+                .subscribeOn(migrationScheduler)
                 .flatMap(validatedCertain -> {
                     var certainDeletedMappings = certainCandidates.stream()
                             .filter(mapping -> !validatedCertain.contains(mapping))
@@ -469,7 +493,7 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
         }
         return Mono
                 .fromCallable(() -> projectService.getOrCreate(workspaceId, DEFAULT_PROJECT_NAME, SYSTEM_USER).id())
-                .subscribeOn(migrationScheduler())
+                .subscribeOn(migrationScheduler)
                 .flatMap(defaultProjectId -> {
                     var allMappings = new ArrayList<>(validatedCertain);
                     for (var deleted : certainDeletedMappings) {
@@ -519,7 +543,7 @@ public class OptimizationProjectMigrationService extends AbstractProjectMigratio
                         .map(trap -> Mono.fromRunnable(
                                 () -> workspacesService.markOptimizationProjectMigrationSkipped(
                                         workspaceId, trap.reason()))
-                                .subscribeOn(migrationScheduler())
+                                .subscribeOn(migrationScheduler)
                                 .doOnSubscribe(s -> log.info(
                                         "Trapping workspace, workspaceId='{}', reason='{}', certainDeleted='{}', ambiguous='{}'",
                                         workspaceId, trap.reason(), certainDeleted, ambiguousCount))

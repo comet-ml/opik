@@ -35,9 +35,7 @@ public record OptimizationProjectMigrationConfig(
         @NotNull @MinDuration(value = 5, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration jobTimeout,
         @Min(2) @Max(8) int schedulerThreadCap,
         @Min(10) @Max(1_000) int schedulerQueuedTaskCap,
-        @NotNull @MinDuration(value = 5, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration schedulerThreadTtl)
-        implements
-            ProjectMigrationJobConfig {
+        @NotNull @MinDuration(value = 5, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration schedulerThreadTtl) {
 
     @JsonIgnore
     @AssertTrue(message = "lockTimeout must be shorter than jobTimeout") public boolean isLockTimeoutShorterThanJobTimeout() {

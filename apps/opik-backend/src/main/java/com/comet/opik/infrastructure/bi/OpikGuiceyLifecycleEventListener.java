@@ -18,7 +18,6 @@ import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.ProjectMigrationJobConfig;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryRefreshJob;
@@ -26,7 +25,6 @@ import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.quartz.Job;
 import org.quartz.JobBuilder;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
@@ -65,7 +63,12 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setRetentionJobs();
                 setLlmModelRegistryRefreshJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
-                scheduleProjectMigrationJobs();
+                scheduleExperimentProjectMigrationJobIfEnabled();
+                scheduleDatasetProjectMigrationJobIfEnabled();
+                scheduleOptimizationProjectMigrationJobIfEnabled();
+                schedulePromptProjectMigrationJobIfEnabled();
+                scheduleAutomationRuleProjectMigrationJobIfEnabled();
+                scheduleAlertProjectMigrationJobIfEnabled();
             }
 
             case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
@@ -312,31 +315,68 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
     }
 
-    private void scheduleProjectMigrationJobs() {
-        var opikConfig = injector.get().getInstance(OpikConfiguration.class);
-        scheduleProjectMigrationJobIfEnabled("Experiment project",
-                ExperimentProjectMigrationJob.class, opikConfig.getExperimentProjectMigration());
-        scheduleProjectMigrationJobIfEnabled("Dataset project",
-                DatasetProjectMigrationJob.class, opikConfig.getDatasetProjectMigration());
-        scheduleProjectMigrationJobIfEnabled("Optimization project",
-                OptimizationProjectMigrationJob.class, opikConfig.getOptimizationProjectMigration());
-        scheduleProjectMigrationJobIfEnabled("Prompt project",
-                PromptProjectMigrationJob.class, opikConfig.getPromptProjectMigration());
-        scheduleProjectMigrationJobIfEnabled("Automation rule project",
-                AutomationRuleProjectMigrationJob.class, opikConfig.getAutomationRuleProjectMigration());
-        scheduleProjectMigrationJobIfEnabled("Alert project",
-                AlertProjectMigrationJob.class, opikConfig.getAlertProjectMigration());
-    }
-
-    private void scheduleProjectMigrationJobIfEnabled(
-            String label,
-            Class<? extends Job> jobClass,
-            ProjectMigrationJobConfig config) {
+    private void scheduleExperimentProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getExperimentProjectMigration();
         if (config == null || !config.enabled()) {
-            log.info("{} migration job is disabled", label);
+            log.info("Experiment project migration job is disabled");
             return;
         }
-        scheduleRepeatingJob(jobClass,
+        scheduleRepeatingJob(ExperimentProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleDatasetProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getDatasetProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Dataset project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(DatasetProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleOptimizationProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getOptimizationProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Optimization project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(OptimizationProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void schedulePromptProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getPromptProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Prompt project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(PromptProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleAutomationRuleProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getAutomationRuleProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Automation rule project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(AutomationRuleProjectMigrationJob.class,
+                config.interval().toJavaDuration(),
+                config.startupDelay().toJavaDuration());
+    }
+
+    private void scheduleAlertProjectMigrationJobIfEnabled() {
+        var config = injector.get().getInstance(OpikConfiguration.class).getAlertProjectMigration();
+        if (config == null || !config.enabled()) {
+            log.info("Alert project migration job is disabled");
+            return;
+        }
+        scheduleRepeatingJob(AlertProjectMigrationJob.class,
                 config.interval().toJavaDuration(),
                 config.startupDelay().toJavaDuration());
     }

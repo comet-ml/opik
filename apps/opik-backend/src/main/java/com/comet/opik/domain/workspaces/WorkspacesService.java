@@ -156,9 +156,24 @@ class WorkspacesServiceImpl implements WorkspacesService {
      */
     @Override
     public boolean markExperimentProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return markMigrationSkipped(workspaceId, reason,
-                WorkspacesDAO::updateExperimentProjectMigrationSkippedIfNull,
-                WorkspacesDAO::insertExperimentProjectMigrationSkipped);
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updateExperimentProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertExperimentProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updateExperimentProjectMigrationSkippedIfNull(workspaceId, now, reason,
+                            SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
     }
 
     @Override
@@ -169,9 +184,23 @@ class WorkspacesServiceImpl implements WorkspacesService {
 
     @Override
     public boolean markPromptProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return markMigrationSkipped(workspaceId, reason,
-                WorkspacesDAO::updatePromptProjectMigrationSkippedIfNull,
-                WorkspacesDAO::insertPromptProjectMigrationSkipped);
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertPromptProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
     }
 
     @Override
@@ -187,46 +216,24 @@ class WorkspacesServiceImpl implements WorkspacesService {
      */
     @Override
     public boolean markOptimizationProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return markMigrationSkipped(workspaceId, reason,
-                WorkspacesDAO::updateOptimizationProjectMigrationSkippedIfNull,
-                WorkspacesDAO::insertOptimizationProjectMigrationSkipped);
-    }
-
-    /**
-     * Shared UPDATE-if-null → INSERT → retry-UPDATE flow used by every {@code mark*MigrationSkipped}
-     * call site. Caller passes the column-specific DAO update and insert references so the locking
-     * logic stays in one place.
-     */
-    private boolean markMigrationSkipped(String workspaceId, String reason,
-            UpdateSkippedIfNullDaoCall updateIfNull,
-            InsertSkippedDaoCall insert) {
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(WorkspacesDAO.class);
             var now = Instant.now();
-            if (updateIfNull.call(dao, workspaceId, now, reason, SYSTEM_USER) > 0) {
+            if (dao.updateOptimizationProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
                 return true;
             }
             try {
-                insert.call(dao, workspaceId, now, reason, SYSTEM_USER);
+                dao.insertOptimizationProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
                 return true;
             } catch (UnableToExecuteStatementException exception) {
                 if (exception.getCause() instanceof SQLException sql
                         && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return updateIfNull.call(dao, workspaceId, now, reason, SYSTEM_USER) > 0;
+                    return dao.updateOptimizationProjectMigrationSkippedIfNull(workspaceId, now, reason,
+                            SYSTEM_USER) > 0;
                 }
                 throw exception;
             }
         });
-    }
-
-    @FunctionalInterface
-    private interface UpdateSkippedIfNullDaoCall {
-        int call(WorkspacesDAO dao, String workspaceId, Instant now, String reason, String userName);
-    }
-
-    @FunctionalInterface
-    private interface InsertSkippedDaoCall {
-        void call(WorkspacesDAO dao, String workspaceId, Instant now, String reason, String userName);
     }
 
     @Override
