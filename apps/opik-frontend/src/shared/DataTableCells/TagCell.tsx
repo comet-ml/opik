@@ -21,7 +21,9 @@ const TagCell = (context: CellContext<unknown, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {colored ? (
+      {!value ? (
+        "-"
+      ) : colored ? (
         <ColoredTag label={value} variant={fixedVariant} size={tagSize} />
       ) : (
         <Tag size={tagSize}>{value}</Tag>

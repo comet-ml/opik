@@ -40,7 +40,7 @@ const FeedbackDefinitionsValueCell = (
       tableMetadata={context.table.options.meta}
     >
       <CellTooltipWrapper content={tooltipContent}>
-        <div className="min-w-0 truncate">{items}</div>
+        <div className="min-w-0 truncate">{items || "-"}</div>
       </CellTooltipWrapper>
     </CellWrapper>
   );

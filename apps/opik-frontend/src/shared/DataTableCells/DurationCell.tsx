@@ -20,7 +20,7 @@ const DurationCell = <TData,>(context: CellContext<TData, number>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {formatDuration(value)}
+      {isNumber(value) ? formatDuration(value) : "-"}
     </CellWrapper>
   );
 };
@@ -33,7 +33,9 @@ const CompareDurationCell: React.FC<
   const renderContent: SplitCellRenderContent = (
     item: ExperimentItem | undefined,
   ) => {
-    const formatted = formatDuration(item?.duration);
+    const formatted = isNumber(item?.duration)
+      ? formatDuration(item?.duration)
+      : "-";
     if (!isAggregatedItem(item)) return formatted;
 
     return (

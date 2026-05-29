@@ -26,6 +26,7 @@ const ExpandableTextCell = <TData,>(context: CellContext<TData, string>) => {
     setExpandedState((prev) => ({ ...prev, [cellKey]: newExpanded }));
   };
 
+  const isEmpty = value === null || value === undefined || value === "";
   const shortValue = getShortValue?.(value) ?? value;
   const isExpandable = getIsExpandable?.(value) ?? false;
 
@@ -48,10 +49,10 @@ const ExpandableTextCell = <TData,>(context: CellContext<TData, string>) => {
             isExpanded ? "whitespace-pre-wrap break-all" : "truncate",
           )}
         >
-          {isExpanded ? value : shortValue}
+          {isEmpty ? "-" : isExpanded ? value : shortValue}
         </span>
       </CellTooltipWrapper>
-      {isExpandable && (
+      {!isEmpty && isExpandable && (
         <Button
           size="2xs"
           variant="ghost"
