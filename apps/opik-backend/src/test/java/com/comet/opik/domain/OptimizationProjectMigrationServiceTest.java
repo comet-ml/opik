@@ -55,10 +55,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code migrationService.runMigrationCycle().block()} directly so each bucket can be exercised in
  * isolation, mirroring {@link DatasetProjectMigrationServiceTest}. The scheduler-driven
  * {@link OptimizationProjectMigrationJobTest} only covers the Path A happy path.
- *
- * <p>{@code allowBeforeDependencies=true} keeps the per-workspace D1/D2 readiness probe from
- * gating the assertions — the seeded data already reflects the post-D1/D2 production layout, and
- * leaving the override on isolates these tests from any latent V1 artefact in shared containers.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -95,7 +91,6 @@ class OptimizationProjectMigrationServiceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
-                                new CustomConfig("optimizationProjectMigration.allowBeforeDependencies", "true"),
                                 new CustomConfig("migration.excludedWorkspaceIds", EXCLUDED_WORKSPACE_ID),
                                 // Cache enabled with the production TTL so only the migration's
                                 // evictCache can flip a cached V1 to V2 between assertions.

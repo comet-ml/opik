@@ -40,7 +40,6 @@ import java.util.UUID;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.ExperimentDAO.getFeedbackScores;
-import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
 import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
@@ -79,10 +78,9 @@ public interface OptimizationDAO {
 
     Flux<OrphanOptimization> findOrphanOptimizationsInWorkspace(String workspaceId);
 
-    Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(
-            String workspaceId, Set<UUID> optimizationIds);
+    Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(Set<UUID> optimizationIds);
 
-    Mono<Long> batchSetProjectId(String workspaceId, Set<UUID> optimizationIds, UUID projectId);
+    Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, UUID projectId);
 }
 
 @Singleton
@@ -140,7 +138,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM optimizations
             WHERE workspace_id = :workspace_id
             AND name NOT IN :demo_optimization_names
-            GROUP BY workspace_id, id
+            GROUP BY id
             HAVING argMax(project_id, last_updated_at) = ''
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -189,7 +187,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     WHERE workspace_id = :workspace_id
                     AND optimization_id IN :optimization_ids
                     AND name NOT IN :demo_experiment_names
-                    GROUP BY workspace_id, id, optimization_id
+                    GROUP BY id, optimization_id
                     HAVING experiment_project_id != ''
                 )
                 GROUP BY optimization_id, experiment_project_id
@@ -1073,22 +1071,34 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         .build()));
     }
 
+    /**
+     * Path A inference row mapper. The SQL filters out experiments with
+     * {@code experiment_project_id = ''} via {@code HAVING}, so under normal conditions every row
+     * carries a non-blank project_id. The defensive {@code Optional.ofNullable(...).filter(...)}
+     * guards a narrow concurrency window: a writer that flips the only matching experiment's
+     * {@code project_id} to {@code ''} between the {@code HAVING} evaluation and the row
+     * materialisation could leave the column blank in the result. In that case we drop the row
+     * (via {@code Mono::justOrEmpty}), and the service treats the optimization as no-inference —
+     * it falls through to Path B (dataset lookup) and ultimately to the workspace's Default
+     * Project. Callers therefore must tolerate an optimization being absent from the Flux even
+     * when its id was in the input set.
+     */
     @Override
-    public Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(
-            @NonNull String workspaceId, @NonNull Set<UUID> optimizationIds) {
+    public Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(Set<UUID> optimizationIds) {
         if (CollectionUtils.isEmpty(optimizationIds)) {
             return Flux.empty();
         }
         var optimizationIdsAsStrings = optimizationIds.stream().map(UUID::toString).toArray(String[]::new);
         var details = "optimizationCount=%d".formatted(optimizationIds.size());
         var template = FilterUtils.getSTWithLogComment(COMPUTE_OPTIMIZATION_PROJECT_MAPPING_VIA_EXPERIMENTS,
-                "compute_optimization_project_mapping_via_experiments", workspaceId, "", details);
+                "compute_optimization_project_mapping_via_experiments", null, null, details);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("optimization_ids", optimizationIdsAsStrings)
-                        .bind("demo_experiment_names", DemoData.EXPERIMENTS.toArray(new String[0]))
-                        .execute()))
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("optimization_ids", optimizationIdsAsStrings)
+                            .bind("demo_experiment_names", DemoData.EXPERIMENTS.toArray(new String[0]));
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
                 .flatMap(result -> result.map((row, metadata) -> Optional
                         .ofNullable(row.get("project_id", String.class))
                         .filter(StringUtils::isNotBlank)
@@ -1102,21 +1112,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     @Override
-    public Mono<Long> batchSetProjectId(@NonNull String workspaceId, @NonNull Set<UUID> optimizationIds,
-            @NonNull UUID projectId) {
+    public Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, @NonNull UUID projectId) {
         if (CollectionUtils.isEmpty(optimizationIds)) {
             return Mono.just(0L);
         }
         var details = "optimizationCount=%d, projectId=%s".formatted(optimizationIds.size(), projectId);
         var template = FilterUtils.getSTWithLogComment(BATCH_SET_PROJECT_ID,
-                "batch_set_optimization_project_id", workspaceId, SYSTEM_USER, details);
+                "batch_set_optimization_project_id", null, null, details);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("optimization_ids", optimizationIds.toArray(UUID[]::new))
-                        .bind("project_id", projectId)
-                        .bind("user_name", SYSTEM_USER)
-                        .execute()))
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("optimization_ids", optimizationIds.toArray(UUID[]::new))
+                            .bind("project_id", projectId);
+                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+                })
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }

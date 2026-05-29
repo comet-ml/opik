@@ -54,11 +54,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link DatasetProjectMigrationJobTest}: seed one V1 optimization in a fresh workspace, let the
  * scheduler fire {@code runMigrationCycle()}, assert the workspace promotes to V2 and the
  * optimization's {@code project_id} points at the experiment's project (Path A).
- *
- * <p>{@code optimizationProjectMigration.allowBeforeDependencies=true} bypasses the per-workspace
- * D1/D2 readiness probe — the seed already represents a workspace where D1 and D2 produced
- * non-orphan rows, but the override keeps the test independent of any latent V1 artefact in
- * shared containers.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -94,7 +89,6 @@ class OptimizationProjectMigrationJobTest {
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
                                 new CustomConfig("optimizationProjectMigration.enabled", "true"),
-                                new CustomConfig("optimizationProjectMigration.allowBeforeDependencies", "true"),
                                 // Cache enabled with the production TTL so only the migration's
                                 // evictCache can flip a cached V1 to V2 within the test windows.
                                 new CustomConfig("cacheManager.enabled", "true"),

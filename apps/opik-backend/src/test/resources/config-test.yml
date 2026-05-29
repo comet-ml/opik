@@ -811,9 +811,6 @@ datasetProjectMigration:
 # fallback inference. Disabled by default in tests — each test opts in via CustomConfig.
 optimizationProjectMigration:
   enabled: false
-  # Override the D1/D2 readiness probe so tests with mocked workspaces aren't gated on
-  # production-style prerequisites.
-  allowBeforeDependencies: false
   workspacesPerRun: 20
   optimizationBatchSize: 1000
   interval: 5s

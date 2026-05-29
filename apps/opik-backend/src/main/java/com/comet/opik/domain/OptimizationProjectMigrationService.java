@@ -34,6 +34,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
@@ -66,9 +67,10 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  *   <tr><td>No inference (Path A=0, Path B=null)</td><td>Assign to Default Project</td></tr>
  * </table>
  *
- * <p>The cycle refuses to run when D1 (experiments) or D2 (datasets) have V1 work pending for a
- * given workspace, unless {@code allowBeforeDependencies} is set. The runbook documents the order
- * strictly; this is the code-level safety net.
+ * <p>D1 (experiments) and D2 (datasets) must be fully drained before this migration is enabled
+ * — Path A reads {@code experiment.project_id} (which D1 sets) and Path B reads
+ * {@code datasets.project_id} (which D2 sets). The ordering is enforced by the deployment runbook,
+ * not in code.
  */
 @Slf4j
 @Singleton
@@ -82,7 +84,6 @@ public class OptimizationProjectMigrationService implements Managed {
 
     private static final Attributes RESULT_MIGRATED = Attributes.of(RESULT_KEY, "migrated");
     private static final Attributes RESULT_NO_ACTIONABLE = Attributes.of(RESULT_KEY, "no_actionable");
-    private static final Attributes RESULT_DEPENDENCIES_PENDING = Attributes.of(RESULT_KEY, "dependencies_pending");
 
     // Reason labels for the `optimizations.assigned_to_default` counter — diagnoses why an
     // optimization ended up in Default Project (inferred project was deleted vs. no inference at
@@ -114,7 +115,6 @@ public class OptimizationProjectMigrationService implements Managed {
     private static final String DEFAULT_PROJECT_NAME = ProjectService.DEFAULT_PROJECT;
 
     private final @NonNull OptimizationDAO optimizationDAO;
-    private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull DatasetService datasetService;
     private final @NonNull ProjectService projectService;
     private final @NonNull WorkspaceVersionService workspaceVersionService;
@@ -140,14 +140,12 @@ public class OptimizationProjectMigrationService implements Managed {
     @Inject
     public OptimizationProjectMigrationService(
             @NonNull OptimizationDAO optimizationDAO,
-            @NonNull ExperimentDAO experimentDAO,
             @NonNull DatasetService datasetService,
             @NonNull ProjectService projectService,
             @NonNull WorkspaceVersionService workspaceVersionService,
             @NonNull @Config("optimizationProjectMigration") OptimizationProjectMigrationConfig config,
             @NonNull @Config("migration") MigrationConfig migrationConfig) {
         this.optimizationDAO = optimizationDAO;
-        this.experimentDAO = experimentDAO;
         this.datasetService = datasetService;
         this.projectService = projectService;
         this.workspaceVersionService = workspaceVersionService;
@@ -223,9 +221,9 @@ public class OptimizationProjectMigrationService implements Managed {
             var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
             cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
             log.info(
-                    "Starting optimization project migration cycle, workspacesPerRun='{}', batchSize='{}', envExcludedWorkspaces='{}', allowBeforeDependencies='{}'",
+                    "Starting optimization project migration cycle, workspacesPerRun='{}', batchSize='{}', envExcludedWorkspaces='{}'",
                     config.workspacesPerRun(), config.optimizationBatchSize(),
-                    envExcludedWorkspaceIds.size(), config.allowBeforeDependencies());
+                    envExcludedWorkspaceIds.size());
             return envExcludedWorkspaceIds;
         })
                 .subscribeOn(migrationScheduler)
@@ -257,24 +255,14 @@ public class OptimizationProjectMigrationService implements Managed {
         var workspaceStartMillis = System.currentTimeMillis();
         log.info("Starting workspace migration, workspaceId='{}', optimizationsCount='{}'",
                 workspaceId, optimizationsCount);
-        return checkDependencies(workspaceId)
-                .flatMap(dependenciesOk -> {
-                    if (!dependenciesOk) {
-                        log.warn(
-                                "Skipping workspace because D1 (experiments) or D2 (datasets) still have V1 work pending; set optimizationProjectMigration.allowBeforeDependencies=true to override (workspaceId='{}')",
-                                workspaceId);
-                        recordWorkspaceDuration(RESULT_DEPENDENCIES_PENDING, workspaceStartMillis);
+        return findOrphanOptimizations(workspaceId)
+                .flatMap(orphans -> {
+                    if (CollectionUtils.isEmpty(orphans)) {
+                        log.info("No orphan optimizations remain, workspaceId='{}'", workspaceId);
+                        recordWorkspaceDuration(RESULT_NO_ACTIONABLE, workspaceStartMillis);
                         return Mono.just(false);
                     }
-                    return findOrphanOptimizations(workspaceId)
-                            .flatMap(orphans -> {
-                                if (CollectionUtils.isEmpty(orphans)) {
-                                    log.info("No orphan optimizations remain, workspaceId='{}'", workspaceId);
-                                    recordWorkspaceDuration(RESULT_NO_ACTIONABLE, workspaceStartMillis);
-                                    return Mono.just(false);
-                                }
-                                return classifyAndMigrate(workspaceId, orphans, workspaceStartMillis);
-                            });
+                    return classifyAndMigrate(workspaceId, orphans, workspaceStartMillis);
                 })
                 .onErrorResume(throwable -> {
                     var duration = Duration.ofMillis(System.currentTimeMillis() - workspaceStartMillis);
@@ -282,26 +270,6 @@ public class OptimizationProjectMigrationService implements Managed {
                             workspaceId, duration, throwable);
                     recordWorkspaceDuration(RESULT_ERROR, workspaceStartMillis);
                     return Mono.just(false);
-                });
-    }
-
-    /**
-     * Per-workspace dependency guard: refuse to run if D1 (experiments) or D2 (datasets) still
-     * carry V1 work for this workspace. Operators can override via
-     * {@code allowBeforeDependencies} (intended for tests and local dev only — production relies
-     * on the runbook ordering).
-     */
-    private Mono<Boolean> checkDependencies(String workspaceId) {
-        if (config.allowBeforeDependencies()) {
-            return Mono.just(true);
-        }
-        return experimentDAO.hasVersion1Experiments(workspaceId, DemoData.EXPERIMENTS)
-                .flatMap(d1Pending -> {
-                    if (d1Pending) {
-                        return Mono.just(false);
-                    }
-                    return Mono.fromCallable(() -> !datasetService.hasVersion1Datasets(workspaceId))
-                            .subscribeOn(migrationScheduler);
                 });
     }
 
@@ -324,9 +292,11 @@ public class OptimizationProjectMigrationService implements Managed {
                 .collect(Collectors.toUnmodifiableSet());
         var orphanDatasetByOptimization = orphans.stream()
                 .collect(Collectors.toUnmodifiableMap(
-                        OrphanOptimization::optimizationId, OrphanOptimization::datasetId, (a, b) -> a));
+                        OrphanOptimization::optimizationId, OrphanOptimization::datasetId,
+                        (existing, duplicate) -> existing));
 
-        return optimizationDAO.computeOptimizationProjectMappingViaExperiments(workspaceId, orphanIds)
+        return optimizationDAO.computeOptimizationProjectMappingViaExperiments(orphanIds)
+                .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                 .publishOn(migrationScheduler)
                 .collectList()
                 .flatMap(pathAResults -> classifyWithPathAResults(
@@ -344,7 +314,7 @@ public class OptimizationProjectMigrationService implements Managed {
         var pathAByOptimization = pathAResults.stream()
                 .collect(Collectors.toUnmodifiableMap(
                         OptimizationProjectMapping::optimizationId, Function.identity(),
-                        (a, b) -> a));
+                        (existing, duplicate) -> existing));
 
         // Bucket 1: certain via experiments (Path A) — collect with their inference path. Any
         // Path A row counts as certain; multi-project rows already carry the dominant project
@@ -562,7 +532,8 @@ public class OptimizationProjectMigrationService implements Managed {
                     var ids = batch.stream()
                             .map(InferredMapping::optimizationId)
                             .collect(Collectors.toUnmodifiableSet());
-                    return optimizationDAO.batchSetProjectId(workspaceId, ids, projectId)
+                    return optimizationDAO.batchSetProjectId(ids, projectId)
+                            .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                             .doOnSuccess(rowsUpdated -> {
                                 batchSize.record(batch.size());
                                 recordInferencePaths(batch);

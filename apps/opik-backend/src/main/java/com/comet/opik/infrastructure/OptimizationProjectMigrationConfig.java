@@ -17,15 +17,14 @@ import java.util.concurrent.TimeUnit;
  * {@code DatasetProjectMigrationConfig} field-for-field — same defaults survived D1/D2 in
  * production and the optimization volume is smaller still.
  *
- * <p>The {@code allowBeforeDependencies} flag overrides the hard guard that refuses to run before
- * D1 (experiments) and D2 (datasets) are fully complete. Operational ordering is documented in
- * the runbook; the override exists for integration tests and local dev where the D1/D2 backfill
- * is not run.
+ * <p>D1 (experiments) and D2 (datasets) must be fully drained before this migration is enabled —
+ * Path A reads {@code experiment.project_id} (set by D1) and Path B reads
+ * {@code datasets.project_id} (set by D2). The ordering is enforced by the deployment runbook,
+ * not in code.
  */
 @Builder(toBuilder = true)
 public record OptimizationProjectMigrationConfig(
         boolean enabled,
-        boolean allowBeforeDependencies,
         @Min(1) @Max(100) int workspacesPerRun,
         @Min(100) @Max(1000) int optimizationBatchSize,
         @NotNull @MinDuration(value = 5, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration interval,

@@ -89,12 +89,6 @@ public interface DatasetService {
      */
     Map<UUID, UUID> findProjectIdsByDatasetIds(Set<UUID> ids, String workspaceId);
 
-    /**
-     * Whether the workspace has any V1 (non-demo, {@code project_id IS NULL}) dataset. Returned
-     * by the same DAO probe that the workspace version determination flow uses.
-     */
-    boolean hasVersion1Datasets(String workspaceId);
-
     Dataset findByNameDetailed(DatasetIdentifier identifier, Visibility visibility);
 
     Mono<Dataset> resolveDatasetByNameAsync(DatasetIdentifier identifier);
@@ -343,19 +337,13 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Map<UUID, UUID> findProjectIdsByDatasetIds(@NonNull Set<UUID> ids, @NonNull String workspaceId) {
-        if (ids.isEmpty()) {
+    public Map<UUID, UUID> findProjectIdsByDatasetIds(Set<UUID> ids, @NonNull String workspaceId) {
+        if (CollectionUtils.isEmpty(ids)) {
             return Map.of();
         }
         return template.inTransaction(READ_ONLY, handle -> handle.attach(DatasetDAO.class)
                 .findProjectIdsByDatasetIds(workspaceId, ids).stream()
                 .collect(Collectors.toMap(DatasetProjectIdRow::id, DatasetProjectIdRow::projectId)));
-    }
-
-    @Override
-    public boolean hasVersion1Datasets(@NonNull String workspaceId) {
-        return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(DatasetDAO.class).hasVersion1Datasets(workspaceId, DemoData.DATASETS));
     }
 
     private Dataset findByNameNoContext(String workspaceId, String name, UUID projectId, Visibility visibility) {

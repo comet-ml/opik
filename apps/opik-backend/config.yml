@@ -1455,13 +1455,11 @@ datasetProjectMigration:
 # Optimization Project Migration configuration (D3)
 # Assigns project_id to orphan optimizations in ClickHouse. Inference is experiments-primary (Path
 # A) with a dataset fallback (Path B), so this job depends on D1 (experiments) and D2 (datasets)
-# being complete in production. Set allowBeforeDependencies=true for local dev / integration tests.
+# being complete in production. The dependency ordering is enforced by the deployment runbook,
+# not by code.
 optimizationProjectMigration:
   # Master switch — disabled by default, enable for staged rollout
   enabled: ${OPTIMIZATION_PROJECT_MIGRATION_ENABLED:-false}
-  # Override the hard guard that refuses to run while D1 (experiments) or D2 (datasets) still
-  # report V1 work pending. Production should leave this false; only flip it for tests/dev.
-  allowBeforeDependencies: ${OPTIMIZATION_PROJECT_MIGRATION_ALLOW_BEFORE_DEPENDENCIES:-false}
   # Number of workspaces to process per job run (smallest first)
   workspacesPerRun: ${OPTIMIZATION_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
   # Number of optimizations to update per ClickHouse INSERT batch
