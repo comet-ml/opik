@@ -1,8 +1,14 @@
+import json
 from unittest import mock
 
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation.resume import integration, state
 from opik.evaluation.samplers import base_dataset_sampler
+
+
+def _blob(result):
+    """Decode the JSON-string resume blob the integration helpers persist."""
+    return json.loads(result[state.RESUME_METADATA_KEY])
 
 
 class _IdentitySampler(base_dataset_sampler.BaseDatasetSampler):
@@ -29,7 +35,7 @@ class TestResumeStateForEvaluate:
             dataset_item_ids=None,
         )
 
-        blob = result[state.RESUME_METADATA_KEY]
+        blob = _blob(result)
         assert blob["resumable"] is True
         assert blob["requires_local_checkpoint"] is False
         assert blob["default_runs_per_item"] == 3
@@ -49,7 +55,7 @@ class TestResumeStateForEvaluate:
         )
 
         assert (
-            result[state.RESUME_METADATA_KEY]["requires_local_checkpoint"] is True
+            _blob(result)["requires_local_checkpoint"] is True
         )
 
     def test_with_explicit_ids__marks_requires_local_checkpoint(self):
@@ -64,7 +70,7 @@ class TestResumeStateForEvaluate:
         )
 
         assert (
-            result[state.RESUME_METADATA_KEY]["requires_local_checkpoint"] is True
+            _blob(result)["requires_local_checkpoint"] is True
         )
 
     def test_dataset_without_versions__marks_non_resumable(self):
@@ -78,7 +84,7 @@ class TestResumeStateForEvaluate:
             dataset_item_ids=None,
         )
 
-        blob = result[state.RESUME_METADATA_KEY]
+        blob = _blob(result)
         assert blob["resumable"] is False
         assert "pinned dataset version" in blob["non_resumable_reason"]
         # No iteration configs leak through when resumable=False.

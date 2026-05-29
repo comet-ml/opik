@@ -4037,13 +4037,13 @@ def test_evaluate__experiment_config_not_set__only_resume_state_added(
             verbose=0,
         )
 
+    import json as _json
+
     sent_config = mock_create_experiment.call_args.kwargs["experiment_config"]
     assert list(sent_config.keys()) == [resume.RESUME_METADATA_KEY]
-    assert sent_config[resume.RESUME_METADATA_KEY]["resumable"] is False
-    assert (
-        "pinned dataset version"
-        in sent_config[resume.RESUME_METADATA_KEY]["non_resumable_reason"]
-    )
+    blob = _json.loads(sent_config[resume.RESUME_METADATA_KEY])
+    assert blob["resumable"] is False
+    assert "pinned dataset version" in blob["non_resumable_reason"]
 
 
 def test_evaluate__no_scoring_metrics__completes_and_writes_no_feedback_scores(

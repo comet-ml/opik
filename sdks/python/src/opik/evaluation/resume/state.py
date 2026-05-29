@@ -23,10 +23,14 @@ omitted field would silently produce a corrupt blob.
 """
 
 import dataclasses
+import json
+import logging
 from typing import Any, Dict, Optional, Union
 
 from ...api_objects.experiment import experiment as experiment_module
 
+
+LOGGER = logging.getLogger(__name__)
 
 RESUME_METADATA_KEY = "_opik_resume"
 RESUME_SCHEMA_VERSION = 1
@@ -62,17 +66,25 @@ def embed_resumable_state(
     experiment_config: Optional[Dict[str, Any]],
     state: ResumableState,
 ) -> Dict[str, Any]:
-    """Embed a :class:`ResumableState` blob into ``experiment_config``."""
+    """
+    Embed a :class:`ResumableState` blob into ``experiment_config``.
+
+    The blob is stored as a single JSON-string value under
+    ``RESUME_METADATA_KEY`` so the experiment Configuration UI shows one
+    row instead of one row per nested field.
+    """
     new_config = dict(experiment_config) if experiment_config else {}
-    new_config[RESUME_METADATA_KEY] = {
-        "schema_version": RESUME_SCHEMA_VERSION,
-        "resumable": True,
-        "default_runs_per_item": state.default_runs_per_item,
-        "dataset_filter_string": state.dataset_filter_string,
-        "dataset_version_name": state.dataset_version_name,
-        "nb_samples": state.nb_samples,
-        "requires_local_checkpoint": state.requires_local_checkpoint,
-    }
+    new_config[RESUME_METADATA_KEY] = json.dumps(
+        {
+            "schema_version": RESUME_SCHEMA_VERSION,
+            "resumable": True,
+            "default_runs_per_item": state.default_runs_per_item,
+            "dataset_filter_string": state.dataset_filter_string,
+            "dataset_version_name": state.dataset_version_name,
+            "nb_samples": state.nb_samples,
+            "requires_local_checkpoint": state.requires_local_checkpoint,
+        }
+    )
     return new_config
 
 
@@ -84,13 +96,17 @@ def embed_non_resumable_state(
     Embed a non-resumable marker into ``experiment_config``.
 
     Only the marker + reason are stored; no iteration configs leak through.
+    Serialized as a JSON string for the same UI-display reason as
+    :func:`embed_resumable_state`.
     """
     new_config = dict(experiment_config) if experiment_config else {}
-    new_config[RESUME_METADATA_KEY] = {
-        "schema_version": RESUME_SCHEMA_VERSION,
-        "resumable": False,
-        "non_resumable_reason": state.reason,
-    }
+    new_config[RESUME_METADATA_KEY] = json.dumps(
+        {
+            "schema_version": RESUME_SCHEMA_VERSION,
+            "resumable": False,
+            "non_resumable_reason": state.reason,
+        }
+    )
     return new_config
 
 
@@ -153,14 +169,33 @@ def read_resume_state(
 def _read_raw_resume_state(
     experiment: experiment_module.Experiment,
 ) -> Optional[Dict[str, Any]]:
+    """
+    Decode the raw resume blob from the experiment metadata.
+
+    The blob is always a JSON-encoded string under ``RESUME_METADATA_KEY``.
+    Any other shape (missing, non-string, malformed JSON) is treated as
+    "no resume state" so callers raise the appropriate error.
+    """
     experiment_data = experiment.get_experiment_data()
     metadata = getattr(experiment_data, "metadata", None) or {}
     if not isinstance(metadata, dict):
         return None
-    raw_state = metadata.get(RESUME_METADATA_KEY)
-    if not isinstance(raw_state, dict):
+
+    raw = metadata.get(RESUME_METADATA_KEY)
+    if not isinstance(raw, str):
         return None
-    return raw_state
+
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        LOGGER.warning(
+            "Failed to decode JSON resume state on experiment metadata; "
+            "treating the experiment as having no resume state.",
+            exc_info=True,
+        )
+        return None
+
+    return decoded if isinstance(decoded, dict) else None
 
 
 def _coerce_positive_int(value: Any, *, fallback: int) -> int:

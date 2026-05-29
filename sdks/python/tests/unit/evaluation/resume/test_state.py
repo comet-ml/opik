@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest import mock
 
@@ -5,7 +6,7 @@ from opik.evaluation.resume import state
 
 
 class TestEmbedResumableState:
-    def test_writes_full_config_blob(self):
+    def test_writes_full_config_blob_as_json_string(self):
         result = state.embed_resumable_state(
             {"foo": "bar"},
             state.ResumableState(
@@ -18,7 +19,12 @@ class TestEmbedResumableState:
         )
 
         assert result["foo"] == "bar"
-        blob = result[state.RESUME_METADATA_KEY]
+        # The blob is a single JSON-encoded string under one key (keeps the
+        # experiment Configuration UI from listing every nested field as a
+        # separate row).
+        raw = result[state.RESUME_METADATA_KEY]
+        assert isinstance(raw, str)
+        blob = json.loads(raw)
         assert blob["resumable"] is True
         assert blob["schema_version"] == state.RESUME_SCHEMA_VERSION
         assert blob["default_runs_per_item"] == 3
@@ -39,7 +45,7 @@ class TestEmbedResumableState:
             ),
         )
 
-        blob = result[state.RESUME_METADATA_KEY]
+        blob = json.loads(result[state.RESUME_METADATA_KEY])
         assert blob["resumable"] is True
         assert blob["dataset_version_name"] == "v1"
         assert blob["nb_samples"] is None
@@ -72,7 +78,8 @@ class TestEmbedResumableState:
             ),
         )
 
-        assert result[state.RESUME_METADATA_KEY]["requires_local_checkpoint"] is True
+        blob = json.loads(result[state.RESUME_METADATA_KEY])
+        assert blob["requires_local_checkpoint"] is True
 
 
 class TestEmbedNonResumableState:
@@ -82,7 +89,9 @@ class TestEmbedNonResumableState:
             state.NonResumableState(reason="some reason"),
         )
 
-        blob = result[state.RESUME_METADATA_KEY]
+        raw = result[state.RESUME_METADATA_KEY]
+        assert isinstance(raw, str)
+        blob = json.loads(raw)
         assert blob["resumable"] is False
         assert blob["non_resumable_reason"] == "some reason"
         # No iteration configs leak through when non-resumable.
@@ -101,6 +110,10 @@ class TestReadResumeState:
         )
         return experiment
 
+    def _metadata_with_blob(self, blob_dict):
+        """Wrap a resume-blob dict in the on-the-wire JSON-string form."""
+        return {state.RESUME_METADATA_KEY: json.dumps(blob_dict)}
+
     def test_missing_metadata__returns_none(self):
         experiment = self._experiment_with_metadata({})
 
@@ -111,10 +124,19 @@ class TestReadResumeState:
 
         assert state.read_resume_state(experiment) is None
 
+    def test_resume_value_not_a_string__returns_none(self):
+        """The persisted value must be a JSON-encoded string; a raw dict is
+        considered malformed and treated as no resume state."""
+        experiment = self._experiment_with_metadata(
+            {state.RESUME_METADATA_KEY: {"resumable": True}}
+        )
+
+        assert state.read_resume_state(experiment) is None
+
     def test_resumable_blob__decoded_into_resumable_state(self):
         experiment = self._experiment_with_metadata(
-            {
-                state.RESUME_METADATA_KEY: {
+            self._metadata_with_blob(
+                {
                     "schema_version": 1,
                     "resumable": True,
                     "default_runs_per_item": 3,
@@ -123,7 +145,7 @@ class TestReadResumeState:
                     "nb_samples": 50,
                     "requires_local_checkpoint": True,
                 }
-            }
+            )
         )
 
         persisted = state.read_resume_state(experiment)
@@ -137,13 +159,13 @@ class TestReadResumeState:
 
     def test_non_resumable_blob__exposes_reason(self):
         experiment = self._experiment_with_metadata(
-            {
-                state.RESUME_METADATA_KEY: {
+            self._metadata_with_blob(
+                {
                     "schema_version": 1,
                     "resumable": False,
                     "non_resumable_reason": "boom",
                 }
-            }
+            )
         )
 
         persisted = state.read_resume_state(experiment)
@@ -156,8 +178,8 @@ class TestReadResumeState:
         version name is downgraded to NonResumableState — iterating against
         a moving dataset HEAD would break the resume contract."""
         experiment = self._experiment_with_metadata(
-            {
-                state.RESUME_METADATA_KEY: {
+            self._metadata_with_blob(
+                {
                     "schema_version": 1,
                     "resumable": True,
                     "default_runs_per_item": 1,
@@ -166,7 +188,7 @@ class TestReadResumeState:
                     "nb_samples": None,
                     "requires_local_checkpoint": False,
                 }
-            }
+            )
         )
 
         persisted = state.read_resume_state(experiment)
@@ -174,10 +196,41 @@ class TestReadResumeState:
         assert isinstance(persisted, state.NonResumableState)
         assert "pinned dataset_version_name" in persisted.reason
 
+    def test_round_trip__embedded_json_string_decodes_back(self):
+        """``embed_resumable_state`` writes a JSON string; ``read_resume_state``
+        must decode it back into a ``ResumableState``."""
+        embedded = state.embed_resumable_state(
+            None,
+            state.ResumableState(
+                default_runs_per_item=3,
+                dataset_filter_string="tags contains 'x'",
+                dataset_version_name="v3",
+                nb_samples=50,
+                requires_local_checkpoint=True,
+            ),
+        )
+        experiment = self._experiment_with_metadata(embedded)
+
+        persisted = state.read_resume_state(experiment)
+
+        assert isinstance(persisted, state.ResumableState)
+        assert persisted.default_runs_per_item == 3
+        assert persisted.dataset_filter_string == "tags contains 'x'"
+        assert persisted.dataset_version_name == "v3"
+        assert persisted.nb_samples == 50
+        assert persisted.requires_local_checkpoint is True
+
+    def test_malformed_json_string__treated_as_no_resume_state(self):
+        experiment = self._experiment_with_metadata(
+            {state.RESUME_METADATA_KEY: "{not valid json"}
+        )
+
+        assert state.read_resume_state(experiment) is None
+
     def test_corrupted_field_types__coerced_to_safe_defaults(self):
         experiment = self._experiment_with_metadata(
-            {
-                state.RESUME_METADATA_KEY: {
+            self._metadata_with_blob(
+                {
                     "schema_version": 1,
                     "resumable": True,
                     "default_runs_per_item": "not-an-int",
@@ -185,7 +238,7 @@ class TestReadResumeState:
                     "dataset_version_name": "v1",
                     "nb_samples": -5,
                 }
-            }
+            )
         )
 
         persisted = state.read_resume_state(experiment)

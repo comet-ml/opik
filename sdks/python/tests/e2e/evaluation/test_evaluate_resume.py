@@ -37,6 +37,30 @@ PROJECT_NAME = generate_project_name("e2e", __name__)
 # --- helpers --------------------------------------------------------------
 
 
+def _items_with_labels(labels):
+    """
+    Build dataset.insert payload + label↔uuid maps.
+
+    The backend requires dataset item ``id`` to be a real UUID. Tests need
+    stable labels (``item-0``, ``item-3``, ...) for readable assertions
+    about which items crashed / got resumed / etc. This helper bridges the
+    two: each label gets a generated UUID stored under ``id``, and the
+    label travels alongside as part of the item content so tasks can
+    reference it.
+    """
+    ids_by_label = {label: id_helpers.generate_id() for label in labels}
+    labels_by_id = {uid: label for label, uid in ids_by_label.items()}
+    payload = [
+        {
+            "id": ids_by_label[label],
+            "input": {"text": label},
+            "expected_output": label,
+        }
+        for label in labels
+    ]
+    return payload, ids_by_label, labels_by_id
+
+
 def _experiment_id_after_failed_evaluate(opik_client, experiment_name) -> str:
     """
     Recover the experiment id when the original ``evaluate()`` raised — the
@@ -143,24 +167,19 @@ def test_evaluate_resume__failure_during_evaluate__continue_works(
     ``evaluate_resume()`` call completes the missing items and the
     experiment converges to "all items completed".
     """
-    # 1. 5-item dataset.
+    # 1. 5-item dataset. Labels (``item-N``) double as the input text so
+    #    tasks can pick them out without touching the UUID ``id`` field.
+    labels = [f"item-{i}" for i in range(5)]
+    items, ids_by_label, labels_by_id = _items_with_labels(labels)
     dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
-    dataset.insert(
-        [
-            {
-                "id": f"item-{i}",
-                "input": {"text": f"value-{i}"},
-                "expected_output": f"value-{i}",
-            }
-            for i in range(5)
-        ]
-    )
-    all_item_ids = {f"item-{i}" for i in range(5)}
-    failed_ids = {"item-3", "item-4"}
+    dataset.insert(items)
+    all_uuids = set(ids_by_label.values())
+    failed_labels = {"item-3", "item-4"}
+    failed_uuids = {ids_by_label[label] for label in failed_labels}
 
     def crashing_task(item: Dict[str, Any]):
-        if item["id"] in failed_ids:
-            raise RuntimeError(f"simulated crash on {item['id']}")
+        if item["input"]["text"] in failed_labels:
+            raise RuntimeError(f"simulated crash on {item['input']['text']}")
         return {"output": item["input"]["text"]}
 
     scoring_key_mapping = {"reference": "expected_output"}
@@ -187,14 +206,14 @@ def test_evaluate_resume__failure_during_evaluate__continue_works(
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids=all_item_ids - failed_ids,
+        expected_completed_dataset_item_ids=all_uuids - failed_uuids,
     )
 
     # 4. Resume with a working task.
     resume_invocations = []
 
     def working_task(item: Dict[str, Any]):
-        resume_invocations.append(item["id"])
+        resume_invocations.append(item["input"]["text"])
         return {"output": item["input"]["text"]}
 
     resume_result = opik.evaluate_resume(
@@ -208,18 +227,18 @@ def test_evaluate_resume__failure_during_evaluate__continue_works(
     # 5. Verify: only the failed items were re-invoked by the task, but the
     #    returned EvaluationResult describes the full experiment — all 5
     #    items appear, every score is 1.0.
-    assert set(resume_invocations) == failed_ids
+    assert set(resume_invocations) == failed_labels
     assert len(resume_result.test_results) == 5
     for test_result in resume_result.test_results:
         assert test_result.score_results[0].value == 1.0
     assert {tr.test_case.dataset_item_id for tr in resume_result.test_results} == (
-        all_item_ids
+        all_uuids
     )
 
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids=all_item_ids,
+        expected_completed_dataset_item_ids=all_uuids,
     )
 
 
@@ -235,26 +254,24 @@ def test_evaluate_resume__failure_during_continue__second_continue_works(
     every call — there is no in-memory "we already tried this" state that
     would prevent a second resume from picking up the still-pending item.
     """
-    # 1. 5-item dataset.
+    # 1. 5-item dataset; labels stand in for ids in task-side logic.
+    labels = [f"item-{i}" for i in range(5)]
+    items, ids_by_label, labels_by_id = _items_with_labels(labels)
     dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
-    dataset.insert(
-        [
-            {
-                "id": f"item-{i}",
-                "input": {"text": f"value-{i}"},
-                "expected_output": f"value-{i}",
-            }
-            for i in range(5)
-        ]
-    )
-    all_item_ids = {f"item-{i}" for i in range(5)}
+    dataset.insert(items)
+    all_uuids = set(ids_by_label.values())
+
+    def uuids_of(label_set):
+        return {ids_by_label[label] for label in label_set}
+
     scoring_key_mapping = {"reference": "expected_output"}
 
     # 2. Original evaluate — items 3 and 4 crash.
     def original_task(item: Dict[str, Any]):
-        if item["id"] in {"item-3", "item-4"}:
-            raise RuntimeError(f"original crash on {item['id']}")
-        return {"output": item["input"]["text"]}
+        label = item["input"]["text"]
+        if label in {"item-3", "item-4"}:
+            raise RuntimeError(f"original crash on {label}")
+        return {"output": label}
 
     try:
         opik.evaluate(
@@ -277,17 +294,20 @@ def test_evaluate_resume__failure_during_continue__second_continue_works(
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids={"item-0", "item-1", "item-2"},
+        expected_completed_dataset_item_ids=uuids_of(
+            {"item-0", "item-1", "item-2"}
+        ),
     )
 
     # 4a. First resume — fixes item-3, but a different bug crashes item-4.
     first_resume_invocations = []
 
     def first_resume_task(item: Dict[str, Any]):
-        first_resume_invocations.append(item["id"])
-        if item["id"] == "item-4":
+        label = item["input"]["text"]
+        first_resume_invocations.append(label)
+        if label == "item-4":
             raise RuntimeError("still flaky on item-4")
-        return {"output": item["input"]["text"]}
+        return {"output": label}
 
     try:
         opik.evaluate_resume(
@@ -306,19 +326,16 @@ def test_evaluate_resume__failure_during_continue__second_continue_works(
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids={
-            "item-0",
-            "item-1",
-            "item-2",
-            "item-3",
-        },
+        expected_completed_dataset_item_ids=uuids_of(
+            {"item-0", "item-1", "item-2", "item-3"}
+        ),
     )
 
     # 4b. Second resume — bug fixed, item-4 completes.
     second_resume_invocations = []
 
     def second_resume_task(item: Dict[str, Any]):
-        second_resume_invocations.append(item["id"])
+        second_resume_invocations.append(item["input"]["text"])
         return {"output": item["input"]["text"]}
 
     opik.evaluate_resume(
@@ -335,7 +352,7 @@ def test_evaluate_resume__failure_during_continue__second_continue_works(
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids=all_item_ids,
+        expected_completed_dataset_item_ids=all_uuids,
     )
 
 
@@ -583,18 +600,11 @@ def test_evaluate_resume__nb_samples__only_sampled_count_replayed(
     dataset. Resume must replay the same cap against the same
     (version-pinned) dataset; the unsampled items must stay out of scope.
     """
-    # 1. 5-item dataset.
+    # 1. 5-item dataset (labels carried in input.text for readability).
+    labels = [f"item-{i}" for i in range(5)]
+    items, _ids_by_label, _labels_by_id = _items_with_labels(labels)
     dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
-    dataset.insert(
-        [
-            {
-                "id": f"item-{i}",
-                "input": {"text": f"v{i}"},
-                "expected_output": f"v{i}",
-            }
-            for i in range(5)
-        ]
-    )
+    dataset.insert(items)
 
     def echo_task(item: Dict[str, Any]):
         return {"output": item["input"]["text"]}
@@ -627,7 +637,7 @@ def test_evaluate_resume__nb_samples__only_sampled_count_replayed(
     resume_invocations = []
 
     def task_for_resume(item: Dict[str, Any]):
-        resume_invocations.append(item["id"])
+        resume_invocations.append(item["input"]["text"])
         return {"output": item["input"]["text"]}
 
     opik.evaluate_resume(
@@ -660,10 +670,13 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
     scratch (not just the missing 2), so the merged result never mixes
     outputs produced by the buggy original task with the fixed resume task.
     """
-    # 1. Single-item dataset (keeps the trial bookkeeping simple).
+    # 1. Single-item dataset (keeps the trial bookkeeping simple). Backend
+    #    requires UUIDs for the ``id`` field, so we generate one upfront
+    #    and pin the verifier to it.
+    the_item_id = id_helpers.generate_id()
     dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
     dataset.insert(
-        [{"id": "the-item", "input": {"text": "value"}, "expected_output": "value"}]
+        [{"id": the_item_id, "input": {"text": "value"}, "expected_output": "value"}]
     )
 
     # Task that succeeds on its first invocation and crashes thereafter.
@@ -701,7 +714,7 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids={"the-item"},
+        expected_completed_dataset_item_ids={the_item_id},
     )
 
     # 4. Resume with a non-crashing task. Because the item is partial
@@ -721,7 +734,7 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
     )
 
     # 5. The same item ran 3 more times — every trial redone end-to-end.
-    assert resume_invocations == ["the-item", "the-item", "the-item"], (
+    assert resume_invocations == [the_item_id, the_item_id, the_item_id], (
         "Partial items must have all trials redone end-to-end; got "
         f"{resume_invocations}"
     )
@@ -731,7 +744,7 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
     # outputs from the buggy and fixed task would be confusing.
     assert len(resume_result.test_results) == 3
     assert all(
-        tr.test_case.dataset_item_id == "the-item"
+        tr.test_case.dataset_item_id == the_item_id
         for tr in resume_result.test_results
     )
     assert all(
@@ -740,7 +753,7 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids={"the-item"},
+        expected_completed_dataset_item_ids={the_item_id},
     )
 
 
@@ -750,40 +763,38 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
     """
     With ``trial_count=2`` over three items, the original run leaves a mix:
       - item-0 fully completed (2 of 2 trials)
-      - item-1 partially done (1 of 2 trials)
-      - item-2 pending (0 of 2 trials, never reached)
+      - item-1 partially done (1 of 2 trials — second trial crashed)
+      - item-2 fully completed (2 of 2 trials)
+
+    The engine submits every trial up front and the executor only re-raises
+    the first failure after collecting all results, so item-1's crash does
+    not prevent item-2's trials from running. The interesting partial state
+    is item-1.
 
     Resume must:
-      - leave item-0 alone (no task invocations; stored trials preserved)
+      - leave item-0 alone (no task invocations; stored trials reconstructed)
       - redo all 2 trials for item-1 (partial → from scratch)
-      - run all 2 trials for item-2 (pending → fresh)
-    The merged result then has 2 reconstructed + 4 fresh = 6 trials.
+      - leave item-2 alone (no task invocations; stored trials reconstructed)
+    The merged result has 4 reconstructed + 2 fresh = 6 trials.
     """
-    # 1. Three items.
+    # 1. Three items. Labels carried as input text so the task can pick
+    #    them out without touching the UUID ``id`` field.
+    labels = [f"item-{i}" for i in range(3)]
+    items, ids_by_label, _labels_by_id = _items_with_labels(labels)
     dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
-    dataset.insert(
-        [
-            {
-                "id": f"item-{i}",
-                "input": {"text": f"value-{i}"},
-                "expected_output": f"value-{i}",
-            }
-            for i in range(3)
-        ]
-    )
+    dataset.insert(items)
 
-    # Original task: succeeds for item-0 (both trials), succeeds once for
-    # item-1 (the second call crashes), never reaches item-2.
+    # Original task: crashes on item-1's SECOND call; everything else
+    # succeeds (including all of item-2's trials).
     call_log = []
 
     def flaky_task(item: Dict[str, Any]):
-        call_log.append(item["id"])
-        is_item_1_second_call = (
-            item["id"] == "item-1" and call_log.count("item-1") == 2
-        )
+        label = item["input"]["text"]
+        call_log.append(label)
+        is_item_1_second_call = label == "item-1" and call_log.count("item-1") == 2
         if is_item_1_second_call:
             raise RuntimeError("crash on item-1 second trial")
-        return {"output": item["input"]["text"]}
+        return {"output": label}
 
     scoring_key_mapping = {"reference": "expected_output"}
 
@@ -807,18 +818,20 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
         opik_client, experiment_name
     )
 
-    # 3. item-0 and item-1 have at least one successful trial; item-2 has none.
+    # 3. All three items have at least one successful trial logged — the
+    #    failure on item-1's second trial does not stop the executor from
+    #    completing item-2's trials.
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids={"item-0", "item-1"},
+        expected_completed_dataset_item_ids=set(ids_by_label.values()),
     )
 
     # 4. Resume with a working task.
     resume_invocations = []
 
     def working_task(item: Dict[str, Any]):
-        resume_invocations.append(item["id"])
+        resume_invocations.append(item["input"]["text"])
         return {"output": item["input"]["text"]}
 
     resume_result = opik.evaluate_resume(
@@ -829,27 +842,26 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
         verbose=0,
     )
 
-    # 5. item-0 fully completed → no resume invocations.
-    #    item-1 partial → both trials redone.
-    #    item-2 pending → both trials run fresh.
-    counts_by_id = {
-        item_id: resume_invocations.count(item_id)
-        for item_id in {"item-0", "item-1", "item-2"}
+    # 5. item-0 fully completed (2/2 successful) → no resume invocations.
+    #    item-1 partial (1/2 successful) → both trials redone.
+    #    item-2 fully completed (2/2 successful) → no resume invocations.
+    counts_by_label = {
+        label: resume_invocations.count(label) for label in labels
     }
-    assert counts_by_id == {"item-0": 0, "item-1": 2, "item-2": 2}, (
-        f"Unexpected resume task invocation distribution: {counts_by_id}"
+    assert counts_by_label == {"item-0": 0, "item-1": 2, "item-2": 0}, (
+        f"Unexpected resume task invocation distribution: {counts_by_label}"
     )
 
     # Merged result: 2 reconstructed for item-0 + 2 fresh for item-1 +
-    # 2 fresh for item-2 = 6 trials total.
+    # 2 reconstructed for item-2 = 6 trials total.
     assert len(resume_result.test_results) == 6
     counts_in_result = {
-        item_id: sum(
+        label: sum(
             1
             for tr in resume_result.test_results
-            if tr.test_case.dataset_item_id == item_id
+            if tr.test_case.dataset_item_id == ids_by_label[label]
         )
-        for item_id in {"item-0", "item-1", "item-2"}
+        for label in labels
     }
     assert counts_in_result == {"item-0": 2, "item-1": 2, "item-2": 2}
 
@@ -857,5 +869,5 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids={"item-0", "item-1", "item-2"},
+        expected_completed_dataset_item_ids=set(ids_by_label.values()),
     )

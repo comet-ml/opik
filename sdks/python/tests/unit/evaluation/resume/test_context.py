@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest import mock
 
@@ -5,6 +6,11 @@ import pytest
 
 from opik import exceptions
 from opik.evaluation.resume import context, state
+
+
+def _metadata_with_blob(blob_dict):
+    """Wrap a resume-blob dict in the on-the-wire JSON-string form."""
+    return {state.RESUME_METADATA_KEY: json.dumps(blob_dict)}
 
 
 def _make_client(
@@ -36,8 +42,8 @@ def _make_client(
 
 class TestPrepareResumeContext:
     def test_resumable_experiment__reads_state_and_counts_completed_runs(self):
-        metadata = {
-            state.RESUME_METADATA_KEY: {
+        metadata = _metadata_with_blob(
+            {
                 "schema_version": 1,
                 "resumable": True,
                 "default_runs_per_item": 3,
@@ -46,7 +52,7 @@ class TestPrepareResumeContext:
                 "nb_samples": 25,
                 "requires_local_checkpoint": False,
             }
-        }
+        )
         client, _ = _make_client(metadata)
         pinned_version = mock.Mock(name="dataset-v1")
         client.get_dataset.return_value.get_version_view.return_value = (
@@ -73,8 +79,8 @@ class TestPrepareResumeContext:
         unused_reader.assert_not_called()
 
     def test_resumable_experiment__with_version_name__pins_dataset_version(self):
-        metadata = {
-            state.RESUME_METADATA_KEY: {
+        metadata = _metadata_with_blob(
+            {
                 "schema_version": 1,
                 "resumable": True,
                 "default_runs_per_item": 1,
@@ -83,7 +89,7 @@ class TestPrepareResumeContext:
                 "nb_samples": None,
                 "requires_local_checkpoint": False,
             }
-        }
+        )
         client, _ = _make_client(metadata)
         pinned_version = mock.Mock(name="dataset-v3")
         client.get_dataset.return_value.get_version_view.return_value = (
@@ -98,8 +104,8 @@ class TestPrepareResumeContext:
         assert ctx.dataset is pinned_version
 
     def test_requires_checkpoint__reader_returns_ids__populated_into_context(self):
-        metadata = {
-            state.RESUME_METADATA_KEY: {
+        metadata = _metadata_with_blob(
+            {
                 "schema_version": 1,
                 "resumable": True,
                 "default_runs_per_item": 1,
@@ -108,7 +114,7 @@ class TestPrepareResumeContext:
                 "nb_samples": None,
                 "requires_local_checkpoint": True,
             }
-        }
+        )
         client, _ = _make_client(metadata)
         injected_reader = mock.Mock(return_value=["id-1", "id-2"])
 
@@ -122,8 +128,8 @@ class TestPrepareResumeContext:
     def test_requires_checkpoint__reader_returns_none__raises_local_missing(
         self,
     ):
-        metadata = {
-            state.RESUME_METADATA_KEY: {
+        metadata = _metadata_with_blob(
+            {
                 "schema_version": 1,
                 "resumable": True,
                 "default_runs_per_item": 1,
@@ -132,7 +138,7 @@ class TestPrepareResumeContext:
                 "nb_samples": None,
                 "requires_local_checkpoint": True,
             }
-        }
+        )
         client, _ = _make_client(metadata)
         absent_reader = mock.Mock(return_value=None)
 
@@ -142,13 +148,13 @@ class TestPrepareResumeContext:
             )
 
     def test_non_resumable_experiment__raises_with_reason(self):
-        metadata = {
-            state.RESUME_METADATA_KEY: {
+        metadata = _metadata_with_blob(
+            {
                 "schema_version": 1,
                 "resumable": False,
                 "non_resumable_reason": "boom",
             }
-        }
+        )
         client, _ = _make_client(metadata)
 
         with pytest.raises(exceptions.ExperimentNotResumable) as exc_info:
@@ -174,8 +180,8 @@ class TestPrepareResumeContext:
         ``dataset_version_name`` forbids resume — iterating against a moving
         dataset HEAD would break the contract.
         """
-        metadata = {
-            state.RESUME_METADATA_KEY: {
+        metadata = _metadata_with_blob(
+            {
                 "schema_version": 1,
                 "resumable": True,
                 "default_runs_per_item": 1,
@@ -184,7 +190,7 @@ class TestPrepareResumeContext:
                 "nb_samples": None,
                 "requires_local_checkpoint": False,
             }
-        }
+        )
         client, _ = _make_client(metadata)
 
         with pytest.raises(exceptions.ExperimentNotResumable) as exc_info:
