@@ -42,6 +42,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
@@ -59,6 +60,7 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.function.TriFunction;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.Assertions;
+import org.awaitility.Awaitility;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -93,6 +95,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -159,8 +162,20 @@ class PromptResourceTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
 
+        wireMock.server().stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(okJson("{\"message\":\"Event added successfully\",\"success\":\"true\"}")));
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .usageReportEnabled(true)
+                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
+                        .customConfigs(List.of(
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true")))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -1013,9 +1028,23 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
+            wireMock.server().resetRequests();
+
             var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             assertThat(promptId).isNotNull();
+
+            var event = AnalyticsService.EVENT_PREFIX + "prompt_version_created";
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(
+                    () -> wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(event))
+                                    .and(matchingJsonPath("$.event_properties.prompt_id",
+                                            equalTo(promptId.toString())))
+                                    .and(matchingJsonPath("$.event_properties.workspace_id",
+                                            equalTo(WORKSPACE_ID)))
+                                    .and(matchingJsonPath("$.event_properties.user_name", equalTo(USER)))
+                                    .and(matchingJsonPath("$.event_properties.version_type",
+                                            equalTo("prompt_version"))))));
         }
 
         @ParameterizedTest
@@ -2004,13 +2033,30 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .commit(null)
                     .id(null)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
                     .build();
 
             var request = createPromptVersionRequest(prompt.name(), expectedPromptVersion, prompt.templateStructure());
 
+            wireMock.server().resetRequests();
+
             PromptVersion actualPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             assertPromptVersion(actualPromptVersion, expectedPromptVersion, promptId);
+
+            var event = AnalyticsService.EVENT_PREFIX + "prompt_version_created";
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(
+                    () -> wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(event))
+                                    .and(matchingJsonPath("$.event_properties.prompt_id",
+                                            equalTo(promptId.toString())))
+                                    .and(matchingJsonPath("$.event_properties.prompt_version_id",
+                                            equalTo(actualPromptVersion.id().toString())))
+                                    .and(matchingJsonPath("$.event_properties.workspace_id",
+                                            equalTo(WORKSPACE_ID)))
+                                    .and(matchingJsonPath("$.event_properties.user_name", equalTo(USER)))
+                                    .and(matchingJsonPath("$.event_properties.version_type",
+                                            equalTo("prompt_version"))))));
         }
 
         @Test
