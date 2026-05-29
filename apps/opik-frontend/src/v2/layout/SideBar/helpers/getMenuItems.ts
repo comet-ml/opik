@@ -20,7 +20,6 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
-
 const getMenuItems = ({
   projectId,
   canViewExperiments,
@@ -28,6 +27,7 @@ const getMenuItems = ({
   canViewDashboards,
   canUsePlayground,
   canViewOptimizationRuns,
+  showHomePage,
   showOlliePage,
 }: {
   projectId: string | null;
@@ -36,6 +36,7 @@ const getMenuItems = ({
   canViewDashboards: boolean;
   canUsePlayground: boolean;
   canViewOptimizationRuns: boolean;
+  showHomePage: boolean;
   showOlliePage: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
@@ -49,14 +50,18 @@ const getMenuItems = ({
     {
       id: "home_group",
       items: [
-        {
-          id: "home",
-          path: projectPath("/home"),
-          type: MENU_ITEM_TYPE.router as const,
-          icon: LayoutDashboard,
-          label: "Home",
-          disabled: !projectPrefix,
-        },
+        ...(showHomePage
+          ? [
+              {
+                id: "home",
+                path: projectPath("/home"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: LayoutDashboard,
+                label: "Home",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
         ...(showOlliePage
           ? [
               {
