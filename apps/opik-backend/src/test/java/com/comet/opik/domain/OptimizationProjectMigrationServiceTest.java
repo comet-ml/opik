@@ -395,6 +395,53 @@ class OptimizationProjectMigrationServiceTest {
         assertOptimizationMigrated(apiKey, workspaceName, optimizationId, projectId);
     }
 
+    /**
+     * Demo experiments are excluded from Path A inference via {@code name NOT IN
+     * :demo_experiment_names}: the only experiment referencing the orphan optimization is a demo
+     * (its name appears in {@link DemoData#EXPERIMENTS}), so Path A returns no rows. The
+     * optimization falls through to Path B (also null because the dataset is orphan), then to
+     * the pre-seeded Default Project. Asserts the demo-exclusion guard; without it Path A would
+     * pick up the demo's project and route the optimization there instead.
+     */
+    @Test
+    void pathAExcludesDemoExperimentsFromInference() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var defaultProjectId = createProject(apiKey, workspaceName, ProjectService.DEFAULT_PROJECT);
+
+        // The project where the demo experiment lives — Path A would route the optimization here
+        // if the demo wasn't excluded. We never expect to see this id post-migration.
+        var demoProjectName = randomName("project");
+        var demoProjectId = createProject(apiKey, workspaceName, demoProjectName);
+
+        var datasetName = randomName("dataset");
+        // Orphan dataset (no project link) so Path B returns null and the route depends entirely
+        // on whether Path A counted the demo experiment.
+        createOrphanDataset(apiKey, workspaceName, datasetName);
+        var optimizationId = createOrphanOptimization(apiKey, workspaceName, datasetName);
+
+        // Demo experiment (name in DemoData.EXPERIMENTS) referencing the orphan optimization,
+        // pinned to demoProjectName. With the exclusion this row is filtered out of the inference.
+        var demoExperimentName = DemoData.EXPERIMENTS.getFirst();
+        experimentResourceClient.create(
+                experimentResourceClient.createPartialExperiment()
+                        .id(null)
+                        .name(demoExperimentName)
+                        .datasetName(datasetName)
+                        .projectName(demoProjectName)
+                        .optimizationId(optimizationId)
+                        .build(),
+                apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertOptimizationMigrated(apiKey, workspaceName, optimizationId, defaultProjectId);
+        assertThat(defaultProjectId).isNotEqualTo(demoProjectId);
+    }
+
     /** No-inference orphan (Path A=∅, Path B=null) with Default Project pre-seeded → migrates there. */
     @Test
     void migrateNoInferenceOptimizationToDefaultProject() {

@@ -361,7 +361,6 @@ public class OptimizationProjectMigrationService implements Managed {
                         InferencePath.EXPERIMENTS));
             }
         }
-        recordDominantAssignments(workspaceId, pathAResults);
 
         // Path B: bulk MySQL lookup of datasets.project_id for the remaining orphans.
         var pathBDatasetIds = pathBCandidateOptimizations.stream()
@@ -388,29 +387,39 @@ public class OptimizationProjectMigrationService implements Managed {
                     allCertain.addAll(certainViaExperiments);
                     allCertain.addAll(certainViaDataset);
                     return validateAndMigrate(workspaceId, orphanIds.size(), allCertain, noInferenceIds,
-                            workspaceStartMillis);
+                            pathAByOptimization, workspaceStartMillis);
                 });
     }
 
     /**
-     * For each multi-project Path A result, increments
+     * For each validated multi-project Path A assignment, increments
      * {@code optimizations.assigned_to_dominant_project} (labeled by distinct_project_count,
      * capped at {@link #DISTINCT_PROJECT_COUNT_MAX}) and logs the chosen project together with
      * the per-project counts that determined it. Mirrors
      * {@code DatasetProjectMigrationService.recordDominantAssignments}.
+     *
+     * <p>Called <b>after</b> {@code validateAndMigrate} drops Path A entries whose project was
+     * deleted, so the counter only fires for the optimization rows that actually keep the
+     * dominant project — entries that get rerouted to Default Project are counted by
+     * {@code optimizations.assigned_to_default{reason=deleted_project}} instead.
      */
-    private void recordDominantAssignments(String workspaceId, List<OptimizationProjectMapping> pathAResults) {
-        for (var mapping : pathAResults) {
-            if (mapping.distinctProjectCount() <= 1) {
+    private void recordDominantAssignments(String workspaceId, List<InferredMapping> validatedCertain,
+            Map<UUID, OptimizationProjectMapping> pathAByOptimization) {
+        for (var mapping : validatedCertain) {
+            if (mapping.path() != InferencePath.EXPERIMENTS) {
                 continue;
             }
-            long boundedCount = Math.min(mapping.distinctProjectCount(), DISTINCT_PROJECT_COUNT_MAX);
+            var pathA = pathAByOptimization.get(mapping.optimizationId());
+            if (pathA == null || pathA.distinctProjectCount() <= 1) {
+                continue;
+            }
+            long boundedCount = Math.min(pathA.distinctProjectCount(), DISTINCT_PROJECT_COUNT_MAX);
             optimizationsAssignedToDominantProject.add(1,
                     Attributes.of(DISTINCT_PROJECT_COUNT_KEY, Long.toString(boundedCount)));
             log.info(
                     "Assigning dominant project to optimization, workspaceId='{}', optimizationId='{}', chosenProjectId='{}', distinctProjectCount='{}', projectBreakdown='{}'",
-                    workspaceId, mapping.optimizationId(), mapping.projectId(), mapping.distinctProjectCount(),
-                    mapping.projectBreakdown());
+                    workspaceId, pathA.optimizationId(), pathA.projectId(), pathA.distinctProjectCount(),
+                    pathA.projectBreakdown());
         }
     }
 
@@ -425,6 +434,7 @@ public class OptimizationProjectMigrationService implements Managed {
             int totalOrphans,
             List<InferredMapping> certainCandidates,
             List<UUID> noInferenceIds,
+            Map<UUID, OptimizationProjectMapping> pathAByOptimization,
             long workspaceStartMillis) {
 
         return Mono.fromCallable(() -> {
@@ -446,6 +456,7 @@ public class OptimizationProjectMigrationService implements Managed {
                     var certainDeletedMappings = certainCandidates.stream()
                             .filter(mapping -> !validatedCertain.contains(mapping))
                             .toList();
+                    recordDominantAssignments(workspaceId, validatedCertain, pathAByOptimization);
                     return resolveDefaultProjectAndMigrate(
                             workspaceId, totalOrphans, validatedCertain, certainDeletedMappings,
                             noInferenceIds, workspaceStartMillis);

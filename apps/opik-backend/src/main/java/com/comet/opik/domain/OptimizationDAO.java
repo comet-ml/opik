@@ -188,6 +188,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     FROM experiments
                     WHERE workspace_id = :workspace_id
                     AND optimization_id IN :optimization_ids
+                    AND name NOT IN :demo_experiment_names
                     GROUP BY workspace_id, id, optimization_id
                     HAVING experiment_project_id != ''
                 )
@@ -1086,6 +1087,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("optimization_ids", optimizationIdsAsStrings)
+                        .bind("demo_experiment_names", DemoData.EXPERIMENTS.toArray(new String[0]))
                         .execute()))
                 .flatMap(result -> result.map((row, metadata) -> Optional
                         .ofNullable(row.get("project_id", String.class))
