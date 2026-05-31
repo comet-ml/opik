@@ -184,17 +184,16 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 <div className="flex h-10 items-center justify-center gap-2">
                   <PromptModelSelect
                     value={model}
-                    onChange={(m) => {
+                    onChange={(m, resolvedProvider) => {
                       if (m) {
                         field.onChange(m);
                         // Update config to ensure reasoning models have temperature >= 1.0
-                        const newProvider = calculateModelProvider(m);
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
                         );
                         const adjustedConfig = updateProviderConfig(
                           currentConfig,
-                          { model: m, provider: newProvider },
+                          { model: m, provider: resolvedProvider },
                         );
                         if (
                           adjustedConfig &&
