@@ -4,6 +4,8 @@ import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -32,6 +34,17 @@ public class FilterUtils {
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
     public static final int UUID_POOL_MULTIPLIER = 2;
     private static final String LOG_COMMENT = "<query_name>:<workspace_id>:<user_name>:<details>";
+
+    /**
+     * Sets the {@code sort_needs_wide} template flag when the sort targets a wide text column (input/output/metadata),
+     * so the *_deduped CTE keeps those columns for the ORDER BY instead of deferring them to page_wide. Shared by all
+     * renderers of SELECT_BY_PROJECT_ID (paginated and stream paths in TraceDAO/SpanDAO) to keep the logic in sync.
+     */
+    public static void addSortNeedsWideFlag(ST template, List<SortingField> sortingFields) {
+        if (SortableFields.sortsByWideTextColumn(sortingFields)) {
+            template.add("sort_needs_wide", true);
+        }
+    }
 
     /**
      * Generates a pool of UUIDv7 identifiers for batch operations.

@@ -63,6 +63,7 @@ import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -965,9 +966,7 @@ public class SpanDAO {
             <endif>
             <endif>, spans_deduped AS (
                 SELECT
-                      s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
-                      truncated_input,
-                      truncated_output,
+                      s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)>, input, output, metadata<endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       input_length,
                       output_length,
                       duration
@@ -1011,12 +1010,28 @@ public class SpanDAO {
                 ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
-            )
+            )<if(!exclude_input || !exclude_output || !exclude_metadata)>, page_wide AS (
+                SELECT
+                    id AS pw_id
+                    <if(!exclude_input)>, input AS pw_input, truncated_input AS pw_truncated_input<endif>
+                    <if(!exclude_output)>, output AS pw_output, truncated_output AS pw_truncated_output<endif>
+                    <if(!exclude_metadata)>, metadata AS pw_metadata<endif>
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id IN (SELECT id FROM spans_final)
+                <if(stream)>
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                <else>
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                <endif>
+                LIMIT 1 BY id
+            )<endif>
             SELECT
                 s.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.truncated_input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
-                <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.truncated_output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
-                <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
+                <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(pw.pw_truncated_input, '<truncate>', '"[image]"') as input <else> pw.pw_input as input<endif> <endif>
+                <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(pw.pw_truncated_output, '<truncate>', '"[image]"') as output <else> pw.pw_output as output<endif> <endif>
+                <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(pw.pw_metadata, '<truncate>', '"[image]"') as metadata <else> pw.pw_metadata as metadata<endif> <endif>
                 <if(truncate)>, input_length >= truncation_threshold as input_truncated<endif>
                 <if(truncate)>, output_length >= truncation_threshold as output_truncated<endif>
                 <if(!exclude_feedback_scores)>
@@ -1025,6 +1040,7 @@ public class SpanDAO {
                 <endif>
                 <if(!exclude_comments)>, c.comments AS comments <endif>
             FROM spans_final s
+            <if(!exclude_input || !exclude_output || !exclude_metadata)>LEFT JOIN page_wide pw ON pw.pw_id = s.id<endif>
             LEFT JOIN comments_final c ON s.id = c.entity_id
             <if(!exclude_feedback_scores)>LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id<endif>
             <if(stream)>
@@ -2352,6 +2368,8 @@ public class SpanDAO {
 
             bindTemplateExcludeFieldVariables(criteria, template);
 
+            addSortNeedsWideFlag(template, criteria.sortingFields());
+
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
@@ -2385,6 +2403,8 @@ public class SpanDAO {
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
+
+            addSortNeedsWideFlag(template, spanSearchCriteria.sortingFields());
 
             var orderBySql = sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields());
             boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)

@@ -71,6 +71,7 @@ import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.stats.StatsMapper.mapProjectScoresStats;
+import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
 import static com.comet.opik.infrastructure.FilterUtils.bindTraceThreadSearchCriteria;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -1225,9 +1226,7 @@ class TraceDAOImpl implements TraceDAO {
             <endif>
             , traces_deduped AS (
                 SELECT
-                    t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
-                    truncated_input,
-                    truncated_output,
+                    t.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)>, input, output, metadata<endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                     input_length,
                     output_length,
                     duration
@@ -1318,12 +1317,24 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
-            )
+            )<if(!exclude_input || !exclude_output || !exclude_metadata)>, page_wide AS (
+                SELECT
+                    id AS pw_id
+                    <if(!exclude_input)>, input AS pw_input, truncated_input AS pw_truncated_input<endif>
+                    <if(!exclude_output)>, output AS pw_output, truncated_output AS pw_truncated_output<endif>
+                    <if(!exclude_metadata)>, metadata AS pw_metadata<endif>
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id IN (SELECT id FROM traces_final)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )<endif>
             SELECT
                   t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(truncated_input, '<truncate>', '"[image]"') as input <else> input as input <endif><endif>
-                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(truncated_output, '<truncate>', '"[image]"') as output <else> output as output <endif><endif>
-                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(pw.pw_truncated_input, '<truncate>', '"[image]"') as input <else> pw.pw_input as input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(pw.pw_truncated_output, '<truncate>', '"[image]"') as output <else> pw.pw_output as output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(pw.pw_metadata, '<truncate>', '"[image]"') as metadata <else> pw.pw_metadata as metadata <endif><endif>
                   <if(truncate)>, input_length >= truncation_threshold as input_truncated<endif>
                   <if(truncate)>, output_length >= truncation_threshold as output_truncated<endif>
                   <if(!exclude_feedback_scores)>
@@ -1341,6 +1352,7 @@ class TraceDAOImpl implements TraceDAO {
                   , s.providers AS providers
                   <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
              FROM traces_final t
+             <if(!exclude_input || !exclude_output || !exclude_metadata)>LEFT JOIN page_wide pw ON pw.pw_id = t.id<endif>
              <if(!exclude_feedback_scores)>
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
@@ -3497,6 +3509,8 @@ class TraceDAOImpl implements TraceDAO {
             template.add("offset", offset);
             template.add("log_comment", logComment);
 
+            addSortNeedsWideFlag(template, traceSearchCriteria.sortingFields());
+
             var orderBySql = sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(),
                     TraceSortingFactory.EXPERIMENT_FIELD_MAPPING);
             boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)
@@ -4221,6 +4235,8 @@ class TraceDAOImpl implements TraceDAO {
             if (shouldUseTraceIdPrefilter(criteria, template)) {
                 template.add("trace_id_prefilter", true);
             }
+
+            addSortNeedsWideFlag(template, criteria.sortingFields());
 
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 

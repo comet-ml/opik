@@ -106,6 +106,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -4442,6 +4443,63 @@ class GetTracesByProjectResourceTest {
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, expectedTraces, List.of(), apiKey,
                     sortingFields, Set.of());
+        }
+
+        @Test
+        @DisplayName("when sorting by a wide text field while excluding that same field, then sort still applies (OPIK-6747)")
+        void getTracesByProject__whenSortingByWideField_andExcludingSameField__thenSortStillApplied() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Distinct input.order values so sorting by the dynamic path "input.order" produces a deterministic order.
+            var traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .input(JsonUtils.getJsonNodeFromString("{\"order\":\"%03d\"}".formatted(i)))
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Fetch the page sorted by the dynamic path, optionally EXCLUDING the base "input" field.
+            BiFunction<Direction, Boolean, List<UUID>> sortedIds = (direction, excludeInput) -> {
+                Map<String, String> queryParams = new HashMap<>();
+                queryParams.put("project_name", projectName);
+                queryParams.put("page", "1");
+                queryParams.put("size", "10");
+                queryParams.put("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(
+                        List.of(SortingField.builder().field(SortableFields.INPUT).direction(direction).build())),
+                        StandardCharsets.UTF_8));
+                if (excludeInput) {
+                    queryParams.put("exclude", toURLEncodedQueryParam(List.of(Trace.TraceField.INPUT)));
+                }
+
+                try (var response = traceResourceClient.callGetTracesWithQueryParams(apiKey, workspaceName,
+                        queryParams)) {
+                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    return response.readEntity(Trace.TracePage.class).content().stream().map(Trace::id).toList();
+                }
+            };
+
+            // Control: sorting by the wide field WITHOUT exclude works (ASC == reverse(DESC), and they differ).
+            var ascNoExclude = sortedIds.apply(Direction.ASC, false);
+            var descNoExclude = sortedIds.apply(Direction.DESC, false);
+            assertThat(descNoExclude).as("wide-field sort works without exclude").isEqualTo(ascNoExclude.reversed());
+            assertThat(descNoExclude).isNotEqualTo(ascNoExclude);
+
+            // Case under test (the area Baz flagged): excluding the same wide field must not drop the sort or error.
+            var ascExclude = sortedIds.apply(Direction.ASC, true);
+            var descExclude = sortedIds.apply(Direction.DESC, true);
+            assertThat(descExclude).as("wide-field sort still applied when that field is excluded")
+                    .isEqualTo(ascExclude.reversed());
+            assertThat(descExclude).isNotEqualTo(ascExclude);
+            assertThat(ascExclude).as("sort order consistent with/without exclude").isEqualTo(ascNoExclude);
         }
 
         @Test
