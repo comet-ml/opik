@@ -127,8 +127,8 @@ public class OpenTelemetryMappingUtils {
         // cost extraction non-fatal regardless of how the conversion fails in the future.
         try {
             return Optional.of(BigDecimal.valueOf(value));
-        } catch (RuntimeException e) {
-            log.warn("Failed to parse cost double value '{}'", value);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to parse cost double value '{}'", value, exception);
             return Optional.empty();
         }
     }
@@ -136,8 +136,8 @@ public class OpenTelemetryMappingUtils {
     private static Optional<BigDecimal> parseCostInt(long value) {
         try {
             return Optional.of(BigDecimal.valueOf(value));
-        } catch (RuntimeException e) {
-            log.warn("Failed to parse cost int value '{}'", value);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to parse cost int value '{}'", value, exception);
             return Optional.empty();
         }
     }
@@ -145,8 +145,8 @@ public class OpenTelemetryMappingUtils {
     private static Optional<BigDecimal> parseCostString(String stringValue) {
         try {
             return Optional.of(new BigDecimal(stringValue.strip()));
-        } catch (RuntimeException e) {
-            log.warn("Failed to parse cost string value '{}' as a number", stringValue);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to parse cost string value '{}' as a number", stringValue, exception);
             return Optional.empty();
         }
     }
