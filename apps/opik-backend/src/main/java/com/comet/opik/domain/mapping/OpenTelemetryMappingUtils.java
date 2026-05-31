@@ -112,17 +112,8 @@ public class OpenTelemetryMappingUtils {
      */
     public static Optional<BigDecimal> extractCost(@NonNull AnyValue value) {
         return switch (value.getValueCase()) {
-            case DOUBLE_VALUE -> {
-                // BigDecimal.valueOf throws NumberFormatException for NaN / Infinity, which would
-                // abort span enrichment for the whole batch. Treat non-finite values as unsupported.
-                double d = value.getDoubleValue();
-                if (!Double.isFinite(d)) {
-                    log.warn("Non-finite cost value, skipping: '{}'", d);
-                    yield Optional.empty();
-                }
-                yield Optional.of(BigDecimal.valueOf(d));
-            }
-            case INT_VALUE -> Optional.of(BigDecimal.valueOf(value.getIntValue()));
+            case DOUBLE_VALUE -> parseCostDouble(value.getDoubleValue());
+            case INT_VALUE -> parseCostInt(value.getIntValue());
             case STRING_VALUE -> parseCostString(value.getStringValue());
             default -> {
                 log.warn("Unsupported value type for cost extraction: '{}'", value.getValueCase());
@@ -131,11 +122,31 @@ public class OpenTelemetryMappingUtils {
         };
     }
 
+    private static Optional<BigDecimal> parseCostDouble(double value) {
+        // BigDecimal.valueOf throws NumberFormatException for NaN / Infinity. Wider catch keeps
+        // cost extraction non-fatal regardless of how the conversion fails in the future.
+        try {
+            return Optional.of(BigDecimal.valueOf(value));
+        } catch (RuntimeException e) {
+            log.warn("Failed to parse cost double value '{}'", value);
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<BigDecimal> parseCostInt(long value) {
+        try {
+            return Optional.of(BigDecimal.valueOf(value));
+        } catch (RuntimeException e) {
+            log.warn("Failed to parse cost int value '{}'", value);
+            return Optional.empty();
+        }
+    }
+
     private static Optional<BigDecimal> parseCostString(String stringValue) {
         try {
-            return Optional.of(new BigDecimal(stringValue.trim()));
-        } catch (NumberFormatException e) {
-            log.debug("Failed to parse cost string value '{}' as a number", stringValue);
+            return Optional.of(new BigDecimal(stringValue.strip()));
+        } catch (RuntimeException e) {
+            log.warn("Failed to parse cost string value '{}' as a number", stringValue);
             return Optional.empty();
         }
     }

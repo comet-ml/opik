@@ -225,56 +225,13 @@ class OpenTelemetryMapperTest {
     void genAiUsageCostExtractedIntoTotalEstimatedCost(String label, AnyValue costValue, BigDecimal expected) {
         // Pre-computed cost from gen_ai.usage.cost lands on the span's totalEstimatedCost for every
         // supported value shape. Malformed values (non-finite doubles, unparseable strings) are
-        // skipped so they never abort span enrichment.
+        // skipped so they never abort span enrichment. Sibling token attributes still populate the
+        // integer-only usage map without a 'cost' key — guarding against the original bug where the
+        // double cost was routed there and silently dropped.
         var attributes = List.of(
                 KeyValue.newBuilder()
                         .setKey("gen_ai.usage.cost")
                         .setValue(costValue)
-                        .build());
-
-        var spanBuilder = Span.builder()
-                .id(UUID.randomUUID())
-                .traceId(UUID.randomUUID())
-                .projectId(UUID.randomUUID())
-                .startTime(Instant.now());
-
-        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
-
-        var span = spanBuilder.build();
-
-        if (expected == null) {
-            assertThat(span.totalEstimatedCost()).isNull();
-        } else {
-            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(expected);
-        }
-    }
-
-    static Stream<Arguments> genAiUsageCostCases() {
-        return Stream.of(
-                Arguments.of("double", AnyValue.newBuilder().setDoubleValue(0.001234).build(),
-                        new BigDecimal("0.001234")),
-                Arguments.of("int", AnyValue.newBuilder().setIntValue(1).build(),
-                        new BigDecimal("1")),
-                Arguments.of("numeric string", AnyValue.newBuilder().setStringValue("0.005").build(),
-                        new BigDecimal("0.005")),
-                Arguments.of("non-numeric string",
-                        AnyValue.newBuilder().setStringValue("not a number").build(), null),
-                Arguments.of("NaN", AnyValue.newBuilder().setDoubleValue(Double.NaN).build(), null),
-                Arguments.of("positive infinity",
-                        AnyValue.newBuilder().setDoubleValue(Double.POSITIVE_INFINITY).build(), null),
-                Arguments.of("negative infinity",
-                        AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
-    }
-
-    @Test
-    void testGenAiUsageCostDoesNotPolluteUsageMap() {
-        // Regression guard for the original bug: gen_ai.usage.cost (a double) used to be routed
-        // to the integer-only usage map and silently dropped. The cost goes to totalEstimatedCost
-        // while sibling token attributes still populate the usage map with no 'cost' key.
-        var attributes = List.of(
-                KeyValue.newBuilder()
-                        .setKey("gen_ai.usage.cost")
-                        .setValue(AnyValue.newBuilder().setDoubleValue(0.001234))
                         .build(),
                 KeyValue.newBuilder()
                         .setKey("gen_ai.usage.prompt_tokens")
@@ -285,20 +242,48 @@ class OpenTelemetryMapperTest {
                         .setValue(AnyValue.newBuilder().setIntValue(50))
                         .build());
 
-        var spanBuilder = Span.builder()
-                .id(UUID.randomUUID())
-                .traceId(UUID.randomUUID())
-                .projectId(UUID.randomUUID())
-                .startTime(Instant.now());
+        var spanBuilder = newSpanBuilder();
 
         OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
 
         var span = spanBuilder.build();
 
-        assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.001234");
+        if (expected == null) {
+            assertThat(span.totalEstimatedCost()).isNull();
+        } else {
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(expected);
+        }
         assertThat(span.usage()).doesNotContainKey("cost");
         assertThat(span.usage().get("prompt_tokens")).isEqualTo(100);
         assertThat(span.usage().get("completion_tokens")).isEqualTo(50);
+    }
+
+    static Stream<Arguments> genAiUsageCostCases() {
+        return Stream.of(
+                Arguments.of("double", AnyValue.newBuilder().setDoubleValue(0.001234).build(),
+                        new BigDecimal("0.001234")),
+                Arguments.of("int", AnyValue.newBuilder().setIntValue(1).build(),
+                        new BigDecimal("1")),
+                Arguments.of("numeric string", AnyValue.newBuilder().setStringValue("0.005").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("numeric string with whitespace",
+                        AnyValue.newBuilder().setStringValue("  0.005  ").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("non-numeric string",
+                        AnyValue.newBuilder().setStringValue("not a number").build(), null),
+                Arguments.of("NaN", AnyValue.newBuilder().setDoubleValue(Double.NaN).build(), null),
+                Arguments.of("positive infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.POSITIVE_INFINITY).build(), null),
+                Arguments.of("negative infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
+    }
+
+    private static Span.SpanBuilder newSpanBuilder() {
+        return Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
     }
 
     @Test
