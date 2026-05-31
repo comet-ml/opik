@@ -2,8 +2,8 @@
 --changeset avinahradau:000078_create_mcp_oauth_tables
 --comment: OAuth 2.1 Authorization Server tables for Opik MCP. Opaque tokens (sha256-hashed), PKCE S256, refresh-token rotation with family revocation. Keyed on user_name/workspace_name to match opik-backend's existing string-identifier convention; no scopes column (tokens grant the user's full workspace role, gated by @RequiredPermissions on each call).
 
--- Registry of MCP host apps allowed to request tokens. Populated by the opik-mcp-local seed below,
--- by Dynamic Client Registration (RFC 7591) when remote hosts self-register, and admin endpoint.
+-- Registry of MCP host apps allowed to request tokens. Populated by Dynamic Client Registration
+-- (RFC 7591) when remote hosts self-register, and by the admin endpoint for manual additions.
 CREATE TABLE mcp_oauth_clients
 (
     client_id        VARCHAR(150)  NOT NULL,
@@ -66,12 +66,6 @@ CREATE TABLE mcp_oauth_tokens
     INDEX mcp_oauth_tokens_expires_at_idx (expires_at)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
-
--- Seeds only opik-mcp-local: the one client whose configuration we control (the local install bakes in
--- this client_id). Remote AI hosts (Claude Code, Cursor, claude.ai, VS Code Copilot) obtain a client_id
--- through Dynamic Client Registration at connect time and declare their own redirect_uris then.
-INSERT INTO mcp_oauth_clients (client_id, name, redirect_uris, logo_uri) VALUES
-    ('opik-mcp-local', 'Opik MCP (local install)', JSON_ARRAY('http://127.0.0.1/callback', 'http://localhost/callback'), NULL);
 
 --rollback DROP TABLE mcp_oauth_tokens;
 --rollback DROP TABLE mcp_oauth_codes;

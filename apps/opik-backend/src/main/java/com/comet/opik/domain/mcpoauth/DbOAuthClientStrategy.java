@@ -69,7 +69,7 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
         }
     }
 
-    // Opaque = no URI scheme (UUID, opik-mcp-local, ...). Anything with a scheme is a URL-form id that a
+    // Opaque = no URI scheme (UUIDs, DCR-minted ids, ...). Anything with a scheme is a URL-form id that a
     // CIMD strategy would own; the https-only / SSRF gate lives there, not here. Scheme-agnostic and
     // case-insensitive, so we never need to enumerate or prefix-match protocols.
     private static boolean isOpaque(String clientId) {
