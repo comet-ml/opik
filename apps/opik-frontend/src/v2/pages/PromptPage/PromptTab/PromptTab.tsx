@@ -269,7 +269,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   </span>
                   <EnvironmentBadgeList
                     names={activeVersionEnvironments}
-                    size="sm"
+                    size="pill"
                     withOverflow
                     maxWidth={200}
                   />
@@ -326,7 +326,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               {activeStage && <StageTag value={activeStage} size="sm" />}
               <EnvironmentBadgeList
                 names={activeVersionEnvironments}
-                size="sm"
+                size="pill"
                 withOverflow
                 maxWidth={320}
               />
