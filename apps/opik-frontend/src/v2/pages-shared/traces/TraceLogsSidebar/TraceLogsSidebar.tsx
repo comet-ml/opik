@@ -38,10 +38,7 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import {
-  CUSTOM_FILTER_VALIDATION_REGEXP,
-  OPERATORS_MAP,
-} from "@/constants/filters";
+import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
@@ -83,6 +80,7 @@ import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableState
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
+import ExperimentsFilterSelect from "@/v2/pages-shared/traces/ExperimentsFilterSelect/ExperimentsFilterSelect";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -515,10 +513,10 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           },
         },
         [COLUMN_EXPERIMENT_ID]: {
-          operators: [
-            ...OPERATORS_MAP[COLUMN_TYPE.string],
-            { label: "is one of", value: "in" },
-          ],
+          keyComponent: ExperimentsFilterSelect as never,
+          keyComponentProps: { projectId },
+          operators: [{ label: "is one of", value: "in" }],
+          defaultOperator: "in",
         },
       },
     }),
