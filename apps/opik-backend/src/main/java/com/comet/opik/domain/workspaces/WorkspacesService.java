@@ -15,10 +15,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLException;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -41,15 +39,6 @@ public interface WorkspacesService {
      * created the trace).
      */
     boolean markFirstTraceReported(String workspaceId, String userName);
-
-    /**
-     * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
-     * are stamped with the system user — this is the migration job's call site, never a direct
-     * user action. Recorded in the dedicated {@code prompt_project_migration_skipped_at} column.
-     */
-    boolean markPromptProjectMigrationSkipped(String workspaceId, String reason);
-
-    List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
@@ -123,33 +112,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
                 throw exception;
             }
         });
-    }
-
-    @Override
-    public boolean markPromptProjectMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            if (dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
-                return true;
-            }
-            try {
-                dao.insertPromptProjectMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
-                return true;
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updatePromptProjectMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
-                }
-                throw exception;
-            }
-        });
-    }
-
-    @Override
-    public List<String> findPromptProjectMigrationSkippedWorkspaceIds() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).findPromptProjectMigrationSkippedWorkspaceIds());
     }
 
     @Override

@@ -6,7 +6,6 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
 @RegisterConstructorMapper(Workspace.class)
@@ -55,50 +54,6 @@ public interface WorkspacesDAO {
     void insertFirstTrace(@Bind("id") String id,
             @Bind("reportedAt") Instant reportedAt,
             @Bind("userName") String userName);
-
-    /**
-     * Atomic NULL → timestamp transition for the prompt-project-migration trap flag. Scoped to the
-     * prompt cycle's own column so its trap state is recorded independently of any other migration.
-     */
-    @SqlUpdate("""
-            UPDATE workspaces
-            SET prompt_project_migration_skipped_at = :skippedAt,
-                prompt_project_migration_skip_reason = :reason,
-                last_updated_by = :userName
-            WHERE id = :id AND prompt_project_migration_skipped_at IS NULL
-            """)
-    int updatePromptProjectMigrationSkippedIfNull(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    /**
-     * Plain INSERT (no upsert). Paired with {@link #updatePromptProjectMigrationSkippedIfNull}
-     * for the missing-row case.
-     */
-    @SqlUpdate("""
-            INSERT INTO workspaces (
-                id,
-                prompt_project_migration_skipped_at,
-                prompt_project_migration_skip_reason,
-                created_by,
-                last_updated_by
-            )
-            VALUES (
-                :id,
-                :skippedAt,
-                :reason,
-                :userName,
-                :userName
-            )
-            """)
-    void insertPromptProjectMigrationSkipped(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    @SqlQuery("SELECT id FROM workspaces WHERE prompt_project_migration_skipped_at IS NOT NULL")
-    List<String> findPromptProjectMigrationSkippedWorkspaceIds();
 
     /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the
