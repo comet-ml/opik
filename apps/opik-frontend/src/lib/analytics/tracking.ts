@@ -8,6 +8,15 @@ export const OpikEvent = {
   EVAL_SUITE_UI_CONFIGURED: "opik_eval_suite_ui_configured",
   AGENT_CONFIG_UI_DEPLOYED: "opik_agent_config_ui_deployed",
   OPTIMIZATION_WIZARD_STARTED: "opik_optimization_wizard_started",
+  FILTER_APPLIED: "opik_filter_applied",
+  FILTER_REMOVED: "opik_filter_removed",
+  FILTER_PINNED: "opik_filter_pinned",
+  FILTER_UNPINNED: "opik_filter_unpinned",
+  FILTER_DIALOG_OPENED: "opik_filter_dialog_opened",
+  FILTER_DIALOG_CLOSED_WITHOUT_SELECTION:
+    "opik_filter_dialog_closed_without_selection",
+  FILTERS_ACTIVE_COUNT: "opik_filters_active_count",
+  PINNED_FILTERS_COUNT: "opik_pinned_filters_count",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];

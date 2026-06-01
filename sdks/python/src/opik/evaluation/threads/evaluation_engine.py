@@ -12,6 +12,7 @@ from . import evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
 from ..engine import types as engine_types
 from ..metrics import score_result
+from ..suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
 from ...api_objects import trace
 from ...api_objects.threads import threads_client
 
@@ -136,7 +137,10 @@ class ThreadsEvaluationEngine:
             scores=results,
         )
 
-    @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
+    @opik.track(  # type: ignore[attr-defined,has-type]
+        name="metrics_calculation",
+        tags=[INTERNAL_SPAN_TAG],
+    )
     def _evaluate_conversation(
         self,
         conversation: List[Dict[Literal["role", "content"], str]],

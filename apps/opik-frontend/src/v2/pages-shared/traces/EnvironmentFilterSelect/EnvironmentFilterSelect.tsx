@@ -57,7 +57,10 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
         >
           <span className="flex min-w-0 items-center gap-1.5 truncate">
             {selectedEnvironment && (
-              <EnvironmentSquare color={selectedEnvironment.color} />
+              <EnvironmentSquare
+                name={selectedEnvironment.name}
+                color={selectedEnvironment.color}
+              />
             )}
             {triggerLabel}
           </span>
@@ -89,7 +92,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
               onSelect={() => onChange(env.name)}
             >
               <div className="flex min-w-0 items-center gap-2">
-                <EnvironmentSquare color={env.color} />
+                <EnvironmentSquare name={env.name} color={env.color} />
                 <span className="truncate">{env.name}</span>
               </div>
             </DropdownMenuItem>

@@ -174,7 +174,6 @@ def test_test_suite__assertion_fails__item_fails(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "2 + 2 equals 4."}
 
-    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
@@ -236,7 +235,6 @@ def test_test_suite__pass_threshold_not_met__item_fails(
             return {"input": item["input"], "output": "2 + 2 equals 4."}
         return {"input": item["input"], "output": "I don't know."}
 
-    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
@@ -903,7 +901,10 @@ def test_get_test_suite_experiments__returns_experiments(
 
     # opik.run_tests must handle flushing
     opik.run_tests(
-        test_suite=suite, task=task, experiment_name=experiment_name, verbose=0
+        test_suite=suite,
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
     )
     experiments = opik_client.get_test_suite_experiments(name=dataset_name)
     experiment_names = {e.name for e in experiments}

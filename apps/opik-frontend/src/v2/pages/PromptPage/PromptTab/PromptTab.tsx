@@ -49,11 +49,12 @@ import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById, {
   useFetchPromptVersion,
 } from "@/api/prompts/usePromptVersionById";
-import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlaygroundButton";
 import useLoadPromptIntoPlayground from "@/v2/pages-shared/playground/useLoadPromptIntoPlayground";
 import { getTimeFromNow } from "@/lib/date";
 import { pickHighestStage } from "@/utils/version-stages";
+import DeployToEnvironmentMenu from "./DeployToEnvironmentMenu";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -80,7 +81,7 @@ interface VersionWithMaybeAuthor extends PromptVersion {
 
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const {
-    permissions: { canUsePlayground },
+    permissions: { canUsePlayground, canConfigureWorkspaceSettings },
   } = usePermissions();
 
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
@@ -124,7 +125,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       description: v.change_description,
       created_at: v.created_at,
       created_by: v.created_by,
-      environment: v.environment ?? null,
+      environments: v.environments ?? [],
     }));
   }, [versions, total]);
 
@@ -154,7 +155,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const activeStage = pickHighestStage(activeVersion?.tags);
   const activeAuthor =
     (activeVersion as VersionWithMaybeAuthor | undefined)?.created_by ?? "";
-  const activeVersionEnvironment = activeVersion?.environment ?? null;
+  const activeVersionEnvironments = useMemo(
+    () => activeVersion?.environments ?? [],
+    [activeVersion?.environments],
+  );
 
   const isChatPrompt =
     prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
@@ -259,12 +263,17 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 size="sm"
                 className="w-full justify-between font-normal"
               >
-                <span className="flex min-w-0 items-center gap-2 truncate">
-                  <span className="comet-body-s-accented text-foreground">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="comet-body-s-accented shrink-0 text-foreground">
                     {activeVersionLabel || "v—"}
                   </span>
-                  <EnvironmentBadge name={activeVersionEnvironment} size="sm" />
-                  <span className="comet-body-xs text-muted-slate">
+                  <EnvironmentBadgeList
+                    names={activeVersionEnvironments}
+                    size="sm"
+                    withOverflow
+                    maxWidth={200}
+                  />
+                  <span className="comet-body-xs shrink-0 text-muted-slate">
                     {activeVersion?.created_at &&
                       getTimeFromNow(activeVersion.created_at)}
                   </span>
@@ -290,7 +299,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                     <span className="comet-body-s-accented shrink-0">
                       {item.label}
                     </span>
-                    <EnvironmentBadge name={item.environment} size="sm" />
+                    <EnvironmentBadgeList
+                      names={item.environments}
+                      size="sm"
+                      withOverflow
+                      compact
+                      maxWidth={120}
+                    />
                   </div>
                   <span className="comet-body-xs text-muted-slate">
                     {getTimeFromNow(item.created_at)}
@@ -303,16 +318,24 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         </div>
         <div className="rounded-md border bg-background">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 px-4 pb-1.5 pt-3">
-            <div className="flex items-center gap-2">
-              <span className="comet-body-accented text-foreground">
+          <div className="flex items-center gap-2 px-4 pb-1.5 pt-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="comet-body-accented shrink-0 text-foreground">
                 {activeVersionLabel || "v—"}
               </span>
               {activeStage && <StageTag value={activeStage} size="sm" />}
-              <EnvironmentBadge name={activeVersionEnvironment} size="sm" />
+              <EnvironmentBadgeList
+                names={activeVersionEnvironments}
+                size="sm"
+                withOverflow
+                maxWidth={320}
+              />
               {historyItems.length > 1 && (
                 <>
-                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <Separator
+                    orientation="vertical"
+                    className="mx-1 h-4 shrink-0"
+                  />
                   <DiffVersionMenu
                     currentItemId={effectiveVersionId}
                     versions={historyItems}
@@ -323,7 +346,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-1 md:ml-auto">
+            <div className="flex shrink-0 flex-wrap items-center gap-1 md:ml-auto">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="px-0">
@@ -365,6 +388,20 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   <ImproveInPlaygroundButton
                     prompt={prompt}
                     activeVersion={activeVersion}
+                  />
+                </>
+              )}
+
+              {canConfigureWorkspaceSettings && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <DeployToEnvironmentMenu
+                    promptId={prompt.id}
+                    versionId={effectiveVersionId}
+                    versionLabel={activeVersionLabel}
+                    versions={versions}
+                    totalVersions={total}
+                    activeEnvironments={activeVersionEnvironments}
                   />
                 </>
               )}

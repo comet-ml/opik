@@ -18,7 +18,7 @@ import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import MediaTagsList from "@/v2/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import VersionTagList from "@/v2/pages-shared/version-history/VersionTagList";
 import VersionMeta from "@/v2/pages-shared/version-history/VersionMeta";
-import EnvironmentBadge from "@/shared/EnvironmentLabel/EnvironmentBadge";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 
 type VersionWithMaybeAuthor = PromptVersion & { created_by?: string };
 type DiffSide = "base" | "diff";
@@ -75,7 +75,12 @@ const ColumnHeader: React.FC<{ version: PromptVersion; label: string }> = ({
     <div className="flex h-8 min-w-0 items-center justify-between gap-2 bg-soft-background px-3">
       <div className="flex min-w-0 items-center gap-2">
         <span className="comet-body-xs shrink-0 text-muted-slate">{label}</span>
-        <EnvironmentBadge name={version.environment} size="sm" />
+        <EnvironmentBadgeList
+          names={version.environments}
+          size="sm"
+          withOverflow
+          maxWidth={200}
+        />
         <VersionTagList tags={version.tags ?? []} size="sm" />
       </div>
       <VersionMeta

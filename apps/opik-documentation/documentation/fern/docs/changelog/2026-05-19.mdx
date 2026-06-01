@@ -1,3 +1,7 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog/2026-05-19
+---
+
 ## 🚀 Client-Side Prompt Caching (Python & TypeScript SDKs)
 
 `client.get_prompt()` and `client.get_chat_prompt()` now cache results in-process, so repeated calls inside a hot path skip the network round-trip entirely. Pinned commits are cached indefinitely; latest-version lookups use a 5-minute TTL that refreshes in the background so your code always gets a reasonably fresh value without blocking.
