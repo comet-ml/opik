@@ -32,7 +32,10 @@ title: Quickstart
 ```bash
 pip install --upgrade opik opik-optimizer
 opik configure  # paste your API key
+export OPIK_PROJECT_NAME="optimization-quickstart"
 ```
+
+Setting `OPIK_PROJECT_NAME` ensures all traces, experiments, and optimization runs are logged to the same project without having to pass `project_name` to every SDK call.
 
 ## 2. Create a dataset and metric
 
@@ -41,7 +44,7 @@ import opik
 from opik.evaluation.metrics import LevenshteinRatio
 
 client = opik.Opik()
-dataset = client.get_or_create_dataset(name="agent-opt-quickstart", project_name="my-project")
+dataset = client.get_or_create_dataset(name="agent-opt-quickstart")
 dataset.insert([
     {"question": "What is Opik?", "answer": "Opik is an LLM observability and optimization platform."},
     {"question": "How do I reduce hallucinations?", "answer": "Use evaluations and prompt optimization to enforce grounding."},

@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractCost;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
@@ -155,6 +156,10 @@ public class OpenTelemetryMapper {
 
                 case USAGE :
                     extractUsageField(usage, rule, key, value);
+                    break;
+
+                case COST :
+                    extractCost(value).ifPresent(spanBuilder::totalEstimatedCost);
                     break;
 
                 case INPUT :
