@@ -8,11 +8,6 @@ import {
 } from "./helpers";
 import { useEnvironmentByName } from "./EnvironmentLabel";
 
-// `pill` is a project-specific variant used across prompt-version
-// surfaces (prompt detail header, mobile version picker, version history
-// timeline, +N overflow tooltip): 20px tall with a 10px label and asymmetric
-// padding so the leading env icon hugs the left edge while the text gets a
-// little more breathing room on the right.
 export type EnvironmentBadgeSize = NonNullable<TagProps["size"]> | "pill";
 
 const SIZE_CLASSES: Record<EnvironmentBadgeSize, string> = {

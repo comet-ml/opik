@@ -111,9 +111,6 @@ const PlaygroundPrompt = ({
     useState(false);
   const [lastImportedPromptName, setLastImportedPromptName] =
     useState<string>("");
-  // Pin the hover-revealed actions strip open while the library popover is up:
-  // otherwise moving the mouse off the trigger collapses the strip to max-w-0,
-  // and the Popover re-anchors to a zero-width origin and visibly shifts.
   const [isChatLibraryOpen, setIsChatLibraryOpen] = useState(false);
 
   const selectedChatPromptId = prompt?.loadedChatPromptId;
@@ -379,7 +376,7 @@ const PlaygroundPrompt = ({
           className={cn(
             "flex min-w-0 items-center overflow-hidden pl-4",
             !isChatLibraryOpen &&
-              "[@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4",
+            "[@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4",
           )}
         >
           {selectedChatPromptId ? (

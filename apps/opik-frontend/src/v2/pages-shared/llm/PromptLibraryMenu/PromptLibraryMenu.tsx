@@ -64,8 +64,8 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
     const allPrompts = data?.content ?? [];
     const byStructure = filterByTemplateStructure
       ? allPrompts.filter(
-          (p) => p.template_structure === filterByTemplateStructure,
-        )
+        (p) => p.template_structure === filterByTemplateStructure,
+      )
       : allPrompts;
     if (!search) return byStructure;
     const q = toLower(search);
@@ -84,10 +84,6 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
   const handleSelect = useCallback(
     (selection: PromptLibrarySelection) => {
       onSelect(selection);
-      // Route through handleOpenChange so subscribers (e.g. the playground's
-      // `isChatLibraryOpen` hover-strip pin) see the close. Calling setOpen
-      // directly updates internal state but Radix doesn't re-fire
-      // onOpenChange when the controlled value flips externally.
       handleOpenChange(false);
     },
     [onSelect, handleOpenChange],
