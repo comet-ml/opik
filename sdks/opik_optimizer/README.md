@@ -9,8 +9,9 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 
 * **EvolutionaryOptimizer** - Uses genetic algorithms for prompt evolution
 * **FewShotBayesianOptimizer** - Uses few-shot learning with Bayesian optimization
-* **MetaPromptOptimizer** - Employs meta-prompting techniques for optimization
 * **GepaOptimizer** - Leverages GEPA (Genetic-Pareto) optimization approach
+* **HRPO** - Uses hierarchical root cause analysis to systematically refine prompts based on failure mode synthesis
+* **MetaPromptOptimizer** - Employs meta-prompting techniques for optimization
 * **ParameterOptimizer** - Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 
 ## 🎯 Key Features

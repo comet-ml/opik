@@ -11,8 +11,11 @@ from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.api_objects.dataset import execution_policy as dataset_execution_policy
 from opik.evaluation import rest_operations, test_case, test_result
+from opik.evaluation.suite_evaluators.agentic import context as agentic_context
+from opik.evaluation.suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
+from opik.message_processing.processors import message_processors_chain
 from opik.types import TraceSource
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
@@ -23,6 +26,8 @@ from ..metrics import base_metric, score_result
 LOGGER = logging.getLogger(__name__)
 
 EVALUATION_TASK_NAME = "evaluation_task"
+
+DEFAULT_STREAMER_DRAIN_TIMEOUT_SECONDS = 5.0
 
 
 def get_item_execution_policy(
@@ -74,21 +79,32 @@ class EvaluationEngine:
         workers: int,
         verbose: int,
         source: TraceSource,
+        flush_timeout: Optional[float] = None,
     ) -> None:
         self._client = client
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
         self._source = source
+        if flush_timeout is None:
+            flush_timeout = DEFAULT_STREAMER_DRAIN_TIMEOUT_SECONDS
+        self._flush_timeout = flush_timeout
 
     # --- Private: metrics & scoring ---
 
     @opik.track(  # type: ignore[attr-defined,has-type]
         name="metrics_calculation",
+        tags=[INTERNAL_SPAN_TAG],
         ignore_arguments=[
             "regular_metrics",
             "scoring_key_mapping",
             "evaluator_model",
+            # `trace_data` is the in-memory TraceData handed in by the
+            # LLM-task path so the agentic judge can see the trace
+            # before its CreateTraceMessage ships. It would otherwise
+            # duplicate the wrapper trace's own data into this span's
+            # input. See `_build_trace_tool_context`.
+            "trace_data",
         ],
     )
     def _compute_test_result_for_test_case(
@@ -98,6 +114,7 @@ class EvaluationEngine:
         scoring_key_mapping: ScoringKeyMappingType,
         evaluator_model: Optional[str],
         trial_id: int = 0,
+        trace_data: Optional[trace.TraceData] = None,
     ) -> test_result.TestResult:
         item_evaluator = metrics_evaluator.build_metrics_evaluator(
             item=test_case_.dataset_item,
@@ -105,9 +122,25 @@ class EvaluationEngine:
             scoring_key_mapping=scoring_key_mapping,
             evaluator_model=evaluator_model,
         )
+        # `trace_data` is the in-memory `TraceData` from the surrounding
+        # `_compute_test_result_for_llm_task` call. When present, the
+        # agentic context is built from it directly because the
+        # `CreateTraceMessage` for this trace isn't emitted to the
+        # emulator until the surrounding `evaluate_llm_task_context`
+        # `__exit__` runs — i.e. after this scoring call returns.
+        # See `build_trace_tool_context_from_trace_data` for the full
+        # rationale.
+        #
+        # Re-scoring code paths (no live task) leave `trace_data=None`
+        # and fall back to the lookup-based helper, which is correct
+        # there because the trace was logged in a prior run.
+        trace_tool_context = self._build_trace_tool_context(
+            trace_id=test_case_.trace_id, trace_data=trace_data
+        )
         score_results, mapped_scoring_inputs = item_evaluator.compute_regular_scores(
             dataset_item_content=test_case_.dataset_item_content,
             task_output=test_case_.task_output,
+            trace_tool_context=trace_tool_context,
         )
         test_case_.mapped_scoring_inputs = mapped_scoring_inputs
 
@@ -126,6 +159,7 @@ class EvaluationEngine:
 
     @opik.track(  # type: ignore[attr-defined,has-type]
         name="task_span_metrics_calculation",
+        tags=[INTERNAL_SPAN_TAG],
         ignore_arguments=["test_case_", "task_span_evaluator"],
     )
     def _compute_scores_for_test_case_with_task_span(
@@ -152,6 +186,80 @@ class EvaluationEngine:
             project_name=self._project_name,
         )
         return score_results
+
+    def _build_trace_tool_context(
+        self,
+        trace_id: str,
+        trace_data: Optional[trace.TraceData] = None,
+    ) -> Optional[agentic_context.TraceToolContext]:
+        """Return a TraceToolContext if the local emulator is active.
+
+        Two construction paths depending on whether the trace has been
+        logged yet:
+
+        - **Live LLM-task scoring** (`trace_data` is provided): scoring
+          runs *inside* `evaluate_llm_task_context`, before the trace's
+          `CreateTraceMessage` is emitted. The emulator has the spans
+          (emitted inline by `@opik.track`) but not the trace itself,
+          so we synthesize a `TraceModel` from the in-memory
+          `TraceData` and pull spans from the emulator. This is the
+          only path that actually engages the agentic loop during a
+          live run — see
+          `build_trace_tool_context_from_trace_data` for the
+          full ordering rationale.
+
+        - **Re-scoring** (`trace_data` is None): the trace was logged
+          in a previous run, so the emulator-lookup path is correct.
+          Returns None if the trace is not in the emulator (the
+          LLMJudge falls back to its one-shot path — see
+          `LLMJudge.score`).
+
+        Returns None when the emulator is not in the processor chain
+        or is inactive, regardless of which construction path applies.
+        """
+        # `getattr` with a default keeps this MagicMock-friendly for
+        # the unit tests in `test_evaluate_test_suite.py`: MagicMock
+        # auto-rejects attribute names that look like dunders (start
+        # and end with `__`), so plain attribute access would raise
+        # AttributeError on mocked clients. Production clients always
+        # have this attribute, so the default branch never fires there.
+        chain = getattr(self._client, "__internal_api__message_processor__", None)
+        if chain is None:
+            return None
+        emulator = message_processors_chain.get_local_emulator_message_processor(chain)
+        if emulator is None or not emulator.is_active():
+            return None
+        # Drain pending messages so spans emitted by `@opik.track`
+        # during the just-run task body (including the error_info on
+        # any span whose function raised) have been applied to the
+        # emulator before we read them. `client.__internal_api__span__`
+        # only *submits* to the streamer queue — the consumer thread
+        # processes asynchronously, and without this drain there's a
+        # small window where the agentic judge sees a stale view.
+        # Bounded timeout so a stuck consumer doesn't block scoring
+        # forever; on timeout we fall through with whatever state is
+        # currently in the emulator (best-effort).
+        drained = self._client.__internal_api__drain_to_processors__(
+            timeout=self._flush_timeout
+        )
+        if not drained:
+            LOGGER.debug(
+                "[engine] streamer drain timed out before agentic context build; "
+                "agentic judge may see partial trace state for trace %s",
+                trace_id,
+            )
+        # Force trace_trees rebuild so spans logged in this process are
+        # attached to the trace before we copy them into the context.
+        # This is needed regardless of construction path — the spans
+        # are what we ultimately read.
+        _ = emulator.trace_trees
+        if trace_data is not None:
+            return agentic_context.build_trace_tool_context_from_trace_data(
+                trace_data=trace_data, emulator=emulator
+            )
+        return agentic_context.build_trace_tool_context(
+            trace_id=trace_id, emulator=emulator
+        )
 
     # --- Private: task execution ---
 
@@ -209,6 +317,12 @@ class EvaluationEngine:
             LOGGER.debug(
                 "[engine] Task done for item %s in %.1fs", item.id, task_execution_time
             )
+            LOGGER.debug(
+                "[diag] trial_id=%s trace_id=%s task_output=%r",
+                trial_id,
+                trace_data.id,
+                task_output_,
+            )
 
             opik_context.update_current_trace(output=task_output_)
 
@@ -227,6 +341,12 @@ class EvaluationEngine:
                 scoring_key_mapping=scoring_key_mapping,
                 evaluator_model=evaluator_model,
                 trial_id=trial_id,
+                # Hand the in-memory TraceData to scoring so the agentic
+                # judge sees the trace before its CreateTraceMessage has
+                # been emitted to the emulator (the emit happens in the
+                # surrounding context-manager's `__exit__`, after we
+                # return). See `_build_trace_tool_context` for details.
+                trace_data=trace_data,
             )
             test_result_.task_execution_time = task_execution_time
             test_result_.scoring_time = time.perf_counter() - scoring_start
@@ -234,6 +354,15 @@ class EvaluationEngine:
                 "[engine] Scoring done for item %s in %.1fs",
                 item.id,
                 test_result_.scoring_time,
+            )
+            LOGGER.debug(
+                "[diag] trial_id=%s trace_id=%s scores=%s",
+                trial_id,
+                trace_data.id,
+                [
+                    (s.name, s.value, getattr(s, "reason", None))
+                    for s in test_result_.score_results
+                ],
             )
 
         return test_result_

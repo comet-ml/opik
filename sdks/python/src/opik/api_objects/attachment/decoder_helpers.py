@@ -49,6 +49,33 @@ def get_file_extension(mime_type: str) -> str:
     return "bin"
 
 
+# Image signatures keyed by header prefix. The WebP entry is handled
+# separately because it lives inside a RIFF container (the "WEBP" marker is
+# at offset 8, not at the start).
+_IMAGE_HEADER_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def detect_image_mime_type_from_header(data: bytes) -> Optional[str]:
+    """Return the image MIME type implied by the leading bytes of ``data``,
+    or None if no known image signature matches.
+
+    Header-only — works on partial payloads (e.g. the first 16 bytes decoded
+    from a base64 string). Use this when you don't have the full file and
+    only need to know "is this an image, and which kind?".
+    """
+    for prefix, mime in _IMAGE_HEADER_SIGNATURES:
+        if data.startswith(prefix):
+            return mime
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 def detect_mime_type(data: bytes) -> Optional[str]:
     """Detect MIME type from byte content using magic bytes.
 
@@ -64,26 +91,18 @@ def detect_mime_type(data: bytes) -> Optional[str]:
     if len(data) < 4:
         return "application/octet-stream"
 
-    # Check common file format magic bytes
-    # PNG
-    if data[:8] == b"\x89PNG\r\n\x1a\n":
-        return "image/png"
-
-    # JPEG
-    if data[:2] == b"\xff\xd8" and data[-2:] == b"\xff\xd9":
-        return "image/jpeg"
-
-    # GIF
-    if data[:6] in (b"GIF87a", b"GIF89a"):
-        return "image/gif"
+    image_mime_type = detect_image_mime_type_from_header(data)
+    if image_mime_type is not None:
+        # Historical behavior: JPEG also requires the FFD9 end marker, so we
+        # only treat a payload as JPEG when the full file is intact.
+        if image_mime_type == "image/jpeg" and data[-2:] != b"\xff\xd9":
+            pass
+        else:
+            return image_mime_type
 
     # PDF
     if data[:4] == b"%PDF":
         return "application/pdf"
-
-    # WebP
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp"
 
     # SVG (XML-based, check for SVG tag)
     try:

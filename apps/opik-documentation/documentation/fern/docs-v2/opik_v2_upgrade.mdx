@@ -1,0 +1,221 @@
+---
+headline: Upgrading to Opik 2.0 | Opik Documentation
+og:description: What changed in Opik 2.0 — everything is now organized around
+  projects — how to update your SDK code, where your existing data was moved, and
+  how to relocate it if needed.
+og:site_name: Opik Documentation
+og:title: Upgrading to Opik 2.0
+title: Upgrading to Opik 2.0
+---
+
+Opik 2.0 reorganized the product around **projects**. A project now maps to a single agent or app and is the home for everything related to it. This page explains what changed, how to work with the SDK from now on, where your existing data was moved, and how to relocate it if it didn't land where you want.
+
+<Note>
+  If you started on Opik 2.0, there's nothing to do here — projects are the default. This
+  guide is for users upgrading from Opik 1.x. For the full list of new features, see the
+  [2.0 release notes](/changelog).
+</Note>
+
+## What changed: projects are the home for everything
+
+In Opik 1.x, traces and threads lived in projects, but **datasets, prompts, experiments, optimizations, automation rules, alerts, and dashboards were workspace-wide**. In 2.0, a project maps to one agent or app and scopes all of its work.
+
+These entities are now **scoped to a project**:
+
+- Datasets and test suites
+- Experiments and optimizations
+- Prompts
+- Automation rules — in 1.x a rule could target multiple projects; in 2.0 a rule is scoped to a single project
+- Alerts
+- Dashboards — workspace-level dashboards remain supported through a dedicated view
+
+You also get a workspace-level project selector, project-scoped navigation across the app, a unified Logs page (threads, traces, and spans in one place), and a redesigned trace view. The result is a focused view of everything tied to a single agent. See the [2.0 release notes](/changelog) for the full picture.
+
+## How to work now
+
+Upgrade to the Opik SDK **2.0 or later**:
+
+<Tabs>
+  <Tab title="Python">
+    ```bash
+    pip install --upgrade "opik>=2.0.0"
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```bash
+    npm install opik@latest
+    ```
+  </Tab>
+</Tabs>
+
+The main change is to **pass the project to the methods you call**. The dataset, test suite, prompt, and experiment APIs all take a `project_name` (`projectName` in TypeScript). Omit it and Opik uses the project from the `OPIK_PROJECT_NAME` environment variable or your config, falling back to `Default Project`.
+
+<Tip>
+  Running `opik configure` now also prompts you to pick a project — it suggests your most
+  recent one and stores your choice as `project_name` in `~/.opik.config`, so you only pass
+  `project_name` on a call when you want to override that default.
+</Tip>
+
+All snippets below assume a client:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import opik
+
+    client = opik.Opik()
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Opik } from "opik";
+
+    const client = new Opik();
+    ```
+  </Tab>
+</Tabs>
+
+### Datasets
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    client.create_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_or_create_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_datasets(project_name="my-agent")
+    client.delete_dataset(name="qa-pairs", project_name="my-agent")
+    client.get_dataset_experiments(dataset_name="qa-pairs", project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createDataset("qa-pairs", "QA pairs", "my-agent");
+    await client.getDataset("qa-pairs", "my-agent");
+    await client.getOrCreateDataset("qa-pairs", "QA pairs", "my-agent");
+    await client.getDatasets(100, "my-agent");
+    await client.deleteDataset("qa-pairs", "my-agent");
+    await client.getDatasetExperiments("qa-pairs", 100, "my-agent");
+    ```
+  </Tab>
+</Tabs>
+
+### Test suites
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    client.create_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_or_create_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_test_suites(project_name="my-agent")
+    client.delete_test_suite(name="qa-suite", project_name="my-agent")
+    client.get_test_suite_experiments(name="qa-suite", project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createTestSuite({ name: "qa-suite", projectName: "my-agent" });
+    await client.getTestSuite("qa-suite", "my-agent");
+    await client.getOrCreateTestSuite({ name: "qa-suite", projectName: "my-agent" });
+    await client.getTestSuites(1000, "my-agent");
+    await client.deleteTestSuite("qa-suite", "my-agent");
+    await client.getTestSuiteExperiments("qa-suite", 100, "my-agent");
+    ```
+  </Tab>
+</Tabs>
+
+### Prompts
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    client.create_prompt(name="assistant", prompt="Answer: {{question}}", project_name="my-agent")
+    client.create_chat_prompt(
+        name="assistant-chat",
+        messages=[{"role": "user", "content": "{{question}}"}],
+        project_name="my-agent",
+    )
+    client.get_prompt(name="assistant", project_name="my-agent")
+    client.get_chat_prompt(name="assistant-chat", project_name="my-agent")
+    client.get_prompt_history(name="assistant", project_name="my-agent")
+    client.get_chat_prompt_history(name="assistant-chat", project_name="my-agent")
+    client.get_all_prompts(name="assistant", project_name="my-agent")
+    client.search_prompts(project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createPrompt({
+      name: "assistant",
+      prompt: "Answer: {{question}}",
+      projectName: "my-agent",
+    });
+    await client.createChatPrompt({
+      name: "assistant-chat",
+      messages: [{ role: "user", content: "{{question}}" }],
+      projectName: "my-agent",
+    });
+    await client.getPrompt({ name: "assistant", projectName: "my-agent" });
+    await client.getChatPrompt({ name: "assistant-chat", projectName: "my-agent" });
+    ```
+  </Tab>
+</Tabs>
+
+### Experiments
+
+An experiment — and **every trace, span, and feedback score it produces** — always lands in the **same project as the dataset it runs against**. You don't scope an experiment separately: put the dataset in the project you want, and each run of it follows. This holds whether you call `opik.evaluate(...)` or create the experiment directly.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # project_name must be the dataset's project — the experiment and its data land there
+    client.create_experiment(dataset_name="qa-pairs", name="run-1", project_name="my-agent")
+    client.get_experiment_by_name(name="run-1", project_name="my-agent")
+    client.get_experiments_by_name(name="run-1", project_name="my-agent")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await client.createExperiment({
+      datasetName: "qa-pairs",
+      name: "run-1",
+      projectName: "my-agent", // the dataset's project
+    });
+    await client.getExperiment("run-1", "my-agent");
+    await client.getExperimentsByName("run-1", "my-agent");
+    ```
+  </Tab>
+</Tabs>
+
+## Where your existing data lands
+
+When your workspace is upgraded to 2.0, your workspace-scoped 1.x data — datasets, prompts, experiments, and optimizations — is **moved into projects**.
+
+Each item is placed in the project Opik can infer from the runs that used it. When there's nothing to infer from (no associated runs, or the original project had been deleted), the item is placed in your **`Default Project`**.
+
+So if you don't see a dataset, prompt, or experiment where you expected it, check the project its traces and experiments belong to — and check **`Default Project`**.
+
+<Note>
+  **Opik Cloud (Comet-hosted):** the move runs automatically — there is nothing to start by hand.
+  A workspace is promoted to 2.0 as soon as its blocking workspace-level (orphan) data has been
+  migrated into projects.
+</Note>
+
+<Note>
+  **Self-hosted Opik:** the same move is available as backend migration jobs that you run yourself
+  before promoting a workspace to 2.0. Dedicated runbooks for those jobs will be published under
+  [self-host configuration](/self-host/overview); until then, see the [2.0 release notes](/changelog)
+  for the current upgrade procedure.
+</Note>
+
+## Moving data to a different project
+
+If something landed in a project you don't want, you can move it with the [`opik migrate`](/tracing/advanced/migrate-data) CLI. It relocates a dataset (with its experiments, traces, and spans) or a prompt (with its full version history) into another project.
+
+```bash
+# Move a dataset that landed in Default Project into your agent's project
+opik migrate dataset "qa-pairs" --to-project="my-agent"
+```
+
+Preview any move with `--dry-run` first. See [Migrate data](/tracing/advanced/migrate-data) for the full guide — what's copied, the options, and troubleshooting.

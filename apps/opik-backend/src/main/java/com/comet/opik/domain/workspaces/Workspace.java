@@ -20,8 +20,6 @@ public record Workspace(
         String lastKnownVersion,
         Instant versionDeterminedAt,
         Instant firstTraceReportedAt,
-        Instant experimentProjectMigrationSkippedAt,
-        String experimentProjectMigrationSkipReason,
         Instant promptProjectMigrationSkippedAt,
         String promptProjectMigrationSkipReason,
         boolean hasLegacyScores,

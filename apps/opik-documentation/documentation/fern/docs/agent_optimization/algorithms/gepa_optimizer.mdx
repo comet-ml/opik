@@ -8,6 +8,7 @@ og:site_name: Opik Documentation
 og:title: Optimize Single-Turn Tasks with Opik - GEPA
 subtitle: Single-turn system prompt optimization with reflection
 title: GEPA Optimizer
+canonical-url: https://www.comet.com/docs/opik/development/optimization-runs/algorithms/gepa_optimizer
 ---
 
 `GepaOptimizer` wraps the external [GEPA](https://github.com/gepa-ai/gepa) package to optimize a
@@ -62,8 +63,7 @@ prompt = ChatPrompt(
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
     n_threads=6,
-    temperature=0.2,
-    max_tokens=200,
+    model_parameters={"temperature": 0.2, "max_tokens": 200},
 )
 
 result = optimizer.optimize_prompt(

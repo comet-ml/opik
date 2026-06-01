@@ -43,6 +43,14 @@ const DATASET_OPTIONS: DatasetOption[] = [
   },
 ];
 
+const DEFAULT_CHEVRON_SIZE = "size-4";
+
+const CHEVRON_SIZE_BY_BUTTON_SIZE: Partial<
+  Record<NonNullable<ButtonProps["size"]>, string>
+> = {
+  "2xs": "size-3",
+};
+
 export type AddToDropdownProps = {
   getDataForExport: () => Promise<Array<Trace | Span | Thread>>;
   selectedRows: Array<Trace | Span | Thread>;
@@ -106,7 +114,13 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
             className={cn("font-normal", buttonVariant === "ghost" && "px-0")}
           >
             Add to
-            <ChevronDown className="ml-2 size-4" />
+            <ChevronDown
+              className={cn(
+                "ml-2",
+                (buttonSize && CHEVRON_SIZE_BY_BUTTON_SIZE[buttonSize]) ??
+                  DEFAULT_CHEVRON_SIZE,
+              )}
+            />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
