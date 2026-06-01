@@ -114,19 +114,20 @@ const ThreadsActionsPanel: React.FunctionComponent<
         disabled={disabled}
         dataType="threads"
         buttonVariant={buttonVariant}
+        buttonSize="2xs"
       />
       {canLogTraceSpanThread && (
         <TooltipWrapper content="Manage tags">
           <Button
             variant={buttonVariant}
-            size="sm"
+            size="2xs"
             onClick={() => {
               setOpen(3);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             disabled={disabled}
           >
-            <Tag className="mr-1.5 size-3.5" />
+            <Tag className="mr-1 size-3" />
             <span>Manage tags</span>
           </Button>
         </TooltipWrapper>
@@ -135,6 +136,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         isNoRules={!rules?.length}
         disabled={disabled}
         buttonVariant={buttonVariant}
+        buttonSize="2xs"
         label="Evaluate"
         onClick={() => {
           setOpen(4);
@@ -153,6 +155,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         getData={mapRowData}
         generateFileName={generateFileName}
         buttonVariant={buttonVariant}
+        buttonSize="icon-2xs"
         tooltipContent={
           !isExportEnabled
             ? "Export functionality is disabled for this installation"
@@ -162,7 +165,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
       <TooltipWrapper content="Delete">
         <Button
           variant={buttonVariant}
-          size="icon-sm"
+          size="icon-2xs"
           onClick={() => {
             setOpen(2);
             resetKeyRef.current = resetKeyRef.current + 1;

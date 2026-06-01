@@ -29,6 +29,7 @@ import json
 
 import pytest
 
+from opik.cli.migrate.audit import AuditLog
 from opik.cli.migrate.datasets import experiments as cascade_module
 from opik.cli.migrate.datasets import planner as planner_module
 from opik.cli.migrate.datasets.experiments import (
@@ -1872,3 +1873,222 @@ def test_module_exports() -> None:
     assert callable(cascade_module.cascade_experiments)
     assert hasattr(cascade_module, "ExperimentCascadeResult")
     assert hasattr(cascade_module, "cascade_one_experiment")
+
+
+# ---------------------------------------------------------------------------
+# OPIK-6599: per-(experiment, reason) skip records on the audit log
+#
+# Previously the cascade tallied skip counters on the returned
+# ``ExperimentCascadeResult`` but never wrote a ``skip`` audit record. The
+# CLI then exited 0 with no machine-readable signal that data was lost.
+# These tests assert the audit log now carries one ``skip`` record per
+# (experiment, reason) pair, with bounded ``sample_source_ids``.
+# ---------------------------------------------------------------------------
+
+
+class TestSkipAuditRecords:
+    def test_missing_dataset_item_remap__emits_skip_record(self) -> None:
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item_mapped = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        item_unmapped = _ExperimentItem(
+            id="src-item-2",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-2",
+            dataset_item_id="src-ds-item-orphan",
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item_mapped, item_unmapped]},
+            traces_by_id={
+                "src-trace-1": _Trace(id="src-trace-1"),
+                "src-trace-2": _Trace(id="src-trace-2"),
+            },
+            spans_by_trace={"src-trace-1": [], "src-trace-2": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+        audit = AuditLog(command="opik migrate dataset", args={})
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=audit,
+        )
+
+        assert result.items_skipped_missing_item == 1
+
+        skip_records = [a for a in audit.actions if a.get("status") == "skipped"]
+        assert len(skip_records) == 1
+        record = skip_records[0]
+        assert record["type"] == "skip"
+        assert record["reason"] == "items_missing_dataset_item_remap"
+        assert record["experiment_id"] == "src-exp-1"
+        assert record["count"] == 1
+        assert record["sample_source_ids"] == ["src-ds-item-orphan"]
+
+    def test_skip_sample_ids__capped_at_limit(self) -> None:
+        # Generate more items than the sample cap so we can verify the
+        # audit record carries the full count but a truncated sample.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        items: List[Any] = []
+        traces: Dict[str, Any] = {}
+        spans: Dict[str, List[Any]] = {}
+        orphan_count = cascade_module._SKIP_SAMPLE_LIMIT + 5
+        for n in range(orphan_count):
+            tid = f"src-trace-{n}"
+            items.append(
+                _ExperimentItem(
+                    id=f"src-item-{n}",
+                    experiment_id="src-exp-1",
+                    trace_id=tid,
+                    dataset_item_id=f"src-ds-item-orphan-{n}",
+                )
+            )
+            traces[tid] = _Trace(id=tid)
+            spans[tid] = []
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": items},
+            traces_by_id=traces,
+            spans_by_trace=spans,
+        )
+        client = _client_with_recreate_capture(rest_client)
+        audit = AuditLog(command="opik migrate dataset", args={})
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            # No item ids mapped -> every item triggers the missing-item skip.
+            item_id_remap={},
+            audit=audit,
+        )
+
+        skip_records = [a for a in audit.actions if a.get("status") == "skipped"]
+        item_skip_records = [
+            r for r in skip_records if r["reason"] == "items_missing_dataset_item_remap"
+        ]
+        assert len(item_skip_records) == 1
+        record = item_skip_records[0]
+        # Full count is preserved even when the sample is truncated, so a
+        # programmatic consumer summing counts gets the right total.
+        assert record["count"] == orphan_count
+        assert len(record["sample_source_ids"]) == cascade_module._SKIP_SAMPLE_LIMIT
+
+    def test_missing_trace_remap__emits_skip_record(self, monkeypatch) -> None:
+        # Stub _copy_traces_and_spans so the cascade returns from the
+        # trace-copy step with an INCOMPLETE remap -- exercising the
+        # post-recreate skip tally for items_missing_trace_remap. The
+        # natural cascade always fills the remap from the source items,
+        # so the only way to land in this branch is to short-circuit the
+        # trace-copy phase. This mirrors the production case where a BE
+        # quirk drops a trace mid-cascade.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item_with_remap = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-mapped",
+            dataset_item_id="src-ds-item-1",
+        )
+        item_orphan_trace = _ExperimentItem(
+            id="src-item-2",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-orphan",
+            dataset_item_id="src-ds-item-2",
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item_with_remap, item_orphan_trace]},
+            traces_by_id={
+                "src-trace-mapped": _Trace(id="src-trace-mapped"),
+                "src-trace-orphan": _Trace(id="src-trace-orphan"),
+            },
+            spans_by_trace={"src-trace-mapped": [], "src-trace-orphan": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+        audit = AuditLog(command="opik migrate dataset", args={})
+
+        def _stub_copy(*_args, **kwargs):
+            # Only the "mapped" trace lands in the remap; the "orphan"
+            # one is dropped, simulating an incomplete trace copy.
+            kwargs["trace_id_remap"]["src-trace-mapped"] = "dest-trace-mapped"
+            return (1, 0, 0, 0)
+
+        monkeypatch.setattr(cascade_module, "_copy_traces_and_spans", _stub_copy)
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={
+                "src-ds-item-1": "dest-ds-item-1",
+                "src-ds-item-2": "dest-ds-item-2",
+            },
+            audit=audit,
+        )
+
+        assert result.items_skipped_missing_trace == 1
+
+        skip_records = [a for a in audit.actions if a.get("status") == "skipped"]
+        # Exactly one skip record for the missing-trace reason; no
+        # missing-item record because both dataset items are mapped.
+        trace_skips = [
+            r for r in skip_records if r["reason"] == "items_missing_trace_remap"
+        ]
+        item_skips = [
+            r for r in skip_records if r["reason"] == "items_missing_dataset_item_remap"
+        ]
+        assert len(trace_skips) == 1
+        assert item_skips == []
+        record = trace_skips[0]
+        assert record["type"] == "skip"
+        assert record["experiment_id"] == "src-exp-1"
+        assert record["count"] == 1
+        assert record["sample_source_ids"] == ["src-trace-orphan"]
+
+    def test_no_skips__no_skip_records(self) -> None:
+        # Happy path: every item maps cleanly; no skip records emitted.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+        audit = AuditLog(command="opik migrate dataset", args={})
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=audit,
+        )
+
+        skip_records = [a for a in audit.actions if a.get("status") == "skipped"]
+        assert skip_records == []

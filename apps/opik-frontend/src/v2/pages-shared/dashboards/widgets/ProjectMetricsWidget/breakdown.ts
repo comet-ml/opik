@@ -132,14 +132,7 @@ export function buildBreakdownDrilldownFilter(
 
   switch (field) {
     case BREAKDOWN_FIELD.ERROR_TYPE:
-      if (noError) {
-        return {
-          field: "error_info",
-          operator: "is_empty" as FilterOperator,
-          type: COLUMN_TYPE.errors,
-          value: "",
-        };
-      }
+      if (noError) return null;
       return {
         field: "error_type",
         operator: "=" as FilterOperator,
@@ -148,11 +141,10 @@ export function buildBreakdownDrilldownFilter(
       };
 
     case BREAKDOWN_FIELD.ERROR_INFO:
+      if (label !== "Has Error") return null;
       return {
         field: "error_info",
-        operator: (label === "Has Error"
-          ? "is_not_empty"
-          : "is_empty") as FilterOperator,
+        operator: "is_not_empty" as FilterOperator,
         type: COLUMN_TYPE.errors,
         value: "",
       };

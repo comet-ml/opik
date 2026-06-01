@@ -63,8 +63,7 @@ prompt = ChatPrompt(
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
     n_threads=6,
-    temperature=0.2,
-    max_tokens=200,
+    model_parameters={"temperature": 0.2, "max_tokens": 200},
 )
 
 result = optimizer.optimize_prompt(

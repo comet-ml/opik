@@ -9,6 +9,7 @@ import { useAnnotationQueueIdFromURL } from "@/v2/pages/AnnotationQueuePage/useA
 import DateTag from "@/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import NavigationTag from "@/shared/NavigationTag";
+import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import FeedbackScoresList from "@/v2/pages-shared/FeedbackScoresList/FeedbackScoresList";
 import ConfigurationTab from "@/v2/pages/AnnotationQueuePage/ConfigurationTab/ConfigurationTab";
 import QueueItemsTab from "@/v2/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
@@ -113,23 +114,26 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
               resource={RESOURCE_TYPE.annotationQueue}
             />
           )}
-          {annotationQueue?.scope && annotationQueue?.project_id && (
-            <NavigationTag
-              resource={
-                annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE
-                  ? RESOURCE_TYPE.traces
-                  : RESOURCE_TYPE.threads
-              }
-              id={annotationQueue.project_id}
-              name={
-                annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE
-                  ? "Go to traces"
-                  : "Go to threads"
-              }
-              search={annotationQueueSearch}
-              tooltipContent={`View all ${annotationQueue.scope}s for this queue`}
-            />
-          )}
+          {annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.TRACE &&
+            annotationQueue?.project_id && (
+              <TraceLogsSidebarButton
+                projectId={annotationQueue.project_id}
+                sourceFilters={generateAnnotationQueueIdFilter(
+                  annotationQueue.id,
+                )}
+                title="Logs"
+              />
+            )}
+          {annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.THREAD &&
+            annotationQueue?.project_id && (
+              <NavigationTag
+                resource={RESOURCE_TYPE.threads}
+                id={annotationQueue.project_id}
+                name="Go to threads"
+                search={annotationQueueSearch}
+                tooltipContent="View all threads for this queue"
+              />
+            )}
           {annotationQueue?.project_id && (
             <NavigationTag
               id={annotationQueue.project_id}

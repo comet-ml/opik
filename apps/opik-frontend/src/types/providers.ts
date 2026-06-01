@@ -102,11 +102,11 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
   CLAUDE_OPUS_4_7 = "claude-opus-4-7",
+  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
-  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -311,6 +311,7 @@ export enum PROVIDER_MODEL_TYPE {
   MINIMAX_MINIMAX_M2_5 = "minimax/minimax-m2.5",
   MINIMAX_MINIMAX_M2_5_FREE = "minimax/minimax-m2.5:free",
   MINIMAX_MINIMAX_M2_7 = "minimax/minimax-m2.7",
+  MINIMAX_MINIMAX_M3 = "minimax/minimax-m3",
   MISTRALAI_CODESTRAL_2501 = "mistralai/codestral-2501",
   MISTRALAI_CODESTRAL_2508 = "mistralai/codestral-2508",
   MISTRALAI_DEVSTRAL_2512 = "mistralai/devstral-2512",
@@ -631,8 +632,10 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite",
   GEMINI_2_5_PRO = "gemini-2.5-pro",
   GEMINI_3_FLASH = "gemini-3-flash-preview",
+  GEMINI_3_PRO_IMAGE = "gemini-3-pro-image",
   GEMINI_3_PRO_IMAGE_PREVIEW = "gemini-3-pro-image-preview",
   GEMINI_3_PRO = "gemini-3-pro-preview",
+  GEMINI_3_1_FLASH_IMAGE = "gemini-3.1-flash-image",
   GEMINI_3_1_FLASH_IMAGE_PREVIEW = "gemini-3.1-flash-image-preview",
   GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite",
   GEMINI_3_1_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
@@ -646,8 +649,6 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_PRO_IMAGE = "gemini-3-pro-image",
-  GEMINI_3_1_FLASH_IMAGE = "gemini-3.1-flash-image",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

@@ -14,7 +14,7 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
 import { checkIsTestSuite } from "@/lib/optimizations";
 import { getObjectiveScoreValue } from "@/lib/feedback-scores";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -24,7 +24,6 @@ import { MAX_EXPERIMENTS_LOADED } from "@/lib/optimizations";
 
 const TrialPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const activeProjectId = useActiveProjectId();
   const {
     permissions: { canViewDatasets },
   } = usePermissions();
@@ -58,7 +57,6 @@ const TrialPage: React.FunctionComponent = () => {
   const { data: optimizationExperimentsData } = useExperimentsList(
     {
       workspaceName,
-      projectId: activeProjectId ?? undefined,
       optimizationId,
       types: [EXPERIMENT_TYPE.TRIAL],
       page: 1,
