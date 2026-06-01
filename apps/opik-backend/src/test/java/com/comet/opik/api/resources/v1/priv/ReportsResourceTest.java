@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.OllieReport;
 import com.comet.opik.api.ReportPreference;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -34,11 +35,15 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -76,6 +81,8 @@ class ReportsResourceTest {
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
         MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
+        var reportGenerationUrl = wireMock.runtimeInfo().getHttpBaseUrl() + "/reports/generate";
+
         APP = newTestDropwizardAppExtension(TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                 .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
@@ -84,6 +91,9 @@ class ReportsResourceTest {
                 .authCacheTtlInSeconds(null)
                 .minioUrl(minioUrl)
                 .isMinIO(true)
+                .customConfigs(List.of(
+                        new TestDropwizardAppExtensionUtils.CustomConfig(
+                                "reportGeneration.url", reportGenerationUrl)))
                 .build());
     }
 
@@ -101,6 +111,10 @@ class ReportsResourceTest {
         this.reportsResourceClient = new ReportsResourceClient(client, baseURI);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID, USER);
+
+        wireMock.server().stubFor(
+                post(urlPathEqualTo("/reports/generate"))
+                        .willReturn(aResponse().withStatus(200).withBody("{\"status\":\"accepted\"}")));
     }
 
     @AfterAll
@@ -192,14 +206,40 @@ class ReportsResourceTest {
         }
 
         @Test
-        @DisplayName("Generate returns 503 when report generation is not configured")
-        void generateReport__notConfigured__returns503() {
+        @DisplayName("Generate returns 202 and creates a pending report")
+        void generateReport__happyPath__returns202AndCreatesPending() {
             var projectId = projectResourceClient.createProject(
                     "project-" + UUID.randomUUID(), API_KEY, TEST_WORKSPACE_NAME);
 
             try (var response = reportsResourceClient.generateReport(projectId, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_SERVICE_UNAVAILABLE);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
             }
+
+            var page = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME);
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content().get(0).status()).isEqualTo(OllieReport.ReportStatus.PENDING);
+        }
+
+        @Test
+        @DisplayName("Complete callback updates a pending report to completed")
+        void completeReport__pendingReport__updatesSuccessfully() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + UUID.randomUUID(), API_KEY, TEST_WORKSPACE_NAME);
+
+            reportsResourceClient.generateReport(projectId, API_KEY, TEST_WORKSPACE_NAME).close();
+
+            var page = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME);
+            var report = page.content().get(0);
+
+            try (var response = reportsResourceClient.completeReport(projectId, report.id(),
+                    Map.of("content", "# Test Report", "status", "completed", "session_id", "sess-1"),
+                    API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            var updated = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME);
+            assertThat(updated.content().get(0).status()).isEqualTo(OllieReport.ReportStatus.COMPLETED);
+            assertThat(updated.content().get(0).content()).isEqualTo("# Test Report");
         }
 
         @Test

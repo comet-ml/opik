@@ -54,7 +54,7 @@ function StatusBadge({ enabled }: { enabled: boolean }) {
   if (enabled) {
     return (
       <span className="flex items-center gap-1.5 text-xs">
-        <span className="size-2 rounded-full bg-emerald-400" />
+        <span className="size-1.5 rounded-full bg-emerald-400" />
         Active
       </span>
     );

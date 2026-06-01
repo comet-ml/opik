@@ -52,6 +52,13 @@ public class ReportService {
                 .stream().findFirst().map(p -> p.name())
                 .orElseThrow(() -> new NotFoundException("Project not found: " + projectId));
 
+        long pending = transactionTemplate.inTransaction(READ_ONLY, handle -> handle.attach(OllieReportDAO.class)
+                .countPendingByProjectId(workspaceId, projectId));
+        if (pending > 0) {
+            log.info("Report already pending for project '{}', skipping", projectId);
+            return null;
+        }
+
         UUID reportId = idGenerator.generateId();
 
         transactionTemplate.inTransaction(WRITE, handle -> {

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -18,8 +20,8 @@ public record ReportPreference(
         @JsonIgnore String workspaceName,
         UUID projectId,
         boolean enabled,
-        String scheduleTime,
-        String customPrompt,
+        @Pattern(regexp = "\\d{2}:\\d{2}:\\d{2}", message = "scheduleTime must be in HH:mm:ss format") String scheduleTime,
+        @Size(max = 5000) String customPrompt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt) {
 }

@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class DailyReportJobTest {
+class OllieDailyReportJobTest {
 
     static Stream<Arguments> windowCases() {
         return Stream.of(
@@ -25,7 +25,7 @@ class DailyReportJobTest {
     @ParameterizedTest
     @MethodSource("windowCases")
     void computeWindow_shouldReturnPreviousWindow(LocalTime now, String expectedStart, String expectedEnd) {
-        var window = DailyReportJob.computeWindow(now);
+        var window = OllieDailyReportJob.computeWindow(now);
 
         assertThat(window.start()).isEqualTo(expectedStart);
         assertThat(window.end()).isEqualTo(expectedEnd);

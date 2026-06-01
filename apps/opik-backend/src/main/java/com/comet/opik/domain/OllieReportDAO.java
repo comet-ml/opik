@@ -53,6 +53,11 @@ interface OllieReportDAO {
     long countByProjectId(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
+    @SqlQuery("SELECT COUNT(*) FROM ollie_reports WHERE workspace_id = :workspaceId " +
+            "AND project_id = :projectId AND status = 'pending'")
+    long countPendingByProjectId(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId);
+
     @SqlUpdate("UPDATE ollie_reports SET status = 'failed' " +
             "WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)")
     int failStaleReports();

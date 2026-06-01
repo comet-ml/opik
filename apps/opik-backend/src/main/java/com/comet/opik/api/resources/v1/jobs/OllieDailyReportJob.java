@@ -29,7 +29,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @DisallowConcurrentExecution
 @On(value = "0 0/10 * * * ?", timeZone = "UTC")
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class DailyReportJob extends Job {
+public class OllieDailyReportJob extends Job {
 
     private static final int WINDOW_MINUTES = 10;
     private static final Lock JOB_LOCK = new Lock("daily_report_job:lock");
@@ -67,7 +67,7 @@ public class DailyReportJob extends Job {
                     return Mono.empty();
                 }),
                 Duration.ofMinutes(5),
-                Duration.ZERO,
+                Duration.ofSeconds(5),
                 true).subscribe(
                         __ -> log.info("Daily report job completed"),
                         error -> log.error("Daily report job failed", error));

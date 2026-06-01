@@ -51,14 +51,15 @@ public class OrchestratorClient {
                 .post(Entity.json(payload), new InvocationCallback<Response>() {
                     @Override
                     public void completed(Response response) {
-                        if (response.getStatus() >= 300) {
-                            log.error("Report generation trigger returned {} for report '{}'",
-                                    response.getStatus(), reportId);
-                            onFailure.run();
-                        } else {
-                            log.info("Report generation accepted for report '{}'", reportId);
+                        try (response) {
+                            if (response.getStatus() >= 300) {
+                                log.error("Report generation trigger returned {} for report '{}'",
+                                        response.getStatus(), reportId);
+                                onFailure.run();
+                            } else {
+                                log.info("Report generation accepted for report '{}'", reportId);
+                            }
                         }
-                        response.close();
                     }
 
                     @Override

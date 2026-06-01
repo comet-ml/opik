@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS report_preferences (
     custom_prompt TEXT NULL,
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    CONSTRAINT report_preferences_pk PRIMARY KEY (workspace_id, project_id)
+    CONSTRAINT report_preferences_pk PRIMARY KEY (workspace_id, project_id),
+    INDEX idx_report_preferences_enabled_schedule (enabled, schedule_time)
 );
 
 --rollback DROP TABLE IF EXISTS report_preferences;
