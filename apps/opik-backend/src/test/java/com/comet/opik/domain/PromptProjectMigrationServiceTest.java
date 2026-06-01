@@ -19,7 +19,6 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptTestAssertions;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -154,25 +153,22 @@ class PromptProjectMigrationServiceTest {
     }
 
     /**
-     * Single workspace covering all four classifier buckets in one cycle:
+     * Single workspace covering every post-classification path in one cycle:
      * <ul>
      *     <li><b>certain</b> — one referencing experiment in a single alive project => assigned.</li>
      *     <li><b>certain-deleted</b> — one referencing experiment in a project later deleted in
      *     MySQL => routed to Default Project.</li>
      *     <li><b>no-inference</b> — orphan prompt with no referencing experiment => routed to
      *     Default Project.</li>
-     *     <li><b>ambiguous</b> — referencing experiments in two distinct live projects => skipped.</li>
+     *     <li><b>multi-project (dominant)</b> — referencing experiments in two distinct live
+     *     projects with different counts => assigned to the dominant (higher-count) project.</li>
      * </ul>
      * Also covers the demo-name filter: a demo-named prompt is workspace-orphan but excluded from
      * the eligibility query, so it's invisible to the cycle even when other prompts in the
      * workspace migrate.
-     *
-     * <p>Outcome: workspace gets trapped with {@code all_ambiguous} because the ambiguous prompt
-     * is left behind; the other three buckets land on their assigned projects and the demo prompt
-     * stays orphan.
      */
     @Test
-    void mixedWorkspaceMigratesAcrossBucketsAndTrapsOnAmbiguous(WorkspacesService workspacesService) {
+    void mixedWorkspaceMigratesAcrossAllBuckets() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -196,14 +192,17 @@ class PromptProjectMigrationServiceTest {
 
         var noInferenceLink = createOrphanPromptVersion(apiKey, workspaceName);
 
-        var secondAliveProjectName = randomName("project");
-        var secondAliveProjectId = createProject(apiKey, workspaceName, secondAliveProjectName);
-        var secondAliveDataset = createDatasetWithProject(apiKey, workspaceName, secondAliveProjectId);
-        var ambiguousLink = createOrphanPromptVersion(apiKey, workspaceName);
+        var minorityProjectName = randomName("project");
+        var minorityProjectId = createProject(apiKey, workspaceName, minorityProjectName);
+        var minorityDataset = createDatasetWithProject(apiKey, workspaceName, minorityProjectId);
+        var dominantLink = createOrphanPromptVersion(apiKey, workspaceName);
+        // Two experiments in aliveProject vs one in minorityProject — aliveProject wins by count.
         createExperimentInProject(apiKey, workspaceName, aliveDataset, aliveProjectId, aliveProjectName,
-                ambiguousLink, null);
-        createExperimentInProject(apiKey, workspaceName, secondAliveDataset, secondAliveProjectId,
-                secondAliveProjectName, ambiguousLink, null);
+                dominantLink, null);
+        createExperimentInProject(apiKey, workspaceName, aliveDataset, aliveProjectId, aliveProjectName,
+                dominantLink, null);
+        createExperimentInProject(apiKey, workspaceName, minorityDataset, minorityProjectId,
+                minorityProjectName, dominantLink, null);
 
         // Demo: eligible-shaped but excluded by the demo-name filter on the eligibility query.
         var demoName = DemoData.PROMPTS.getFirst();
@@ -216,7 +215,7 @@ class PromptProjectMigrationServiceTest {
         var certainBefore = promptResourceClient.getPrompt(certainLink.promptId(), apiKey, workspaceName);
         var deletedBefore = promptResourceClient.getPrompt(deletedLink.promptId(), apiKey, workspaceName);
         var noInferenceBefore = promptResourceClient.getPrompt(noInferenceLink.promptId(), apiKey, workspaceName);
-        var ambiguousBefore = promptResourceClient.getPrompt(ambiguousLink.promptId(), apiKey, workspaceName);
+        var dominantBefore = promptResourceClient.getPrompt(dominantLink.promptId(), apiKey, workspaceName);
         var demoBefore = promptResourceClient.getPrompt(demoLink.promptId(), apiKey, workspaceName);
 
         migrationService.runMigrationCycle().block();
@@ -224,10 +223,8 @@ class PromptProjectMigrationServiceTest {
         assertPromptMigratedTo(apiKey, workspaceName, certainLink.promptId(), certainBefore, aliveProjectId);
         assertPromptMigratedToDefault(apiKey, workspaceName, deletedLink.promptId(), deletedBefore);
         assertPromptMigratedToDefault(apiKey, workspaceName, noInferenceLink.promptId(), noInferenceBefore);
-        assertPromptUnchanged(apiKey, workspaceName, ambiguousLink.promptId(), ambiguousBefore);
+        assertPromptMigratedTo(apiKey, workspaceName, dominantLink.promptId(), dominantBefore, aliveProjectId);
         assertPromptUnchanged(apiKey, workspaceName, demoLink.promptId(), demoBefore);
-
-        assertWorkspaceTrapped(workspacesService, workspaceId, "all_ambiguous");
     }
 
     @Test
@@ -306,61 +303,37 @@ class PromptProjectMigrationServiceTest {
     }
 
     /**
-     * Workspace whose only orphan is ambiguous: the early {@code assignments.isEmpty()}
-     * short-circuit in {@code applyClassifications} traps the workspace before any writes happen.
-     * Distinct from the post-write trap exercised by
-     * {@link #mixedWorkspaceMigratesAcrossBucketsAndTrapsOnAmbiguous}, which goes through the
-     * full batch-update chain first.
+     * Multi-project orphan referenced by two equally-counted projects — the dominant query falls
+     * through the count tiebreaker to recency, picking the project of the more recently updated
+     * experiment. A small sleep between the two seed calls keeps the {@code last_updated_at}
+     * values distinguishable at ClickHouse's nanosecond precision.
      */
     @Test
-    void trapWorkspaceWithOnlyAmbiguousPrompts(WorkspacesService workspacesService) {
+    void migrateMultiProjectPromptToMostRecentProjectWhenCountTies() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        var projectName1 = randomName("project");
-        var projectId1 = createProject(apiKey, workspaceName, projectName1);
-        var dataset1 = createDatasetWithProject(apiKey, workspaceName, projectId1);
-        var projectName2 = randomName("project");
-        var projectId2 = createProject(apiKey, workspaceName, projectName2);
-        var dataset2 = createDatasetWithProject(apiKey, workspaceName, projectId2);
+        var olderProjectName = randomName("project");
+        var olderProjectId = createProject(apiKey, workspaceName, olderProjectName);
+        var olderDataset = createDatasetWithProject(apiKey, workspaceName, olderProjectId);
+        var newerProjectName = randomName("project");
+        var newerProjectId = createProject(apiKey, workspaceName, newerProjectName);
+        var newerDataset = createDatasetWithProject(apiKey, workspaceName, newerProjectId);
 
         var promptLink = createOrphanPromptVersion(apiKey, workspaceName);
-        createExperimentInProject(apiKey, workspaceName, dataset1, projectId1, projectName1,
+        createExperimentInProject(apiKey, workspaceName, olderDataset, olderProjectId, olderProjectName,
                 promptLink, null);
-        createExperimentInProject(apiKey, workspaceName, dataset2, projectId2, projectName2,
+        TestUtils.waitForMillis(20);
+        createExperimentInProject(apiKey, workspaceName, newerDataset, newerProjectId, newerProjectName,
                 promptLink, null);
 
         var before = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
 
         migrationService.runMigrationCycle().block();
 
-        assertPromptUnchanged(apiKey, workspaceName, promptLink.promptId(), before);
-        assertWorkspaceTrapped(workspacesService, workspaceId, "all_ambiguous");
-    }
-
-    @Test
-    void skipPreMarkedTrappedWorkspaces(WorkspacesService workspacesService) {
-        var apiKey = randomName("api-key");
-        var workspaceName = randomName("workspace");
-        var workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
-
-        workspacesService.markPromptProjectMigrationSkipped(workspaceId, "test-pre-marked-trap");
-
-        var projectName = randomName("project");
-        var projectId = createProject(apiKey, workspaceName, projectName);
-        var datasetName = createDatasetWithProject(apiKey, workspaceName, projectId);
-        var promptLink = createOrphanPromptVersion(apiKey, workspaceName);
-        createExperimentInProject(apiKey, workspaceName, datasetName, projectId, projectName,
-                promptLink, null);
-
-        var before = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
-
-        migrationService.runMigrationCycle().block();
-
-        assertPromptUnchanged(apiKey, workspaceName, promptLink.promptId(), before);
+        assertPromptMigratedTo(apiKey, workspaceName, promptLink.promptId(), before, newerProjectId);
     }
 
     @Test
@@ -465,110 +438,222 @@ class PromptProjectMigrationServiceTest {
     }
 
     /**
-     * Partial-batch all-ambiguous: a workspace with more orphans than {@code promptBatchSize}
-     * whose current batch happens to be entirely ambiguous must NOT be trapped on this cycle —
-     * the workspace may still have non-ambiguous orphans on the next page. Without the
-     * {@code isTailBatch} guard this is a silent data-loss path: workspace gets permanently
-     * excluded after cycle 1 and the remaining orphans are stranded.
-     *
-     * <p>Known residual: when every orphan in the workspace is genuinely ambiguous,
-     * {@code findOrphanPromptIds} keeps returning a full {@code BATCH_SIZE}-sized page each
-     * cycle so {@code isTailBatch} stays false forever and the workspace cycles indefinitely
-     * without trapping. The indefinite cycle is annoying (visible in metrics / logs) but is
-     * strictly better than the silent-data-loss alternative. Closing this cleanly requires
-     * {@code ORDER BY id ASC} + cursor-style spillover in {@code findOrphanPromptIds} and is
-     * a follow-up to this PR.
+     * Multi-project orphan referenced by experiments split across two projects with different
+     * counts — the dominant (higher-count) project wins by the {@code count DESC} step of the
+     * ranking. A second cycle is a no-op (re-runs are deterministic; same input → same
+     * assignment).
      */
     @Test
-    void partialBatchAllAmbiguousDoesNotTrap(WorkspacesService workspacesService) {
+    void migrateMultiProjectPromptToDominantProjectByCount() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        // Two distinct alive projects shared across every ambiguous prompt so each prompt's
-        // classification has projectCount == 2 → AMBIGUOUS bucket.
-        var projectName1 = randomName("project");
-        var projectId1 = createProject(apiKey, workspaceName, projectName1);
-        var dataset1 = createDatasetWithProject(apiKey, workspaceName, projectId1);
-        var projectName2 = randomName("project");
-        var projectId2 = createProject(apiKey, workspaceName, projectName2);
-        var dataset2 = createDatasetWithProject(apiKey, workspaceName, projectId2);
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var dominantDataset = createDatasetWithProject(apiKey, workspaceName, dominantProjectId);
+        var minorityProjectName = randomName("project");
+        var minorityProjectId = createProject(apiKey, workspaceName, minorityProjectName);
+        var minorityDataset = createDatasetWithProject(apiKey, workspaceName, minorityProjectId);
 
-        // BATCH_SIZE + 2 ambiguous prompts: cycle 1 fetches BATCH_SIZE (non-tail, all-ambiguous),
-        // so the guard defers the trap. None get migrated either, so the workspace remains
-        // eligible — which is the correctness contract we're protecting.
-        var promptIds = new ArrayList<UUID>();
-        for (int i = 0; i < BATCH_SIZE + 2; i++) {
-            var link = createOrphanPromptVersion(apiKey, workspaceName);
-            createExperimentInProject(apiKey, workspaceName, dataset1, projectId1, projectName1, link, null);
-            createExperimentInProject(apiKey, workspaceName, dataset2, projectId2, projectName2, link, null);
-            promptIds.add(link.promptId());
-        }
+        var promptLink = createOrphanPromptVersion(apiKey, workspaceName);
+        // 3 experiments in the dominant project, 1 in the minority project.
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, minorityDataset, minorityProjectId, minorityProjectName,
+                promptLink, null);
+
+        var before = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
 
         migrationService.runMigrationCycle().block();
 
-        assertThat(countMigrated(apiKey, workspaceName, promptIds))
-                .as("cycle 1 must not migrate any ambiguous prompt")
-                .isZero();
-        assertWorkspaceNotTrapped(workspacesService, workspaceId);
+        assertPromptMigratedTo(apiKey, workspaceName, promptLink.promptId(), before, dominantProjectId);
+
+        var afterFirstCycle = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
+        migrationService.runMigrationCycle().block();
+        assertPromptUnchanged(apiKey, workspaceName, promptLink.promptId(), afterFirstCycle);
     }
 
     /**
-     * Partial-batch mixed buckets: a workspace with more orphans than {@code promptBatchSize}
-     * whose current batch contains both certain and ambiguous prompts must migrate the certain
-     * prompts and NOT trap on the post-write decision — the workspace still has more orphans
-     * (including the ambiguous remainder) for the next cycle. Without the {@code isTailBatch}
-     * guard the post-write trap fires and strands the rest.
+     * Multi-project orphan where one referencing experiment is itself still V1 ({@code
+     * project_id = ''}): the empty-project row is filtered out by the CH classifier's inner
+     * {@code HAVING experiment_project_id != ''}, and the dominant choice is made over the
+     * remaining V2 experiments only.
      */
     @Test
-    void partialBatchMixedAmbiguousAndCertainDoesNotTrap(WorkspacesService workspacesService) {
+    void multiProjectPromptIgnoresExperimentsWithEmptyProjectId() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        // One alive project for the certain bucket, two alive projects for the ambiguous bucket.
-        var certainProjectName = randomName("project");
-        var certainProjectId = createProject(apiKey, workspaceName, certainProjectName);
-        var certainDataset = createDatasetWithProject(apiKey, workspaceName, certainProjectId);
-        var ambiguousProjectName1 = randomName("project");
-        var ambiguousProjectId1 = createProject(apiKey, workspaceName, ambiguousProjectName1);
-        var ambiguousDataset1 = createDatasetWithProject(apiKey, workspaceName, ambiguousProjectId1);
-        var ambiguousProjectName2 = randomName("project");
-        var ambiguousProjectId2 = createProject(apiKey, workspaceName, ambiguousProjectName2);
-        var ambiguousDataset2 = createDatasetWithProject(apiKey, workspaceName, ambiguousProjectId2);
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var dominantDataset = createDatasetWithProject(apiKey, workspaceName, dominantProjectId);
+        var minorityProjectName = randomName("project");
+        var minorityProjectId = createProject(apiKey, workspaceName, minorityProjectName);
+        var minorityDataset = createDatasetWithProject(apiKey, workspaceName, minorityProjectId);
 
-        // 51 certain + 51 ambiguous = BATCH_SIZE + 2 total. Pigeonhole: any 100-of-102 slice must
-        // include at least 49 of each bucket — cycle 1's batch is guaranteed to have both certain
-        // and ambiguous prompts regardless of MySQL fetch order.
-        int perBucket = (BATCH_SIZE + 2) / 2;
-        var certainPromptIds = new ArrayList<UUID>();
-        for (int i = 0; i < perBucket; i++) {
-            var link = createOrphanPromptVersion(apiKey, workspaceName);
-            createExperimentInProject(apiKey, workspaceName, certainDataset, certainProjectId, certainProjectName,
-                    link, null);
-            certainPromptIds.add(link.promptId());
-        }
-        var ambiguousPromptIds = new ArrayList<UUID>();
-        for (int i = 0; i < perBucket; i++) {
-            var link = createOrphanPromptVersion(apiKey, workspaceName);
-            createExperimentInProject(apiKey, workspaceName, ambiguousDataset1, ambiguousProjectId1,
-                    ambiguousProjectName1, link, null);
-            createExperimentInProject(apiKey, workspaceName, ambiguousDataset2, ambiguousProjectId2,
-                    ambiguousProjectName2, link, null);
-            ambiguousPromptIds.add(link.promptId());
-        }
+        var promptLink = createOrphanPromptVersion(apiKey, workspaceName);
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, minorityDataset, minorityProjectId, minorityProjectName,
+                promptLink, null);
+        // V1 experiment referencing the prompt without a project: filtered out by the HAVING
+        // clause, so the dominant tally only spans the three V2 experiments above.
+        var orphanDataset = randomName("dataset");
+        datasetResourceClient.createDataset(
+                factory.manufacturePojo(Dataset.class).toBuilder()
+                        .name(orphanDataset)
+                        .projectId(null)
+                        .projectName(null)
+                        .build(),
+                apiKey, workspaceName);
+        experimentResourceClient.create(
+                experimentResourceClient.createPartialExperiment()
+                        .id(null)
+                        .datasetName(orphanDataset)
+                        .promptVersion(promptLink)
+                        .build(),
+                apiKey, workspaceName);
+
+        var before = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
 
         migrationService.runMigrationCycle().block();
 
-        assertThat(countMigrated(apiKey, workspaceName, certainPromptIds))
-                .as("cycle 1 must migrate at least some certain prompts in the batch")
-                .isPositive();
-        assertThat(countMigrated(apiKey, workspaceName, ambiguousPromptIds))
-                .as("ambiguous prompts are never written by the cycle")
-                .isZero();
-        assertWorkspaceNotTrapped(workspacesService, workspaceId);
+        assertPromptMigratedTo(apiKey, workspaceName, promptLink.promptId(), before, dominantProjectId);
+    }
+
+    /**
+     * Multi-project prompt whose dominant project (the higher-count one the query chose) is
+     * deleted in MySQL before the cycle runs. Project-validation drops the now-missing dominant
+     * project, so the prompt falls back to the Default Project — it is not reassigned to the
+     * surviving lower-count project.
+     */
+    @Test
+    void migrateMultiProjectPromptToDefaultProjectWhenDominantProjectWasDeleted() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var dominantDataset = createDatasetWithProject(apiKey, workspaceName, dominantProjectId);
+        var minorityProjectName = randomName("project");
+        var minorityProjectId = createProject(apiKey, workspaceName, minorityProjectName);
+        var minorityDataset = createDatasetWithProject(apiKey, workspaceName, minorityProjectId);
+
+        var promptLink = createOrphanPromptVersion(apiKey, workspaceName);
+        // Dominant project (2 experiments) beats the minority project (1) by count.
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, minorityDataset, minorityProjectId, minorityProjectName,
+                promptLink, null);
+
+        // Delete the dominant project: the query still infers it, but validation drops it.
+        projectResourceClient.deleteProject(dominantProjectId, apiKey, workspaceName);
+
+        var before = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertPromptMigratedToDefault(apiKey, workspaceName, promptLink.promptId(), before);
+    }
+
+    /**
+     * Multi-project orphan referenced both via the legacy {@code experiments.prompt_id} column and
+     * via the {@code experiments.prompt_versions} map: both reference paths contribute to the
+     * dominant calculation via the {@code ARRAY JOIN} on the concatenated prompt-id array.
+     * Same-experiment duplicates (an experiment referencing the prompt through both columns at
+     * once) are absorbed by {@code arrayDistinct} so they don't inflate the count.
+     */
+    @Test
+    void multiProjectPromptViaLegacyAndModernRefsContributesToDominant() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var dominantDataset = createDatasetWithProject(apiKey, workspaceName, dominantProjectId);
+        var minorityProjectName = randomName("project");
+        var minorityProjectId = createProject(apiKey, workspaceName, minorityProjectName);
+        var minorityDataset = createDatasetWithProject(apiKey, workspaceName, minorityProjectId);
+
+        var promptLink = createOrphanPromptVersion(apiKey, workspaceName);
+        // Dominant: one experiment via prompt_id, one via prompt_versions map only.
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                promptLink, null);
+        createExperimentInProject(apiKey, workspaceName, dominantDataset, dominantProjectId, dominantProjectName,
+                null, List.of(promptLink));
+        // Minority: one experiment with the prompt referenced via both columns redundantly. After
+        // arrayDistinct in the classifier, this counts as a single reference.
+        createExperimentInProject(apiKey, workspaceName, minorityDataset, minorityProjectId, minorityProjectName,
+                promptLink, List.of(promptLink));
+
+        var before = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertPromptMigratedTo(apiKey, workspaceName, promptLink.promptId(), before, dominantProjectId);
+    }
+
+    /**
+     * Demo-named experiments must not influence the dominant-project choice for a non-demo prompt.
+     * The real experiment is created first in {@code realProject}; a demo-named experiment is
+     * then created in a different project that references the same prompt. Without the
+     * {@code AND name NOT IN :demo_experiment_names} filter on the classifier, both projects
+     * would tie at {@code distinctProjectCount=2} and the recency tiebreaker would assign the
+     * prompt to the demo experiment's project — leaking demo data into a real prompt's home.
+     * With the filter, only the real experiment contributes and the prompt lands on
+     * {@code realProject}.
+     */
+    @Test
+    void multiProjectPromptIgnoresDemoNamedExperiments() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var realProjectName = randomName("project");
+        var realProjectId = createProject(apiKey, workspaceName, realProjectName);
+        var realDataset = createDatasetWithProject(apiKey, workspaceName, realProjectId);
+        var demoSpyProjectName = randomName("project");
+        var demoSpyProjectId = createProject(apiKey, workspaceName, demoSpyProjectName);
+        var demoSpyDataset = createDatasetWithProject(apiKey, workspaceName, demoSpyProjectId);
+
+        var promptLink = createOrphanPromptVersion(apiKey, workspaceName);
+        createExperimentInProject(apiKey, workspaceName, realDataset, realProjectId, realProjectName,
+                promptLink, null);
+        // Wait so the demo experiment's last_updated_at is strictly newer; absent the filter the
+        // recency tiebreaker would pick demoSpyProject and the assertion below would fail.
+        TestUtils.waitForMillis(20);
+        var demoExperiment = experimentResourceClient.createPartialExperiment()
+                .id(null)
+                .name(DemoData.EXPERIMENTS.getFirst())
+                .datasetName(demoSpyDataset)
+                .projectId(demoSpyProjectId)
+                .projectName(demoSpyProjectName)
+                .promptVersion(promptLink)
+                .build();
+        experimentResourceClient.create(demoExperiment, apiKey, workspaceName);
+
+        var before = promptResourceClient.getPrompt(promptLink.promptId(), apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertPromptMigratedTo(apiKey, workspaceName, promptLink.promptId(), before, realProjectId);
     }
 
     /**
@@ -733,16 +818,6 @@ class PromptProjectMigrationServiceTest {
             Prompt beforeMigration) {
         var actual = promptResourceClient.getPrompt(promptId, apiKey, workspaceName);
         PromptTestAssertions.assertPromptEqual(actual, beforeMigration);
-    }
-
-    private void assertWorkspaceTrapped(WorkspacesService workspacesService, String workspaceId, String reason) {
-        assertThat(workspacesService.findPromptProjectMigrationSkippedWorkspaceIds()).contains(workspaceId);
-        assertThat(workspacesService.findById(workspaceId))
-                .hasValueSatisfying(w -> assertThat(w.promptProjectMigrationSkipReason()).isEqualTo(reason));
-    }
-
-    private void assertWorkspaceNotTrapped(WorkspacesService workspacesService, String workspaceId) {
-        assertThat(workspacesService.findPromptProjectMigrationSkippedWorkspaceIds()).doesNotContain(workspaceId);
     }
 
     private long countMigrated(String apiKey, String workspaceName, List<UUID> promptIds) {
