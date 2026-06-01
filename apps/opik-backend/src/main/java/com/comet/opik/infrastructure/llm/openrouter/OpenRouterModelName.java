@@ -220,6 +220,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MINIMAX_MINIMAX_M2_5("minimax/minimax-m2.5"),
     MINIMAX_MINIMAX_M2_5_FREE("minimax/minimax-m2.5:free"),
     MINIMAX_MINIMAX_M2_7("minimax/minimax-m2.7"),
+    MINIMAX_MINIMAX_M3("minimax/minimax-m3"),
     MISTRALAI_CODESTRAL_2501("mistralai/codestral-2501"),
     MISTRALAI_CODESTRAL_2508("mistralai/codestral-2508"),
     MISTRALAI_DEVSTRAL_2512("mistralai/devstral-2512"),
