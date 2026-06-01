@@ -4,6 +4,7 @@ import {
   Check,
   CircleFadingArrowUp,
   Settings2,
+  X,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
@@ -173,7 +174,8 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem size="sm" onSelect={handleClearAll}>
-              Remove from all environments
+              <X className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+              Remove from all
             </DropdownMenuItem>
           </>
         )}
