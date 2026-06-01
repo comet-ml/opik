@@ -8,19 +8,19 @@ import {
 } from "./helpers";
 import { useEnvironmentByName } from "./EnvironmentLabel";
 
-// `promptPill` is a project-specific variant used across prompt-version
+// `pill` is a project-specific variant used across prompt-version
 // surfaces (prompt detail header, mobile version picker, version history
 // timeline, +N overflow tooltip): 20px tall with a 10px label and asymmetric
 // padding so the leading env icon hugs the left edge while the text gets a
 // little more breathing room on the right.
-export type EnvironmentBadgeSize = NonNullable<TagProps["size"]> | "promptPill";
+export type EnvironmentBadgeSize = NonNullable<TagProps["size"]> | "pill";
 
 const SIZE_CLASSES: Record<EnvironmentBadgeSize, string> = {
   default: "comet-body-xs h-5 px-2 leading-5 rounded-sm",
   sm: "comet-body-xs h-4 px-2 text-[11px] leading-4 rounded-sm",
   md: "comet-body-s h-6 px-1.5 leading-6 rounded-md",
   lg: "comet-body-s h-7 px-3 leading-7 rounded-md",
-  promptPill: "h-5 pl-1.5 pr-2 text-[10px] leading-5 rounded-sm",
+  pill: "h-5 pl-1.5 pr-2 text-[10px] leading-5 rounded-sm",
 };
 
 const ICON_SIZE_CLASSES: Record<EnvironmentBadgeSize, string> = {
@@ -28,7 +28,7 @@ const ICON_SIZE_CLASSES: Record<EnvironmentBadgeSize, string> = {
   sm: "size-2.5",
   md: "size-3",
   lg: "size-3.5",
-  promptPill: "size-2.5",
+  pill: "size-2.5",
 };
 
 type EnvironmentBadgeProps = {
