@@ -1896,36 +1896,53 @@ public class ExperimentDAO {
             """;
 
     /**
-     * For one workspace and a set of orphan prompt IDs, returns the trace-derived classification
-     * for each prompt that has at least one referencing experiment: {@code project_id} is any
-     * non-orphan {@code project_id} of a referencing experiment (meaningful only when
-     * {@code project_count = 1}); {@code project_count} is the distinct count of non-orphan
-     * project_ids — {@code 0} = no inference, {@code 1} = certain, {@code > 1} = ambiguous.
-     * Same shape as {@link #COMPUTE_EXPERIMENT_PROJECT_MAPPING} so the prompt and experiment
-     * cycles classify the same way.
+     * For one workspace and a set of orphan prompt IDs, returns each referenced prompt's inferred
+     * {@code project_id}, the {@code distinct_project_count} of referencing projects, and a sorted
+     * {@code project_breakdown} ({@code projectId=count,...}) included in the dominant-assignment
+     * log entry. Same shape as {@link #COMPUTE_DATASET_PROJECT_MAPPING}: single-project rows are
+     * unambiguous; multi-project rows pick the dominant project by {@code (count DESC,
+     * last_activity DESC, project_id ASC)} so repeated runs produce the same result. Prompts whose
+     * only referencing experiments are still at {@code project_id = ''} are dropped by the inner
+     * {@code HAVING}; the caller treats absence as no-inference.
      *
-     * <p>{@code argMax(_, last_updated_at)} on the inner aggregate dedupes ReplacingMergeTree
-     * duplicates by picking the latest row per experiment id. Prompt references are immutable
-     * per the data contract but {@code project_id} can flip during the D1 migration, so the
-     * latest one is what the inference must observe. The outer {@code anyIf} / {@code countDistinctIf}
-     * then filter on {@code project_id != ''} so experiments still orphan post-D1 are correctly
-     * invisible to the inference.
+     * <p>{@code argMax(_, last_updated_at) GROUP BY id} dedupes ReplacingMergeTree row versions
+     * for in-flight experiment updates. {@code arrayDistinct} collapses experiments that reach
+     * the same prompt via both the legacy {@code prompt_id} column and the {@code prompt_versions}
+     * map, preventing {@code per_proj_count} inflation in the subsequent {@code ARRAY JOIN}.
+     * Demo-named experiments are filtered upstream so the seeded Demo Project cannot tilt the
+     * dominant choice for a user prompt that happens to be referenced by a demo experiment.
      */
     private static final String COMPUTE_PROMPT_PROJECT_CLASSIFICATION = """
+            WITH arraySort(proj -> (-proj.1, -proj.2, proj.3),
+                    groupArray((per_proj_count, per_proj_last_activity_nanos, experiment_project_id))) AS ranked
             SELECT
                 prompt_id_ref AS prompt_id,
-                anyIf(latest_project_id, latest_project_id != '') AS project_id,
-                countDistinctIf(latest_project_id, latest_project_id != '') AS project_count
+                length(ranked) AS distinct_project_count,
+                ranked[1].3 AS project_id,
+                arrayStringConcat(
+                    arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked), ','
+                ) AS project_breakdown
             FROM (
                 SELECT
-                    argMax(project_id, last_updated_at) AS latest_project_id,
-                    argMax(arrayConcat([prompt_id], mapKeys(prompt_versions)), last_updated_at) AS prompt_id_refs
-                FROM experiments
-                WHERE workspace_id = :workspace_id
-                GROUP BY id
+                    prompt_id_ref,
+                    experiment_project_id,
+                    count() AS per_proj_count,
+                    toUnixTimestamp64Nano(max(experiment_last_updated_at)) AS per_proj_last_activity_nanos
+                FROM (
+                    SELECT
+                        argMax(project_id, last_updated_at) AS experiment_project_id,
+                        argMax(arrayDistinct(arrayConcat([prompt_id], mapKeys(prompt_versions))), last_updated_at) AS prompt_id_refs,
+                        max(last_updated_at) AS experiment_last_updated_at
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND name NOT IN :demo_experiment_names
+                    GROUP BY id
+                    HAVING experiment_project_id != ''
+                )
+                ARRAY JOIN prompt_id_refs AS prompt_id_ref
+                WHERE prompt_id_ref IN :prompt_ids
+                GROUP BY prompt_id_ref, experiment_project_id
             )
-            ARRAY JOIN prompt_id_refs AS prompt_id_ref
-            WHERE prompt_id_ref IN :prompt_ids
             GROUP BY prompt_id_ref
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -3040,11 +3057,9 @@ public class ExperimentDAO {
     }
 
     /**
-     * Bulk classification for the prompt project migration. For the workspace from the request
-     * context and a set of orphan prompt IDs, returns one {@link PromptProjectClassification}
-     * per prompt that has at least one referencing experiment. Prompts absent from the result
-     * have no referencing experiments at all and the caller treats them the same as
-     * {@code projectCount = 0} — i.e. no-inference → Default Project.
+     * Bulk classification for the prompt project migration. Returns one
+     * {@link PromptProjectClassification} per referenced prompt with a usable inferred project;
+     * prompts absent from the result are treated as no-inference by the caller.
      */
     Flux<PromptProjectClassification> computePromptProjectClassification(Set<UUID> promptIds) {
         if (CollectionUtils.isEmpty(promptIds)) {
@@ -3055,16 +3070,19 @@ public class ExperimentDAO {
             var template = getSTWithLogComment(COMPUTE_PROMPT_PROJECT_CLASSIFICATION,
                     "compute_prompt_project_classification", workspaceId, userName, details);
             var statement = connection.createStatement(template.render())
-                    .bind("prompt_ids", promptIds);
+                    .bind("prompt_ids", promptIds)
+                    .bind("demo_experiment_names", DemoData.EXPERIMENTS);
             return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
         }))
-                .flatMap(result -> result.map((row, metadata) -> PromptProjectClassification.builder()
-                        .promptId(UUID.fromString(row.get("prompt_id", String.class)))
-                        .projectId(Optional.ofNullable(row.get("project_id", String.class))
-                                .filter(StringUtils::isNotBlank)
-                                .map(UUID::fromString)
-                                .orElse(null))
-                        .projectCount(row.get("project_count", Long.class))
-                        .build()));
+                .flatMap(result -> result.map((row, metadata) -> Optional
+                        .ofNullable(row.get("project_id", String.class))
+                        .filter(StringUtils::isNotBlank)
+                        .map(projectId -> PromptProjectClassification.builder()
+                                .promptId(UUID.fromString(row.get("prompt_id", String.class)))
+                                .projectId(UUID.fromString(projectId))
+                                .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                                .projectBreakdown(row.get("project_breakdown", String.class))
+                                .build())))
+                .flatMap(Mono::justOrEmpty);
     }
 }
