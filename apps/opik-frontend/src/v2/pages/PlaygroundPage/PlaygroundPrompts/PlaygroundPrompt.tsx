@@ -28,7 +28,7 @@ import usePromptBadgeColor from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/use
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
-import { getAlphabetLetter } from "@/lib/utils";
+import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import {
@@ -111,6 +111,10 @@ const PlaygroundPrompt = ({
     useState(false);
   const [lastImportedPromptName, setLastImportedPromptName] =
     useState<string>("");
+  // Pin the hover-revealed actions strip open while the library popover is up:
+  // otherwise moving the mouse off the trigger collapses the strip to max-w-0,
+  // and the Popover re-anchors to a zero-width origin and visibly shifts.
+  const [isChatLibraryOpen, setIsChatLibraryOpen] = useState(false);
 
   const selectedChatPromptId = prompt?.loadedChatPromptId;
   const selectedChatPromptVersionId = prompt?.loadedChatPromptVersionId;
@@ -371,7 +375,13 @@ const PlaygroundPrompt = ({
           />
         </div>
 
-        <div className="flex min-w-0 items-center overflow-hidden pl-4 [@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4">
+        <div
+          className={cn(
+            "flex min-w-0 items-center overflow-hidden pl-4",
+            !isChatLibraryOpen &&
+              "[@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4",
+          )}
+        >
           {selectedChatPromptId ? (
             <LoadedPromptDisplay
               name={chatPromptData?.name}
@@ -380,6 +390,10 @@ const PlaygroundPrompt = ({
               versionTags={
                 chatPromptVersionData?.tags ??
                 chatPromptData?.latest_version?.tags
+              }
+              versionEnvironments={
+                chatPromptVersionData?.environments ??
+                chatPromptData?.latest_version?.environments
               }
               hasUnsavedChanges={hasUnsavedChatPromptChanges}
               onClear={() => handleImportChatPrompt(undefined, undefined)}
@@ -391,6 +405,7 @@ const PlaygroundPrompt = ({
               onSelect={({ promptId: pId, versionId }) =>
                 handleImportChatPrompt(pId, versionId)
               }
+              onOpenChange={setIsChatLibraryOpen}
               trigger={
                 <div>
                   <TooltipWrapper content="Load prompt">

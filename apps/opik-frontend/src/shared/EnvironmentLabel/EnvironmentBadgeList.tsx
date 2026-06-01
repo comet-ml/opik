@@ -1,15 +1,14 @@
 import React, { useCallback, useState } from "react";
-import { TagProps } from "@/ui/tag";
 import { cn } from "@/lib/utils";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
 import ChildrenWidthMeasurer from "@/shared/ChildrenWidthMeasurer/ChildrenWidthMeasurer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import EnvironmentBadge from "./EnvironmentBadge";
+import EnvironmentBadge, { EnvironmentBadgeSize } from "./EnvironmentBadge";
 import { EnvironmentSquareWithTooltip } from "./EnvironmentLabel";
 
 type EnvironmentBadgeListProps = {
   names: string[] | null | undefined;
-  size?: TagProps["size"];
+  size?: EnvironmentBadgeSize;
   className?: string;
   badgeClassName?: string;
   withOverflow?: boolean;
@@ -17,11 +16,12 @@ type EnvironmentBadgeListProps = {
   compact?: boolean;
 };
 
-const COUNTER_CLASSES: Record<NonNullable<TagProps["size"]>, string> = {
+const COUNTER_CLASSES: Record<EnvironmentBadgeSize, string> = {
   default: "comet-body-xs h-5 px-1.5 leading-5 rounded-sm",
   sm: "comet-body-xs h-4 px-1.5 text-[11px] leading-4 rounded-sm",
   md: "comet-body-s h-6 px-1.5 leading-6 rounded-md",
   lg: "comet-body-s h-7 px-2 leading-7 rounded-md",
+  pill: "h-5 px-1.5 text-[10px] leading-5 rounded-sm",
 };
 
 const OVERFLOW_CONFIG = {
@@ -118,7 +118,12 @@ const EnvironmentBadgeList: React.FC<EnvironmentBadgeListProps> = ({
           content={
             <div className="flex max-w-[300px] flex-wrap gap-1">
               {hiddenItems.map((name) => (
-                <EnvironmentBadge key={name} name={name} size={size} />
+                <EnvironmentBadge
+                  key={name}
+                  name={name}
+                  size={size}
+                  className={badgeClassName}
+                />
               ))}
             </div>
           }
