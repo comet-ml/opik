@@ -20,6 +20,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,11 @@ public class FiltersFactory {
             ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
                     .put(FieldType.STRING, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.STRING_EXACT, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.STRING_EXACT_LIST,
+                            filter -> StringUtils.isNotBlank(filter.value())
+                                    && Arrays.stream(filter.value().split(","))
+                                            .map(String::trim)
+                                            .anyMatch(StringUtils::isNotEmpty))
                     .put(FieldType.STRING_STATE_DB, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.ENUM, filter ->
                     // No value is required for IS_EMPTY / IS_NOT_EMPTY (e.g. "Untagged" environment filter).
@@ -145,6 +151,7 @@ public class FiltersFactory {
     private Filter toValidAndDecoded(Filter filter) {
         if (filter.field().getType() != FieldType.STRING
                 && filter.field().getType() != FieldType.STRING_EXACT
+                && filter.field().getType() != FieldType.STRING_EXACT_LIST
                 && filter.field().getType() != FieldType.ENUM
                 && !Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
             // don't decode value for string fields or no-value operators (IS_EMPTY, IS_NOT_EMPTY)

@@ -146,6 +146,7 @@ public class FilterQueryBuilder {
                     .put(Operator.CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "ilike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.STRING_EXACT, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.STRING_EXACT_LIST, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.LIST,
                             "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
@@ -160,6 +161,7 @@ public class FilterQueryBuilder {
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.STRING_EXACT, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.STRING_EXACT_LIST, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.LIST,
                             "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 0",
@@ -173,6 +175,7 @@ public class FilterQueryBuilder {
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_EXACT, "startsWith(%1$s, :filter%2$d)",
+                            FieldType.STRING_EXACT_LIST, "startsWith(%1$s, :filter%2$d)",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
                             // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
@@ -185,6 +188,7 @@ public class FilterQueryBuilder {
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_EXACT, "endsWith(%1$s, :filter%2$d)",
+                            FieldType.STRING_EXACT_LIST, "endsWith(%1$s, :filter%2$d)",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
                             // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
@@ -197,6 +201,7 @@ public class FilterQueryBuilder {
                     .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.STRING_EXACT_LIST, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)"),
                             Map.entry(FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s = :filter%2$d"),
@@ -218,6 +223,7 @@ public class FilterQueryBuilder {
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.STRING_EXACT_LIST, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) != lower(:filter%2$d)"),
                             Map.entry(FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s != :filter%2$d"),
@@ -239,6 +245,7 @@ public class FilterQueryBuilder {
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s > :filter%2$d"),
+                            Map.entry(FieldType.STRING_EXACT_LIST, "%1$s > :filter%2$d"),
                             Map.entry(FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s > :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s > :filter%2$d"),
@@ -261,6 +268,7 @@ public class FilterQueryBuilder {
                     .put(Operator.LESS_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) < lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s < :filter%2$d"),
+                            Map.entry(FieldType.STRING_EXACT_LIST, "%1$s < :filter%2$d"),
                             Map.entry(FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s < :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s < :filter%2$d"),
@@ -307,9 +315,11 @@ public class FilterQueryBuilder {
                             FieldType.ENUM,
                             "notEmpty(%1$s)")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
-                            FieldType.ENUM, "%1$s IN :filter%2$d")))
+                            FieldType.ENUM, "%1$s IN :filter%2$d",
+                            FieldType.STRING_EXACT_LIST, "%1$s IN :filter%2$d")))
                     .put(Operator.NOT_IN, new EnumMap<>(Map.of(
-                            FieldType.ENUM, "%1$s NOT IN :filter%2$d")))
+                            FieldType.ENUM, "%1$s NOT IN :filter%2$d",
+                            FieldType.STRING_EXACT_LIST, "%1$s NOT IN :filter%2$d")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -1120,7 +1130,7 @@ public class FilterQueryBuilder {
 
                 if (!NO_VALUE_OPERATORS.contains(filter.operator())) {
                     if (Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())) {
-                        // Comma-separated values for ENUM IN/NOT_IN; bind as String[].
+                        // Comma-separated values for IN/NOT_IN (ENUM, STRING_EXACT_LIST); bind as String[].
                         // Trim and drop empty tokens defensively against stray whitespace
                         // or trailing commas in client input.
                         binder.accept("filter%d".formatted(i),

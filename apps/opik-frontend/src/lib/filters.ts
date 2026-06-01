@@ -1,5 +1,6 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
+import compact from "lodash/compact";
 import { Filter, Filters } from "@/types/filters";
 import { DatasetItemColumn } from "@/types/datasets";
 import {
@@ -162,6 +163,20 @@ export const generateExperimentIdFilter = (experimentId?: string) => {
       type: COLUMN_TYPE.string,
       operator: "=",
       value: experimentId,
+    }),
+  ];
+};
+
+export const generateExperimentIdsFilter = (experimentIds: string[] = []) => {
+  const ids = compact(experimentIds);
+  if (!ids.length) return [];
+
+  return [
+    createFilter({
+      field: "experiment_id",
+      type: COLUMN_TYPE.string,
+      operator: "in",
+      value: ids.join(","),
     }),
   ];
 };
