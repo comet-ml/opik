@@ -175,7 +175,7 @@ const PromptRow: React.FC<PromptRowProps> = ({
           size="sm"
           withOverflow
           compact
-          maxWidth={80}
+          maxWidth={60}
         />
         {enableVersionSelect && (
           <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
@@ -281,7 +281,7 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
               size="sm"
               withOverflow
               compact
-              maxWidth={80}
+              maxWidth={60}
             />
             <TooltipWrapper
               content={`${formatDate(version.created_at, {
