@@ -1303,8 +1303,11 @@ class TraceDAOImpl implements TraceDAO {
                  <endif>
                  ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                  LIMIT 1 BY id
-            ), traces_final AS (
-                SELECT td.*
+            ), page_ids AS (
+                -- Phase 1: paginate on the light, deduped id+sort-key set only.
+                -- Selecting just `id` keeps this CTE (and the heavy traces_deduped scan it
+                -- inlines) referenced exactly once, so the filtered scan runs a single time.
+                SELECT td.id
                 FROM traces_deduped td
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = td.id
@@ -1317,24 +1320,28 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
-            )<if(!exclude_input || !exclude_output || !exclude_metadata)>, page_wide AS (
+            ), page_wide AS (
+                -- Phase 2: re-read the full rows (incl. wide text columns) for just the page ids.
+                -- This is the single source for the final SELECT, so page_ids/traces_deduped are
+                -- not re-evaluated. Wide columns are read for ~page-size rows, not the whole match set.
                 SELECT
-                    id AS pw_id
-                    <if(!exclude_input)>, input AS pw_input, truncated_input AS pw_truncated_input<endif>
-                    <if(!exclude_output)>, output AS pw_output, truncated_output AS pw_truncated_output<endif>
-                    <if(!exclude_metadata)>, metadata AS pw_metadata<endif>
-                FROM traces
+                    t.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(exclude_input)>, input<endif><if(exclude_output)>, output<endif><if(exclude_metadata)>, metadata<endif><endif>)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
+                    <if(truncate)><if(!exclude_input)>truncated_input,<endif><if(!exclude_output)>truncated_output,<endif><endif>
+                    input_length,
+                    output_length,
+                    duration
+                FROM traces t
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT id FROM traces_final)
+                AND id IN (SELECT id FROM page_ids)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            )<endif>
+            )
             SELECT
-                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(pw.pw_truncated_input, '<truncate>', '"[image]"') as input <else> pw.pw_input as input <endif><endif>
-                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(pw.pw_truncated_output, '<truncate>', '"[image]"') as output <else> pw.pw_output as output <endif><endif>
-                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(pw.pw_metadata, '<truncate>', '"[image]"') as metadata <else> pw.pw_metadata as metadata <endif><endif>
+                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata, truncated_input, truncated_output) <else> EXCEPT (input, output, metadata, truncated_input, truncated_output)<endif>
+                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(t.truncated_input, '<truncate>', '"[image]"') as input <else> t.input as input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(t.truncated_output, '<truncate>', '"[image]"') as output <else> t.output as output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(t.metadata, '<truncate>', '"[image]"') as metadata <else> t.metadata as metadata <endif><endif>
                   <if(truncate)>, input_length >= truncation_threshold as input_truncated<endif>
                   <if(truncate)>, output_length >= truncation_threshold as output_truncated<endif>
                   <if(!exclude_feedback_scores)>
@@ -1351,8 +1358,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
                   <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
-             FROM traces_final t
-             <if(!exclude_input || !exclude_output || !exclude_metadata)>LEFT JOIN page_wide pw ON pw.pw_id = t.id<endif>
+             FROM page_wide t
              <if(!exclude_feedback_scores)>
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
