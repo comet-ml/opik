@@ -368,24 +368,26 @@ def verify_experiment_items_completed(
     timeout: float = 15,
 ) -> None:
     """
-    Assert that the set of dataset item ids with at least one successfully
+    Assert that the set of dataset item ids with at least one fully-
     completed experiment item matches ``expected_completed_dataset_item_ids``
     exactly.
 
-    A dataset item is considered completed when at least one experiment item
-    has a non-null ``evaluation_task_output``. Failed task attempts produce
-    experiment items with null output and are not counted, so this check
-    captures the user-visible "did this item finish" signal — useful for
-    resume tests where partial / repeated runs leave a mix of successful
-    and failed experiment items.
+    A trial is considered fully completed when its trace metadata carries
+    the happy-path marker flipped to ``False`` — the same predicate
+    ``opik.evaluate_resume`` uses to decide which trials to replay. This
+    correctly excludes both task-side failures (output never written) and
+    scoring-side failures (output written but happy-path line never
+    reached).
     """
+    from opik.evaluation.resume import context as resume_context
+
     experiment = opik_client.get_experiment_by_id(experiment_id)
 
     def _completed_ids() -> Set[str]:
         return {
             item.dataset_item_id
             for item in experiment.get_items()
-            if item.evaluation_task_output is not None
+            if resume_context.is_trial_fully_completed(item)
         }
 
     assert synchronization.until(

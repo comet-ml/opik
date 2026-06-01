@@ -27,6 +27,7 @@ import pytest
 import opik
 from opik import id_helpers
 from opik.evaluation import metrics, samplers
+from opik.evaluation.metrics import base_metric, score_result
 
 from .. import verifiers
 from ...testlib import generate_project_name
@@ -866,6 +867,295 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
     assert counts_in_result == {"item-0": 2, "item-1": 2, "item-2": 2}
 
     # All three items end up in the converged completed set.
+    verifiers.verify_experiment_items_completed(
+        opik_client,
+        experiment_id,
+        expected_completed_dataset_item_ids=set(ids_by_label.values()),
+    )
+
+
+# === Marker-design failure modes ==========================================
+
+
+class _MetricRaisingBaseException(base_metric.BaseMetric):
+    """
+    Metric that succeeds on most items but raises ``BaseException`` on a
+    chosen subset. ``BaseException`` (not ``Exception``) escapes the
+    per-metric ``except Exception`` handler inside the engine, so the
+    failure propagates past scoring even though the task itself returned
+    cleanly. End result: the trial's trace is written with ``output`` set
+    (task succeeded) and the pending marker still at ``True`` (scoring
+    never reached the happy-path-only line that clears it).
+
+    This is the failure mode the marker design exists to detect — the old
+    ``evaluation_task_output is not None`` predicate would have classified
+    the trial as fully completed and resume would have skipped it.
+    """
+
+    def __init__(self, failing_labels: Set[str]) -> None:
+        super().__init__(name="raises_on_subset")
+        self._failing_labels = failing_labels
+
+    def score(
+        self, output: str, reference: str, **ignored_kwargs: Any
+    ) -> score_result.ScoreResult:
+        if output in self._failing_labels:
+            # SystemExit is a BaseException; the engine's per-metric
+            # except-clause catches Exception only, so this escapes.
+            raise SystemExit(
+                f"simulated scoring crash on label={output!r}"
+            )
+        return score_result.ScoreResult(
+            name=self.name,
+            value=1.0 if output == reference else 0.0,
+        )
+
+
+def test_evaluate_resume__scoring_crash_after_task_success__trial_replayed(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    The case the marker design exists for: the task succeeds (so the
+    trace's ``output`` is set), but a metric raises ``BaseException``
+    mid-scoring. The trial is recorded with output set but the marker
+    still at ``True``. Resume must read the marker and replay.
+
+    Under the pre-marker predicate (``evaluation_task_output is not None``)
+    these items would be misclassified as fully completed and silently
+    skipped on resume.
+    """
+    # 1. 3-item dataset. Single-threaded scoring keeps the failure
+    #    deterministic regardless of submission order.
+    labels = [f"item-{i}" for i in range(3)]
+    items, ids_by_label, _ = _items_with_labels(labels)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+    dataset.insert(items)
+    scoring_will_fail = {"item-1"}
+    fully_ok_uuids = {
+        ids_by_label[label]
+        for label in labels
+        if label not in scoring_will_fail
+    }
+
+    def working_task(item: Dict[str, Any]):
+        return {"output": item["input"]["text"]}
+
+    scoring_key_mapping = {"reference": "expected_output", "output": "output"}
+
+    # 2. Original evaluate — task is healthy, but the metric raises on
+    #    ``item-1``. The escaping BaseException propagates out of
+    #    ``evaluate()``.
+    try:
+        opik.evaluate(
+            dataset=dataset,
+            task=working_task,
+            scoring_metrics=[
+                _MetricRaisingBaseException(failing_labels=scoring_will_fail)
+            ],
+            scoring_key_mapping=scoring_key_mapping,
+            experiment_name=experiment_name,
+            task_threads=1,
+            verbose=0,
+        )
+    except BaseException:
+        pass
+
+    experiment_id = _experiment_id_after_failed_evaluate(
+        opik_client, experiment_name
+    )
+
+    # 3. Verify the partial state from the marker's point of view:
+    #    item-0 and item-2 reached the happy-path line and count as
+    #    completed; item-1 did not (its scoring crashed) and is excluded
+    #    even though its task wrote output to the trace.
+    verifiers.verify_experiment_items_completed(
+        opik_client,
+        experiment_id,
+        expected_completed_dataset_item_ids=fully_ok_uuids,
+    )
+
+    # 4. Resume with a healthy task + a metric that never raises.
+    resume_invocations: list = []
+
+    def resume_task(item: Dict[str, Any]):
+        resume_invocations.append(item["input"]["text"])
+        return {"output": item["input"]["text"]}
+
+    resume_result = opik.evaluate_resume(
+        experiment_id=experiment_id,
+        task=resume_task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping=scoring_key_mapping,
+        verbose=0,
+    )
+
+    # 5. Only the scoring-failed item was replayed; the two items that
+    #    cleared their happy-path line were left alone.
+    assert resume_invocations == ["item-1"], (
+        "Only the scoring-failed item should be replayed; got "
+        f"{resume_invocations}"
+    )
+    assert len(resume_result.test_results) == 3
+    assert all(
+        tr.score_results[0].value == 1.0 for tr in resume_result.test_results
+    )
+    verifiers.verify_experiment_items_completed(
+        opik_client,
+        experiment_id,
+        expected_completed_dataset_item_ids=set(ids_by_label.values()),
+    )
+
+
+def test_evaluate_resume__metric_scoring_failed_inside_loop__not_replayed(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Counterpart to the BaseException case: when a metric raises a regular
+    ``Exception`` (or returns ``scoring_failed=True``), the engine catches
+    it inside the per-metric loop and the scoring step still reaches the
+    happy-path line. The trial is fully completed (marker flipped to
+    ``False``), and resume must NOT replay it — even though the stored
+    feedback score is missing or marked as failed.
+
+    This regression-guards the "scoring loop reached its end" semantics
+    against future changes to the marker logic.
+    """
+    labels = [f"item-{i}" for i in range(3)]
+    items, ids_by_label, _ = _items_with_labels(labels)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+    dataset.insert(items)
+    metric_will_fail_on = {"item-1"}
+
+    class _MetricRaisingException(base_metric.BaseMetric):
+        def __init__(self) -> None:
+            super().__init__(name="raises_caught_by_engine")
+
+        def score(
+            self, output: str, reference: str, **ignored_kwargs: Any
+        ) -> score_result.ScoreResult:
+            if output in metric_will_fail_on:
+                raise RuntimeError(f"caught simulated failure on {output!r}")
+            return score_result.ScoreResult(
+                name=self.name,
+                value=1.0 if output == reference else 0.0,
+            )
+
+    def working_task(item: Dict[str, Any]):
+        return {"output": item["input"]["text"]}
+
+    scoring_key_mapping = {"reference": "expected_output", "output": "output"}
+
+    # 2. Evaluate runs to completion — RuntimeError is caught inside the
+    #    metric loop (engine converts it to ``ScoreResult(scoring_failed=True)``),
+    #    so the scoring step still returns and the happy-path marker is
+    #    cleared on every trial.
+    evaluate_result = opik.evaluate(
+        dataset=dataset,
+        task=working_task,
+        scoring_metrics=[_MetricRaisingException()],
+        scoring_key_mapping=scoring_key_mapping,
+        experiment_name=experiment_name,
+        task_threads=1,
+        verbose=0,
+    )
+
+    assert len(evaluate_result.test_results) == 3
+    experiment_id = evaluate_result.experiment_id
+
+    # 3. All three items have cleared markers; resume should treat the
+    #    experiment as fully completed.
+    verifiers.verify_experiment_items_completed(
+        opik_client,
+        experiment_id,
+        expected_completed_dataset_item_ids=set(ids_by_label.values()),
+    )
+
+    # 4. Resume with a healthy metric — none of the items should be
+    #    re-invoked, even item-1 whose only stored score is failed.
+    resume_invocations: list = []
+
+    def resume_task(item: Dict[str, Any]):
+        resume_invocations.append(item["input"]["text"])
+        return {"output": item["input"]["text"]}
+
+    resume_result = opik.evaluate_resume(
+        experiment_id=experiment_id,
+        task=resume_task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping=scoring_key_mapping,
+        verbose=0,
+    )
+
+    assert resume_invocations == [], (
+        "Items with a cleared marker must not be replayed even when the "
+        f"stored score is failed; got resume invocations: {resume_invocations}"
+    )
+    assert len(resume_result.test_results) == 3
+
+
+def test_evaluate_resume__mixed_task_and_scoring_failures__only_failed_items_replayed(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Combined coverage: one item fails in the task, one fails in scoring
+    (BaseException), one completes happily. Resume must replay exactly the
+    two failed items — distinguishing them from the happy one purely via
+    the marker.
+    """
+    labels = ["task_fails", "scoring_fails", "all_good"]
+    items, ids_by_label, _ = _items_with_labels(labels)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+    dataset.insert(items)
+
+    def task_failing_for_one(item: Dict[str, Any]):
+        if item["input"]["text"] == "task_fails":
+            raise RuntimeError("simulated task crash on task_fails")
+        return {"output": item["input"]["text"]}
+
+    scoring_key_mapping = {"reference": "expected_output", "output": "output"}
+
+    try:
+        opik.evaluate(
+            dataset=dataset,
+            task=task_failing_for_one,
+            scoring_metrics=[
+                _MetricRaisingBaseException(failing_labels={"scoring_fails"})
+            ],
+            scoring_key_mapping=scoring_key_mapping,
+            experiment_name=experiment_name,
+            task_threads=1,
+            verbose=0,
+        )
+    except BaseException:
+        pass
+
+    experiment_id = _experiment_id_after_failed_evaluate(
+        opik_client, experiment_name
+    )
+
+    # Only the all-good item finished the happy path.
+    verifiers.verify_experiment_items_completed(
+        opik_client,
+        experiment_id,
+        expected_completed_dataset_item_ids={ids_by_label["all_good"]},
+    )
+
+    resume_invocations: list = []
+
+    def resume_task(item: Dict[str, Any]):
+        resume_invocations.append(item["input"]["text"])
+        return {"output": item["input"]["text"]}
+
+    resume_result = opik.evaluate_resume(
+        experiment_id=experiment_id,
+        task=resume_task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping=scoring_key_mapping,
+        verbose=0,
+    )
+
+    assert set(resume_invocations) == {"task_fails", "scoring_fails"}
+    assert len(resume_result.test_results) == 3
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
