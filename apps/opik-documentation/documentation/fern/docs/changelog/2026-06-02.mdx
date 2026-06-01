@@ -2,12 +2,13 @@
 canonical-url: https://www.comet.com/docs/opik/changelog/2026-06-02
 ---
 
-## Prompt Environments for the Prompt Library
+## Prompt Library Now Available in Opik 2.0
 
-Prompt versions can now be tagged with deployment environments (e.g. `production`, `staging`) and retrieved by environment name from both the Python and TypeScript SDKs. This makes it straightforward to point your agent at the right prompt version per deployment stage without hard-coding version hashes.
+The Prompt Library is now part of the Opik 2.0 UI, accessible from the project sidebar under **Prompt library**. Alongside that, prompt versions have gained first-class environment support — you can tag a version as `production` or `staging` and retrieve it by name from the SDK, without tracking version numbers in application code.
 
 **What's new:**
 
+- **Prompt Library in the sidebar** — the Prompt Library is now a top-level section in every project in the new Opik 2.0 interface
 - **Fetch by environment** — `client.get_prompt(name, environment="production")` returns the version currently tagged as production; `version` and `environment` are mutually exclusive and passing both raises a clear error
 - **Assign environments** — `client.set_prompt_environments(name, ["production", "staging"])` replaces the full environment set on a version; the same environment is automatically moved away from whatever version previously held it
 - **Tag at creation** — `client.create_prompt(name, content="...", environments=["staging"])` and `client.create_chat_prompt(...)` accept `environments` directly
@@ -26,10 +27,6 @@ production_prompt = client.get_prompt("system-prompt", environment="production")
 # Promote a specific version to production
 client.set_prompt_environments("system-prompt", ["production"], version="v3")
 ```
-
-## Filter Chips for the Logs View
-
-The Traces, Spans, and Threads tabs in the Logs view now have a chip-based filter bar. There are six chip types — single-select, pseudo-search, boolean, numeric, time range, and query-builder — each with a dedicated popover. Chips can be pinned to the bar so frequently-used filters stay one click away, and filter state persists in the URL and is remembered per project in local storage. Clicking a tag value in any trace row adds it to the Tags chip directly, making it fast to drill into a specific label without opening the filter panel manually.
 
 ## Bug Fixes & Improvements
 
