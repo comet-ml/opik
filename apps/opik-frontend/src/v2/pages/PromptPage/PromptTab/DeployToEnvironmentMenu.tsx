@@ -53,10 +53,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
     useSetPromptVersionEnvironmentMutation();
 
   const environments = useMemo(
-    () =>
-      (environmentsData?.content ?? [])
-        .slice()
-        .sort((a, b) => a.position - b.position),
+    () => environmentsData?.content ?? [],
     [environmentsData?.content],
   );
 

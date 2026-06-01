@@ -20,7 +20,7 @@ import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Textarea } from "@/ui/textarea";
-import { DEFAULT_HEX_COLOR, HEX_COLOR_REGEX } from "@/constants/colorVariants";
+import { HEX_COLOR_REGEX, PRESET_HEX_COLORS } from "@/constants/colorVariants";
 import {
   ENVIRONMENT_DESCRIPTION_MAX_LENGTH,
   ENVIRONMENT_NAME_MAX_LENGTH,
@@ -49,10 +49,10 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
   const [description, setDescription] = useState<string>(
     environment?.description ?? "",
   );
-  const [color, setColor] = useState<string>(
+  const [color, setColor] = useState<string>(() =>
     environment?.color && HEX_COLOR_REGEX.test(environment.color)
       ? environment.color
-      : DEFAULT_HEX_COLOR,
+      : PRESET_HEX_COLORS[Math.floor(Math.random() * PRESET_HEX_COLORS.length)],
   );
   const [submitError, setSubmitError] = useState<string>("");
   const [colorPopoverOpen, setColorPopoverOpen] = useState(false);

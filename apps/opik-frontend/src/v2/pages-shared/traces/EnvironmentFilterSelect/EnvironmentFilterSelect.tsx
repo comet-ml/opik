@@ -35,7 +35,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
   const { data } = useEnvironmentsList();
 
   const environments = useMemo<Environment[]>(
-    () => (data?.content ?? []).slice().sort((a, b) => a.position - b.position),
+    () => data?.content ?? [],
     [data?.content],
   );
 
