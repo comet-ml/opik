@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
-import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
+import api, { SPANS_KEY, TRACE_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { FEEDBACK_SCORE_TYPE } from "@/types/traces";
 import { useToast } from "@/ui/use-toast";
 import { extractErrorMessage } from "@/lib/errors";
@@ -47,10 +47,15 @@ const useSpanFeedbackScoreBatchSetMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: (data, error, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [SPANS_KEY, { projectId: variables.projectId }],
-      });
+    onSettled: async () => {
+      // Mirror useTraceFeedbackScoreSetMutation's span branch: refresh the spans
+      // list, its columns/statistics, and the trace details panel (which shows
+      // aggregated span_feedback_scores). The batch only carries span ids, so the
+      // per-trace cache is invalidated broadly rather than by traceId.
+      await queryClient.invalidateQueries({ queryKey: [SPANS_KEY] });
+      await queryClient.invalidateQueries({ queryKey: ["spans-columns"] });
+      await queryClient.invalidateQueries({ queryKey: ["spans-statistic"] });
+      await queryClient.invalidateQueries({ queryKey: [TRACE_KEY] });
     },
   });
 };
