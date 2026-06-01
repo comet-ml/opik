@@ -47,6 +47,12 @@ data:
       keepalive 16;
     }
     {{- end }}
+    {{- if and .Values.mcpOAuth.enabled .Values.mcpOAuth.opikMcpUpstream.enabled }}
+    upstream opik-mcp {
+      server {{ .Values.mcpOAuth.opikMcpUpstream.serviceName }}:{{ .Values.mcpOAuth.opikMcpUpstream.port }};
+      keepalive 16;
+    }
+    {{- end }}
 
     {{- range .Values.component.frontend.maps }}
     map {{ .source }} ${{ .variable }} {
@@ -151,6 +157,85 @@ data:
         location {{ $rootPath }}/api/ {
           try_files /dev/null @api;
         }
+        {{- if .Values.mcpOAuth.enabled }}
+
+        # --- MCP OAuth (OPIK-6666) — Option B issuer at {{ $rootPath | default "/" }} -------
+        # AS endpoints are mounted directly at /oauth/* on opik-backend
+        # (no /api prefix in @Path). The exact-match `consent` route MUST
+        # come before the prefix block — nginx exact-match wins, so the
+        # React consent page renders from the SPA bundle while every other
+        # /oauth/* path is rewritten to / and proxied to the backend.
+        location = {{ $rootPath }}/oauth/consent {
+          try_files /dev/null {{ $rootPath }}/index.html;
+        }
+        location @mcp_oauth_backend {
+          rewrite ^{{ $rootPath }}/(.*)$ /$1 break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location ^~ {{ $rootPath }}/oauth/ {
+          try_files /dev/null @mcp_oauth_backend;
+        }
+        # RFC 8414 §3 — for issuer `<host>{{ $rootPath }}`, the AS metadata
+        # MUST live at `/.well-known/oauth-authorization-server{{ $rootPath }}`
+        # (the well-known segment is inserted between host and issuer path).
+        # Backend mounts the metadata at `/.well-known/oauth-authorization-server`
+        # directly, so we strip the path suffix before proxying.
+        location = /.well-known/oauth-authorization-server{{ $rootPath }} {
+          rewrite ^.*$ /.well-known/oauth-authorization-server break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        {{- if .Values.mcpOAuth.opikMcpUpstream.enabled }}
+        # --- MCP resource server (Flavor 5: hosted opik-mcp) -----------------
+        # SSE-friendly: buffering off, long read timeout, bearer + workspace
+        # headers pass through verbatim so opik-mcp can forward them to the
+        # backend data API. The /api prefix is preserved on the upstream
+        # because opik-mcp mounts /mcp at the application root and we route
+        # via the same `{{ $rootPath }}/api/v1/mcp` path here.
+        location @opik_mcp {
+          rewrite ^{{ $rootPath }}/api/(.*)$ /$1 break;
+          proxy_pass http://opik-mcp;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+          proxy_buffering off;
+          proxy_request_buffering off;
+          proxy_read_timeout 86400s;
+          proxy_send_timeout 86400s;
+        }
+        location ^~ {{ $rootPath }}/api/v1/mcp {
+          try_files /dev/null @opik_mcp;
+        }
+        # RFC 9728 protected-resource discovery — host-relative form.
+        location = /.well-known/oauth-protected-resource {
+          proxy_pass http://opik-mcp/.well-known/oauth-protected-resource;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+        }
+        # RFC 9728 path-suffix form (resource URI = <host>{{ $rootPath }}/api/v1/mcp).
+        # opik-mcp only serves the host-relative form; rewrite before proxying.
+        location = /.well-known/oauth-protected-resource{{ $rootPath }}/api/v1/mcp {
+          rewrite ^.*$ /.well-known/oauth-protected-resource break;
+          proxy_pass http://opik-mcp;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+        }
+        {{- end }}
+        # --- end MCP OAuth -------------------------------------------------
+        {{- end }}
 
         location @swagger {
             rewrite /swagger/(.*) /$1 break;
