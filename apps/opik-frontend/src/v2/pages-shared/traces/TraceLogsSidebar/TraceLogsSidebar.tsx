@@ -38,7 +38,10 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import {
+  CUSTOM_FILTER_VALIDATION_REGEXP,
+  OPERATORS_MAP,
+} from "@/constants/filters";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
@@ -510,6 +513,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             projectId,
             type,
           },
+        },
+        [COLUMN_EXPERIMENT_ID]: {
+          operators: [
+            ...OPERATORS_MAP[COLUMN_TYPE.string],
+            { label: "is one of", value: "in" },
+          ],
         },
       },
     }),
