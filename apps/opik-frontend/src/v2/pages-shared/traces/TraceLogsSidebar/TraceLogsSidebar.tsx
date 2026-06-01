@@ -80,7 +80,7 @@ import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableState
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
-import ExperimentsFilterSelect from "@/v2/pages-shared/traces/ExperimentsFilterSelect/ExperimentsFilterSelect";
+import ExperimentsSelectBoxFilterWrapper from "@/v2/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBoxFilterWrapper";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -513,7 +513,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           },
         },
         [COLUMN_EXPERIMENT_ID]: {
-          keyComponent: ExperimentsFilterSelect as never,
+          keyComponent: ExperimentsSelectBoxFilterWrapper as never,
           keyComponentProps: { projectId },
           operators: [{ label: "is one of", value: "in" }],
           defaultOperator: "in",

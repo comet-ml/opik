@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from "react";
 
 import ExperimentsSelectBox from "@/v2/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 
-type ExperimentsFilterSelectProps = {
+type ExperimentsSelectBoxFilterWrapperProps = {
   value: string;
   onValueChange: (value: string) => void;
   projectId: string;
@@ -10,13 +10,9 @@ type ExperimentsFilterSelectProps = {
   disabled?: boolean;
 };
 
-const ExperimentsFilterSelect: React.FC<ExperimentsFilterSelectProps> = ({
-  value,
-  onValueChange,
-  projectId,
-  className,
-  disabled,
-}) => {
+const ExperimentsSelectBoxFilterWrapper: React.FC<
+  ExperimentsSelectBoxFilterWrapperProps
+> = ({ value, onValueChange, projectId, className, disabled }) => {
   const ids = useMemo(
     () => (value ? String(value).split(",").filter(Boolean) : []),
     [value],
@@ -39,4 +35,4 @@ const ExperimentsFilterSelect: React.FC<ExperimentsFilterSelectProps> = ({
   );
 };
 
-export default ExperimentsFilterSelect;
+export default ExperimentsSelectBoxFilterWrapper;
