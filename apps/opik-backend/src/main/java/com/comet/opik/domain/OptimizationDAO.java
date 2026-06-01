@@ -1033,11 +1033,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     @Override
     public Flux<EligibleOptimizationWorkspace> findEligibleOptimizationWorkspaces(
-            @NonNull Set<String> excludedWorkspaceIds, int limit) {
-        var details = "excludedWorkspacesCount=%d, limit=%d".formatted(excludedWorkspaceIds.size(), limit);
+            Set<String> excludedWorkspaceIds, int limit) {
+        var details = "excludedWorkspacesCount=%d, limit=%d"
+                .formatted(CollectionUtils.size(excludedWorkspaceIds), limit);
         var template = FilterUtils.getSTWithLogComment(FIND_ELIGIBLE_OPTIMIZATION_WORKSPACES,
                 "find_eligible_optimization_workspaces", "", "", details);
-        if (!excludedWorkspaceIds.isEmpty()) {
+        if (CollectionUtils.isNotEmpty(excludedWorkspaceIds)) {
             template.add("excluded_workspace_ids", true);
         }
         return Mono.from(connectionFactory.create())
@@ -1045,7 +1046,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     var statement = connection.createStatement(template.render())
                             .bind("demo_optimization_names", DemoData.OPTIMIZATIONS.toArray(String[]::new))
                             .bind("limit", limit);
-                    if (!excludedWorkspaceIds.isEmpty()) {
+                    if (CollectionUtils.isNotEmpty(excludedWorkspaceIds)) {
                         statement.bind("excluded_workspace_ids", excludedWorkspaceIds.toArray(String[]::new));
                     }
                     return Flux.from(statement.execute());
