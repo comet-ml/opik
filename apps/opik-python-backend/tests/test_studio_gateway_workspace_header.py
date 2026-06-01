@@ -14,7 +14,14 @@ import types
 
 import pytest
 
+from opik_backend.jobs import optimizer_runner
 from opik_backend.jobs.optimizer_runner import route_litellm_calls_through_gateway
+
+
+@pytest.fixture(autouse=True)
+def reset_gateway_state(monkeypatch):
+    """Isolate the module-level workspace container between tests."""
+    monkeypatch.setattr(optimizer_runner, "_gateway_workspace", {"name": None})
 
 
 @pytest.fixture
@@ -40,7 +47,9 @@ def fake_litellm(monkeypatch):
 
 @pytest.fixture
 def gateway_env(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_BASE", "http://gateway/v1/private")
+    monkeypatch.setattr(
+        optimizer_runner, "OPENAI_API_BASE", "http://gateway/v1/private"
+    )
 
 
 class TestRouteLitellmCallsThroughGateway:
@@ -81,7 +90,7 @@ class TestRouteLitellmCallsThroughGateway:
         assert fake_litellm.calls[-1]["extra_headers"]["Comet-Workspace"] == "explicit-ws"
 
     def test_noop_when_gateway_not_active(self, fake_litellm, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+        monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", None)
 
         route_litellm_calls_through_gateway("my-workspace")
         fake_litellm.completion(messages=[])
@@ -128,3 +137,15 @@ class TestRouteLitellmCallsThroughGateway:
         fake_litellm.completion(messages=[])
         # Header injected exactly once (no nested extra_headers stacking).
         assert fake_litellm.calls[-1]["extra_headers"] == {"Comet-Workspace": "my-workspace"}
+
+    def test_updates_workspace_without_rewrapping(self, fake_litellm, gateway_env):
+        route_litellm_calls_through_gateway("workspace-a")
+        wrapped_once = fake_litellm.completion
+
+        route_litellm_calls_through_gateway("workspace-b")
+
+        # Same wrapper object (no nested re-wrap)...
+        assert fake_litellm.completion is wrapped_once
+        # ...but it now injects the updated workspace.
+        fake_litellm.completion(messages=[])
+        assert fake_litellm.calls[-1]["extra_headers"] == {"Comet-Workspace": "workspace-b"}

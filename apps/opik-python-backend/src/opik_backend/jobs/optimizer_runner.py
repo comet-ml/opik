@@ -77,6 +77,13 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 logger = logging.getLogger(__name__)
 logger.debug(f"TERMINAL_WIDTH: {TERMINAL_WIDTH}")
 
+# Opik backend gateway base URL for LLM calls. optimizer.py sets this in the
+# subprocess environment before spawning this runner whenever Optimization
+# Studio routes completions through the backend gateway, so it is read once at
+# import (mirrors OPIK_URL handling in studio/config.py).
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE")
+logger.debug(f"OPENAI_API_BASE configured: {bool(OPENAI_API_BASE)}")
+
 
 def reconfigure_rich_console():
     """Reconfigure Rich console to output to stderr so we can capture it.
@@ -115,6 +122,12 @@ def reconfigure_rich_console():
         logger.warning(f"Failed to reconfigure Rich console: {e}")
 
 
+# Workspace the gateway wrappers inject into the Comet-Workspace header. Held in
+# a mutable container so the (single) set of wrappers always reflects the latest
+# workspace without needing to be torn down and rebuilt.
+_gateway_workspace = {"name": None}
+
+
 def route_litellm_calls_through_gateway(workspace_name):
     """Attach the ``Comet-Workspace`` header to gateway LLM calls.
 
@@ -131,18 +144,27 @@ def route_litellm_calls_through_gateway(workspace_name):
     Both call sites in opik_optimizer resolve these attributes at call time, so
     patching them before the optimization runs is sufficient. Guarded on
     ``OPENAI_API_BASE`` so direct-provider calls are never touched.
+
+    Idempotent: the wrappers are installed at most once. Calling again with a
+    different ``workspace_name`` updates the injected value in place rather than
+    stacking another wrapper.
     """
-    if not workspace_name or not os.environ.get("OPENAI_API_BASE"):
+    if not workspace_name or not OPENAI_API_BASE:
         return
 
     import litellm
 
-    if getattr(litellm.completion, "_opik_gateway_workspace", None):
+    # Always reflect the latest workspace; the wrappers read this dynamically.
+    _gateway_workspace["name"] = workspace_name
+
+    # Install the wrappers only once — they pick up workspace changes via the
+    # shared container above.
+    if getattr(litellm.completion, "_opik_gateway_wrapped", False):
         return
 
     def _add_workspace_header(kwargs):
         extra_headers = dict(kwargs.get("extra_headers") or {})
-        extra_headers.setdefault("Comet-Workspace", workspace_name)
+        extra_headers.setdefault("Comet-Workspace", _gateway_workspace["name"])
         kwargs["extra_headers"] = extra_headers
         return kwargs
 
@@ -157,8 +179,8 @@ def route_litellm_calls_through_gateway(workspace_name):
     async def acompletion_with_workspace(*args, **kwargs):
         return await original_acompletion(*args, **_add_workspace_header(kwargs))
 
-    completion_with_workspace._opik_gateway_workspace = workspace_name
-    acompletion_with_workspace._opik_gateway_workspace = workspace_name
+    completion_with_workspace._opik_gateway_wrapped = True
+    acompletion_with_workspace._opik_gateway_wrapped = True
 
     litellm.completion = completion_with_workspace
     litellm.acompletion = acompletion_with_workspace
