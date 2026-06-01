@@ -376,7 +376,7 @@ const PlaygroundPrompt = ({
           className={cn(
             "flex min-w-0 items-center overflow-hidden pl-4",
             !isChatLibraryOpen &&
-            "[@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4",
+              "[@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4",
           )}
         >
           {selectedChatPromptId ? (

@@ -64,8 +64,8 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
     const allPrompts = data?.content ?? [];
     const byStructure = filterByTemplateStructure
       ? allPrompts.filter(
-        (p) => p.template_structure === filterByTemplateStructure,
-      )
+          (p) => p.template_structure === filterByTemplateStructure,
+        )
       : allPrompts;
     if (!search) return byStructure;
     const q = toLower(search);
