@@ -8,30 +8,32 @@ import {
 } from "./helpers";
 import { useEnvironmentByName } from "./EnvironmentLabel";
 
-const SIZE_CLASSES: Record<NonNullable<TagProps["size"]>, string> = {
+// `promptPill` is a project-specific variant used across prompt-version
+// surfaces (prompt detail header, mobile version picker, version history
+// timeline, +N overflow tooltip): 20px tall with a 10px label and asymmetric
+// padding so the leading env icon hugs the left edge while the text gets a
+// little more breathing room on the right.
+export type EnvironmentBadgeSize = NonNullable<TagProps["size"]> | "promptPill";
+
+const SIZE_CLASSES: Record<EnvironmentBadgeSize, string> = {
   default: "comet-body-xs h-5 px-2 leading-5 rounded-sm",
   sm: "comet-body-xs h-4 px-2 text-[11px] leading-4 rounded-sm",
   md: "comet-body-s h-6 px-1.5 leading-6 rounded-md",
   lg: "comet-body-s h-7 px-3 leading-7 rounded-md",
+  promptPill: "h-5 pl-1.5 pr-2 text-[10px] leading-5 rounded-sm",
 };
 
-const ICON_SIZE_CLASSES: Record<NonNullable<TagProps["size"]>, string> = {
+const ICON_SIZE_CLASSES: Record<EnvironmentBadgeSize, string> = {
   default: "size-3",
   sm: "size-2.5",
   md: "size-3",
   lg: "size-3.5",
+  promptPill: "size-2.5",
 };
-
-// Asymmetric pill spec used across prompt-version surfaces (prompt detail
-// header, mobile version picker, version history timeline, +N overflow
-// tooltip). Pass as `badgeClassName` on EnvironmentBadgeList — tailwind-merge
-// resolves the conflicts against SIZE_CLASSES["sm"].
-export const ENV_BADGE_PROMPT_PILL_CLASS =
-  "h-5 pl-1.5 pr-2 text-[10px] leading-5";
 
 type EnvironmentBadgeProps = {
   name?: string | null;
-  size?: TagProps["size"];
+  size?: EnvironmentBadgeSize;
   className?: string;
 };
 

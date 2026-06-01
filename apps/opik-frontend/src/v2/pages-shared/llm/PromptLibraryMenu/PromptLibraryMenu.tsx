@@ -109,7 +109,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
             setSearchText={setSearch}
             placeholder="Search"
             variant="ghost"
-            size="sm"
+            dimension="sm"
           />
         </div>
         <Separator className="my-1" />
