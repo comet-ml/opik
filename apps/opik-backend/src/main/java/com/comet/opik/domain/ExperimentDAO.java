@@ -1757,31 +1757,55 @@ public class ExperimentDAO {
             """;
 
     /**
-     * For each orphan experiment in a workspace, returns the trace-derived classification:
-     * {@code project_id} is any non-empty trace project_id (meaningful only when
-     * {@code project_count = 1}); {@code project_count} is the distinct count of non-empty trace
-     * project_ids — {@code 0} = no inference, {@code 1} = certain, {@code > 1} = ambiguous.
+     * For each orphan experiment in a workspace, returns the dominant project: {@code project_id}
+     * (empty when no traces are referenced), {@code distinct_project_count} ({@code 0} = no
+     * inference, {@code 1} = certain, {@code > 1} = dominant pick), and a {@code project_breakdown}
+     * ({@code projectId=count,...}) included in the per-assignment log line. Multi-project
+     * experiments are ranked by {@code (count DESC, last_activity DESC, project_id ASC)} so
+     * repeated runs produce the same result.
      *
-     * <p>The {@code CAST(t.project_id AS String)} converts away from {@code FixedString(36)},
-     * whose LEFT JOIN no-match default (36 NUL bytes, not {@code ''}) would slip past the
-     * {@code != ''} guard and trip the downstream UUID parser.
+     * <p>{@code CAST(t.project_id AS String)} converts away from {@code FixedString(36)}, whose
+     * default would slip past the {@code != ''} guard and trip the downstream UUID parser.
+     * {@code count(DISTINCT ei.trace_id)} counts in units of "distinct traces per project"
+     * (the natural unit for the dominant pick, since one trace lives in one project) and
+     * neutralizes join-output inflation from transient ReplacingMergeTree row versions on
+     * either side.
      */
     private static final String COMPUTE_EXPERIMENT_PROJECT_MAPPING = """
+            WITH per_experiment_ranked AS (
+                WITH arraySort(
+                        proj -> (-proj.1, -proj.2, proj.3),
+                        groupArray((per_proj_count, per_proj_last_activity_nanos, project_id))
+                    ) AS ranked
+                SELECT
+                    experiment_id,
+                    ranked,
+                    arrayStringConcat(
+                        arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked),
+                        ','
+                    ) AS project_breakdown
+                FROM (
+                    SELECT
+                        ei.experiment_id AS experiment_id,
+                        CAST(t.project_id AS String) AS project_id,
+                        count(DISTINCT ei.trace_id) AS per_proj_count,
+                        toUnixTimestamp64Nano(max(t.last_updated_at)) AS per_proj_last_activity_nanos
+                    FROM experiment_items ei
+                    INNER JOIN traces t
+                        ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
+                    WHERE ei.workspace_id = :workspace_id
+                    GROUP BY ei.experiment_id, project_id
+                    HAVING project_id != ''
+                )
+                GROUP BY experiment_id
+            )
             SELECT
                 e.id AS experiment_id,
-                anyIf(et.project_id, et.project_id != '') AS project_id,
-                countDistinctIf(et.project_id, et.project_id != '') AS project_count
+                any(if(length(per_experiment_ranked.ranked) > 0, per_experiment_ranked.ranked[1].3, '')) AS project_id,
+                any(ifNull(length(per_experiment_ranked.ranked), 0)) AS distinct_project_count,
+                any(ifNull(per_experiment_ranked.project_breakdown, '')) AS project_breakdown
             FROM experiments e
-            LEFT JOIN (
-                SELECT
-                    ei.workspace_id,
-                    ei.experiment_id,
-                    CAST(t.project_id AS String) AS project_id
-                FROM experiment_items ei
-                INNER JOIN traces t
-                    ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
-                WHERE ei.workspace_id = :workspace_id
-            ) et ON e.workspace_id = et.workspace_id AND e.id = et.experiment_id
+            LEFT JOIN per_experiment_ranked ON e.id = per_experiment_ranked.experiment_id
             WHERE e.workspace_id = :workspace_id
             AND e.name NOT IN :demo_experiment_names
             GROUP BY e.id
@@ -1820,75 +1844,105 @@ public class ExperimentDAO {
             """;
 
     /**
-     * For one workspace, returns each dataset_id and the (single) project_id that all
-     * non-demo experiments for that dataset resolve to. Inference is derived directly from
-     * {@code experiments.project_id} (which D1 sets) rather than from the experiment→trace
-     * graph: this is correct only when D1 (experiment-project migration) has already run for
-     * the workspace, which is a documented operational pre-requirement. Experiments whose
-     * latest {@code project_id} is still {@code ''} (D1 left them V1 — typically ambiguous in
-     * D1's own bucketing) are filtered out and effectively count as "no-inference" at the
-     * dataset level, which the service then routes to the workspace's Default Project.
+     * For one workspace and the given orphan dataset IDs, returns each dataset's inferred
+     * {@code project_id}, the {@code distinct_project_count} of referencing projects, and a sorted
+     * {@code project_breakdown} ({@code projectId=count,...}) included in the log entry for each
+     * assignment.
      *
-     * <p>Scoped to the caller-supplied orphan dataset IDs via {@code dataset_id IN :dataset_ids}
-     * so the scan only walks the experiments rows for V1 datasets, not the whole workspace.
+     * <p>Inference reads {@code experiments.project_id} (set by the experiment-project migration);
+     * experiments still at {@code project_id = ''} are excluded, so a dataset whose experiments are
+     * all unmigrated does not appear in the result and the service treats it as no-inference. With
+     * one referencing project the choice is unambiguous; with several, the dominant project wins,
+     * ordered by {@code (count DESC, last_activity DESC, project_id ASC)} so that repeated runs
+     * produce the same result.
      *
-     * <p>Inner aggregate uses {@code argMax(project_id, last_updated_at) GROUP BY id} to dedup
-     * across ReplacingMergeTree row versions: when D1 updates {@code project_id} from {@code ''}
-     * to a non-empty value, the table briefly carries both pre- and post-update rows for the
-     * same {@code (workspace_id, id)} until merge. {@code argMax} picks the latest, so the outer
-     * {@code count(DISTINCT)} does not double-count an in-flight migration as ambiguous.
+     * <p>The inner {@code argMax(project_id, last_updated_at) GROUP BY id} removes duplicate
+     * ReplacingMergeTree row versions: while a migration is in progress the table can briefly hold
+     * both the previous and the updated row for an experiment, and taking the latest keeps the
+     * outer aggregates from counting it twice.
      */
     private static final String COMPUTE_DATASET_PROJECT_MAPPING = """
+            WITH arraySort(proj -> (-proj.1, -proj.2, proj.3),
+                    groupArray((per_proj_count, per_proj_last_activity_nanos, experiment_project_id))) AS ranked
             SELECT
                 dataset_id AS dataset_id,
-                count(DISTINCT experiment_project_id) AS distinct_project_count,
-                any(experiment_project_id) AS project_id
+                length(ranked) AS distinct_project_count,
+                ranked[1].3 AS project_id,
+                arrayStringConcat(
+                    arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked), ','
+                ) AS project_breakdown
             FROM (
                 SELECT
                     dataset_id,
-                    argMax(project_id, last_updated_at) AS experiment_project_id
-                FROM experiments
-                WHERE workspace_id = :workspace_id
-                AND dataset_id IN :dataset_ids
-                AND name NOT IN :demo_experiment_names
-                GROUP BY workspace_id, id, dataset_id
-                HAVING experiment_project_id != ''
+                    experiment_project_id,
+                    count() AS per_proj_count,
+                    toUnixTimestamp64Nano(max(experiment_last_updated_at)) AS per_proj_last_activity_nanos
+                FROM (
+                    SELECT
+                        dataset_id,
+                        argMax(project_id, last_updated_at) AS experiment_project_id,
+                        max(last_updated_at) AS experiment_last_updated_at
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id IN :dataset_ids
+                    AND name NOT IN :demo_experiment_names
+                    GROUP BY workspace_id, id, dataset_id
+                    HAVING experiment_project_id != ''
+                )
+                GROUP BY dataset_id, experiment_project_id
             )
             GROUP BY dataset_id
             SETTINGS log_comment = '<log_comment>'
             """;
 
     /**
-     * For one workspace and a set of orphan prompt IDs, returns the trace-derived classification
-     * for each prompt that has at least one referencing experiment: {@code project_id} is any
-     * non-orphan {@code project_id} of a referencing experiment (meaningful only when
-     * {@code project_count = 1}); {@code project_count} is the distinct count of non-orphan
-     * project_ids — {@code 0} = no inference, {@code 1} = certain, {@code > 1} = ambiguous.
-     * Same shape as {@link #COMPUTE_EXPERIMENT_PROJECT_MAPPING} so the prompt and experiment
-     * cycles classify the same way.
+     * For one workspace and a set of orphan prompt IDs, returns each referenced prompt's inferred
+     * {@code project_id}, the {@code distinct_project_count} of referencing projects, and a sorted
+     * {@code project_breakdown} ({@code projectId=count,...}) included in the dominant-assignment
+     * log entry. Same shape as {@link #COMPUTE_DATASET_PROJECT_MAPPING}: single-project rows are
+     * unambiguous; multi-project rows pick the dominant project by {@code (count DESC,
+     * last_activity DESC, project_id ASC)} so repeated runs produce the same result. Prompts whose
+     * only referencing experiments are still at {@code project_id = ''} are dropped by the inner
+     * {@code HAVING}; the caller treats absence as no-inference.
      *
-     * <p>{@code argMax(_, last_updated_at)} on the inner aggregate dedupes ReplacingMergeTree
-     * duplicates by picking the latest row per experiment id. Prompt references are immutable
-     * per the data contract but {@code project_id} can flip during the D1 migration, so the
-     * latest one is what the inference must observe. The outer {@code anyIf} / {@code countDistinctIf}
-     * then filter on {@code project_id != ''} so experiments still orphan post-D1 are correctly
-     * invisible to the inference.
+     * <p>{@code argMax(_, last_updated_at) GROUP BY id} dedupes ReplacingMergeTree row versions
+     * for in-flight experiment updates. {@code arrayDistinct} collapses experiments that reach
+     * the same prompt via both the legacy {@code prompt_id} column and the {@code prompt_versions}
+     * map, preventing {@code per_proj_count} inflation in the subsequent {@code ARRAY JOIN}.
+     * Demo-named experiments are filtered upstream so the seeded Demo Project cannot tilt the
+     * dominant choice for a user prompt that happens to be referenced by a demo experiment.
      */
     private static final String COMPUTE_PROMPT_PROJECT_CLASSIFICATION = """
+            WITH arraySort(proj -> (-proj.1, -proj.2, proj.3),
+                    groupArray((per_proj_count, per_proj_last_activity_nanos, experiment_project_id))) AS ranked
             SELECT
                 prompt_id_ref AS prompt_id,
-                anyIf(latest_project_id, latest_project_id != '') AS project_id,
-                countDistinctIf(latest_project_id, latest_project_id != '') AS project_count
+                length(ranked) AS distinct_project_count,
+                ranked[1].3 AS project_id,
+                arrayStringConcat(
+                    arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked), ','
+                ) AS project_breakdown
             FROM (
                 SELECT
-                    argMax(project_id, last_updated_at) AS latest_project_id,
-                    argMax(arrayConcat([prompt_id], mapKeys(prompt_versions)), last_updated_at) AS prompt_id_refs
-                FROM experiments
-                WHERE workspace_id = :workspace_id
-                GROUP BY id
+                    prompt_id_ref,
+                    experiment_project_id,
+                    count() AS per_proj_count,
+                    toUnixTimestamp64Nano(max(experiment_last_updated_at)) AS per_proj_last_activity_nanos
+                FROM (
+                    SELECT
+                        argMax(project_id, last_updated_at) AS experiment_project_id,
+                        argMax(arrayDistinct(arrayConcat([prompt_id], mapKeys(prompt_versions))), last_updated_at) AS prompt_id_refs,
+                        max(last_updated_at) AS experiment_last_updated_at
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND name NOT IN :demo_experiment_names
+                    GROUP BY id
+                    HAVING experiment_project_id != ''
+                )
+                ARRAY JOIN prompt_id_refs AS prompt_id_ref
+                WHERE prompt_id_ref IN :prompt_ids
+                GROUP BY prompt_id_ref, experiment_project_id
             )
-            ARRAY JOIN prompt_id_refs AS prompt_id_ref
-            WHERE prompt_id_ref IN :prompt_ids
             GROUP BY prompt_id_ref
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -2955,7 +3009,8 @@ public class ExperimentDAO {
                                 .filter(StringUtils::isNotBlank)
                                 .map(UUID::fromString)
                                 .orElse(null))
-                        .projectCount(row.get("project_count", Long.class))
+                        .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                        .projectBreakdown(row.get("project_breakdown", String.class))
                         .build()));
     }
 
@@ -2996,16 +3051,15 @@ public class ExperimentDAO {
                                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                                 .projectId(UUID.fromString(projectId))
                                 .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                                .projectBreakdown(row.get("project_breakdown", String.class))
                                 .build())))
                 .flatMap(Mono::justOrEmpty);
     }
 
     /**
-     * Bulk classification for the prompt project migration. For the workspace from the request
-     * context and a set of orphan prompt IDs, returns one {@link PromptProjectClassification}
-     * per prompt that has at least one referencing experiment. Prompts absent from the result
-     * have no referencing experiments at all and the caller treats them the same as
-     * {@code projectCount = 0} — i.e. no-inference → Default Project.
+     * Bulk classification for the prompt project migration. Returns one
+     * {@link PromptProjectClassification} per referenced prompt with a usable inferred project;
+     * prompts absent from the result are treated as no-inference by the caller.
      */
     Flux<PromptProjectClassification> computePromptProjectClassification(Set<UUID> promptIds) {
         if (CollectionUtils.isEmpty(promptIds)) {
@@ -3016,16 +3070,19 @@ public class ExperimentDAO {
             var template = getSTWithLogComment(COMPUTE_PROMPT_PROJECT_CLASSIFICATION,
                     "compute_prompt_project_classification", workspaceId, userName, details);
             var statement = connection.createStatement(template.render())
-                    .bind("prompt_ids", promptIds);
+                    .bind("prompt_ids", promptIds)
+                    .bind("demo_experiment_names", DemoData.EXPERIMENTS);
             return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
         }))
-                .flatMap(result -> result.map((row, metadata) -> PromptProjectClassification.builder()
-                        .promptId(UUID.fromString(row.get("prompt_id", String.class)))
-                        .projectId(Optional.ofNullable(row.get("project_id", String.class))
-                                .filter(StringUtils::isNotBlank)
-                                .map(UUID::fromString)
-                                .orElse(null))
-                        .projectCount(row.get("project_count", Long.class))
-                        .build()));
+                .flatMap(result -> result.map((row, metadata) -> Optional
+                        .ofNullable(row.get("project_id", String.class))
+                        .filter(StringUtils::isNotBlank)
+                        .map(projectId -> PromptProjectClassification.builder()
+                                .promptId(UUID.fromString(row.get("prompt_id", String.class)))
+                                .projectId(UUID.fromString(projectId))
+                                .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                                .projectBreakdown(row.get("project_breakdown", String.class))
+                                .build())))
+                .flatMap(Mono::justOrEmpty);
     }
 }

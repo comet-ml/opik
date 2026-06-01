@@ -13,9 +13,14 @@ logger = logging.getLogger(__name__)
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
 _CacheKey = typing.Tuple[
-    str, typing.Optional[str], typing.Optional[str], str, typing.Optional[str]
+    str,
+    typing.Optional[str],
+    typing.Optional[str],
+    str,
+    typing.Optional[str],
+    typing.Optional[str],
 ]
-#                         name  commit               project_name           tmpl  mask_id
+#             name  pin(commit/ver)  project_name  tmpl  environment  mask_id
 
 _RefreshCallback = typing.Callable[[], typing.Optional[BasePrompt]]
 
@@ -64,6 +69,24 @@ class PromptCache:
         self._stop_refresh_thread()
         with self._lock:
             self._entries.clear()
+
+    def invalidate_for_prompt(
+        self, name: str, project_name: typing.Optional[str]
+    ) -> None:
+        """Drop every cached entry for the given prompt name + project scope.
+
+        Used after operations that change the env-to-version mapping (such as
+        ``Opik.set_prompt_environments``) so that subsequent
+        ``get_prompt(..., environment=...)`` calls cannot return a stale version.
+        """
+        with self._lock:
+            stale_keys = [
+                key
+                for key in self._entries
+                if key[0] == name and key[2] == project_name
+            ]
+            for key in stale_keys:
+                del self._entries[key]
 
     def get_or_fetch(
         self,
@@ -174,6 +197,7 @@ def get_or_fetch(
     fetch_fn: typing.Callable[[], typing.Optional[_PromptT]],
     mask_id: typing.Optional[str] = None,
     version: typing.Optional[str] = None,
+    environment: typing.Optional[str] = None,
 ) -> typing.Optional[_PromptT]:
     """Return a cached prompt or fetch, cache, and return it.
 
@@ -197,7 +221,14 @@ def get_or_fetch(
     refresh_callback = (
         fetch_fn if (ttl_seconds is not None and mask_id is None) else None
     )
-    key: _CacheKey = (name, identifier, project_name, template_structure, mask_id)
+    key: _CacheKey = (
+        name,
+        identifier,
+        project_name,
+        template_structure,
+        environment,
+        mask_id,
+    )
     result = _cache.get_or_fetch(
         key=key,
         fetch_fn=fetch_fn,
@@ -205,3 +236,8 @@ def get_or_fetch(
         refresh_callback=refresh_callback,
     )
     return typing.cast(typing.Optional[_PromptT], result)
+
+
+def invalidate_for_prompt(name: str, project_name: typing.Optional[str]) -> None:
+    """Drop every cached entry for the given prompt name + project scope."""
+    _cache.invalidate_for_prompt(name=name, project_name=project_name)

@@ -77,6 +77,11 @@ export interface GetPromptOptions {
   version?: string;
   /** Optional project name to scope the lookup. */
   projectName?: string;
+  /**
+   * Optional environment name. Resolves to the version currently owned by that
+   * workspace environment. Mutually exclusive with `commit`.
+   */
+  environment?: string;
 }
 
 /**

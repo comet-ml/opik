@@ -123,7 +123,7 @@ const AIProvidersTab = () => {
   const isTableLoading = isPending;
 
   return (
-    <div>
+    <div data-testid="ai-providers-tabpanel">
       <ExplainerCallout
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}

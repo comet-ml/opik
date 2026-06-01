@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TestSuiteMetadataKeys;
@@ -29,6 +30,7 @@ import java.util.UUID;
 class ExperimentTracePersistence {
 
     private static final String TRACE_SPAN_NAME = "chat_completion_create";
+    private static final String OPIK_PROMPTS_METADATA_KEY = "opik_prompts";
 
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
@@ -50,7 +52,8 @@ class ExperimentTracePersistence {
             @NonNull UUID experimentId,
             @NonNull UUID datasetId,
             String versionHash,
-            @NonNull UUID datasetItemId) {
+            @NonNull UUID datasetItemId,
+            List<OpikPromptEntry> opikPrompts) {
     }
 
     Mono<Void> persistTraceSpanAndItem(@NonNull PersistenceContext ctx) {
@@ -74,6 +77,9 @@ class ExperimentTracePersistence {
         metadata.put(TestSuiteMetadataKeys.DATASET_ITEM_ID, ctx.datasetItemId().toString());
         metadata.put(TestSuiteMetadataKeys.MODEL, ctx.prompt().model());
         metadata.put(TestSuiteMetadataKeys.EXPERIMENT_ID, ctx.experimentId().toString());
+        if (ctx.opikPrompts() != null && !ctx.opikPrompts().isEmpty()) {
+            metadata.set(OPIK_PROMPTS_METADATA_KEY, JsonUtils.getMapper().valueToTree(ctx.opikPrompts()));
+        }
 
         var traceBuilder = Trace.builder()
                 .id(ctx.traceId())
@@ -94,9 +100,7 @@ class ExperimentTracePersistence {
                     .build());
         }
 
-        var trace = traceBuilder.build();
-
-        return traceService.create(trace)
+        return traceService.create(traceBuilder.build())
                 .then();
     }
 

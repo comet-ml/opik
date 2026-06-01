@@ -130,6 +130,8 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-opus-4-8"
+    label: "Claude Opus 4.8"
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
     structuredOutput: true
@@ -180,12 +182,6 @@ gemini:
   - id: "gemini-2.5-flash-lite"
     label: "Gemini 2.5 Flash-Lite"
     structuredOutput: true
-  - id: "gemini-2.0-flash"
-    label: "Gemini 2.0 Flash"
-    structuredOutput: true
-  - id: "gemini-2.0-flash-lite"
-    label: "Gemini 2.0 Flash-Lite"
-    structuredOutput: true
   - id: "gemma-4-26b-a4b-it"
     label: "Gemma 4 26B A4B IT"
   - id: "gemma-4-31b-it"
@@ -200,12 +196,18 @@ gemini:
     structuredOutput: true
   - id: "gemini-1.5-pro-latest"
     structuredOutput: true
+  - id: "gemini-2.0-flash"
+    structuredOutput: true
+  - id: "gemini-2.0-flash-lite"
+    structuredOutput: true
   - id: "gemini-2.5-flash-image"
     structuredOutput: true
+  - id: "gemini-3-pro-image"
   - id: "gemini-3-pro-image-preview"
     structuredOutput: true
   - id: "gemini-3-pro-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-image"
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
@@ -334,6 +336,10 @@ openrouter:
     structuredOutput: true
   - id: "anthropic/claude-opus-4.7-fast"
     label: "anthropic/claude-opus-4.7-fast"
+  - id: "anthropic/claude-opus-4.8"
+    label: "anthropic/claude-opus-4.8"
+  - id: "anthropic/claude-opus-4.8-fast"
+    label: "anthropic/claude-opus-4.8-fast"
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
@@ -481,9 +487,6 @@ openrouter:
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
     label: "essentialai/rnj-1-instruct"
-  - id: "google/gemini-2.0-flash-001"
-    label: "google/gemini-2.0-flash-001"
-    structuredOutput: true
   - id: "google/gemini-2.0-flash-exp:free"
     label: "google/gemini-2.0-flash-exp:free"
     structuredOutput: true
@@ -521,6 +524,7 @@ openrouter:
     label: "google/gemini-3.1-flash-image-preview"
   - id: "google/gemini-3.1-flash-lite"
     label: "google/gemini-3.1-flash-lite"
+    structuredOutput: true
   - id: "google/gemini-3.1-flash-lite-preview"
     label: "google/gemini-3.1-flash-lite-preview"
     structuredOutput: true
@@ -700,6 +704,8 @@ openrouter:
     label: "minimax/minimax-m2.5:free"
   - id: "minimax/minimax-m2.7"
     label: "minimax/minimax-m2.7"
+  - id: "minimax/minimax-m3"
+    label: "minimax/minimax-m3"
   - id: "mistralai/codestral-2501"
     label: "mistralai/codestral-2501"
     structuredOutput: true
@@ -819,6 +825,8 @@ openrouter:
     label: "moonshotai/kimi-k2.5"
   - id: "moonshotai/kimi-k2.6"
     label: "moonshotai/kimi-k2.6"
+  - id: "moonshotai/kimi-k2.6:free"
+    label: "moonshotai/kimi-k2.6:free"
   - id: "moonshotai/kimi-k2:free"
     label: "moonshotai/kimi-k2:free"
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
@@ -1248,6 +1256,8 @@ openrouter:
     label: "stepfun/step-3.5-flash"
   - id: "stepfun/step-3.5-flash:free"
     label: "stepfun/step-3.5-flash:free"
+  - id: "stepfun/step-3.7-flash"
+    label: "stepfun/step-3.7-flash"
   - id: "switchpoint/router"
     label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
@@ -1325,8 +1335,10 @@ openrouter:
     label: "xiaomi/mimo-v2-pro"
   - id: "xiaomi/mimo-v2.5"
     label: "xiaomi/mimo-v2.5"
+    structuredOutput: true
   - id: "xiaomi/mimo-v2.5-pro"
     label: "xiaomi/mimo-v2.5-pro"
+    structuredOutput: true
   - id: "z-ai/glm-4-32b"
     label: "z-ai/glm-4-32b"
   - id: "z-ai/glm-4.5"
@@ -1371,3 +1383,5 @@ openrouter:
     label: "~openai/gpt-latest"
   - id: "~openai/gpt-mini-latest"
     label: "~openai/gpt-mini-latest"
+  - id: "google/gemini-2.0-flash-001"
+    structuredOutput: true

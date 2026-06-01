@@ -81,11 +81,21 @@ const DatasetItemsPageHeader: React.FunctionComponent<
         <div className="flex items-center gap-2">
           {hasDraft && (
             <>
-              <Button variant="outline" size="sm" onClick={onDiscardClick}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onDiscardClick}
+                data-testid="dataset-items-discard-button"
+              >
                 <X className="mr-1 size-4" />
                 Discard changes
               </Button>
-              <Button variant="default" size="sm" onClick={onSaveClick}>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={onSaveClick}
+                data-testid="dataset-items-commit-button"
+              >
                 <Check className="mr-1 size-4" />
                 Save changes
               </Button>
@@ -128,6 +138,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
         {latestVersion && (
           <>
             <Tag
+              data-testid="dataset-detail-version-label"
               size="md"
               variant="transparent"
               className="flex shrink-0 items-center gap-1"
@@ -149,6 +160,8 @@ const DatasetItemsPageHeader: React.FunctionComponent<
           <Tooltip>
             <TooltipTrigger asChild>
               <div
+                data-testid="dataset-detail-global-assertions-pill"
+                data-count={effectiveAssertions.length}
                 className="flex shrink-0 cursor-pointer items-center gap-1 rounded bg-thread-active px-1.5 py-0.5"
                 onClick={onSettingsClick}
               >

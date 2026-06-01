@@ -10,6 +10,7 @@ export const PromptVersionLink: core.serialization.ObjectSchema<
 > = core.serialization.object({
     id: core.serialization.string(),
     commit: core.serialization.string().optional(),
+    versionNumber: core.serialization.property("version_number", core.serialization.string().optional()),
     promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
     promptName: core.serialization.property("prompt_name", core.serialization.string().optional()),
 });
@@ -18,6 +19,7 @@ export declare namespace PromptVersionLink {
     export interface Raw {
         id: string;
         commit?: string | null;
+        version_number?: string | null;
         prompt_id?: string | null;
         prompt_name?: string | null;
     }

@@ -1,6 +1,9 @@
 # Mac
 .DS_Store
 
+# Load-test suite runtime output (one JSON file per scenario per run)
+.last_run/
+
 # Environment variables
 .env.local
 .env

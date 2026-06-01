@@ -514,6 +514,44 @@ def _verify_experiment_metadata(
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
 
 
+def verify_experiment_traces_have_opik_prompts(
+    opik_client: opik.Opik,
+    trace_ids: List[str],
+    prompts: List[Prompt],
+) -> None:
+    """Verify each trace produced by an experiment carries `opik_prompts`
+    in its metadata. Backend needs this for trace-level prompt linkage."""
+    assert trace_ids, "Expected at least one trace_id to verify prompt injection"
+
+    expected_prompt_keys = sorted(
+        (p.__internal_api__prompt_id__, p.commit) for p in prompts
+    )
+
+    for trace_id in trace_ids:
+        assert synchronization.until(
+            lambda: opik_client.get_trace_content(id=trace_id) is not None,
+            allow_errors=True,
+        ), f"Failed to get trace {trace_id}"
+
+        trace_content = opik_client.get_trace_content(id=trace_id)
+        assert trace_content.metadata is not None, (
+            f"Trace {trace_id} has no metadata; expected opik_prompts"
+        )
+        actual_prompts = trace_content.metadata.get("opik_prompts")
+        assert actual_prompts, (
+            f"Trace {trace_id} metadata is missing 'opik_prompts': "
+            f"{trace_content.metadata}"
+        )
+        actual_keys = sorted(
+            (p.get("id"), (p.get("version") or {}).get("commit"))
+            for p in actual_prompts
+        )
+        assert actual_keys == expected_prompt_keys, (
+            f"Trace {trace_id} opik_prompts mismatch: "
+            f"actual={actual_keys}, expected={expected_prompt_keys}"
+        )
+
+
 def _verify_experiment_prompts(
     experiment_content: ExperimentPublic,
     prompts: Optional[List[Prompt]],
@@ -731,6 +769,7 @@ def verify_prompt_version(
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
     project_name: Any = mock.ANY,
+    environments: Optional[Iterable[str]] = None,
 ) -> None:
     testlib.assert_equal(name, prompt.name)
     testlib.assert_equal(project_name, prompt.project_name)
@@ -744,6 +783,8 @@ def verify_prompt_version(
         f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == prompt.commit, f"{prompt.commit} != {commit}"
+    if environments is not None:
+        verify_prompt_environments(prompt, contains=environments)
 
 
 def verify_chat_prompt_version(
@@ -757,6 +798,7 @@ def verify_chat_prompt_version(
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
     project_name: Any = mock.ANY,  # type: ignore
+    environments: Optional[Iterable[str]] = None,
 ) -> None:
     """
     Verifies that a ChatPrompt has the expected properties.
@@ -777,6 +819,39 @@ def verify_chat_prompt_version(
         f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
+    if environments is not None:
+        verify_prompt_environments(chat_prompt, contains=environments)
+
+
+def verify_prompt_environments(
+    prompt: Union[Prompt, ChatPrompt],
+    *,
+    contains: Optional[Iterable[str]] = None,
+    excludes: Optional[Iterable[str]] = None,
+    exactly: Optional[Iterable[str]] = None,
+) -> None:
+    """Verify the environment ownership of a prompt version.
+
+    Environment order is not guaranteed by the backend, so checks are
+    set-based:
+    - ``contains``: every listed environment must be present
+    - ``excludes``: none of the listed environments may be present
+    - ``exactly``: the environment set must match exactly (use an empty
+      iterable to assert ownership was cleared)
+    """
+    actual: Set[str] = set(prompt.environments or [])
+
+    if exactly is not None:
+        expected = set(exactly)
+        assert actual == expected, f"environments {actual} != expected {expected}"
+
+    if contains is not None:
+        missing = set(contains) - actual
+        assert not missing, f"environments {actual} missing {missing}"
+
+    if excludes is not None:
+        present = set(excludes) & actual
+        assert not present, f"environments {actual} should not contain {present}"
 
 
 def verify_opik_prompt_entry(

@@ -164,6 +164,7 @@ export class Prompt extends BasePrompt {
         tags: promptData.tags,
         synced: true,
         projectName,
+        environments: apiResponse.environments,
       },
       opik,
     );

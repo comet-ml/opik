@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { AxiosError } from "axios";
 import isEqual from "fast-deep-equal";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
@@ -8,8 +9,16 @@ import { PromptWithLatestVersion } from "@/types/prompts";
 
 export interface UseLoadChatPromptOptions {
   selectedChatPromptId: string | undefined;
+  selectedChatPromptVersionId?: string;
   messages: LLMMessage[];
   onMessagesLoaded: (messages: LLMMessage[], promptName: string) => void;
+  /**
+   * Fired when the loaded prompt is reported as missing by the backend (404),
+   * typically after it was deleted from the library. Callers should clear the
+   * loaded references from their state so the UI stops showing the prompt as
+   * if it still exists.
+   */
+  onPromptUnavailable?: () => void;
   skipInitialLoad?: boolean;
 }
 
@@ -25,32 +34,60 @@ export interface UseLoadChatPromptReturn {
 
 const useLoadChatPrompt = ({
   selectedChatPromptId,
+  selectedChatPromptVersionId,
   messages,
   onMessagesLoaded,
+  onPromptUnavailable,
   skipInitialLoad = false,
 }: UseLoadChatPromptOptions): UseLoadChatPromptReturn => {
   const skippedRef = useRef(false);
   const loadedChatPromptRef = useRef<string | null>(null);
 
-  const { data: chatPromptData, isSuccess: chatPromptDataLoaded } =
-    usePromptById(
-      {
-        promptId: selectedChatPromptId!,
+  const {
+    data: chatPromptData,
+    isSuccess: chatPromptDataLoaded,
+    error: chatPromptError,
+  } = usePromptById(
+    {
+      promptId: selectedChatPromptId!,
+    },
+    {
+      enabled: !!selectedChatPromptId,
+      // Don't keep retrying a definitively-missing prompt — the playground
+      // needs the 404 to surface promptly so it can detach the deleted prompt.
+      retry: (failureCount, error) => {
+        if (error instanceof AxiosError && error.response?.status === 404) {
+          return false;
+        }
+        return failureCount < 3;
       },
-      {
-        enabled: !!selectedChatPromptId,
-      },
-    );
+    },
+  );
+
+  // When the selected prompt is reported as 404, tell the caller so it can
+  // clear the loaded references from playground state.
+  useEffect(() => {
+    if (
+      selectedChatPromptId &&
+      chatPromptError instanceof AxiosError &&
+      chatPromptError.response?.status === 404
+    ) {
+      onPromptUnavailable?.();
+    }
+  }, [selectedChatPromptId, chatPromptError, onPromptUnavailable]);
+
+  const effectiveVersionId =
+    selectedChatPromptVersionId || chatPromptData?.latest_version?.id || "";
 
   const {
     data: chatPromptVersionData,
     isSuccess: chatPromptVersionDataLoaded,
   } = usePromptVersionById(
     {
-      versionId: chatPromptData?.latest_version?.id || "",
+      versionId: effectiveVersionId,
     },
     {
-      enabled: !!chatPromptData?.latest_version?.id && chatPromptDataLoaded,
+      enabled: !!effectiveVersionId && chatPromptDataLoaded,
     },
   );
 
@@ -132,22 +169,44 @@ const useLoadChatPrompt = ({
         return;
       }
 
-      try {
-        const parsedMessages = JSON.parse(chatPromptVersionData.template);
-
-        const newMessages: LLMMessage[] = parsedMessages.map(
-          (msg: { role: string; content: unknown }) =>
+      const fallbackToSingleUserMessage = (content: string) => {
+        onMessagesLoaded(
+          [
             generateDefaultLLMPromptMessage({
-              role: msg.role as LLM_MESSAGE_ROLE,
-              content: msg.content as LLMMessage["content"],
+              role: LLM_MESSAGE_ROLE.user,
+              content,
             }),
+          ],
+          chatPromptData.name,
         );
-
-        onMessagesLoaded(newMessages, chatPromptData.name);
         loadedChatPromptRef.current = chatPromptKey;
-      } catch (error) {
-        console.error("Failed to parse chat prompt:", error);
+      };
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(chatPromptVersionData.template);
+      } catch {
+        fallbackToSingleUserMessage(chatPromptVersionData.template);
+        return;
       }
+
+      if (!Array.isArray(parsed)) {
+        fallbackToSingleUserMessage(
+          typeof parsed === "string" ? parsed : chatPromptVersionData.template,
+        );
+        return;
+      }
+
+      const newMessages: LLMMessage[] = parsed.map(
+        (msg: { role: string; content: unknown }) =>
+          generateDefaultLLMPromptMessage({
+            role: msg.role as LLM_MESSAGE_ROLE,
+            content: msg.content as LLMMessage["content"],
+          }),
+      );
+
+      onMessagesLoaded(newMessages, chatPromptData.name);
+      loadedChatPromptRef.current = chatPromptKey;
     }
 
     // reset the ref when chat prompt is deselected

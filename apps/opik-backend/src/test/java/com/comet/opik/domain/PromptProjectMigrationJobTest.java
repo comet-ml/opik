@@ -44,10 +44,10 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Wiring smoke test for the D4 Quartz job. The bucket logic, trap conditions, exclusion lists,
- * and idempotency live in {@link PromptProjectMigrationServiceTest} — this class only verifies
- * that the scheduler -> job -> service plumbing fires and a migration actually happens. Keep
- * scenarios here minimal so the Awaitility windows can stay short.
+ * Wiring smoke test for the D4 Quartz job. Classification logic, dominant-project assignment,
+ * exclusion lists, and idempotency live in {@link PromptProjectMigrationServiceTest} — this class
+ * only verifies that the scheduler -> job -> service plumbing fires and a migration actually
+ * happens. Keep scenarios here minimal so the Awaitility windows can stay short.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)

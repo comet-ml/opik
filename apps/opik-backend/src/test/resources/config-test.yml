@@ -734,6 +734,16 @@ datasetVersioningMigration:
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: 3600
 
+# Dataset Versioning runtime configuration (OPIK-6674).
+# Tunes the application-side retry guard around INSERT...SELECT into dataset_item_versions.
+# Test backoffs tolerate the testcontainer's async-insert flush window
+# (async_insert_busy_timeout_max_ms=60) while keeping tests reasonably fast.
+datasetVersioning:
+  zeroRowsRetry:
+    maxAttempts: 3
+    minBackoff: 100ms
+    maxBackoff: 500ms
+
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).
 # Runs as a recurring job, processing workspaces in batches.
@@ -794,6 +804,22 @@ datasetProjectMigration:
   schedulerQueuedTaskCap: 50
   # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
   # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
+
+# Optimization Project Migration configuration (D3)
+# Assigns project_id to orphan optimizations in ClickHouse via experiments-primary + dataset
+# fallback inference. Disabled by default in tests — each test opts in via CustomConfig.
+optimizationProjectMigration:
+  enabled: false
+  workspacesPerRun: 20
+  optimizationBatchSize: 1000
+  interval: 5s
+  startupDelay: 5s
+  lockTimeout: 5s
+  lockWaitTime: 100ms
+  jobTimeout: 30s
+  schedulerThreadCap: 2
+  schedulerQueuedTaskCap: 50
   schedulerThreadTtl: 10s
 
 # Prompt Project Migration configuration (D4)

@@ -366,7 +366,12 @@ export const OnlineEvaluationPage: React.FC = () => {
           Online evaluation
         </h1>
         {canUpdateOnlineEvaluationRules && (
-          <Button variant="default" size="xs" onClick={handleNewRuleClick}>
+          <Button
+            variant="default"
+            size="xs"
+            onClick={handleNewRuleClick}
+            data-testid="online-evaluation-create-rule-button"
+          >
             <Plus className="mr-1 size-4" />
             Create rule
           </Button>

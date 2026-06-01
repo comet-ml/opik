@@ -381,7 +381,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-[720px]">
+      <DialogContent
+        data-testid="add-provider-dialog"
+        className="max-w-lg sm:max-w-[720px]"
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>

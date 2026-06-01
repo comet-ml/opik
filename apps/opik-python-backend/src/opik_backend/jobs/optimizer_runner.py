@@ -153,6 +153,21 @@ def main():
         context = OptimizationJobContext.from_job_message(job_message)
         config = OptimizationConfig.from_dict(job_message.get("config", {}))
 
+        # Treat the Opik backend gateway as an OpenAI-compatible endpoint.
+        # The "openai/" prefix tells LiteLLM to use its OpenAI handler, which
+        # is the only handler that honors OPENAI_API_BASE (set to the gateway
+        # URL in optimizer.py). LiteLLM strips the prefix before the HTTP
+        # request, so the gateway still receives the original provider-
+        # qualified model string (e.g. "vertex_ai/gemini-2.5-flash") and
+        # dispatches to the correct provider on the Java backend side.
+        if not config.model.startswith("openai/"):
+            config.model = f"openai/{config.model}"
+
+        # The gateway requires an explicit stream field; LiteLLM omits it by
+        # default which causes an NPE in the Java backend's Anthropic mapper.
+        config.model_params = config.model_params or {}
+        config.model_params.setdefault("stream", False)
+
         # Ensure optimizer_params is a dict before mutating
         config.optimizer_params = config.optimizer_params or {}
 

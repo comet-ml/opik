@@ -17,6 +17,7 @@ export const MINE_TYPE_TO_ATTACHMENT_TYPE_MAP: Record<string, ATTACHMENT_TYPE> =
     "image/png": ATTACHMENT_TYPE.IMAGE,
     "image/gif": ATTACHMENT_TYPE.IMAGE,
     "image/svg+xml": ATTACHMENT_TYPE.IMAGE,
+    "image/webp": ATTACHMENT_TYPE.IMAGE,
     "video/mp4": ATTACHMENT_TYPE.VIDEO,
     "video/webm": ATTACHMENT_TYPE.VIDEO,
     "audio/vorbis": ATTACHMENT_TYPE.AUDIO,

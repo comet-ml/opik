@@ -56,7 +56,7 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
         return {"output": "hello"}
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -125,7 +125,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
         return {"output": "hello"}
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -187,7 +187,7 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
         return {"output": "hello"}
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -257,6 +257,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "experiment-id"
     mock_experiment.name = None
     mock_create_experiment = mock.Mock()
@@ -315,9 +316,9 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
 
-    mock_experiment1 = mock.Mock()
+    mock_experiment1 = mock.Mock(prompts=None)
     mock_experiment1.id = "experiment-id-1"
-    mock_experiment2 = mock.Mock()
+    mock_experiment2 = mock.Mock(prompts=None)
     mock_experiment2.id = "experiment-id-2"
 
     mock_create_experiment = mock.Mock()
@@ -417,7 +418,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -493,7 +494,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -565,7 +566,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -644,7 +645,7 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -750,7 +751,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
                     )
 
                     # First call
-                    mock_create_experiment.return_value = mock.Mock()
+                    mock_create_experiment.return_value = mock.Mock(prompts=None)
                     evaluation.evaluate_prompt(
                         dataset=mock_dataset,
                         messages=[
@@ -762,7 +763,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
                     )
 
                     # Second call
-                    mock_create_experiment.return_value = mock.Mock()
+                    mock_create_experiment.return_value = mock.Mock(prompts=None)
                     evaluation.evaluate_prompt(
                         dataset=mock_dataset,
                         messages=[

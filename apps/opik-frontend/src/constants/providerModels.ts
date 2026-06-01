@@ -107,6 +107,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8,
+      label: "Claude Opus 4.8",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
       label: "Claude Opus 4.7",
     },
@@ -280,6 +284,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
       label: "anthropic/claude-opus-4.7-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8,
+      label: "anthropic/claude-opus-4.8",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8_FAST,
+      label: "anthropic/claude-opus-4.8-fast",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
@@ -537,10 +549,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ESSENTIALAI_RNJ_1_INSTRUCT,
       label: "essentialai/rnj-1-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_001,
-      label: "google/gemini-2.0-flash-001",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
@@ -939,6 +947,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "minimax/minimax-m2.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3,
+      label: "minimax/minimax-m3",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
       label: "mistralai/codestral-2501",
     },
@@ -1141,6 +1153,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_6,
       label: "moonshotai/kimi-k2.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_6_FREE,
+      label: "moonshotai/kimi-k2.6:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
@@ -1924,6 +1940,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "stepfun/step-3.5-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_7_FLASH,
+      label: "stepfun/step-3.7-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.SWITCHPOINT_ROUTER,
       label: "switchpoint/router",
     },
@@ -2193,14 +2213,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       label: "Gemini 2.5 Flash-Lite",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
-      label: "Gemini 2.0 Flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
-      label: "Gemini 2.0 Flash-Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_26B_A4B_IT,

@@ -13,6 +13,7 @@
     --primary-active: 238 65% 43%;
     --secondary: 240 93% 95%;
     --primary-100: 235 85% 97%;
+    --primary-50: 240 71% 99%;
     --white: #ffffff;
 
     --foreground-secondary: 224 71% 4%;
@@ -270,6 +271,7 @@
     --primary-active: 220, 91%, 67%;
     --secondary: 0, 0%, 18%;
     --primary-100: 222, 25%, 14%;
+    --primary-50: 222, 25%, 12%;
     --white: #ffffff;
 
     --foreground-secondary: 214, 32%, 91%;
@@ -503,6 +505,11 @@
 
   .dark .cm-focused .cm-selectionBackground {
     background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .cm-editor:not(.cm-focused) .cm-activeLine,
+  .cm-editor:not(.cm-focused) .cm-activeLineGutter {
+    background-color: transparent !important;
   }
 
   /* Static Lezer code highlighting (used in PrettyLLMMessageCodeBlock) */
@@ -832,14 +839,21 @@
 
   td:last-child,
   th:last-child,
-  // Pinned/grouped cells use box-shadow for their border (see getCommonPinningStyles)
-  .comet-pinned-cell,
-  .comet-grouped-cell ~ td {
+  // Pinned cells use box-shadow for their border (see getCommonPinningStyles)
+  .comet-pinned-cell {
     border-right: none;
   }
 
   .comet-pinned-last-left {
     box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
+  }
+
+  // In group rows the grouped cell paints its right border via inline
+  // box-shadow; the immediately-adjacent aggregated cell is only a thin
+  // (~1px) phantom slot whose own border-right would render as a second
+  // line right next to it. Suppress only that one neighbour's border-right.
+  .comet-grouped-cell + td {
+    border-right: none;
   }
 }
 

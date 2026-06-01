@@ -229,7 +229,7 @@ class TraceServiceImpl implements TraceService {
     private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
-                        Project::name,
+                        WorkspaceUtils::stripProjectName,
                         Function.identity(),
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));

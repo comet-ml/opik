@@ -27,7 +27,6 @@ export class PromptVersion {
   public readonly commit: string;
   /**
    * Sequential version identifier of this prompt version (e.g. `"v3"`).
-   * Undefined for mask versions, which do not carry a version number.
    */
   public readonly version?: string;
   public readonly type: PromptType;
@@ -72,7 +71,7 @@ export class PromptVersion {
   /**
    * Get formatted version information string.
    * Format: "[v3] YYYY-MM-DD by user@email.com - Change description"
-   * (falls back to the commit hash for mask versions, which have no version number).
+   * (falls back to the commit hash when no version number is present).
    */
   getVersionInfo(): string {
     const parts: string[] = [`[${this.version ?? this.commit}]`];

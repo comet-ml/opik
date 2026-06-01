@@ -85,6 +85,7 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
           <PopoverTrigger asChild>
             <div className="flex cursor-pointer flex-col items-center gap-3">
               <Button
+                data-testid="playground-add-variant-button"
                 variant="secondary"
                 size="icon-xs"
                 className="group-hover/variant:bg-secondary group-hover/variant:text-primary-hover"

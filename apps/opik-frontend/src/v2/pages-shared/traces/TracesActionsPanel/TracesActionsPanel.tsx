@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from "react";
 import { Tag, Trash } from "lucide-react";
 import slugify from "slugify";
 import { cn } from "@/lib/utils";
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { Span, Trace } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -20,6 +20,22 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
+type ActionsButtonStyle = {
+  iconButtonSize: ButtonProps["size"];
+  leadIconClassName: string;
+};
+
+const DEFAULT_ACTIONS_BUTTON_STYLE: ActionsButtonStyle = {
+  iconButtonSize: "icon-sm",
+  leadIconClassName: "mr-1.5 size-3.5",
+};
+
+const ACTIONS_BUTTON_STYLE_BY_SIZE: Partial<
+  Record<NonNullable<ButtonProps["size"]>, ActionsButtonStyle>
+> = {
+  "2xs": { iconButtonSize: "icon-2xs", leadIconClassName: "mr-1 size-3" },
+};
+
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
   getDataForExport: () => Promise<Array<Trace | Span>>;
@@ -29,6 +45,7 @@ type TracesActionsPanelProps = {
   projectId: string;
   hideEvaluate?: boolean;
   buttonVariant?: "outline" | "ghost" | "ghostInverted";
+  buttonSize?: ButtonProps["size"];
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
@@ -40,7 +57,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   projectId,
   hideEvaluate = false,
   buttonVariant = "outline",
+  buttonSize = "sm",
 }) => {
+  const { iconButtonSize, leadIconClassName } =
+    (buttonSize && ACTIONS_BUTTON_STYLE_BY_SIZE[buttonSize]) ??
+    DEFAULT_ACTIONS_BUTTON_STYLE;
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
@@ -128,19 +149,20 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         disabled={disabled}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
         buttonVariant={buttonVariant}
+        buttonSize={buttonSize}
       />
       {canLogTraceSpanThread && (
         <TooltipWrapper content="Manage tags">
           <Button
             variant={buttonVariant}
-            size="sm"
+            size={buttonSize}
             onClick={() => {
               setOpen(3);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             disabled={disabled}
           >
-            <Tag className="mr-1.5 size-3.5" />
+            <Tag className={leadIconClassName} />
             <span>Manage tags</span>
           </Button>
         </TooltipWrapper>
@@ -150,6 +172,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           isNoRules={!rules?.length}
           disabled={disabled}
           buttonVariant={buttonVariant}
+          buttonSize={buttonSize}
           label="Evaluate"
           onClick={() => {
             setOpen(4);
@@ -169,6 +192,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         getData={mapRowData}
         generateFileName={generateFileName}
         buttonVariant={buttonVariant}
+        buttonSize={iconButtonSize}
         tooltipContent={
           !isExportEnabled
             ? "Export functionality is disabled for this installation"
@@ -179,7 +203,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         <TooltipWrapper content="Delete">
           <Button
             variant={buttonVariant}
-            size="icon-sm"
+            size={iconButtonSize}
             onClick={() => {
               setOpen(2);
               resetKeyRef.current = resetKeyRef.current + 1;

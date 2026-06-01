@@ -2,6 +2,7 @@
 title: "Optimizer Parameters Guide"
 subtitle: "Complete reference for all optimizer-specific parameters and their use cases"
 description: "Comprehensive guide to all parameters available for each optimizer, including usage recommendations and best practices."
+canonical-url: https://www.comet.com/docs/opik/development/optimization-runs/algorithms/overview
 ---
 
 This guide provides a complete reference for all optimizer-specific parameters, their use cases, and best practices for tuning them effectively.
@@ -88,12 +89,13 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 **Purpose**: Uses meta-prompting to iteratively refine prompts through LLM-driven analysis.
 
 **Specific Parameters:**
-- **`reasoning_model`** (str, optional): Separate model for generating prompt suggestions
-- **`max_rounds`** (int, default: 3): Number of optimization rounds
-- **`num_prompts_per_round`** (int, default: 4): Number of candidates generated per round
-- **`initial_trials_per_candidate`** (int, default: 1): Initial evaluations per candidate
-- **`max_trials_per_candidate`** (int, default: 3): Maximum evaluations per promising candidate
-- **`improvement_threshold`** (float, default: 0.01): Minimum improvement to continue optimization
+- **`prompts_per_round`** (int, default: 4): Number of candidate prompts generated per round
+- **`enable_context`** (bool, default: True): Include dataset/task context when generating candidates
+- **`num_task_examples`** (int, default: 5): Number of dataset examples included as context
+- **`model_parameters`** (dict, optional): LiteLLM parameters (e.g. `temperature`, `max_tokens`) for the optimizer's reasoning model
+
+**Optimization Parameters (via optimize_prompt kwargs):**
+- **`max_trials`** (int, default: 10): Total number of candidate evaluations across rounds
 
 **Use Cases:**
 - General-purpose prompt improvement
@@ -101,9 +103,9 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 - Tasks where prompt wording and structure matter significantly
 
 **Parameter Tuning:**
-- **Reasoning Model**: Use more capable models (gpt-4, claude-3) for better suggestions
-- **Max Rounds**: More rounds (5-10) for thorough refinement, fewer (2-3) for quick improvement
+- **Model**: Use more capable models (gpt-4o, claude-3.5-sonnet) for better prompt suggestions
 - **Prompts Per Round**: More candidates (6-8) for exploration, fewer (2-4) for focused refinement
+- **Max Trials**: More trials for thorough refinement, fewer for quick improvement
 
 ### HRPO (Hierarchical Reflective Prompt Optimizer)
 
@@ -138,8 +140,9 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 **Purpose**: Wraps the GEPA package for single-turn system prompt optimization with reflection.
 
 **Specific Parameters:**
-- **`reflection_model`** (str, optional): Model for reflection (defaults to main model)
 - **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
+
+Reflection is handled internally; there is no separate `reflection_model` argument to set.
 
 **Optimization Parameters (via optimize_prompt kwargs):**
 - **`max_metric_calls`** (int): Effective metric budget used by GEPA (`max_trials × evaluated_samples`). The Opik wrapper still runs its own baseline/final rescoring outside this budget, so plan for those extra evaluations when sizing API usage.
@@ -209,7 +212,7 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 
 **Limited Computational Resources:**
 - Use `FewShotBayesianOptimizer` with lower `n_iterations`
-- Use `MetaPromptOptimizer` with fewer `max_rounds`
+- Use `MetaPromptOptimizer` with fewer `max_trials`
 - Use `MiproOptimizer` with `auto="light"`
 
 **Abundant Computational Resources:**

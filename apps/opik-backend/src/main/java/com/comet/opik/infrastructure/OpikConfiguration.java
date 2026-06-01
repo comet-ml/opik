@@ -124,6 +124,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatasetVersioningConfig datasetVersioning = DatasetVersioningConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private MigrationConfig migration = new MigrationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -132,6 +135,11 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private DatasetProjectMigrationConfig datasetProjectMigration = DatasetProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private OptimizationProjectMigrationConfig optimizationProjectMigration = OptimizationProjectMigrationConfig
+            .builder()
             .build();
 
     @Valid @NotNull @JsonProperty

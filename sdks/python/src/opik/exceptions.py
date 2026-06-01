@@ -199,6 +199,24 @@ class EnvironmentAlreadyExists(OpikException):
     pass
 
 
+class EnvironmentConfigurationError(OpikException):
+    """Raised when an environment configuration operation is not permitted."""
+
+    pass
+
+
+class PromptNotFoundError(OpikException):
+    """Raised when no prompt with the given name (or commit) exists in the project."""
+
+    pass
+
+
+class EnvironmentNotFoundError(OpikException):
+    """Raised when referencing an environment that is not registered in the workspace."""
+
+    pass
+
+
 class LLMJudgeParseError(OpikException):
     """Raised when LLMJudge output fails validation.
 

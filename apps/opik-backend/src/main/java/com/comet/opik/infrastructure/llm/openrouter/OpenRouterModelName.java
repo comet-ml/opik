@@ -53,6 +53,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     ANTHROPIC_CLAUDE_OPUS_4_6_FAST("anthropic/claude-opus-4.6-fast"),
     ANTHROPIC_CLAUDE_OPUS_4_7("anthropic/claude-opus-4.7"),
     ANTHROPIC_CLAUDE_OPUS_4_7_FAST("anthropic/claude-opus-4.7-fast"),
+    ANTHROPIC_CLAUDE_OPUS_4_8("anthropic/claude-opus-4.8"),
+    ANTHROPIC_CLAUDE_OPUS_4_8_FAST("anthropic/claude-opus-4.8-fast"),
     ANTHROPIC_CLAUDE_SONNET_4("anthropic/claude-sonnet-4"),
     ANTHROPIC_CLAUDE_SONNET_4_5("anthropic/claude-sonnet-4.5"),
     ANTHROPIC_CLAUDE_SONNET_4_6("anthropic/claude-sonnet-4.6"),
@@ -218,6 +220,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MINIMAX_MINIMAX_M2_5("minimax/minimax-m2.5"),
     MINIMAX_MINIMAX_M2_5_FREE("minimax/minimax-m2.5:free"),
     MINIMAX_MINIMAX_M2_7("minimax/minimax-m2.7"),
+    MINIMAX_MINIMAX_M3("minimax/minimax-m3"),
     MISTRALAI_CODESTRAL_2501("mistralai/codestral-2501"),
     MISTRALAI_CODESTRAL_2508("mistralai/codestral-2508"),
     MISTRALAI_DEVSTRAL_2512("mistralai/devstral-2512"),
@@ -269,6 +272,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MOONSHOTAI_KIMI_K2_THINKING("moonshotai/kimi-k2-thinking"),
     MOONSHOTAI_KIMI_K2_5("moonshotai/kimi-k2.5"),
     MOONSHOTAI_KIMI_K2_6("moonshotai/kimi-k2.6"),
+    MOONSHOTAI_KIMI_K2_6_FREE("moonshotai/kimi-k2.6:free"),
     MOONSHOTAI_KIMI_K2_FREE("moonshotai/kimi-k2:free"),
     MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT("moonshotai/kimi-linear-48b-a3b-instruct"),
     MORPH_MORPH_V3_FAST("morph/morph-v3-fast"),
@@ -464,6 +468,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     STEPFUN_AI_STEP3("stepfun-ai/step3"),
     STEPFUN_STEP_3_5_FLASH("stepfun/step-3.5-flash"),
     STEPFUN_STEP_3_5_FLASH_FREE("stepfun/step-3.5-flash:free"),
+    STEPFUN_STEP_3_7_FLASH("stepfun/step-3.7-flash"),
     SWITCHPOINT_ROUTER("switchpoint/router"),
     TENCENT_HUNYUAN_A13B_INSTRUCT("tencent/hunyuan-a13b-instruct"),
     TENCENT_HY3_PREVIEW("tencent/hy3-preview"),
@@ -538,6 +543,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
             GOOGLE_GEMINI_2_5_FLASH,
             GOOGLE_GEMINI_2_5_PRO,
+            GOOGLE_GEMINI_3_1_FLASH_LITE,
             GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW,
             GOOGLE_GEMINI_3_1_PRO_PREVIEW,
             GOOGLE_GEMINI_3_FLASH_PREVIEW,
@@ -588,7 +594,9 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             OPENROUTER_FREE,
             QWEN_QWEN_2_5_72B_INSTRUCT,
             QWEN_QWEN_2_5_CODER_32B_INSTRUCT,
-            QWEN_QWQ_32B);
+            QWEN_QWQ_32B,
+            XIAOMI_MIMO_V2_5,
+            XIAOMI_MIMO_V2_5_PRO);
 
     private final String value;
 
