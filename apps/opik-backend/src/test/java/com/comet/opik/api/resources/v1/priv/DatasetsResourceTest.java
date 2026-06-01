@@ -11113,9 +11113,21 @@ class DatasetsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TraceMetadataOnExperimentItemCompareTest {
 
-        @Test
-        @DisplayName("Trace.metadata is projected onto ExperimentItem.traceMetadata in the compare response")
-        void findDatasetItemsWithExperimentItems__whenTraceHasMetadata__thenIncludesTraceMetadata() {
+        Stream<Arguments> traceMetadataCases() {
+            // Value is opaque to the BE; the projection should pass it
+            // through verbatim, or surface ``null`` when the trace has none.
+            var populated = JsonUtils.readTree(
+                    Map.of("_opik_evaluation_pending", false, "other_key", "other_value"));
+            return Stream.of(
+                    arguments("populated metadata round-trips", populated, populated),
+                    arguments("null metadata stays null", null, null));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("traceMetadataCases")
+        @DisplayName("Trace.metadata projects onto ExperimentItem.traceMetadata via the compare endpoint")
+        void findDatasetItemsWithExperimentItems__projectsTraceMetadata(
+                String displayName, JsonNode traceMetadata, JsonNode expectedTraceMetadata) {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -11129,11 +11141,6 @@ class DatasetsResourceTest {
                     .items(List.of(datasetItem))
                     .build(), workspaceName, apiKey);
 
-            // Trace whose metadata carries the resume marker the SDK reads.
-            // Field value is opaque to the BE; the projection should pass
-            // it through verbatim.
-            var traceMetadata = JsonUtils.readTree(
-                    Map.of("_opik_evaluation_pending", false, "other_key", "other_value"));
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .metadata(traceMetadata)
                     .build();
@@ -11155,49 +11162,7 @@ class DatasetsResourceTest {
             assertThat(result.content()).hasSize(1);
             var experimentItems = result.content().get(0).experimentItems();
             assertThat(experimentItems).hasSize(1);
-            assertThat(experimentItems.get(0).traceMetadata())
-                    .as("traceMetadata is the trace.metadata projected onto the compare view")
-                    .isEqualTo(traceMetadata);
-        }
-
-        @Test
-        @DisplayName("ExperimentItem.traceMetadata is null when the trace has no metadata")
-        void findDatasetItemsWithExperimentItems__whenTraceHasNoMetadata__thenTraceMetadataIsNull() {
-            var workspaceName = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var dataset = buildDataset();
-            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
-            var datasetItem = DatasetResourceClient.buildDatasetItem(factory);
-            putAndAssert(DatasetItemBatch.builder()
-                    .datasetId(datasetId)
-                    .items(List.of(datasetItem))
-                    .build(), workspaceName, apiKey);
-
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .metadata(null)
-                    .build();
-            createAndAssert(trace, workspaceName, apiKey);
-
-            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
-            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(experimentId)
-                    .datasetItemId(datasetItem.id())
-                    .traceId(trace.id())
-                    .build();
-            createAndAssert(ExperimentItemsBatch.builder()
-                    .experimentItems(Set.of(experimentItem))
-                    .build(), apiKey, workspaceName);
-
-            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
-                    datasetId, List.of(experimentId), apiKey, workspaceName);
-
-            assertThat(result.content()).hasSize(1);
-            var experimentItems = result.content().get(0).experimentItems();
-            assertThat(experimentItems).hasSize(1);
-            assertThat(experimentItems.get(0).traceMetadata()).isNull();
+            assertThat(experimentItems.get(0).traceMetadata()).isEqualTo(expectedTraceMetadata);
         }
     }
 
