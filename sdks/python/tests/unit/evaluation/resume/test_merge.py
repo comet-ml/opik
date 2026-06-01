@@ -1,7 +1,17 @@
 from types import SimpleNamespace
 from unittest import mock
 
+from opik.evaluation.engine import helpers as engine_helpers
 from opik.evaluation.resume import merge
+
+
+# Trace metadata that marks a trial as fully completed by the happy-path
+# line in the engine. Tests that want a partial/failed trial either pass
+# ``trace_metadata=None`` (legacy / pre-marker) or supply a dict with the
+# marker still at ``True``.
+_COMPLETED_TRACE_METADATA = {
+    engine_helpers.EVALUATION_PENDING_METADATA_KEY: False
+}
 
 
 def _experiment_item(
@@ -11,6 +21,7 @@ def _experiment_item(
     trace_id: str,
     evaluation_task_output,
     feedback_scores=None,
+    trace_metadata=_COMPLETED_TRACE_METADATA,
 ):
     return SimpleNamespace(
         id=id,
@@ -18,6 +29,7 @@ def _experiment_item(
         trace_id=trace_id,
         evaluation_task_output=evaluation_task_output,
         feedback_scores=feedback_scores or [],
+        trace_metadata=trace_metadata,
     )
 
 
@@ -34,13 +46,25 @@ def _experiment_with(experiment_items):
 
 
 class TestReconstructPreviousTestResults:
-    def test_null_output_items__skipped(self):
+    def test_items_without_completion_marker__skipped(self):
+        """The marker, not output presence, decides reconstruction.
+
+        Item 'a' has output set but its trace metadata still carries the
+        pending marker (the engine never reached the happy-path line —
+        scoring crashed or was interrupted). Even if the caller passes it
+        in ``fully_completed_dataset_item_ids`` by mistake, the per-trial
+        defensive check in ``reconstruct_previous_test_results`` keeps the
+        stale row from leaking into the merged result.
+        """
         experiment = _experiment_with(
             [
                 _experiment_item(
                     dataset_item_id="a",
                     trace_id="t-a",
-                    evaluation_task_output=None,
+                    evaluation_task_output={"output": "stale"},
+                    trace_metadata={
+                        engine_helpers.EVALUATION_PENDING_METADATA_KEY: True
+                    },
                 ),
                 _experiment_item(
                     dataset_item_id="b",
@@ -59,8 +83,6 @@ class TestReconstructPreviousTestResults:
             fully_completed_dataset_item_ids={"a", "b"},
         )
 
-        # 'a' has null output → skipped even though it's "fully completed"
-        # on paper; 'b' is reconstructed.
         assert [r.test_case.dataset_item_id for r in results] == ["b"]
 
     def test_partial_items__not_reconstructed(self):

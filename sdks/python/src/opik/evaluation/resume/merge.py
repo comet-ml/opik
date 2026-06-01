@@ -20,6 +20,7 @@ from ...api_objects.experiment import experiment as experiment_module
 from .. import test_case as test_case_module
 from .. import test_result as test_result_module
 from ..metrics import score_result
+from . import context as context_module
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +53,11 @@ def reconstruct_previous_test_results(
     results: List[test_result_module.TestResult] = []
 
     for experiment_item_content in experiment.get_items():
-        if experiment_item_content.evaluation_task_output is None:
+        # Only reconstruct trials that finished the full happy path; the
+        # outer dataset-item gate already filters to fully-completed items,
+        # but a defensive per-trial check keeps stale output rows from
+        # leaking into the merged result if data is ever inconsistent.
+        if not context_module.is_trial_fully_completed(experiment_item_content):
             continue
         if (
             experiment_item_content.dataset_item_id

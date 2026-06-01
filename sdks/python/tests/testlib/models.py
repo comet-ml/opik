@@ -29,6 +29,11 @@ class TraceModel(models.TraceModel):
     attachments: Optional[List[models.AttachmentModel]] = dataclasses.field(
         default_factory=lambda: ANY
     )  # we don't want to check attachments unless explicitly specified in the test
+    metadata: Optional[dict] = dataclasses.field(
+        default_factory=lambda: ANY
+    )  # ignore metadata by default — evaluate() seeds the resume marker
+    # (``_opik_evaluation_pending``) on every trace, so we leave the
+    # field out of assertions unless a test explicitly cares about it.
     source: TraceSource = dataclasses.field(default_factory=lambda: "sdk")
 
 

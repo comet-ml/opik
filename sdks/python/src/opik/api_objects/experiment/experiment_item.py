@@ -26,6 +26,7 @@ class ExperimentItemContent:
     assertion_results: List[AssertionResultDict] = dataclasses.field(
         default_factory=list
     )
+    trace_metadata: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_rest_experiment_item_compare(
@@ -64,4 +65,5 @@ class ExperimentItemContent:
             evaluation_task_output=value.output,
             feedback_scores=feedback_scores,
             assertion_results=assertion_results,
+            trace_metadata=getattr(value, "trace_metadata", None),
         )

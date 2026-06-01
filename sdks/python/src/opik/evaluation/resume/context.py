@@ -28,6 +28,8 @@ from ... import exceptions as opik_exceptions
 from ...api_objects import opik_client
 from ...api_objects.dataset import dataset
 from ...api_objects.experiment import experiment as experiment_module
+from ...api_objects.experiment import experiment_item
+from ..engine import helpers as engine_helpers
 from . import checkpoint as checkpoint_module
 from . import state as state_module
 
@@ -155,9 +157,31 @@ def _resolve_dataset_version(
 def _count_completed_runs_by_item_id(
     experiment: experiment_module.Experiment,
 ) -> Mapping[str, int]:
+    """
+    Count fully-completed trials per dataset item.
+
+    A trial counts as fully completed only when the trace carries the
+    happy-path marker flipped to ``False``. The marker is seeded to
+    ``True`` when the trace is built (see
+    ``engine.helpers.EVALUATION_PENDING_METADATA_KEY``) and flipped only
+    after task + scoring + score-logging all returned. Any failure —
+    sync exception, KeyboardInterrupt, process kill before the happy
+    line — leaves the marker at its default and the trial is replayed.
+
+    Trials produced by an SDK version older than the marker rollout will
+    not carry the key at all; those are also treated as incomplete and
+    replayed, which is the safe default.
+    """
     counts: Dict[str, int] = {}
     for item in experiment.get_items():
-        if item.evaluation_task_output is None:
+        if not is_trial_fully_completed(item):
             continue
         counts[item.dataset_item_id] = counts.get(item.dataset_item_id, 0) + 1
     return counts
+
+
+def is_trial_fully_completed(
+    item: experiment_item.ExperimentItemContent,
+) -> bool:
+    metadata = item.trace_metadata or {}
+    return metadata.get(engine_helpers.EVALUATION_PENDING_METADATA_KEY) is False

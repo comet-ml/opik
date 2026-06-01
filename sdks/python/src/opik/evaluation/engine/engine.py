@@ -284,6 +284,7 @@ class EvaluationEngine:
             created_by="evaluation",
             project_name=self._project_name,
             source=self._source,
+            metadata={helpers.EVALUATION_PENDING_METADATA_KEY: True},
         )
 
         execution_policy_dict = None
@@ -363,6 +364,16 @@ class EvaluationEngine:
                     (s.name, s.value, getattr(s, "reason", None))
                     for s in test_result_.score_results
                 ],
+            )
+
+            # Happy-path-only line: flips the trace-level pending marker to
+            # ``False``. ``evaluate_resume`` reads this back to decide which
+            # trials are fully completed vs. need to be replayed. Any failure
+            # before this line (task, scoring, score-log, KeyboardInterrupt)
+            # leaves the marker at its default ``True``, which resume treats
+            # as "trial incomplete".
+            opik_context.update_current_trace(
+                metadata={helpers.EVALUATION_PENDING_METADATA_KEY: False}
             )
 
         return test_result_
