@@ -84,9 +84,13 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
   const handleSelect = useCallback(
     (selection: PromptLibrarySelection) => {
       onSelect(selection);
-      setOpen(false);
+      // Route through handleOpenChange so subscribers (e.g. the playground's
+      // `isChatLibraryOpen` hover-strip pin) see the close. Calling setOpen
+      // directly updates internal state but Radix doesn't re-fire
+      // onOpenChange when the controlled value flips externally.
+      handleOpenChange(false);
     },
-    [onSelect],
+    [onSelect, handleOpenChange],
   );
 
   return (
