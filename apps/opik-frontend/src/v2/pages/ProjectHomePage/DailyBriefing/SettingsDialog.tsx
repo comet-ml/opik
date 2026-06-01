@@ -6,7 +6,7 @@ import { Button } from "@/ui/button";
 import { Textarea } from "@/ui/textarea";
 import { Switch } from "@/ui/switch";
 import { Separator } from "@/ui/separator";
-import TimePicker from "@/shared/TimePicker/TimePicker";
+import TimeInput from "@/shared/TimeInput/TimeInput";
 import {
   Dialog,
   DialogContent,
@@ -102,13 +102,11 @@ export default function SettingsDialog({
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
                   <p className="font-medium text-foreground">Scheduled for</p>
-                  <div
-                    className={
-                      !localEnabled ? "pointer-events-none opacity-50" : ""
-                    }
-                  >
-                    <TimePicker date={timeDate} setDate={setTimeDate} />
-                  </div>
+                  <TimeInput
+                    date={timeDate}
+                    setDate={setTimeDate}
+                    disabled={!localEnabled}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-1">
