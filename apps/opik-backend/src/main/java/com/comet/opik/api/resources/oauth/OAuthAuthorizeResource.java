@@ -6,6 +6,7 @@ import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
 import com.comet.opik.infrastructure.McpOAuthConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.UserWorkspace;
@@ -29,7 +30,6 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -58,7 +58,7 @@ public class OAuthAuthorizeResource {
     private final @NonNull OAuthClientService clientService;
     private final @NonNull AuthService authService;
     private final @NonNull McpOAuthService mcpOAuthService;
-    private final @NonNull @Config("mcpOAuth") McpOAuthConfig config;
+    private final @NonNull OpikConfiguration opikConfig;
 
     @GET
     @Path("/authorize")
@@ -73,6 +73,7 @@ public class OAuthAuthorizeResource {
             @Context HttpHeaders headers,
             @Context UriInfo uriInfo) {
 
+        McpOAuthConfig config = opikConfig.getMcpOAuth();
         McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
 
         // client and redirect_uri are now trusted, so protocol errors are reported back to the client via redirect.
@@ -143,6 +144,7 @@ public class OAuthAuthorizeResource {
             throw new ForbiddenException("invalid csrf token");
         }
 
+        McpOAuthConfig config = opikConfig.getMcpOAuth();
         requireClientWithRedirect(request.clientId(), request.redirectUri());
         if (!config.getMcpResourceUri().equals(request.resource())) {
             throw new BadRequestException(ERROR_INVALID_TARGET);

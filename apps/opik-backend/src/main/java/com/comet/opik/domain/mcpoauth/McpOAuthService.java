@@ -2,6 +2,7 @@ package com.comet.opik.domain.mcpoauth;
 
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.McpOAuthConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -11,7 +12,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
@@ -41,7 +41,11 @@ public class McpOAuthService {
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
-    private final @NonNull @Config("mcpOAuth") McpOAuthConfig config;
+    private final @NonNull OpikConfiguration opikConfig;
+
+    private McpOAuthConfig config() {
+        return opikConfig.getMcpOAuth();
+    }
 
     public String createAuthorizationCode(@NonNull CreateOAuthCodeCommand cmd) {
         String rawCode = McpOAuthTokens.generateCode();
@@ -57,7 +61,7 @@ public class McpOAuthService {
                 .codeChallengeMethod(CODE_CHALLENGE_METHOD_S256)
                 .redirectUri(cmd.redirectUri())
                 .resource(cmd.resource())
-                .expiresAt(now.plus(config.getCodeTtl()))
+                .expiresAt(now.plus(config().getCodeTtl()))
                 .build();
 
         template.inTransaction(WRITE, handle -> {
@@ -103,7 +107,7 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(familyId)
-                    .expiresAt(now.plus(config.getAccessTokenTtl()))
+                    .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
                     .tokenHash(McpOAuthTokens.hash(refreshToken))
@@ -114,7 +118,7 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(familyId)
-                    .expiresAt(now.plus(config.getRefreshTokenTtl()))
+                    .expiresAt(now.plus(config().getRefreshTokenTtl()))
                     .build());
 
             return buildTokenResponse(accessToken, refreshToken, row.workspaceId(), row.workspaceName());
@@ -139,7 +143,7 @@ public class McpOAuthService {
 
             if (row.revokedAt() != null) {
                 boolean benignRetry = REASON_ROTATED.equals(row.revokedReason())
-                        && !now.isAfter(row.revokedAt().plus(config.getRefreshRotationGrace()));
+                        && !now.isAfter(row.revokedAt().plus(config().getRefreshRotationGrace()));
                 if (!benignRetry) {
                     tokenDao.revokeFamily(row.familyId(), REASON_REUSE);
                 }
@@ -159,7 +163,7 @@ public class McpOAuthService {
                     .resource(row.resource())
                     .familyId(row.familyId())
                     .rotatedFrom(row.tokenHash())
-                    .expiresAt(now.plus(config.getAccessTokenTtl()))
+                    .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
                     .tokenHash(McpOAuthTokens.hash(newRefreshToken))
@@ -230,7 +234,7 @@ public class McpOAuthService {
     private TokenResponse buildTokenResponse(String accessToken, String refreshToken, String workspaceId,
             String workspaceName) {
         return new TokenResponse(accessToken, refreshToken, TOKEN_TYPE_BEARER,
-                config.getAccessTokenTtl().toSeconds(), workspaceId, workspaceName);
+                config().getAccessTokenTtl().toSeconds(), workspaceId, workspaceName);
     }
 
     private static boolean verifyPkce(String codeVerifier, String codeChallenge) {
