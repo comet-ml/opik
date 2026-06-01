@@ -22,6 +22,13 @@ const ICON_SIZE_CLASSES: Record<NonNullable<TagProps["size"]>, string> = {
   lg: "size-3.5",
 };
 
+// Asymmetric pill spec used across prompt-version surfaces (prompt detail
+// header, mobile version picker, version history timeline, +N overflow
+// tooltip). Pass as `badgeClassName` on EnvironmentBadgeList — tailwind-merge
+// resolves the conflicts against SIZE_CLASSES["sm"].
+export const ENV_BADGE_PROMPT_PILL_CLASS =
+  "h-5 pl-1.5 pr-2 text-[10px] leading-5";
+
 type EnvironmentBadgeProps = {
   name?: string | null;
   size?: TagProps["size"];

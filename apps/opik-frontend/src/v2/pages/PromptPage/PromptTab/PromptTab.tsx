@@ -50,6 +50,7 @@ import usePromptVersionById, {
   useFetchPromptVersion,
 } from "@/api/prompts/usePromptVersionById";
 import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
+import { ENV_BADGE_PROMPT_PILL_CLASS } from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlaygroundButton";
 import useLoadPromptIntoPlayground from "@/v2/pages-shared/playground/useLoadPromptIntoPlayground";
 import { getTimeFromNow } from "@/lib/date";
@@ -270,6 +271,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   <EnvironmentBadgeList
                     names={activeVersionEnvironments}
                     size="sm"
+                    badgeClassName={ENV_BADGE_PROMPT_PILL_CLASS}
                     withOverflow
                     maxWidth={200}
                   />
@@ -327,6 +329,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               <EnvironmentBadgeList
                 names={activeVersionEnvironments}
                 size="sm"
+                badgeClassName={ENV_BADGE_PROMPT_PILL_CLASS}
                 withOverflow
                 maxWidth={320}
               />

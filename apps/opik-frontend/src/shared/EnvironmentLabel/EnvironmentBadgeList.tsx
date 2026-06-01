@@ -118,7 +118,12 @@ const EnvironmentBadgeList: React.FC<EnvironmentBadgeListProps> = ({
           content={
             <div className="flex max-w-[300px] flex-wrap gap-1">
               {hiddenItems.map((name) => (
-                <EnvironmentBadge key={name} name={name} size={size} />
+                <EnvironmentBadge
+                  key={name}
+                  name={name}
+                  size={size}
+                  className={badgeClassName}
+                />
               ))}
             </div>
           }

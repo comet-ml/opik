@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
+import { ENV_BADGE_PROMPT_PILL_CLASS } from "@/shared/EnvironmentLabel/EnvironmentBadge";
 import VersionTagList from "./VersionTagList";
 import VersionMeta from "./VersionMeta";
 
@@ -102,7 +103,10 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
                 <EnvironmentBadgeList
                   names={item.environments}
                   size="sm"
-                  badgeClassName="max-w-[120px]"
+                  badgeClassName={cn(
+                    ENV_BADGE_PROMPT_PILL_CLASS,
+                    "max-w-[120px]",
+                  )}
                   withOverflow
                   maxWidth={160}
                 />

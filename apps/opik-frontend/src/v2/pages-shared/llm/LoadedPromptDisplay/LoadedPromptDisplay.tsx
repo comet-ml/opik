@@ -8,6 +8,7 @@ import {
 
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import { pickHighestStage } from "@/utils/version-stages";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
@@ -18,6 +19,7 @@ type LoadedPromptDisplayProps = {
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   versionLabel?: string;
   versionTags?: string[];
+  versionEnvironments?: string[] | null;
   hasUnsavedChanges?: boolean;
   onClear?: () => void;
 };
@@ -27,6 +29,7 @@ const LoadedPromptDisplay: React.FC<LoadedPromptDisplayProps> = ({
   templateStructure,
   versionLabel,
   versionTags,
+  versionEnvironments,
   hasUnsavedChanges = false,
   onClear,
 }) => {
@@ -57,6 +60,14 @@ const LoadedPromptDisplay: React.FC<LoadedPromptDisplayProps> = ({
         </span>
       )}
       {stage && <StageTag value={stage} size="xs" />}
+      <EnvironmentBadgeList
+        names={versionEnvironments}
+        className="ml-1"
+        size="sm"
+        withOverflow
+        compact
+        maxWidth={60}
+      />
       {onClear && (
         <TooltipWrapper content="Detach loaded prompt">
           <Button

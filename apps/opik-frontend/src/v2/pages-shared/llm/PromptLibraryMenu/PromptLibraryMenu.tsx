@@ -109,6 +109,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
             setSearchText={setSearch}
             placeholder="Search"
             variant="ghost"
+            size="sm"
           />
         </div>
         <Separator className="my-1" />
@@ -266,17 +267,12 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
             role="button"
             tabIndex={0}
             className={cn(
-              "comet-body-s flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-primary-foreground",
+              "comet-body-s flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 hover:bg-primary-foreground",
               isActive && "bg-primary-100 text-primary",
             )}
             onClick={() => onSelect(version.id)}
           >
-            <span
-              className={cn(
-                "comet-body-s-accented shrink-0",
-                isActive && "text-primary",
-              )}
-            >
+            <span className={cn("shrink-0", isActive && "text-primary")}>
               {label}
             </span>
             {stage && <StageTag value={stage} size="xs" />}
