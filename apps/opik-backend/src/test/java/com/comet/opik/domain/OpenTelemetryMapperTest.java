@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.protobuf.ByteString;
@@ -12,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,6 +24,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OpenTelemetryMapperTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Test
     void testThreadIdMappingRule() {
@@ -278,12 +282,13 @@ class OpenTelemetryMapperTest {
                         AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
     }
 
-    private static Span.SpanBuilder newSpanBuilder() {
-        return Span.builder()
-                .id(UUID.randomUUID())
-                .traceId(UUID.randomUUID())
-                .projectId(UUID.randomUUID())
-                .startTime(Instant.now());
+    private Span.SpanBuilder newSpanBuilder() {
+        // PODAM fills in id / traceId / projectId / startTime and every other field with random
+        // values; null out totalEstimatedCost because enrich only sets it on successful extraction,
+        // so the malformed/non-finite cost cases would otherwise inherit PODAM's random BigDecimal.
+        return podamFactory.manufacturePojo(Span.class)
+                .toBuilder()
+                .totalEstimatedCost(null);
     }
 
     @Test
