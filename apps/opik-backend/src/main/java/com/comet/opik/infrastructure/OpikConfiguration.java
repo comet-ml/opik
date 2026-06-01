@@ -138,6 +138,11 @@ public class OpikConfiguration extends JobConfiguration {
             .build();
 
     @Valid @NotNull @JsonProperty
+    private OptimizationProjectMigrationConfig optimizationProjectMigration = OptimizationProjectMigrationConfig
+            .builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private PromptProjectMigrationConfig promptProjectMigration = PromptProjectMigrationConfig.builder()
             .build();
 
