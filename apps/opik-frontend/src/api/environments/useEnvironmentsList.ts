@@ -5,7 +5,7 @@ import api, {
   QueryConfig,
 } from "@/api/api";
 import { Environment } from "@/types/environments";
-import { sortEnvironments } from "@/shared/EnvironmentLabel/helpers";
+import { sortEnvironments } from "@/utils/environments";
 
 export type UseEnvironmentsListResponse = {
   content: Environment[];
