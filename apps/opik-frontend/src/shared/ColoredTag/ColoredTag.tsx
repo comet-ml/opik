@@ -6,6 +6,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 export interface ColoredTagProps {
   label: string;
+  tooltip?: string | React.ReactElement | null;
   size?: TagProps["size"];
   variant?: TagProps["variant"];
   testId?: string;
@@ -15,6 +16,7 @@ export interface ColoredTagProps {
 
 const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
   label,
+  tooltip,
   size = "md",
   variant: variantOverride,
   testId,
@@ -31,7 +33,7 @@ const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
       data-testid={testId}
       className={className}
     >
-      <TooltipWrapper content={label} stopClickPropagation>
+      <TooltipWrapper content={tooltip ?? label} stopClickPropagation>
         <div className="flex min-w-0 items-center gap-1">
           {IconComponent && <IconComponent className="size-3 shrink-0" />}
           <span className="truncate">{label}</span>

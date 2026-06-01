@@ -257,7 +257,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
               searchText={search}
               setSearchText={setSearch}
               variant="ghost"
-              size="sm"
+              dimension="sm"
             />
           </div>
           <DropdownMenuSeparator className="my-1" />
