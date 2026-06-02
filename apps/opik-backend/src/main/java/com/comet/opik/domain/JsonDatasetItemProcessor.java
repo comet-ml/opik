@@ -133,8 +133,9 @@ public class JsonDatasetItemProcessor {
                     datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.COMPLETED);
                     deleteTempFile(tempFile);
                 })
-                .subscribe(null, error -> log.error("Subscription error during JSON processing for dataset '{}'",
-                        datasetId, error));
+                .subscribe(null, error -> log.debug(
+                        "JSON processing subscription error for dataset '{}' (already handled): {}",
+                        datasetId, error.getMessage()));
     }
 
     private Path bufferToTempFile(InputStream inputStream) throws IOException {
