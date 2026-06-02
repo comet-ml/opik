@@ -20,6 +20,7 @@ from opik.types import TraceSource
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
 from .types import EvaluationTask
+from .. import _completion_marker as completion_marker
 from ..metrics import base_metric, score_result
 
 
@@ -284,7 +285,7 @@ class EvaluationEngine:
             created_by="evaluation",
             project_name=self._project_name,
             source=self._source,
-            metadata={helpers.EVALUATION_PENDING_METADATA_KEY: True},
+            metadata=completion_marker.initial_metadata(),
         )
 
         execution_policy_dict = None
@@ -366,14 +367,11 @@ class EvaluationEngine:
                 ],
             )
 
-            # Happy-path-only line: flips the trace-level pending marker to
-            # ``False``. ``evaluate_resume`` reads this back to decide which
-            # trials are fully completed vs. need to be replayed. Any failure
-            # before this line (task, scoring, score-log, KeyboardInterrupt)
-            # leaves the marker at its default ``True``, which resume treats
-            # as "trial incomplete".
+            # Happy-path-only line: hands the marker to ``completion_marker``
+            # to flip; any failure before here leaves the trace's marker
+            # at its initial state and ``evaluate_resume`` replays the trial.
             opik_context.update_current_trace(
-                metadata={helpers.EVALUATION_PENDING_METADATA_KEY: False}
+                metadata=completion_marker.completed_metadata()
             )
 
         return test_result_

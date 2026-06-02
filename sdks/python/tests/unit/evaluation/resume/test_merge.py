@@ -1,17 +1,14 @@
 from types import SimpleNamespace
 from unittest import mock
 
-from opik.evaluation.engine import helpers as engine_helpers
+from opik.evaluation import _completion_marker as completion_marker
 from opik.evaluation.resume import merge
 
 
-# Trace metadata that marks a trial as fully completed by the happy-path
-# line in the engine. Tests that want a partial/failed trial either pass
-# ``trace_metadata=None`` (legacy / pre-marker) or supply a dict with the
-# marker still at ``True``.
-_COMPLETED_TRACE_METADATA = {
-    engine_helpers.EVALUATION_PENDING_METADATA_KEY: False
-}
+# Default trace metadata: marks a trial as fully completed. Tests that
+# want a partial/failed trial pass ``trace_metadata=None`` or
+# ``completion_marker.initial_metadata()`` (the pending state).
+_COMPLETED_TRACE_METADATA = completion_marker.completed_metadata()
 
 
 def _experiment_item(
@@ -62,9 +59,7 @@ class TestReconstructPreviousTestResults:
                     dataset_item_id="a",
                     trace_id="t-a",
                     evaluation_task_output={"output": "stale"},
-                    trace_metadata={
-                        engine_helpers.EVALUATION_PENDING_METADATA_KEY: True
-                    },
+                    trace_metadata=completion_marker.initial_metadata(),
                 ),
                 _experiment_item(
                     dataset_item_id="b",

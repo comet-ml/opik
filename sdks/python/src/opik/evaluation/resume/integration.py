@@ -66,13 +66,6 @@ def resume_state_for_evaluate(
             requires_local_checkpoint=(
                 dataset_sampler is not None or dataset_item_ids is not None
             ),
-            # This SDK version writes the completion marker on every trace
-            # (see ``engine.helpers.EVALUATION_PENDING_METADATA_KEY``).
-            # Resume reads it back via the BE's ``trace_metadata``
-            # projection on the experiment-item compare endpoint; the
-            # flag here lets resume fail loudly if the connected BE is
-            # older than that projection.
-            requires_completion_marker=True,
         ),
     )
 

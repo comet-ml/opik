@@ -15,7 +15,6 @@ class TestEmbedResumableState:
                 dataset_version_name="v7",
                 nb_samples=50,
                 requires_local_checkpoint=False,
-                requires_completion_marker=True,
             ),
         )
 
@@ -43,7 +42,6 @@ class TestEmbedResumableState:
                 dataset_version_name="v1",
                 nb_samples=None,
                 requires_local_checkpoint=False,
-                requires_completion_marker=True,
             ),
         )
 
@@ -63,7 +61,6 @@ class TestEmbedResumableState:
                 dataset_version_name="v1",
                 nb_samples=None,
                 requires_local_checkpoint=False,
-                requires_completion_marker=True,
             ),
         )
 
@@ -78,28 +75,11 @@ class TestEmbedResumableState:
                 dataset_version_name="v1",
                 nb_samples=None,
                 requires_local_checkpoint=True,
-                requires_completion_marker=True,
             ),
         )
 
         blob = json.loads(result[state.RESUME_METADATA_KEY])
         assert blob["requires_local_checkpoint"] is True
-
-    def test_requires_completion_marker__persists_true_flag(self):
-        result = state.embed_resumable_state(
-            None,
-            state.ResumableState(
-                default_runs_per_item=2,
-                dataset_filter_string=None,
-                dataset_version_name="v1",
-                nb_samples=None,
-                requires_local_checkpoint=False,
-                requires_completion_marker=True,
-            ),
-        )
-
-        blob = json.loads(result[state.RESUME_METADATA_KEY])
-        assert blob["requires_completion_marker"] is True
 
 
 class TestEmbedNonResumableState:
@@ -227,7 +207,6 @@ class TestReadResumeState:
                 dataset_version_name="v3",
                 nb_samples=50,
                 requires_local_checkpoint=True,
-                requires_completion_marker=True,
             ),
         )
         experiment = self._experiment_with_metadata(embedded)
@@ -240,7 +219,6 @@ class TestReadResumeState:
         assert persisted.dataset_version_name == "v3"
         assert persisted.nb_samples == 50
         assert persisted.requires_local_checkpoint is True
-        assert persisted.requires_completion_marker is True
 
     def test_malformed_json_string__treated_as_no_resume_state(self):
         experiment = self._experiment_with_metadata(

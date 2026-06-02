@@ -9,16 +9,6 @@ from opik.types import ErrorInfoDict
 import opik.context_storage as context_storage
 
 
-# Trace-metadata marker used by ``opik.evaluate_resume`` to decide whether a
-# trial finished its full scoring pipeline. Seeded to ``True`` when the
-# trace is built; flipped to ``False`` on the happy-path-only line after
-# scoring + score-logging both returned. Any failure mode that prevents
-# control flow from reaching that line — sync exception, KeyboardInterrupt,
-# process kill — leaves the marker at ``True``, which resume treats as
-# "trial incomplete, replay it".
-EVALUATION_PENDING_METADATA_KEY: str = "_opik_evaluation_pending"
-
-
 @contextlib.contextmanager
 def evaluate_llm_task_context(
     experiment: Optional[experiment.Experiment],

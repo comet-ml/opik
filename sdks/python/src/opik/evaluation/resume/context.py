@@ -29,7 +29,7 @@ from ...api_objects import opik_client
 from ...api_objects.dataset import dataset
 from ...api_objects.experiment import experiment as experiment_module
 from ...api_objects.experiment import experiment_item
-from ..engine import helpers as engine_helpers
+from .. import _completion_marker as completion_marker
 from . import checkpoint as checkpoint_module
 from . import state as state_module
 
@@ -103,10 +103,9 @@ def prepare_resume_context(
     )
 
     experiment_items = list(experiment.get_items())
-    if persisted.requires_completion_marker:
-        _require_backend_projects_trace_marker(
-            experiment_id=experiment_id, experiment_items=experiment_items
-        )
+    completion_marker.ensure_backend_supports_marker(
+        experiment_id=experiment_id, experiment_items=experiment_items
+    )
 
     return ResumeContext(
         experiment=experiment,
@@ -118,35 +117,6 @@ def prepare_resume_context(
         dataset_filter_string=persisted.dataset_filter_string,
         nb_samples=persisted.nb_samples,
         candidate_dataset_item_ids=candidate_ids,
-    )
-
-
-def _require_backend_projects_trace_marker(
-    *,
-    experiment_id: str,
-    experiment_items: List[experiment_item.ExperimentItemContent],
-) -> None:
-    """
-    Bail out when the persisted state says the completion marker is
-    required but no experiment item carries any ``trace_metadata`` —
-    meaning the connected backend is older than the OPIK-5269
-    ``trace_metadata`` projection.
-
-    The marker is seeded on every trace at creation, so a marker-supporting
-    SDK + marker-supporting BE should always surface at least one
-    populated ``trace_metadata`` here.
-    """
-    if not experiment_items:
-        return
-    if any(item.trace_metadata for item in experiment_items):
-        return
-    raise opik_exceptions.BackendTooOldForResume(
-        f"Experiment {experiment_id} was created with a SDK that writes the "
-        "trace-level resume marker, but the connected backend does not "
-        "surface ``trace_metadata`` on the experiment-item compare endpoint. "
-        "Upgrade the backend to a version that includes the OPIK-5269 "
-        "``ExperimentItem.traceMetadata`` projection, or downgrade the SDK "
-        "to a version that does not depend on it."
     )
 
 
@@ -194,25 +164,18 @@ def _resolve_dataset_version(
 def _count_completed_runs_by_item_id(
     experiment_items: List[experiment_item.ExperimentItemContent],
 ) -> Mapping[str, int]:
-    """
-    Count fully-completed trials per dataset item.
-
-    A trial counts as fully completed only when the trace carries the
-    happy-path marker flipped to ``False``. The marker is seeded to
-    ``True`` when the trace is built (see
-    ``engine.helpers.EVALUATION_PENDING_METADATA_KEY``) and flipped only
-    after task + scoring + score-logging all returned.
-    """
+    """Count fully-completed trials per dataset item."""
     counts: Dict[str, int] = {}
     for item in experiment_items:
-        if not is_trial_fully_completed(item):
+        if not completion_marker.is_trial_fully_completed(item):
             continue
         counts[item.dataset_item_id] = counts.get(item.dataset_item_id, 0) + 1
     return counts
 
 
-def is_trial_fully_completed(
-    item: experiment_item.ExperimentItemContent,
-) -> bool:
-    metadata = item.trace_metadata or {}
-    return metadata.get(engine_helpers.EVALUATION_PENDING_METADATA_KEY) is False
+# Re-exported so ``resume.merge`` and the e2e verifier helpers can ask
+# "is this trial done?" without each having to know about the
+# completion-marker module. The implementation lives in
+# ``opik.evaluation._completion_marker`` — this name is the resume-side
+# entry point.
+is_trial_fully_completed = completion_marker.is_trial_fully_completed

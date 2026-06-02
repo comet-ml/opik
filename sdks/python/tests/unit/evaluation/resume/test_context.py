@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 
 from opik import exceptions
-from opik.evaluation.engine import helpers as engine_helpers
+from opik.evaluation import _completion_marker as completion_marker
 from opik.evaluation.resume import context, state
 
 
@@ -16,7 +16,12 @@ def _metadata_with_blob(blob_dict):
 
 def _completed_trace_metadata():
     """Trace metadata that marks a trial as fully completed."""
-    return {engine_helpers.EVALUATION_PENDING_METADATA_KEY: False}
+    return completion_marker.completed_metadata()
+
+
+def _pending_trace_metadata():
+    """Trace metadata at the marker's initial value — not yet completed."""
+    return completion_marker.initial_metadata()
 
 
 def _make_client(
@@ -44,9 +49,7 @@ def _make_client(
             SimpleNamespace(
                 dataset_item_id="b",
                 evaluation_task_output=None,
-                trace_metadata={
-                    engine_helpers.EVALUATION_PENDING_METADATA_KEY: True
-                },
+                trace_metadata=_pending_trace_metadata(),
             ),
             SimpleNamespace(
                 dataset_item_id="c",
@@ -247,9 +250,7 @@ class TestIsTrialFullyCompleted:
         item = SimpleNamespace(
             dataset_item_id="a",
             evaluation_task_output={"x": 1},
-            trace_metadata={
-                engine_helpers.EVALUATION_PENDING_METADATA_KEY: False
-            },
+            trace_metadata=_completed_trace_metadata(),
         )
         assert context.is_trial_fully_completed(item) is True
 
@@ -258,9 +259,7 @@ class TestIsTrialFullyCompleted:
         item = SimpleNamespace(
             dataset_item_id="a",
             evaluation_task_output={"x": 1},
-            trace_metadata={
-                engine_helpers.EVALUATION_PENDING_METADATA_KEY: True
-            },
+            trace_metadata=_pending_trace_metadata(),
         )
         assert context.is_trial_fully_completed(item) is False
 
@@ -291,19 +290,15 @@ class TestIsTrialFullyCompleted:
             SimpleNamespace(
                 dataset_item_id="a",
                 evaluation_task_output={"x": 1},
-                trace_metadata={
-                    engine_helpers.EVALUATION_PENDING_METADATA_KEY: False
-                },
+                trace_metadata=_completed_trace_metadata(),
             ),
-            # Output is set (task succeeded) but marker is still True —
-            # scoring crashed or process was interrupted between task and
-            # the happy-path-only line.
+            # Output is set (task succeeded) but marker is still pending
+            # — scoring crashed or process was interrupted between task
+            # and the happy-path-only line.
             SimpleNamespace(
                 dataset_item_id="a",
                 evaluation_task_output={"x": 2},
-                trace_metadata={
-                    engine_helpers.EVALUATION_PENDING_METADATA_KEY: True
-                },
+                trace_metadata=_pending_trace_metadata(),
             ),
         ]
         client, _ = _make_client(
@@ -319,9 +314,9 @@ class TestIsTrialFullyCompleted:
 
 
 class TestBackendTooOldDetection:
-    """``requires_completion_marker`` + empty trace_metadata → raise."""
+    """Empty ``trace_metadata`` across all items → raise."""
 
-    def _marker_required_metadata(self):
+    def _resumable_metadata(self):
         return _metadata_with_blob(
             {
                 "schema_version": 1,
@@ -331,7 +326,6 @@ class TestBackendTooOldDetection:
                 "dataset_version_name": "v1",
                 "nb_samples": None,
                 "requires_local_checkpoint": False,
-                "requires_completion_marker": True,
             }
         )
 
@@ -352,7 +346,7 @@ class TestBackendTooOldDetection:
 
     def test_old_be_raises_with_actionable_message(self):
         client, _ = _make_client(
-            self._marker_required_metadata(),
+            self._resumable_metadata(),
             experiment_items=self._legacy_be_items(),
         )
         client.get_dataset.return_value.get_version_view.return_value = (
@@ -371,9 +365,7 @@ class TestBackendTooOldDetection:
             SimpleNamespace(
                 dataset_item_id="a",
                 evaluation_task_output={"x": 1},
-                trace_metadata={
-                    engine_helpers.EVALUATION_PENDING_METADATA_KEY: False
-                },
+                trace_metadata=_completed_trace_metadata(),
             ),
             SimpleNamespace(
                 dataset_item_id="b",
@@ -382,7 +374,7 @@ class TestBackendTooOldDetection:
             ),
         ]
         client, _ = _make_client(
-            self._marker_required_metadata(), experiment_items=items
+            self._resumable_metadata(), experiment_items=items
         )
         client.get_dataset.return_value.get_version_view.return_value = (
             mock.Mock(name="ds-v1")
@@ -394,39 +386,12 @@ class TestBackendTooOldDetection:
         # incomplete under strict rules.
         assert dict(ctx.completed_runs_by_item_id) == {"a": 1}
 
-    def test_marker_not_required__no_raise_even_with_empty_metadata(self):
-        """Old experiment blob without ``requires_completion_marker`` shouldn't
-        trigger the check — the SDK that wrote it didn't promise a marker."""
-        old_blob_metadata = _metadata_with_blob(
-            {
-                "schema_version": 1,
-                "resumable": True,
-                "default_runs_per_item": 1,
-                "dataset_filter_string": None,
-                "dataset_version_name": "v1",
-                "nb_samples": None,
-                "requires_local_checkpoint": False,
-                # No requires_completion_marker → defaults to False.
-            }
-        )
-        client, _ = _make_client(
-            old_blob_metadata, experiment_items=self._legacy_be_items()
-        )
-        client.get_dataset.return_value.get_version_view.return_value = (
-            mock.Mock(name="ds-v1")
-        )
-
-        # No raise; with no marker on any item, the strict predicate
-        # treats every trial as incomplete (the safe default).
-        ctx = context.prepare_resume_context(client, "exp-1")
-        assert dict(ctx.completed_runs_by_item_id) == {}
-
     def test_empty_experiment__no_raise(self):
         """An experiment with zero items can't trigger the check (nothing to
         sample). Resume should still build the context — the iteration logic
         will then process all dataset items as fresh."""
         client, _ = _make_client(
-            self._marker_required_metadata(), experiment_items=[]
+            self._resumable_metadata(), experiment_items=[]
         )
         client.get_dataset.return_value.get_version_view.return_value = (
             mock.Mock(name="ds-v1")
