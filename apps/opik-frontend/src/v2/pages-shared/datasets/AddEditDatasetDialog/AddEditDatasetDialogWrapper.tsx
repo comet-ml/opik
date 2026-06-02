@@ -17,10 +17,7 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import DatasetUploadDescription from "@/shared/DatasetUploadDescription/DatasetUploadDescription";
 import UploadField from "@/shared/UploadField/UploadField";
-import {
-  DATASET_UPLOAD_ACCEPTED_TYPES,
-  formatToHumanLabel,
-} from "@/lib/file";
+import { DATASET_UPLOAD_ACCEPTED_TYPES, formatToHumanLabel } from "@/lib/file";
 import type useDatasetForm from "./useDatasetForm";
 
 type AddEditDatasetDialogWrapperProps = {
