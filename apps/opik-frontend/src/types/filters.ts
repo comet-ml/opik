@@ -11,6 +11,7 @@ export type FilterOperator =
   | "in"
   | "not_in"
   | "="
+  | "!="
   | ">"
   | ">="
   | "<"

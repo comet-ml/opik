@@ -8,7 +8,6 @@ import {
 } from "@/shared/filter-chips/lib/sanitizeFilters.types";
 import { booleanFromFilters } from "@/shared/filter-chips/chips/BooleanChip/BooleanChip.logic";
 import { singleSelectFromFilters } from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip.logic";
-import { pseudoSearchFromFilters } from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip.logic";
 import { numericFromFilters } from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
 import { timeFromFilters } from "@/shared/filter-chips/chips/TimeChip/TimeChip.logic";
 import { queryBuilderFromFilters } from "@/shared/filter-chips/chips/QueryBuilderChip/QueryBuilderChip.logic";
@@ -28,8 +27,6 @@ const fromFiltersForChip = (
       return booleanFromFilters(candidates, def);
     case "single-select":
       return singleSelectFromFilters(candidates, def);
-    case "pseudo-search":
-      return pseudoSearchFromFilters(candidates, def);
     case "numeric":
       return numericFromFilters(candidates);
     case "time":

@@ -48,13 +48,6 @@ export interface SingleSelectChipDefinition extends ChipDefinitionBase {
   operator?: FilterOperator;
 }
 
-export interface PseudoSearchChipDefinition extends ChipDefinitionBase {
-  kind: "pseudo-search";
-  searchMode: "contains" | "equals";
-  columnType?: COLUMN_TYPE;
-  placeholder?: string;
-}
-
 export interface BooleanChipDefinition extends ChipDefinitionBase {
   kind: "boolean";
   onOperator: FilterOperator;
@@ -107,17 +100,12 @@ export interface QueryBuilderChipDefinition extends ChipDefinitionBase {
 
 export type ChipDefinition =
   | SingleSelectChipDefinition
-  | PseudoSearchChipDefinition
   | BooleanChipDefinition
   | NumericChipDefinition
   | TimeChipDefinition
   | QueryBuilderChipDefinition;
 
 export interface SingleSelectChipValue {
-  value: string;
-}
-
-export interface PseudoSearchChipValue {
   value: string;
 }
 
@@ -143,7 +131,6 @@ export interface QueryBuilderChipValue {
 
 export type ChipValue =
   | SingleSelectChipValue
-  | PseudoSearchChipValue
   | BooleanChipValue
   | NumericChipValue
   | TimeChipValue
