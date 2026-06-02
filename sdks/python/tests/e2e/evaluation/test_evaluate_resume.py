@@ -199,9 +199,7 @@ def test_evaluate_resume__failure_during_evaluate__continue_works(
     except Exception:
         pass  # see _experiment_id_after_failed_evaluate docstring
 
-    experiment_id = _experiment_id_after_failed_evaluate(
-        opik_client, experiment_name
-    )
+    experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
 
     # 3. Verify partial state: only the 3 non-crashing items completed.
     verifiers.verify_experiment_items_completed(
@@ -287,17 +285,13 @@ def test_evaluate_resume__failure_during_continue__second_continue_works(
     except Exception:
         pass
 
-    experiment_id = _experiment_id_after_failed_evaluate(
-        opik_client, experiment_name
-    )
+    experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
 
     # 3. After the original run: items 0, 1, 2 are done; items 3 and 4 are pending.
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
-        expected_completed_dataset_item_ids=uuids_of(
-            {"item-0", "item-1", "item-2"}
-        ),
+        expected_completed_dataset_item_ids=uuids_of({"item-0", "item-1", "item-2"}),
     )
 
     # 4a. First resume — fixes item-3, but a different bug crashes item-4.
@@ -487,9 +481,7 @@ def test_evaluate_resume__dataset_item_ids__only_selected_items_resumed(
     except Exception:
         pass
 
-    experiment_id = _experiment_id_after_failed_evaluate(
-        opik_client, experiment_name
-    )
+    experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
 
     # 3. Only the non-failing selected id is completed so far.
     verifiers.verify_experiment_items_completed(
@@ -707,9 +699,7 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
     except Exception:
         pass
 
-    experiment_id = _experiment_id_after_failed_evaluate(
-        opik_client, experiment_name
-    )
+    experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
 
     # 3. The item has at least one completed trial (the first one).
     verifiers.verify_experiment_items_completed(
@@ -745,12 +735,9 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
     # outputs from the buggy and fixed task would be confusing.
     assert len(resume_result.test_results) == 3
     assert all(
-        tr.test_case.dataset_item_id == the_item_id
-        for tr in resume_result.test_results
+        tr.test_case.dataset_item_id == the_item_id for tr in resume_result.test_results
     )
-    assert all(
-        tr.score_results[0].value == 1.0 for tr in resume_result.test_results
-    )
+    assert all(tr.score_results[0].value == 1.0 for tr in resume_result.test_results)
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
@@ -815,9 +802,7 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
     except Exception:
         pass
 
-    experiment_id = _experiment_id_after_failed_evaluate(
-        opik_client, experiment_name
-    )
+    experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
 
     # 3. All three items have at least one successful trial logged — the
     #    failure on item-1's second trial does not stop the executor from
@@ -846,9 +831,7 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
     # 5. item-0 fully completed (2/2 successful) → no resume invocations.
     #    item-1 partial (1/2 successful) → both trials redone.
     #    item-2 fully completed (2/2 successful) → no resume invocations.
-    counts_by_label = {
-        label: resume_invocations.count(label) for label in labels
-    }
+    counts_by_label = {label: resume_invocations.count(label) for label in labels}
     assert counts_by_label == {"item-0": 0, "item-1": 2, "item-2": 0}, (
         f"Unexpected resume task invocation distribution: {counts_by_label}"
     )
@@ -902,9 +885,7 @@ class _MetricRaisingBaseException(base_metric.BaseMetric):
         if output in self._failing_labels:
             # SystemExit is a BaseException; the engine's per-metric
             # except-clause catches Exception only, so this escapes.
-            raise SystemExit(
-                f"simulated scoring crash on label={output!r}"
-            )
+            raise SystemExit(f"simulated scoring crash on label={output!r}")
         return score_result.ScoreResult(
             name=self.name,
             value=1.0 if output == reference else 0.0,
@@ -932,9 +913,7 @@ def test_evaluate_resume__scoring_crash_after_task_success__trial_replayed(
     dataset.insert(items)
     scoring_will_fail = {"item-1"}
     fully_ok_uuids = {
-        ids_by_label[label]
-        for label in labels
-        if label not in scoring_will_fail
+        ids_by_label[label] for label in labels if label not in scoring_will_fail
     }
 
     def working_task(item: Dict[str, Any]):
@@ -960,9 +939,7 @@ def test_evaluate_resume__scoring_crash_after_task_success__trial_replayed(
     except BaseException:
         pass
 
-    experiment_id = _experiment_id_after_failed_evaluate(
-        opik_client, experiment_name
-    )
+    experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
 
     # 3. Verify the partial state from the marker's point of view:
     #    item-0 and item-2 reached the happy-path line and count as
@@ -992,13 +969,10 @@ def test_evaluate_resume__scoring_crash_after_task_success__trial_replayed(
     # 5. Only the scoring-failed item was replayed; the two items that
     #    cleared their happy-path line were left alone.
     assert resume_invocations == ["item-1"], (
-        "Only the scoring-failed item should be replayed; got "
-        f"{resume_invocations}"
+        f"Only the scoring-failed item should be replayed; got {resume_invocations}"
     )
     assert len(resume_result.test_results) == 3
-    assert all(
-        tr.score_results[0].value == 1.0 for tr in resume_result.test_results
-    )
+    assert all(tr.score_results[0].value == 1.0 for tr in resume_result.test_results)
     verifiers.verify_experiment_items_completed(
         opik_client,
         experiment_id,
@@ -1129,9 +1103,7 @@ def test_evaluate_resume__mixed_task_and_scoring_failures__only_failed_items_rep
     except BaseException:
         pass
 
-    experiment_id = _experiment_id_after_failed_evaluate(
-        opik_client, experiment_name
-    )
+    experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
 
     # Only the all-good item finished the happy path.
     verifiers.verify_experiment_items_completed(

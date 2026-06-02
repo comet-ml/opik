@@ -60,9 +60,7 @@ class TestReadCheckpoint:
 
         assert checkpoint.read_checkpoint("exp-1") is None
 
-    def test_payload_with_non_string_ids__returns_none(
-        self, isolated_checkpoint_dir
-    ):
+    def test_payload_with_non_string_ids__returns_none(self, isolated_checkpoint_dir):
         target = isolated_checkpoint_dir / "exp-1.json"
         target.write_text(json.dumps({"resolved_dataset_item_ids": [1, 2, 3]}))
 

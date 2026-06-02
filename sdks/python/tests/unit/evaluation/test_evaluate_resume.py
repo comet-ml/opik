@@ -94,14 +94,18 @@ class TestEvaluateResumeHappyFlow:
         empty_new_result = _evaluation_result_from([], context.experiment)
 
         task = lambda data: {"output": "x"}
-        with mock.patch.object(
-            evaluator.resume_module, "prepare_resume_context", return_value=context
-        ), mock.patch.object(
-            evaluator, "_evaluate_task", return_value=empty_new_result
-        ) as mock_evaluate_task, mock.patch.object(
-            evaluation_result.resume_merge,
-            "reconstruct_previous_test_results",
-            return_value=[],
+        with (
+            mock.patch.object(
+                evaluator.resume_module, "prepare_resume_context", return_value=context
+            ),
+            mock.patch.object(
+                evaluator, "_evaluate_task", return_value=empty_new_result
+            ) as mock_evaluate_task,
+            mock.patch.object(
+                evaluation_result.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
         ):
             evaluator.evaluate_resume(
                 "exp-1",
@@ -133,14 +137,18 @@ class TestEvaluateResumeHappyFlow:
         )
         empty_new_result = _evaluation_result_from([], context.experiment)
 
-        with mock.patch.object(
-            evaluator.resume_module, "prepare_resume_context", return_value=context
-        ), mock.patch.object(
-            evaluator, "_evaluate_task", return_value=empty_new_result
-        ) as mock_evaluate_task, mock.patch.object(
-            evaluation_result.resume_merge,
-            "reconstruct_previous_test_results",
-            return_value=[],
+        with (
+            mock.patch.object(
+                evaluator.resume_module, "prepare_resume_context", return_value=context
+            ),
+            mock.patch.object(
+                evaluator, "_evaluate_task", return_value=empty_new_result
+            ) as mock_evaluate_task,
+            mock.patch.object(
+                evaluation_result.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
         ):
             evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
@@ -164,9 +172,12 @@ class TestItemResolutionPathSelection:
             nb_samples=99,
         )
 
-        with mock.patch.object(
-            evaluator.resume_module, "prepare_resume_context", return_value=context
-        ), mock.patch.object(evaluator, "_evaluate_task"):
+        with (
+            mock.patch.object(
+                evaluator.resume_module, "prepare_resume_context", return_value=context
+            ),
+            mock.patch.object(evaluator, "_evaluate_task"),
+        ):
             evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
         context.dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
@@ -185,9 +196,12 @@ class TestItemResolutionPathSelection:
             nb_samples=10,
         )
 
-        with mock.patch.object(
-            evaluator.resume_module, "prepare_resume_context", return_value=context
-        ), mock.patch.object(evaluator, "_evaluate_task"):
+        with (
+            mock.patch.object(
+                evaluator.resume_module, "prepare_resume_context", return_value=context
+            ),
+            mock.patch.object(evaluator, "_evaluate_task"),
+        ):
             evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
         context.dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
@@ -207,18 +221,18 @@ class TestMergeWithPreviouslyCompleted:
         fresh_only = _new_test_result("fresh", "trace-fresh", score=1.0)
         new_result = _evaluation_result_from([fresh_only], context.experiment)
 
-        with mock.patch.object(
-            evaluator.resume_module,
-            "prepare_resume_context",
-            return_value=context,
-        ), mock.patch.object(
-            evaluator, "_evaluate_task", return_value=new_result
-        ), mock.patch.object(
-            evaluation_result.resume_merge, "reconstruct_previous_test_results"
-        ) as mock_reconstruct:
-            result = evaluator.evaluate_resume(
-                "exp-1", task=lambda _: {"output": "x"}
-            )
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluation_result.resume_merge, "reconstruct_previous_test_results"
+            ) as mock_reconstruct,
+        ):
+            result = evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
         # No reconstruction call when there's nothing to merge in.
         mock_reconstruct.assert_not_called()
@@ -233,30 +247,26 @@ class TestMergeWithPreviouslyCompleted:
             completed_runs_by_item_id={"done": 1, "pending": 0},
             default_runs_per_item=1,
         )
-        pending_run_result = _new_test_result(
-            "pending", "trace-pending-new", score=1.0
-        )
-        new_result = _evaluation_result_from(
-            [pending_run_result], context.experiment
-        )
+        pending_run_result = _new_test_result("pending", "trace-pending-new", score=1.0)
+        new_result = _evaluation_result_from([pending_run_result], context.experiment)
         reconstructed = [
             _previous_test_result("done", "trace-done-old", score=1.0),
         ]
 
-        with mock.patch.object(
-            evaluator.resume_module,
-            "prepare_resume_context",
-            return_value=context,
-        ), mock.patch.object(
-            evaluator, "_evaluate_task", return_value=new_result
-        ), mock.patch.object(
-            evaluation_result.resume_merge,
-            "reconstruct_previous_test_results",
-            return_value=reconstructed,
-        ) as mock_reconstruct:
-            result = evaluator.evaluate_resume(
-                "exp-1", task=lambda _: {"output": "x"}
-            )
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluation_result.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=reconstructed,
+            ) as mock_reconstruct,
+        ):
+            result = evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
         # Reconstruction was asked for the fully-completed set ('done' only).
         mock_reconstruct.assert_called_once()
@@ -293,20 +303,20 @@ class TestMergeWithPreviouslyCompleted:
             for i in range(3)
         ]
 
-        with mock.patch.object(
-            evaluator.resume_module,
-            "prepare_resume_context",
-            return_value=context,
-        ), mock.patch.object(
-            evaluator, "_evaluate_task", return_value=new_result
-        ), mock.patch.object(
-            evaluation_result.resume_merge,
-            "reconstruct_previous_test_results",
-            return_value=reconstructed_for_done,
-        ) as mock_reconstruct:
-            result = evaluator.evaluate_resume(
-                "exp-1", task=lambda _: {"output": "x"}
-            )
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluation_result.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=reconstructed_for_done,
+            ) as mock_reconstruct,
+        ):
+            result = evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
         # Only 'done' is in the fully-completed set passed to reconstruct;
         # 'partial' is excluded — it's being redone from scratch.
@@ -316,14 +326,18 @@ class TestMergeWithPreviouslyCompleted:
 
         # Final test_results: 3 reconstructed for 'done' + 3 fresh for 'partial'
         assert len(result.test_results) == 6
-        assert sum(
-            1 for r in result.test_results if r.test_case.dataset_item_id == "done"
-        ) == 3
-        assert sum(
-            1
-            for r in result.test_results
-            if r.test_case.dataset_item_id == "partial"
-        ) == 3
+        assert (
+            sum(1 for r in result.test_results if r.test_case.dataset_item_id == "done")
+            == 3
+        )
+        assert (
+            sum(
+                1
+                for r in result.test_results
+                if r.test_case.dataset_item_id == "partial"
+            )
+            == 3
+        )
 
     def test_experiment_scoring_functions__computed_over_merged_set(self):
         context = _make_context(
@@ -345,21 +359,23 @@ class TestMergeWithPreviouslyCompleted:
 
         def mean_score(test_results):
             seen_test_results.extend(test_results)
-            mean = sum(
-                tr.score_results[0].value for tr in test_results
-            ) / len(test_results)
+            mean = sum(tr.score_results[0].value for tr in test_results) / len(
+                test_results
+            )
             return score_result.ScoreResult(name="mean_equals", value=mean)
 
-        with mock.patch.object(
-            evaluator.resume_module,
-            "prepare_resume_context",
-            return_value=context,
-        ), mock.patch.object(
-            evaluator, "_evaluate_task", return_value=new_result
-        ), mock.patch.object(
-            evaluation_result.resume_merge,
-            "reconstruct_previous_test_results",
-            return_value=reconstructed,
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluation_result.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=reconstructed,
+            ),
         ):
             result = evaluator.evaluate_resume(
                 "exp-1",

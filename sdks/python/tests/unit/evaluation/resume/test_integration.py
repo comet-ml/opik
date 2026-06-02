@@ -54,9 +54,7 @@ class TestResumeStateForEvaluate:
             dataset_item_ids=None,
         )
 
-        assert (
-            _blob(result)["requires_local_checkpoint"] is True
-        )
+        assert _blob(result)["requires_local_checkpoint"] is True
 
     def test_with_explicit_ids__marks_requires_local_checkpoint(self):
         result = integration.resume_state_for_evaluate(
@@ -69,9 +67,7 @@ class TestResumeStateForEvaluate:
             dataset_item_ids=["a", "b"],
         )
 
-        assert (
-            _blob(result)["requires_local_checkpoint"] is True
-        )
+        assert _blob(result)["requires_local_checkpoint"] is True
 
     def test_dataset_without_versions__marks_non_resumable(self):
         result = integration.resume_state_for_evaluate(

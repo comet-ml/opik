@@ -140,9 +140,7 @@ def read_resume_state(
             or "unspecified"
         )
 
-    dataset_version_name = _coerce_optional_str(
-        raw_state.get("dataset_version_name")
-    )
+    dataset_version_name = _coerce_optional_str(raw_state.get("dataset_version_name"))
     if dataset_version_name is None:
         return NonResumableState(
             reason=(

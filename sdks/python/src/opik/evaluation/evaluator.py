@@ -68,8 +68,6 @@ def _try_notifying_about_experiment_completion(
         )
 
 
-
-
 def evaluate(
     dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
@@ -1456,9 +1454,7 @@ def evaluate_resume(
     )
 
     fully_completed_ids = {
-        item.id
-        for item in items
-        if resume_iteration.is_fully_completed(context, item)
+        item.id for item in items if resume_iteration.is_fully_completed(context, item)
     }
 
     new_result = _evaluate_task(

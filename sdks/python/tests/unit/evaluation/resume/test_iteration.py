@@ -4,9 +4,7 @@ from opik.api_objects.dataset import dataset_item
 from opik.evaluation.resume import context, iteration
 
 
-def _make_context(
-    completed: dict = None, default: int = 1
-) -> context.ResumeContext:
+def _make_context(completed: dict = None, default: int = 1) -> context.ResumeContext:
     return context.ResumeContext(
         experiment=mock.Mock(),
         dataset=mock.Mock(),

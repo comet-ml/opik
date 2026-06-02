@@ -116,9 +116,7 @@ def healthy_task(item):
 def completed_count(experiment) -> int:
     """Number of experiment items with at least one successful run."""
     return sum(
-        1
-        for item in experiment.get_items()
-        if item.evaluation_task_output is not None
+        1 for item in experiment.get_items() if item.evaluation_task_output is not None
     )
 
 

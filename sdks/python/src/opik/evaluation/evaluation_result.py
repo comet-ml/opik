@@ -73,9 +73,7 @@ def merge_resume_results(
         test_results=merged_test_results,
     )
     if merged_experiment_scores:
-        context.experiment.log_experiment_scores(
-            score_results=merged_experiment_scores
-        )
+        context.experiment.log_experiment_scores(score_results=merged_experiment_scores)
 
     return EvaluationResult(
         dataset_id=new_result.dataset_id,

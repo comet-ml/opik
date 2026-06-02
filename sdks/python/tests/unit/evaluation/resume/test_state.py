@@ -105,9 +105,7 @@ class TestEmbedNonResumableState:
 class TestReadResumeState:
     def _experiment_with_metadata(self, metadata) -> mock.Mock:
         experiment = mock.Mock()
-        experiment.get_experiment_data.return_value = SimpleNamespace(
-            metadata=metadata
-        )
+        experiment.get_experiment_data.return_value = SimpleNamespace(metadata=metadata)
         return experiment
 
     def _metadata_with_blob(self, blob_dict):

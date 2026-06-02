@@ -24,16 +24,10 @@ def _make_client(
         # The two "a" items and the "c" item completed (output set);
         # "b" never finished (output stripped to None by the engine).
         experiment_items = [
-            SimpleNamespace(
-                dataset_item_id="a", evaluation_task_output={"x": 1}
-            ),
-            SimpleNamespace(
-                dataset_item_id="a", evaluation_task_output={"x": 2}
-            ),
+            SimpleNamespace(dataset_item_id="a", evaluation_task_output={"x": 1}),
+            SimpleNamespace(dataset_item_id="a", evaluation_task_output={"x": 2}),
             SimpleNamespace(dataset_item_id="b", evaluation_task_output=None),
-            SimpleNamespace(
-                dataset_item_id="c", evaluation_task_output={"x": 3}
-            ),
+            SimpleNamespace(dataset_item_id="c", evaluation_task_output={"x": 3}),
         ]
 
     experiment = mock.Mock()
@@ -63,9 +57,7 @@ class TestPrepareResumeContext:
         )
         client, _ = _make_client(metadata)
         pinned_version = mock.Mock(name="dataset-v1")
-        client.get_dataset.return_value.get_version_view.return_value = (
-            pinned_version
-        )
+        client.get_dataset.return_value.get_version_view.return_value = pinned_version
         unused_reader = mock.Mock()
 
         ctx = context.prepare_resume_context(
@@ -78,9 +70,7 @@ class TestPrepareResumeContext:
         assert ctx.candidate_dataset_item_ids is None
         # context.dataset is always the pinned DatasetVersion
         assert ctx.dataset is pinned_version
-        client.get_dataset.return_value.get_version_view.assert_called_once_with(
-            "v1"
-        )
+        client.get_dataset.return_value.get_version_view.assert_called_once_with("v1")
         # only trials whose ``evaluation_task_output`` is set are counted;
         # "b" (output stripped to None on failure) is skipped
         assert dict(ctx.completed_runs_by_item_id) == {"a": 2, "c": 1}
@@ -101,15 +91,11 @@ class TestPrepareResumeContext:
         )
         client, _ = _make_client(metadata)
         pinned_version = mock.Mock(name="dataset-v3")
-        client.get_dataset.return_value.get_version_view.return_value = (
-            pinned_version
-        )
+        client.get_dataset.return_value.get_version_view.return_value = pinned_version
 
         ctx = context.prepare_resume_context(client, "exp-1")
 
-        client.get_dataset.return_value.get_version_view.assert_called_once_with(
-            "v3"
-        )
+        client.get_dataset.return_value.get_version_view.assert_called_once_with("v3")
         assert ctx.dataset is pinned_version
 
     def test_requires_checkpoint__reader_returns_ids__populated_into_context(self):
@@ -225,14 +211,10 @@ class TestIsTrialFullyCompleted:
         )
 
     def test_output_set_counts_as_completed(self):
-        item = SimpleNamespace(
-            dataset_item_id="a", evaluation_task_output={"x": 1}
-        )
+        item = SimpleNamespace(dataset_item_id="a", evaluation_task_output={"x": 1})
         assert context.is_trial_fully_completed(item) is True
 
     def test_output_none_does_not_count(self):
         """The engine strips ``output`` if the happy line never ran."""
-        item = SimpleNamespace(
-            dataset_item_id="a", evaluation_task_output=None
-        )
+        item = SimpleNamespace(dataset_item_id="a", evaluation_task_output=None)
         assert context.is_trial_fully_completed(item) is False
