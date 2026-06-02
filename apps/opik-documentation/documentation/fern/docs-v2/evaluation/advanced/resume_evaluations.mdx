@@ -45,16 +45,6 @@ back from the experiment.
 - **Returns one merged result.** `EvaluationResult.test_results` covers both the kept runs
   and the freshly replayed ones.
 
-## Requirements
-
-To call `evaluate_resume`, the experiment must have been created by:
-
-- A Python SDK version that supports resume.
-- An `evaluate(...)` call against a **versioned dataset**.
-
-If either condition isn't met, `evaluate_resume` raises
-`opik.exceptions.ExperimentNotResumable`.
-
 ## When `evaluate_resume` is the wrong tool
 
 - **You want to re-score an existing experiment with new metrics.** Use
@@ -68,11 +58,18 @@ If either condition isn't met, `evaluate_resume` raises
   already-completed runs keep their original outputs and feedback scores. If the change
   should affect every run, start a fresh `evaluate()`.
 
-## Running on the same machine as the original `evaluate()`
+## Requirements
+
+To call `evaluate_resume`, the experiment must have been created by:
+
+- A Python SDK version that supports resume.
+- An `evaluate(...)` call against a **versioned dataset**.
+
+If either condition isn't met, `evaluate_resume` raises
+`opik.exceptions.ExperimentNotResumable`.
 
 If the original `evaluate(...)` used a custom `dataset_sampler` or explicit
-`dataset_item_ids`, resume needs a local checkpoint that was written next to the experiment
-id. Run resume from the same machine that ran the original call — otherwise
-`opik.exceptions.LocalCheckpointMissing` is raised.
-
-Evaluations without a sampler or explicit ids do **not** need to run on the same machine.
+`dataset_item_ids`, resume also needs a local checkpoint that was written next to the
+experiment id. Run resume from the same machine that ran the original call — otherwise
+`opik.exceptions.LocalCheckpointMissing` is raised. Evaluations without a sampler or
+explicit ids do **not** need to run on the same machine.
