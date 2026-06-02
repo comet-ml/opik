@@ -27,6 +27,7 @@ import useTracesFeedbackScoresNames from "@/api/traces/useTracesFeedbackScoresNa
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_EXPERIMENT_ID,
+  COLUMN_EXPERIMENT_IDS,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_CUSTOM_ID,
@@ -39,7 +40,6 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { EXPERIMENT_IDS_FILTER_FIELD } from "@/lib/filters";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
@@ -338,7 +338,7 @@ const FILTERS_COLUMN_DATA: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: EXPERIMENT_IDS_FILTER_FIELD,
+    id: COLUMN_EXPERIMENT_IDS,
     label: "Experiment",
     type: COLUMN_TYPE.string,
   },
@@ -513,7 +513,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             type,
           },
         },
-        [EXPERIMENT_IDS_FILTER_FIELD]: {
+        [COLUMN_EXPERIMENT_IDS]: {
           keyComponent: ExperimentsSelectBoxFilterWrapper as never,
           keyComponentProps: { projectId },
           operators: [{ label: "is one of", value: "in" }],

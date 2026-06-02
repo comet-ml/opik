@@ -5,6 +5,7 @@ import { Filter, Filters } from "@/types/filters";
 import { DatasetItemColumn } from "@/types/datasets";
 import {
   COLUMN_DATA_ID,
+  COLUMN_EXPERIMENT_IDS,
   COLUMN_TYPE,
   DYNAMIC_COLUMN_TYPE,
 } from "@/types/shared";
@@ -173,7 +174,7 @@ export const generateExperimentIdsFilter = (experimentIds: string[] = []) => {
 
   return [
     createFilter({
-      field: EXPERIMENT_IDS_FILTER_FIELD,
+      field: COLUMN_EXPERIMENT_IDS,
       type: COLUMN_TYPE.string,
       operator: "in",
       value: ids.join(","),
