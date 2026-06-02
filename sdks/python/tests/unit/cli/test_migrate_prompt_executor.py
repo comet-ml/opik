@@ -34,6 +34,7 @@ def _client_with_rest_mock(version_pages: List[_Page]) -> Any:
         side_effect=lambda **kw: MagicMock(
             id=f"dest-version-{kw['version'].commit}",
             commit=kw["version"].commit,
+            environments=kw["version"].environments,
         )
     )
     rest_client.prompts.get_prompt_versions.side_effect = version_pages
@@ -168,6 +169,55 @@ class TestExecuteActions:
         assert second_version.commit == "bbbbbbbb"
         assert first_version.template == "hello {{name}}"
         assert second_version.template == "hello {{name}} v2"
+
+    def test_replay_versions__carries_environments_verbatim(self) -> None:
+        # Environment ownership is per-version data the BE accepts inline on
+        # create_prompt_version. A version that owns environments on the
+        # source must carry them onto the destination; one that owns none
+        # must pass environments=None so the BE assigns no ownership.
+        v1 = _PromptVersionRow(
+            id="src-v-1",
+            prompt_id="src-1",
+            commit="aaaaaaaa",
+            template="hello",
+        )
+        v2 = _PromptVersionRow(
+            id="src-v-2",
+            prompt_id="src-1",
+            commit="bbbbbbbb",
+            template="hi",
+            environments=["production", "staging"],
+        )
+        client, rest_client = _client_with_rest_mock([_Page([v2, v1])])
+        plan = _make_plan()
+        audit = AuditLog(command="opik migrate prompt", args={})
+
+        executor_module.execute_plan(client, plan, audit)
+
+        calls = rest_client.prompts.create_prompt_version.call_args_list
+        first_version = calls[0].kwargs["version"]
+        second_version = calls[1].kwargs["version"]
+        assert first_version.environments is None
+        assert second_version.environments == ["production", "staging"]
+
+    def test_replay_versions__records_environments_in_audit(self) -> None:
+        v1 = _PromptVersionRow(
+            id="src-v-1",
+            prompt_id="src-1",
+            commit="aaaaaaaa",
+            template="hello",
+            environments=["staging", "production"],
+        )
+        client, _ = _client_with_rest_mock([_Page([v1])])
+        plan = _make_plan()
+        audit = AuditLog(command="opik migrate prompt", args={})
+
+        executor_module.execute_plan(client, plan, audit)
+
+        record = next(a for a in audit.actions if a["type"] == "replay_prompt_version")
+        # Sorted for stable audit output regardless of source set ordering.
+        assert record["source_environments"] == ["production", "staging"]
+        assert record["target_environments"] == ["production", "staging"]
 
     def test_replay_versions__populates_prompt_version_id_remap(self) -> None:
         # Slice 7 (OPIK-6575) reads ``plan.prompt_version_id_remap`` to

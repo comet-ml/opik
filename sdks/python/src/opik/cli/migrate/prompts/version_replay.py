@@ -8,8 +8,9 @@ the destination prompt has a fresh id.
 
 Stays on the low-level ``OpikApi`` (Fern) client so we can read every
 field the BE persists per version (``template``, ``metadata``, ``type``,
-``commit``, ``change_description``, ``tags``, ``template_structure``)
-without going through the high-level ``opik.api_objects.prompt`` wrapper.
+``commit``, ``change_description``, ``tags``, ``environments``,
+``template_structure``) without going through the high-level
+``opik.api_objects.prompt`` wrapper.
 Every call site is wrapped with
 ``ensure_rest_api_call_respecting_rate_limit``.
 
@@ -128,6 +129,15 @@ def replay_all_prompt_versions(
         if progress_callback is not None:
             progress_callback(index, total, label)
 
+        # ``environments`` (the set of environments this version owns) is
+        # carried verbatim. The BE accepts it inline on
+        # ``create_prompt_version`` and moves env ownership atomically
+        # (PromptService.createVersionWithEnvironment). ``get_prompt_versions``
+        # only reports active ownership (``ended_at IS NULL``), so each env is
+        # owned by exactly one source version and no collision occurs when the
+        # destination versions are minted oldest-first.
+        environments = getattr(source_version, "environments", None)
+
         version_payload = PromptVersionDetail(
             template=source_version.template,
             metadata=getattr(source_version, "metadata", None),
@@ -135,6 +145,7 @@ def replay_all_prompt_versions(
             commit=commit,
             change_description=getattr(source_version, "change_description", None),
             tags=getattr(source_version, "tags", None),
+            environments=environments,
         )
 
         create_kwargs: Dict[str, Any] = {
@@ -157,6 +168,7 @@ def replay_all_prompt_versions(
 
         result.versions_replayed += 1
 
+        target_environments = getattr(created, "environments", None)
         audit.record(
             type="replay_prompt_version",
             status="ok",
@@ -166,6 +178,10 @@ def replay_all_prompt_versions(
                 "source_commit": commit,
                 "target_version_id": new_version_id,
                 "target_commit": getattr(created, "commit", None),
+                "source_environments": sorted(environments) if environments else None,
+                "target_environments": sorted(target_environments)
+                if target_environments
+                else None,
             },
         )
 
