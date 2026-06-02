@@ -48,8 +48,9 @@ data:
     }
     {{- end }}
     {{- if and .Values.mcpOAuth.enabled .Values.mcpOAuth.opikMcpUpstream.enabled }}
+    {{- $mcpService := required "mcpOAuth.opikMcpUpstream.serviceName must be set when mcpOAuth.opikMcpUpstream.enabled=true" .Values.mcpOAuth.opikMcpUpstream.serviceName }}
     upstream opik-mcp {
-      server {{ .Values.mcpOAuth.opikMcpUpstream.serviceName }}:{{ .Values.mcpOAuth.opikMcpUpstream.port }};
+      server {{ $mcpService }}:{{ .Values.mcpOAuth.opikMcpUpstream.port }};
       keepalive 16;
     }
     {{- end }}

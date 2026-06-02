@@ -124,7 +124,7 @@ public class OAuthAuthorizeResource {
                 .value(csrf)
                 .path("/")
                 .httpOnly(true)
-                .secure(true)
+                .secure(isSecureDeployment(opikConfig.getMcpOAuth()))
                 .sameSite(NewCookie.SameSite.LAX)
                 .build();
         return Response.ok(new AuthorizeContext(client.name(), client.logoUri(), workspaces, csrf))
@@ -149,7 +149,8 @@ public class OAuthAuthorizeResource {
         if (!config.getMcpResourceUri().equals(request.resource())) {
             throw new BadRequestException(ERROR_INVALID_TARGET);
         }
-        if (!CODE_CHALLENGE_METHOD_S256.equals(request.codeChallengeMethod())) {
+        if (isBlank(request.codeChallenge())
+                || !CODE_CHALLENGE_METHOD_S256.equals(request.codeChallengeMethod())) {
             throw new BadRequestException(ERROR_INVALID_REQUEST);
         }
 
@@ -206,5 +207,10 @@ public class OAuthAuthorizeResource {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean isSecureDeployment(McpOAuthConfig config) {
+        String baseUrl = config.getBaseUrl();
+        return baseUrl != null && baseUrl.startsWith("https://");
     }
 }

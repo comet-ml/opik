@@ -6,12 +6,19 @@ import lombok.NonNull;
 import java.util.UUID;
 
 /**
- * Per-prompt classification result, sister to {@link ExperimentProjectMapping}. {@code projectId}
- * is any non-orphan {@code project_id} of an experiment that references this prompt via either
- * the legacy {@code prompt_id} column or the {@code prompt_versions} map; meaningful only when
- * {@code projectCount = 1}. {@code projectCount} is the distinct count of such non-orphan
- * project_ids — {@code 0} = no inference, {@code 1} = certain, {@code > 1} = ambiguous.
+ * Result of {@link ExperimentDAO#computePromptProjectClassification(java.util.Set)}: one row per
+ * referenced prompt with a usable inferred project. Sister to {@link DatasetProjectMapping}.
+ *
+ * <p>When {@code distinctProjectCount == 1}, {@code projectId} is the sole referenced project;
+ * when {@code > 1}, it is the dominant project, chosen by {@code (count DESC, last_activity DESC,
+ * project_id ASC)}. {@code projectBreakdown} lists the per-project experiment counts in the same
+ * order (for example {@code "p1=5,p2=3,p3=1"}) and is included in the dominant-assignment log
+ * entry.
  */
 @Builder(toBuilder = true)
-public record PromptProjectClassification(@NonNull UUID promptId, UUID projectId, long projectCount) {
+public record PromptProjectClassification(
+        @NonNull UUID promptId,
+        @NonNull UUID projectId,
+        long distinctProjectCount,
+        @NonNull String projectBreakdown) {
 }

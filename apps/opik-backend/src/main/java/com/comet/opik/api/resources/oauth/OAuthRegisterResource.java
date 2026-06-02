@@ -14,6 +14,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
+import java.net.URI;
 import java.util.List;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.AUTH_METHOD_NONE;
@@ -33,17 +34,22 @@ public class OAuthRegisterResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response register(@NonNull ClientRegistrationRequest request) {
         McpOAuthClient client = clientService.register(request);
-        return Response.status(Response.Status.CREATED)
-                .entity(ClientRegistrationResponse.builder()
-                        .clientId(client.clientId())
-                        .clientIdIssuedAt(client.createdAt() == null ? null : client.createdAt().getEpochSecond())
-                        .clientName(client.name())
-                        .logoUri(client.logoUri())
-                        .redirectUris(client.redirectUris())
-                        .tokenEndpointAuthMethod(AUTH_METHOD_NONE)
-                        .grantTypes(List.of(GRANT_AUTHORIZATION_CODE, GRANT_REFRESH_TOKEN))
-                        .responseTypes(List.of(RESPONSE_TYPE_CODE))
-                        .build())
+        ClientRegistrationResponse body = ClientRegistrationResponse.builder()
+                .clientId(client.clientId())
+                .clientIdIssuedAt(client.createdAt() == null ? null : client.createdAt().getEpochSecond())
+                .clientName(client.name())
+                .logoUri(client.logoUri())
+                .redirectUris(client.redirectUris())
+                .tokenEndpointAuthMethod(AUTH_METHOD_NONE)
+                .grantTypes(List.of(GRANT_AUTHORIZATION_CODE, GRANT_REFRESH_TOKEN))
+                .responseTypes(List.of(RESPONSE_TYPE_CODE))
+                .build();
+        // RFC 7591 §3.2.1: the response SHOULD include a Location header pointing
+        // at a client-configuration endpoint. We don't expose a public read-back
+        // endpoint, so we point at the admin path used for manual lifecycle
+        // operations; the URI is informational and not part of the OAuth dance.
+        return Response.created(URI.create("/admin/mcp-oauth-clients/" + client.clientId()))
+                .entity(body)
                 .build();
     }
 }

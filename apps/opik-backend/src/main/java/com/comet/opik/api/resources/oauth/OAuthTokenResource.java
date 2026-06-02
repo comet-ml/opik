@@ -91,8 +91,8 @@ public class OAuthTokenResource {
             try {
                 mcpOAuthService.revoke(token);
             } catch (Exception e) {
-                log.warn("MCP OAuth revoke failed [token={}, client_id={}]: {}",
-                        maskToken(token), clientId, e.toString(), e);
+                log.warn("MCP OAuth revoke failed [token={}, client_id={}]",
+                        maskToken(token), clientId, e);
             }
         }
         return Response.ok().build();
