@@ -178,8 +178,8 @@ def replay_all_prompt_versions(
                 "source_commit": commit,
                 "target_version_id": new_version_id,
                 "target_commit": getattr(created, "commit", None),
-                "source_environments": sorted(environments) if environments else None,
-                "target_environments": sorted(target_environments)
+                "source_environments": environments if environments else None,
+                "target_environments": target_environments
                 if target_environments
                 else None,
             },
