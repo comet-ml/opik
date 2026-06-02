@@ -105,7 +105,7 @@ class TestEvaluateResumeHappyFlow:
                 evaluator, "_evaluate_task", return_value=empty_new_result
             ) as mock_evaluate_task,
             mock.patch.object(
-                evaluation_result.resume_merge,
+                evaluator.resume_merge,
                 "reconstruct_previous_test_results",
                 return_value=[],
             ),
@@ -121,10 +121,10 @@ class TestEvaluateResumeHappyFlow:
         pending_ids = [item.id for item in forwarded]
         # done item filtered out; partial + fresh forwarded
         assert pending_ids == ["partial", "fresh"]
-        # Both partial and fresh get the full trial count — partial items
-        # have all 3 trials redone, not just the missing 2.
+        # partial had 1 of 3 done → only 2 missing runs replay; fresh runs
+        # the full 3.
         runs = [item.execution_policy.runs_per_item for item in forwarded]
-        assert runs == [3, 3]
+        assert runs == [2, 3]
         assert call_kwargs["total_items"] == 2
         # context + user-supplied scoring_key_mapping wired through
         assert call_kwargs["experiment"] is context.experiment
@@ -150,7 +150,7 @@ class TestEvaluateResumeHappyFlow:
                 evaluator, "_evaluate_task", return_value=empty_new_result
             ) as mock_evaluate_task,
             mock.patch.object(
-                evaluation_result.resume_merge,
+                evaluator.resume_merge,
                 "reconstruct_previous_test_results",
                 return_value=[],
             ),
@@ -183,6 +183,11 @@ class TestItemResolutionPathSelection:
                 evaluator.resume_module, "prepare_resume_context", return_value=context
             ),
             mock.patch.object(evaluator, "_evaluate_task"),
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
         ):
             evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
@@ -207,6 +212,11 @@ class TestItemResolutionPathSelection:
                 evaluator.resume_module, "prepare_resume_context", return_value=context
             ),
             mock.patch.object(evaluator, "_evaluate_task"),
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
         ):
             evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
@@ -219,7 +229,7 @@ class TestItemResolutionPathSelection:
 
 
 class TestMergeWithPreviouslyCompleted:
-    def test_no_previous_items__returns_new_result_unchanged(self):
+    def test_no_previous_items__returns_only_new_test_results(self):
         context = _make_context(
             items_to_stream=[dataset_item.DatasetItem(id="fresh")],
             completed_runs_by_item_id={},  # no prior runs to merge
@@ -235,16 +245,17 @@ class TestMergeWithPreviouslyCompleted:
             ),
             mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
             mock.patch.object(
-                evaluation_result.resume_merge, "reconstruct_previous_test_results"
-            ) as mock_reconstruct,
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
         ):
             result = evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
-        # No reconstruction call when there's nothing to merge in.
-        mock_reconstruct.assert_not_called()
-        assert result is new_result
+        # No prior runs to merge → returned result mirrors ``new_result``.
+        assert [r.test_case.trace_id for r in result.test_results] == ["trace-fresh"]
 
-    def test_with_fully_completed_items__merges_into_returned_test_results(self):
+    def test_with_previous_items__merges_into_returned_test_results(self):
         context = _make_context(
             items_to_stream=[
                 dataset_item.DatasetItem(id="done"),
@@ -267,18 +278,17 @@ class TestMergeWithPreviouslyCompleted:
             ),
             mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
             mock.patch.object(
-                evaluation_result.resume_merge,
+                evaluator.resume_merge,
                 "reconstruct_previous_test_results",
                 return_value=reconstructed,
             ) as mock_reconstruct,
         ):
             result = evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
-        # Reconstruction was asked for the fully-completed set ('done' only).
+        # ``reconstruct_previous_test_results`` is now called unconditionally
+        # — every completed run from the backend gets reconstructed and the
+        # function returns ``[]`` when nothing qualifies.
         mock_reconstruct.assert_called_once()
-        assert mock_reconstruct.call_args.kwargs[
-            "fully_completed_dataset_item_ids"
-        ] == {"done"}
 
         # Result contains reconstructed-first, then new — both items present.
         trace_ids = [r.test_case.trace_id for r in result.test_results]
@@ -287,27 +297,33 @@ class TestMergeWithPreviouslyCompleted:
         assert result.experiment_id == new_result.experiment_id
         assert result.experiment_url == new_result.experiment_url
 
-    def test_partial_items__not_reconstructed__redone_by_resume(self):
-        """A partially-completed item is excluded from the reconstructed
-        set — its trials are being redone end-to-end by the resume call."""
+    def test_partial_items__only_missing_runs_replayed_and_completed_runs_reconstructed(
+        self,
+    ):
+        """Trials are independent: a partially-completed item replays only
+        its missing runs and reconstructs its completed runs alongside the
+        fully-completed items."""
         context = _make_context(
             items_to_stream=[
                 dataset_item.DatasetItem(id="done"),
                 dataset_item.DatasetItem(id="partial"),
             ],
-            # 'partial' has 1 of 3 trials done → partial, redo all
+            # 'partial' has 1 of 3 trials done → 2 missing runs.
             completed_runs_by_item_id={"done": 3, "partial": 1},
             default_runs_per_item=3,
         )
+        # The engine replays only the 2 missing runs for 'partial'.
         redone_results = [
             _new_test_result("partial", f"trace-partial-new-{i}", score=1.0)
-            for i in range(3)
+            for i in range(2)
         ]
         new_result = _evaluation_result_from(redone_results, context.experiment)
-        reconstructed_for_done = [
+        # Reconstruction now returns 3 completed runs of 'done' + the 1
+        # completed run of 'partial'.
+        reconstructed = [
             _previous_test_result("done", f"trace-done-old-{i}", score=1.0)
             for i in range(3)
-        ]
+        ] + [_previous_test_result("partial", "trace-partial-old-0", score=1.0)]
 
         with (
             mock.patch.object(
@@ -317,20 +333,15 @@ class TestMergeWithPreviouslyCompleted:
             ),
             mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
             mock.patch.object(
-                evaluation_result.resume_merge,
+                evaluator.resume_merge,
                 "reconstruct_previous_test_results",
-                return_value=reconstructed_for_done,
-            ) as mock_reconstruct,
+                return_value=reconstructed,
+            ),
         ):
             result = evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
-        # Only 'done' is in the fully-completed set passed to reconstruct;
-        # 'partial' is excluded — it's being redone from scratch.
-        assert mock_reconstruct.call_args.kwargs[
-            "fully_completed_dataset_item_ids"
-        ] == {"done"}
-
-        # Final test_results: 3 reconstructed for 'done' + 3 fresh for 'partial'
+        # Final test_results: 3 reconstructed for 'done' + 1 reconstructed
+        # for 'partial' + 2 fresh for 'partial' = 6.
         assert len(result.test_results) == 6
         assert (
             sum(1 for r in result.test_results if r.test_case.dataset_item_id == "done")
@@ -378,7 +389,7 @@ class TestMergeWithPreviouslyCompleted:
             ),
             mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
             mock.patch.object(
-                evaluation_result.resume_merge,
+                evaluator.resume_merge,
                 "reconstruct_previous_test_results",
                 return_value=reconstructed,
             ),

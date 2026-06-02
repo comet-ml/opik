@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Set, TYPE_CHECKING
+from typing import List, Optional, Dict, TYPE_CHECKING
 from collections import defaultdict
 import logging
 
@@ -6,7 +6,6 @@ import dataclasses
 
 from . import score_statistics, test_result
 from .metrics import score_result
-from .resume import merge as resume_merge
 
 if TYPE_CHECKING:
     from .resume import context as resume_context_module
@@ -46,26 +45,21 @@ def merge_resume_results(
     *,
     new_result: "EvaluationResult",
     context: "resume_context_module.ResumeContext",
-    fully_completed_dataset_item_ids: Set[str],
+    previous_test_results: List[test_result.TestResult],
     experiment_scoring_functions: List["ExperimentScoreFunction"],
 ) -> "EvaluationResult":
     """
-    Fold previously-completed items into ``new_result`` so the returned
+    Fold previously-completed runs into ``new_result`` so the returned
     ``EvaluationResult`` reflects the whole experiment.
 
-    Only *fully-completed* items (every expected trial done) are
-    reconstructed. Partial items are intentionally excluded — the resume
-    call redoes their trials from scratch, so their old experiment items
-    must not appear in the merged result.
+    ``previous_test_results`` must be snapshotted by the caller **before**
+    the resume call runs new trials — otherwise the resume's own freshly
+    written experiment items would be reconstructed back into the merge
+    and double-counted.
     """
-    if not fully_completed_dataset_item_ids:
+    if not previous_test_results:
         return new_result
 
-    previous_test_results = resume_merge.reconstruct_previous_test_results(
-        experiment=context.experiment,
-        dataset_=context.dataset,
-        fully_completed_dataset_item_ids=fully_completed_dataset_item_ids,
-    )
     merged_test_results = previous_test_results + list(new_result.test_results)
 
     merged_experiment_scores = compute_experiment_scores(

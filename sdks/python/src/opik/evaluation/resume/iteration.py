@@ -44,18 +44,13 @@ def remaining_runs_for_item(
     """
     How many more runs this item still needs.
 
-    Per-item contract: each dataset item is **all-or-nothing** with respect
-    to trials. If every expected trial has already completed successfully,
-    return 0 (skip). Otherwise return the full ``expected`` count — partial
-    items have all their trials redone from scratch, so the merged result
-    never mixes trial outputs produced by different task versions
-    (e.g., the buggy original vs the fixed resume).
+    Trials of the same item are independent, so resume only replays the
+    runs that did not complete. Returns ``expected - completed`` clamped
+    at zero.
     """
     expected = expected_runs_for_item(context, item)
     completed = context.completed_runs_by_item_id.get(item.id, 0)
-    if completed >= expected:
-        return 0
-    return expected
+    return max(0, expected - completed)
 
 
 def build_pending_items_iterator(
@@ -64,8 +59,8 @@ def build_pending_items_iterator(
 ) -> Iterator[dataset_item.DatasetItem]:
     """
     Yield only items that still need work, with
-    ``execution_policy.runs_per_item`` set to the full trial count — partial
-    items are re-run end-to-end (see :func:`remaining_runs_for_item`).
+    ``execution_policy.runs_per_item`` set to the count of runs still
+    missing for that item (see :func:`remaining_runs_for_item`).
     """
     for item in items_iter:
         remaining = remaining_runs_for_item(context, item)

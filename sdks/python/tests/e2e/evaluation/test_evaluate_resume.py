@@ -653,15 +653,15 @@ def test_evaluate_resume__nb_samples__only_sampled_count_replayed(
 # === Trials ===============================================================
 
 
-def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
+def test_evaluate_resume__trial_count__partial_item_replays_only_missing_runs(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
-    Partial-trial contract: with ``trial_count=3``, the original task
-    succeeds on the first trial then crashes on the second — the item is
-    *partially* evaluated (1 of 3). Resume must redo **all 3** trials from
-    scratch (not just the missing 2), so the merged result never mixes
-    outputs produced by the buggy original task with the fixed resume task.
+    Trials of the same item are independent: with ``trial_count=3``, the
+    original task succeeds on the first run then crashes on the second
+    (item ends up 1-of-3 completed). Resume must replay **only the 2
+    missing runs** — the one completed run is reconstructed alongside,
+    so the merged result has 3 runs total.
     """
     # 1. Single-item dataset (keeps the trial bookkeeping simple). Backend
     #    requires UUIDs for the ``id`` field, so we generate one upfront
@@ -708,8 +708,8 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
         expected_completed_dataset_item_ids={the_item_id},
     )
 
-    # 4. Resume with a non-crashing task. Because the item is partial
-    #    (1 of 3), resume must re-run all 3 trials, not just 2.
+    # 4. Resume with a non-crashing task. The item had 1 of 3 runs done,
+    #    so resume should replay only the 2 missing runs.
     resume_invocations = []
 
     def working_task(item: Dict[str, Any]):
@@ -724,15 +724,13 @@ def test_evaluate_resume__trial_count__partial_item_has_all_trials_redone(
         verbose=0,
     )
 
-    # 5. The same item ran 3 more times — every trial redone end-to-end.
-    assert resume_invocations == [the_item_id, the_item_id, the_item_id], (
-        "Partial items must have all trials redone end-to-end; got "
-        f"{resume_invocations}"
+    # 5. Only the 2 missing runs replayed.
+    assert resume_invocations == [the_item_id, the_item_id], (
+        f"Only missing runs should be replayed; got {resume_invocations}"
     )
 
-    # The merged EvaluationResult contains only the 3 fresh trials. The
-    # original (partial) trial is intentionally excluded, since mixing
-    # outputs from the buggy and fixed task would be confusing.
+    # The merged EvaluationResult has 3 runs total: 1 reconstructed +
+    # 2 freshly replayed.
     assert len(resume_result.test_results) == 3
     assert all(
         tr.test_case.dataset_item_id == the_item_id for tr in resume_result.test_results
@@ -761,9 +759,9 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
 
     Resume must:
       - leave item-0 alone (no task invocations; stored trials reconstructed)
-      - redo all 2 trials for item-1 (partial → from scratch)
+      - replay only the 1 missing run for item-1 (trials are independent)
       - leave item-2 alone (no task invocations; stored trials reconstructed)
-    The merged result has 4 reconstructed + 2 fresh = 6 trials.
+    The merged result has 5 reconstructed (2 + 1 + 2) + 1 fresh = 6 trials.
     """
     # 1. Three items. Labels carried as input text so the task can pick
     #    them out without touching the UUID ``id`` field.
@@ -829,15 +827,15 @@ def test_evaluate_resume__mixed_partial_and_fully_completed_items(
     )
 
     # 5. item-0 fully completed (2/2 successful) → no resume invocations.
-    #    item-1 partial (1/2 successful) → both trials redone.
+    #    item-1 partial (1/2 successful) → only the 1 missing run replays.
     #    item-2 fully completed (2/2 successful) → no resume invocations.
     counts_by_label = {label: resume_invocations.count(label) for label in labels}
-    assert counts_by_label == {"item-0": 0, "item-1": 2, "item-2": 0}, (
+    assert counts_by_label == {"item-0": 0, "item-1": 1, "item-2": 0}, (
         f"Unexpected resume task invocation distribution: {counts_by_label}"
     )
 
-    # Merged result: 2 reconstructed for item-0 + 2 fresh for item-1 +
-    # 2 reconstructed for item-2 = 6 trials total.
+    # Merged result: 2 reconstructed for item-0 + 1 reconstructed + 1 fresh
+    # for item-1 + 2 reconstructed for item-2 = 6 trials total.
     assert len(resume_result.test_results) == 6
     counts_in_result = {
         label: sum(

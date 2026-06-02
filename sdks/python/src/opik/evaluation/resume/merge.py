@@ -13,7 +13,7 @@ not re-evaluated and no new feedback scores are written to the backend.
 """
 
 import logging
-from typing import List, Set
+from typing import List
 
 from ...api_objects.dataset import dataset
 from ...api_objects.experiment import experiment as experiment_module
@@ -27,18 +27,17 @@ LOGGER = logging.getLogger(__name__)
 def reconstruct_previous_test_results(
     experiment: experiment_module.Experiment,
     dataset_: dataset.DatasetVersion,
-    *,
-    fully_completed_dataset_item_ids: Set[str],
 ) -> List[test_result_module.TestResult]:
     """
-    Build TestResult objects from experiment items belonging to dataset
-    items that were **fully completed** before this resume call.
+    Build TestResult objects from every run that completed cleanly before
+    this resume call.
 
-    Only dataset items in ``fully_completed_dataset_item_ids`` are
-    reconstructed. Items with partial trial completion are intentionally
-    excluded — their trials are re-run from scratch by the resume call, so
-    keeping the old (potentially buggy) trial outputs would mix incompatible
-    runs in the merged result.
+    Trials of the same item are independent: resume only replays the
+    missing runs, so completed runs from partially-finished items are
+    reconstructed alongside completed runs from fully-finished items. A
+    run counts as "completed cleanly" when its experiment item has a
+    non-None ``evaluation_task_output`` (i.e. the engine reached the
+    happy-path-only line that writes ``trace.output``).
 
     Reconstruction is read-only: stored ``evaluation_task_output`` and
     ``feedback_scores`` are copied from existing experiment items; no
@@ -52,20 +51,11 @@ def reconstruct_previous_test_results(
     results: List[test_result_module.TestResult] = []
 
     for experiment_item_content in experiment.get_items():
-        # Only reconstruct trials that finished the full happy path; the
-        # outer dataset-item gate already filters to fully-completed items,
-        # but a defensive per-trial check keeps stale output rows from
-        # leaking into the merged result if data is ever inconsistent.
         # Direct ``output is None`` check (rather than going through
         # ``is_trial_fully_completed``) so mypy can narrow the type for
         # the ``TestCase(...)`` call below.
         task_output = experiment_item_content.evaluation_task_output
         if task_output is None:
-            continue
-        if (
-            experiment_item_content.dataset_item_id
-            not in fully_completed_dataset_item_ids
-        ):
             continue
 
         dataset_item_data = dataset_items_by_id.get(

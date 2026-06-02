@@ -36,10 +36,7 @@ def _experiment_with(experiment_items):
 class TestReconstructPreviousTestResults:
     def test_items_without_output__skipped(self):
         """The engine strips ``output`` on any failed trial, so output
-        presence is the completion signal. Even if the caller passes a
-        failed item in ``fully_completed_dataset_item_ids`` by mistake,
-        the per-trial defensive check inside
-        ``reconstruct_previous_test_results`` keeps the stale row out of
+        presence is the completion signal — failed runs never appear in
         the merged result."""
         experiment = _experiment_with(
             [
@@ -62,20 +59,27 @@ class TestReconstructPreviousTestResults:
         results = merge.reconstruct_previous_test_results(
             experiment=experiment,
             dataset_=dataset,
-            fully_completed_dataset_item_ids={"a", "b"},
         )
 
         assert [r.test_case.dataset_item_id for r in results] == ["b"]
 
-    def test_partial_items__not_reconstructed(self):
-        """Items not in ``fully_completed_dataset_item_ids`` are dropped —
-        they're being redone from scratch by the resume call."""
+    def test_partial_items__completed_runs_reconstructed(self):
+        """Trials are independent: a completed run from a partially-finished
+        item is still reconstructed. Resume replays only the missing run."""
         experiment = _experiment_with(
             [
+                # Item 'a' had two trials: one completed cleanly, one failed.
                 _experiment_item(
+                    id="ei-a-1",
                     dataset_item_id="a",
                     trace_id="t-a-trial-1",
-                    evaluation_task_output={"output": "stale"},
+                    evaluation_task_output={"output": "ok"},
+                ),
+                _experiment_item(
+                    id="ei-a-2",
+                    dataset_item_id="a",
+                    trace_id="t-a-trial-2",
+                    evaluation_task_output=None,
                 ),
                 _experiment_item(
                     dataset_item_id="b",
@@ -91,11 +95,14 @@ class TestReconstructPreviousTestResults:
         results = merge.reconstruct_previous_test_results(
             experiment=experiment,
             dataset_=dataset,
-            # only 'b' fully completed; 'a' had partial trials → exclude
-            fully_completed_dataset_item_ids={"b"},
         )
 
-        assert [r.test_case.dataset_item_id for r in results] == ["b"]
+        # The completed trial of 'a' reconstructs alongside 'b'; the failed
+        # trial of 'a' is dropped (no output).
+        assert sorted(r.test_case.trace_id for r in results) == [
+            "t-a-trial-1",
+            "t-b",
+        ]
 
     def test_reconstructed_test_case_carries_stored_output_and_dataset_content(
         self,
@@ -116,7 +123,6 @@ class TestReconstructPreviousTestResults:
         results = merge.reconstruct_previous_test_results(
             experiment=experiment,
             dataset_=dataset,
-            fully_completed_dataset_item_ids={"a"},
         )
 
         assert len(results) == 1
@@ -159,7 +165,6 @@ class TestReconstructPreviousTestResults:
         results = merge.reconstruct_previous_test_results(
             experiment=experiment,
             dataset_=dataset,
-            fully_completed_dataset_item_ids={"a"},
         )
 
         scores = {sr.name: sr for sr in results[0].score_results}
@@ -189,18 +194,17 @@ class TestReconstructPreviousTestResults:
         results = merge.reconstruct_previous_test_results(
             experiment=experiment,
             dataset_=dataset,
-            fully_completed_dataset_item_ids={"a", "ghost"},
         )
 
         assert [r.test_case.dataset_item_id for r in results] == ["a"]
 
-    def test_no_fully_completed_items__returns_empty_list(self):
+    def test_no_completed_runs__returns_empty_list(self):
         experiment = _experiment_with(
             [
                 _experiment_item(
                     dataset_item_id="a",
                     trace_id="t-a",
-                    evaluation_task_output={"output": "ok"},
+                    evaluation_task_output=None,
                 ),
             ]
         )
@@ -209,14 +213,12 @@ class TestReconstructPreviousTestResults:
         results = merge.reconstruct_previous_test_results(
             experiment=experiment,
             dataset_=dataset,
-            fully_completed_dataset_item_ids=set(),
         )
 
         assert results == []
 
-    def test_multiple_trials__all_reconstructed_for_fully_completed_item(self):
-        """A fully-completed item with trial_count=3 has 3 stored experiment
-        items; all three are reconstructed as separate TestResults."""
+    def test_multiple_trials__all_completed_reconstructed(self):
+        """An item with three completed trials produces three TestResults."""
         experiment = _experiment_with(
             [
                 _experiment_item(
@@ -244,7 +246,6 @@ class TestReconstructPreviousTestResults:
         results = merge.reconstruct_previous_test_results(
             experiment=experiment,
             dataset_=dataset,
-            fully_completed_dataset_item_ids={"a"},
         )
 
         assert [r.test_case.trace_id for r in results] == [

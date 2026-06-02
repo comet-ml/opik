@@ -34,7 +34,7 @@ from . import (
 )
 from . import resume as resume_module
 from .resume import integration as resume_integration
-from .resume import iteration as resume_iteration
+from .resume import merge as resume_merge
 from .metrics import base_metric
 from .suite_evaluators.llm_judge import (
     metric as suite_evaluators_llm_judge_metric,
@@ -1508,9 +1508,13 @@ def evaluate_resume(
         project_name=project_name,
     )
 
-    fully_completed_ids = {
-        item.id for item in items if resume_iteration.is_fully_completed(context, item)
-    }
+    # Snapshot already-completed runs **before** ``_evaluate_task`` starts
+    # writing new experiment items, otherwise the resume call's own fresh
+    # trials would be double-counted in the merged result.
+    previous_test_results = resume_merge.reconstruct_previous_test_results(
+        experiment=context.experiment,
+        dataset_=context.dataset,
+    )
 
     new_result = _evaluate_task(
         client=client,
@@ -1532,7 +1536,7 @@ def evaluate_resume(
     return evaluation_result.merge_resume_results(
         new_result=new_result,
         context=context,
-        fully_completed_dataset_item_ids=fully_completed_ids,
+        previous_test_results=previous_test_results,
         experiment_scoring_functions=experiment_scoring_functions,
     )
 
