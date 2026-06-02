@@ -326,7 +326,7 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     kind: "query-builder",
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
-    defaultOperator: "=",
+    defaultOperator: "contains",
     addLabel: "Add condition",
     value: { placeholder: "Enter thread ID" },
   },
