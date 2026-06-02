@@ -92,8 +92,10 @@ public class OAuthAuthorizeResource {
         try {
             authService.listEligibleWorkspaces(session);
         } catch (ClientErrorException e) {
-            String returnTo = enc(uriInfo.getRequestUri().toString());
-            return redirect(config.getBaseUrl() + "/login?return_to=" + returnTo);
+            // Rebuild the public authorize URL; uriInfo is the nginx-rewritten internal path
+            String rawQuery = uriInfo.getRequestUri().getRawQuery();
+            String authorizeUrl = config.getBaseUrl() + "/oauth/authorize" + (rawQuery == null ? "" : "?" + rawQuery);
+            return redirect(config.getBaseUrl() + "/login?returnTo=" + enc(authorizeUrl));
         }
 
         String query = "client_id=" + enc(clientId)

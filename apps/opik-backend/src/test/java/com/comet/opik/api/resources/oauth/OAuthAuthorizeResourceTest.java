@@ -175,8 +175,14 @@ class OAuthAuthorizeResourceTest {
         Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "code", CODE_CHALLENGE, "S256",
                 RESOURCE_URI, STATE, headers, uriInfo);
 
-        assertThat(response.getLocation().toString())
-                .startsWith("https://www.comet.com/opik/login?return_to=");
+        String location = response.getLocation().toString();
+        assertThat(location).startsWith("https://www.comet.com/opik/login?returnTo=");
+        String returnTo = java.net.URLDecoder.decode(
+                location.substring(location.indexOf("returnTo=") + "returnTo=".length()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        // return_to must be the public authorize URL (with /opik prefix), not the nginx-internal path
+        assertThat(returnTo).startsWith("https://www.comet.com/opik/oauth/authorize?");
+        assertThat(returnTo).contains("client_id=" + CLIENT_ID);
     }
 
     @Test
