@@ -208,7 +208,7 @@ class PromptServiceImpl implements PromptService {
                 .build();
 
         return withPromptVersionLock(workspaceId, createdPrompt.id(),
-                () -> savePromptVersion(workspaceId, createdPrompt.projectId(), promptVersion));
+                () -> savePromptVersion(workspaceId, createdPrompt.projectId(), promptVersion, createdPrompt.name()));
     }
 
     private Prompt savePrompt(String workspaceId, Prompt prompt) {
@@ -366,7 +366,7 @@ class PromptServiceImpl implements PromptService {
                         .commit(commit)
                         .build();
 
-                var savedPromptVersion = savePromptVersion(workspaceId, projectId, promptVersion);
+                var savedPromptVersion = savePromptVersion(workspaceId, projectId, promptVersion, prompt.name());
                 postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
 
                 return savedPromptVersion;
@@ -407,7 +407,7 @@ class PromptServiceImpl implements PromptService {
                 .environments(environments)
                 .build();
 
-        var saved = savePromptVersion(workspaceId, projectId, promptVersion);
+        var saved = savePromptVersion(workspaceId, projectId, promptVersion, prompt.name());
         postPromptCommittedEvent(saved, workspaceId, workspaceName, userName, projectId);
         return saved;
     }
@@ -511,12 +511,13 @@ class PromptServiceImpl implements PromptService {
                     .commit(CommitUtils.getCommit(newId))
                     .build();
 
-            return savePromptVersion(workspaceId, prompt.projectId(), promptVersion);
+            return savePromptVersion(workspaceId, prompt.projectId(), promptVersion, prompt.name());
 
         }).withRetry(3, this::newVersionConflict);
     }
 
-    private PromptVersion savePromptVersion(String workspaceId, UUID projectId, PromptVersion promptVersion) {
+    private PromptVersion savePromptVersion(String workspaceId, UUID projectId, PromptVersion promptVersion,
+            String promptName) {
         log.info("Creating prompt version for prompt id '{}'", promptVersion.promptId());
 
         IdGenerator.validateVersion(promptVersion.id(), "prompt version");
@@ -549,11 +550,15 @@ class PromptServiceImpl implements PromptService {
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
         PromptVersion savedVersion = getById(workspaceId, promptVersion.id());
-        trackPromptVersionCreated(savedVersion, projectId, workspaceId);
+        trackPromptVersionCreated(savedVersion, projectId, workspaceId, promptName);
         return savedVersion;
     }
 
-    private void trackPromptVersionCreated(PromptVersion promptVersion, UUID projectId, String workspaceId) {
+    private void trackPromptVersionCreated(PromptVersion promptVersion, UUID projectId, String workspaceId,
+            String promptName) {
+        if (DemoData.PROMPTS.contains(promptName)) {
+            return;
+        }
         Schedulers.boundedElastic().schedule(() -> {
             Map<String, String> properties = new HashMap<>();
             properties.put("prompt_version_id", Objects.toString(promptVersion.id(), ""));
@@ -935,7 +940,7 @@ class PromptServiceImpl implements PromptService {
 
         PromptVersion restoredVersion = withPromptVersionLock(workspaceId, promptId,
                 () -> EntityConstraintHandler
-                        .handle(() -> savePromptVersion(workspaceId, prompt.projectId(), newVersion))
+                        .handle(() -> savePromptVersion(workspaceId, prompt.projectId(), newVersion, prompt.name()))
                         .onErrorDo(() -> retryableCreateVersion(workspaceId,
                                 CreatePromptVersion.builder()
                                         .name(prompt.name())
