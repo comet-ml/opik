@@ -3,6 +3,7 @@ import { NO_VALUE_OPERATORS } from "@/constants/filters";
 
 const OPERATOR_LABELS: Partial<Record<FilterOperator, string>> = {
   "=": "equals",
+  "!=": "does not equal",
   contains: "contains",
   not_contains: "does not contain",
   starts_with: "starts with",
@@ -17,6 +18,7 @@ const OPERATOR_LABELS: Partial<Record<FilterOperator, string>> = {
 
 const OPERATOR_SHORT_LABELS: Partial<Record<FilterOperator, string>> = {
   "=": "=",
+  "!=": "≠",
   contains: "contains",
   not_contains: "not contains",
   starts_with: "starts",
@@ -33,6 +35,24 @@ export const TAGS_OPERATORS: FilterOperator[] = [
   "contains",
   "not_contains",
   "=",
+];
+
+export const STRING_OPERATORS: FilterOperator[] = [
+  "contains",
+  "not_contains",
+  "starts_with",
+  "ends_with",
+  "=",
+  "!=",
+];
+
+export const LIST_OPERATORS: FilterOperator[] = [
+  "contains",
+  "not_contains",
+  "=",
+  "!=",
+  "is_empty",
+  "is_not_empty",
 ];
 
 export const FEEDBACK_SCORE_OPERATORS: FilterOperator[] = [
