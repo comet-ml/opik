@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Plus, Tag } from "lucide-react";
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Input } from "@/ui/input";
 import { useToast } from "@/ui/use-toast";
@@ -8,6 +8,26 @@ import RemovableTag from "@/shared/RemovableTag/RemovableTag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { TagProps } from "@/ui/tag";
+
+type TagSizeConfig = {
+  addButtonSize: ButtonProps["size"];
+  addButtonClassName?: string;
+  rowMinHeight: string;
+};
+
+const DEFAULT_TAG_SIZE_CONFIG: TagSizeConfig = {
+  addButtonSize: "icon-2xs",
+  addButtonClassName: "size-5",
+  rowMinHeight: "min-h-7",
+};
+
+const TAG_SIZE_CONFIG: Partial<
+  Record<NonNullable<TagProps["size"]>, TagSizeConfig>
+> = {
+  sm: { addButtonSize: "icon-3xs", rowMinHeight: "min-h-4" },
+  md: { addButtonSize: "icon-2xs", rowMinHeight: "min-h-6" },
+  lg: { addButtonSize: "icon-xs", rowMinHeight: "min-h-7" },
+};
 
 export type TagListRendererProps = {
   tags: string[];
@@ -23,6 +43,7 @@ export type TagListRendererProps = {
   tagType?: string; // For error messages (e.g., "tag", "version tag")
   canAdd?: boolean;
   tagVariant?: TagProps["variant"];
+  tagSize?: TagProps["size"];
 };
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
@@ -39,12 +60,16 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   tagType = "tag",
   canAdd = true,
   tagVariant,
+  tagSize = "default",
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [newTag, setNewTag] = useState<string>("");
 
   const hasTags = tags.length > 0 || immutableTags.length > 0;
+
+  const tagSizeConfig =
+    (tagSize && TAG_SIZE_CONFIG[tagSize]) ?? DEFAULT_TAG_SIZE_CONFIG;
 
   const tagMarginClass = size === "sm" ? "mx-0" : "mx-1";
 
@@ -75,7 +100,8 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   return (
     <div
       className={cn(
-        "flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden",
+        "flex w-full flex-wrap items-center gap-2 overflow-x-hidden",
+        tagSizeConfig.rowMinHeight,
         className,
       )}
     >
@@ -86,7 +112,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
         <RemovableTag
           label={tag}
           key={`immutable-${tag}`}
-          size="default"
+          size={tagSize}
           variant={tagVariant}
         />
       ))}
@@ -94,7 +120,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
         <RemovableTag
           label={tag}
           key={tag}
-          size="default"
+          size={tagSize}
           variant={tagVariant}
           onDelete={() => onDeleteTag(tag)}
         />
@@ -105,8 +131,8 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
             <Button
               data-testid="add-tag-button"
               variant="outline"
-              size="icon-2xs"
-              className="size-5"
+              size={tagSizeConfig.addButtonSize}
+              className={cn(tagSizeConfig.addButtonClassName)}
             >
               <Plus />
             </Button>
