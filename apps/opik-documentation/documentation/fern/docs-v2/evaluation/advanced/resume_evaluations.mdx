@@ -58,12 +58,15 @@ If either condition isn't met, `evaluate_resume` raises
 ## When `evaluate_resume` is the wrong tool
 
 - **You want to re-score an existing experiment with new metrics.** Use
-  `opik.evaluate_experiment(...)` — it scores existing runs without re-running the task.
+  [`opik.evaluate_experiment(...)`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/evaluate_experiment.html)
+  — it scores existing runs without re-running the task.
 - **You want to add more items to the experiment.** Resume only iterates the items the
   original evaluation saw. Start a fresh `evaluate()` against the larger dataset.
-- **You changed the `task` implementation between calls.** Resume calls your new `task`
-  only for the missing runs; already-completed runs keep their original outputs. If the
-  change should affect every run, start a fresh `evaluate()`.
+- **You changed the `task` implementation or the metrics between calls.** Providing the
+  same `task` and `scoring_metrics` you used originally is the caller's responsibility.
+  Resume calls your new `task` and runs your new metrics only for the missing runs;
+  already-completed runs keep their original outputs and feedback scores. If the change
+  should affect every run, start a fresh `evaluate()`.
 
 ## Running on the same machine as the original `evaluate()`
 
@@ -73,8 +76,3 @@ id. Run resume from the same machine that ran the original call — otherwise
 `opik.exceptions.LocalCheckpointMissing` is raised.
 
 Evaluations without a sampler or explicit ids do **not** need to run on the same machine.
-
-## Reference
-
-- `opik.evaluate_resume`
-- `opik.exceptions.ExperimentNotResumable`, `opik.exceptions.LocalCheckpointMissing`
