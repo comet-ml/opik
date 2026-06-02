@@ -12515,6 +12515,8 @@ components:
           $ref: "#/components/schemas/JsonListString"
         output:
           $ref: "#/components/schemas/JsonListString"
+        trace_metadata:
+          $ref: "#/components/schemas/JsonListString"
         feedback_scores:
           type: array
           readOnly: true
@@ -13236,6 +13238,8 @@ components:
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
+          $ref: "#/components/schemas/JsonListString_Compare"
+        trace_metadata:
           $ref: "#/components/schemas/JsonListString_Compare"
         feedback_scores:
           type: array
