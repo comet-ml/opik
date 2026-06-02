@@ -81,18 +81,19 @@ def _materialize_for_checkpoint(
     possible.
 
     Three cases:
-      * No sampler, no explicit ids → streaming. No checkpoint needed; the
-        iterator is passed straight to the engine.
-      * Explicit ``dataset_item_ids`` → ids are known up front; the checkpoint
-        gets them directly and the iterator is left untouched so the engine
-        can still consume it lazily.
-      * Sampler → the iterator was already built from a materialized list
-        inside ``resolve_dataset_items``; we drain it once to surface the
-        resolved ids for the checkpoint, then hand a fresh iterator over the
-        same list to the engine.
+      * Sampler (with or without explicit ids) → the iterator was already
+        built from a materialized list inside ``resolve_dataset_items``;
+        we drain it once to surface the post-sampler ids for the
+        checkpoint, then hand a fresh iterator over the same list to the
+        engine. Sampler precedence ensures the checkpoint reflects what
+        the engine actually iterated, not the raw input ids — otherwise a
+        resume would replay a different item set than the original eval.
+      * Explicit ``dataset_item_ids`` only → ids are known up front; the
+        checkpoint gets them directly and the iterator is left untouched
+        so the engine can still consume it lazily.
+      * Neither → streaming. No checkpoint needed; the iterator is passed
+        straight to the engine.
     """
-    if dataset_item_ids is not None:
-        return items_iter, total_items, list(dataset_item_ids)
     if dataset_sampler is not None:
         materialized = list(items_iter)
         return (
@@ -100,6 +101,8 @@ def _materialize_for_checkpoint(
             len(materialized),
             [item.id for item in materialized],
         )
+    if dataset_item_ids is not None:
+        return items_iter, total_items, list(dataset_item_ids)
     return items_iter, total_items, None
 
 

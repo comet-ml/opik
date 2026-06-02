@@ -94,7 +94,9 @@ class TestEvaluateResumeHappyFlow:
         )
         empty_new_result = _evaluation_result_from([], context.experiment)
 
-        task = lambda data: {"output": "x"}
+        def task(data):
+            return {"output": "x"}
+
         with (
             mock.patch.object(
                 evaluator.resume_module, "prepare_resume_context", return_value=context

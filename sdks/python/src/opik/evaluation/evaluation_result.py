@@ -75,6 +75,10 @@ def merge_resume_results(
     if merged_experiment_scores:
         context.experiment.log_experiment_scores(score_results=merged_experiment_scores)
 
+    # ``experiment_scores`` must reflect the merged (whole-experiment)
+    # aggregate or nothing at all. Falling back to ``new_result``'s
+    # slice-only scores would advertise pending-slice aggregates as
+    # whole-experiment coverage.
     return EvaluationResult(
         dataset_id=new_result.dataset_id,
         experiment_id=new_result.experiment_id,
@@ -82,11 +86,7 @@ def merge_resume_results(
         test_results=merged_test_results,
         experiment_url=new_result.experiment_url,
         trial_count=new_result.trial_count,
-        experiment_scores=(
-            merged_experiment_scores
-            if merged_experiment_scores
-            else new_result.experiment_scores
-        ),
+        experiment_scores=merged_experiment_scores,
     )
 
 

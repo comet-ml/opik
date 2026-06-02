@@ -922,8 +922,11 @@ def test_evaluate_resume__scoring_crash_after_task_success__trial_replayed(
     scoring_key_mapping = {"reference": "expected_output", "output": "output"}
 
     # 2. Original evaluate — task is healthy, but the metric raises on
-    #    ``item-1``. The escaping BaseException propagates out of
-    #    ``evaluate()``.
+    #    ``item-1``. The simulated crash is ``SystemExit`` (a
+    #    ``BaseException`` subclass) so it escapes the engine's
+    #    ``except Exception`` handler; we catch it narrowly here so any
+    #    unrelated ``KeyboardInterrupt`` / ``GeneratorExit`` is not
+    #    silently swallowed.
     try:
         opik.evaluate(
             dataset=dataset,
@@ -936,7 +939,7 @@ def test_evaluate_resume__scoring_crash_after_task_success__trial_replayed(
             task_threads=1,
             verbose=0,
         )
-    except BaseException:
+    except SystemExit:
         pass
 
     experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
@@ -1088,6 +1091,12 @@ def test_evaluate_resume__mixed_task_and_scoring_failures__only_failed_items_rep
 
     scoring_key_mapping = {"reference": "expected_output", "output": "output"}
 
+    # ``_MetricRaisingBaseException`` raises ``SystemExit`` (a
+    # ``BaseException`` subclass) on the scoring-failure label; the task
+    # raises ``RuntimeError`` on the task-failure label. Catch the scoring
+    # crash narrowly so we don't mask unrelated ``KeyboardInterrupt`` /
+    # ``GeneratorExit``; the ``RuntimeError`` is consumed inside the
+    # engine and does not escape.
     try:
         opik.evaluate(
             dataset=dataset,
@@ -1100,7 +1109,7 @@ def test_evaluate_resume__mixed_task_and_scoring_failures__only_failed_items_rep
             task_threads=1,
             verbose=0,
         )
-    except BaseException:
+    except SystemExit:
         pass
 
     experiment_id = _experiment_id_after_failed_evaluate(opik_client, experiment_name)
