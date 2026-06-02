@@ -30,11 +30,6 @@ const useDatasetItemsFromJsonMutation = () => {
       const { data } = await api.post(
         `${DATASETS_REST_ENDPOINT}items/from-json`,
         formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
       );
       return data;
     },

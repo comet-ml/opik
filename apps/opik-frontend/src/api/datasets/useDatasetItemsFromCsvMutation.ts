@@ -25,11 +25,6 @@ const useDatasetItemsFromCsvMutation = () => {
       const { data } = await api.post(
         `${DATASETS_REST_ENDPOINT}items/from-csv`,
         formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
       );
       return data;
     },
