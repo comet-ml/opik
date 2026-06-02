@@ -18,9 +18,8 @@ import { Textarea } from "@/ui/textarea";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
+import { DATASET_UPLOAD_ACCEPTED_TYPES } from "@/lib/file";
 import type useDatasetForm from "./useDatasetForm";
-
-const ACCEPTED_TYPE = ".csv,.json,.jsonl,.ndjson";
 
 type AddEditDatasetDialogWrapperProps = {
   open: boolean;
@@ -125,7 +124,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
               <UploadField
                 disabled={isEdit}
                 description="Drop a CSV or JSON file to upload or"
-                accept={ACCEPTED_TYPE}
+                accept={DATASET_UPLOAD_ACCEPTED_TYPES}
                 onFileSelect={handleFileSelect}
                 errorText={uploadError}
                 successText={

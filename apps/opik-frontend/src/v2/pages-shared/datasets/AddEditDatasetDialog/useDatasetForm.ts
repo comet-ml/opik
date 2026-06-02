@@ -10,10 +10,10 @@ import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
 import { useToast } from "@/ui/use-toast";
 import {
-  detectUploadFormat,
   formatToHumanLabel,
   getDatasetUploadFilenameWithoutExtension,
   UploadFormat,
+  validateDatasetUploadFile,
 } from "@/lib/file";
 import { packAssertions } from "@/lib/assertion-converters";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
@@ -359,19 +359,17 @@ const useDatasetForm = ({
 
       if (!file) return;
 
-      if (file.size > fileSizeLimit * 1024 * 1024) {
-        setUploadError(`File exceeds maximum size (${fileSizeLimit}MB).`);
+      const result = validateDatasetUploadFile(file, fileSizeLimit);
+      if (result.error) {
+        setUploadError(result.error);
         return;
       }
-      const format = detectUploadFormat(file.name);
-      if (!format) {
-        setUploadError("File must be .csv, .json, .jsonl, or .ndjson");
-        return;
-      }
-      setUploadFile(file);
-      setUploadFormat(format);
+      if (!result.file || !result.format) return;
+
+      setUploadFile(result.file);
+      setUploadFormat(result.format);
       if (!name.trim()) {
-        setName(getDatasetUploadFilenameWithoutExtension(file.name));
+        setName(getDatasetUploadFilenameWithoutExtension(result.file.name));
       }
     },
     [fileSizeLimit, name],

@@ -26,14 +26,13 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import { buildDocsUrl } from "@/v1/lib/utils";
 import {
-  detectUploadFormat,
+  DATASET_UPLOAD_ACCEPTED_TYPES,
   formatToHumanLabel,
   getDatasetUploadFilenameWithoutExtension,
   UploadFormat,
+  validateDatasetUploadFile,
 } from "@/lib/file";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
-
-const ACCEPTED_TYPE = ".csv,.json,.jsonl,.ndjson";
 
 const FILE_SIZE_LIMIT_IN_MB = 2000;
 
@@ -255,22 +254,18 @@ const AddEditTestSuiteDialog = ({
         return;
       }
 
-      if (file.size > fileSizeLimit * 1024 * 1024) {
-        setUploadError(`File exceeds maximum size (${fileSizeLimit}MB).`);
+      const result = validateDatasetUploadFile(file, fileSizeLimit);
+      if (result.error) {
+        setUploadError(result.error);
         return;
       }
+      if (!result.file || !result.format) return;
 
-      const format = detectUploadFormat(file.name);
-      if (!format) {
-        setUploadError("File must be .csv, .json, .jsonl, or .ndjson");
-        return;
-      }
-
-      setUploadFile(file);
-      setUploadFormat(format);
+      setUploadFile(result.file);
+      setUploadFormat(result.format);
 
       if (!name.trim()) {
-        setName(getDatasetUploadFilenameWithoutExtension(file.name));
+        setName(getDatasetUploadFilenameWithoutExtension(result.file.name));
       }
     },
     [fileSizeLimit, name],
@@ -344,7 +339,7 @@ const AddEditTestSuiteDialog = ({
               <UploadField
                 disabled={isEdit}
                 description="Drop a CSV or JSON file to upload or"
-                accept={ACCEPTED_TYPE}
+                accept={DATASET_UPLOAD_ACCEPTED_TYPES}
                 onFileSelect={handleFileSelect}
                 errorText={uploadError}
                 successText={

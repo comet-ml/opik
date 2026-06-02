@@ -157,3 +157,41 @@ export const detectUploadFormat = (filename: string): UploadFormat | null => {
  */
 export const formatToHumanLabel = (format: UploadFormat): string =>
   format === "csv" ? "CSV" : format === "jsonl" ? "JSONL" : "JSON";
+
+/**
+ * Comma-separated list of accepted extensions for dataset upload fields,
+ * suitable for the HTML `accept` attribute.
+ */
+export const DATASET_UPLOAD_ACCEPTED_TYPES = ".csv,.json,.jsonl,.ndjson";
+
+/**
+ * Error shown when a picked dataset-upload file has an unsupported extension.
+ */
+export const INVALID_UPLOAD_FORMAT_MESSAGE =
+  "File must be .csv, .json, .jsonl, or .ndjson";
+
+export type DatasetUploadValidation = {
+  file?: File;
+  format?: UploadFormat;
+  error?: string;
+};
+
+/**
+ * Validates a picked dataset-upload file: enforces the size limit and detects
+ * its UploadFormat. Returns the trio `{ file, format, error }` so callers can
+ * either store the validated file/format or surface the error.
+ */
+export const validateDatasetUploadFile = (
+  file: File | undefined,
+  maxSizeMB: number,
+): DatasetUploadValidation => {
+  if (!file) return {};
+  if (file.size > maxSizeMB * 1024 * 1024) {
+    return { error: `File exceeds maximum size (${maxSizeMB}MB).` };
+  }
+  const format = detectUploadFormat(file.name);
+  if (!format) {
+    return { error: INVALID_UPLOAD_FORMAT_MESSAGE };
+  }
+  return { file, format };
+};

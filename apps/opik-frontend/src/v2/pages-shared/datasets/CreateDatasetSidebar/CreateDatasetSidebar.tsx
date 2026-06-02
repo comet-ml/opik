@@ -9,6 +9,7 @@ import { Separator } from "@/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
 import { cn, escapeJsString } from "@/lib/utils";
+import { DATASET_UPLOAD_ACCEPTED_TYPES } from "@/lib/file";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   Accordion,
@@ -35,8 +36,6 @@ import {
   PASS_CRITERIA_TITLE,
   PASS_CRITERIA_DESCRIPTION,
 } from "@/constants/test-suites";
-
-const ACCEPTED_TYPE = ".csv,.json,.jsonl,.ndjson";
 
 enum Step {
   NAME_DESCRIPTION,
@@ -255,7 +254,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
         </Description>
         <UploadField
           description="Drop a CSV or JSON file to upload or"
-          accept={ACCEPTED_TYPE}
+          accept={DATASET_UPLOAD_ACCEPTED_TYPES}
           onFileSelect={handleFileSelect}
           errorText={uploadError}
           successText={
