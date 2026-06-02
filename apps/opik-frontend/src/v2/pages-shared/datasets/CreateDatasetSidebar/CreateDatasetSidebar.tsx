@@ -8,7 +8,6 @@ import { Separator } from "@/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
 import { cn, escapeJsString } from "@/lib/utils";
-import { DATASET_UPLOAD_ACCEPTED_TYPES, formatToHumanLabel } from "@/lib/file";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   Accordion,
@@ -25,7 +24,7 @@ import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSideP
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import DatasetUploadDescription from "@/shared/DatasetUploadDescription/DatasetUploadDescription";
-import UploadField from "@/shared/UploadField/UploadField";
+import DatasetUploadField from "@/shared/DatasetUploadField/DatasetUploadField";
 import useDatasetForm from "@/v2/pages-shared/datasets/AddEditDatasetDialog/useDatasetForm";
 import useProjectById from "@/api/projects/useProjectById";
 import { useActiveProjectId } from "@/store/AppStore";
@@ -243,16 +242,11 @@ const CreateDatasetSidebar: React.FunctionComponent<
           docsUrl={buildDocsUrl("/evaluation/advanced/manage_datasets")}
           className="mb-2 tracking-normal"
         />
-        <UploadField
-          description="Drop a CSV or JSON file to upload or"
-          accept={DATASET_UPLOAD_ACCEPTED_TYPES}
+        <DatasetUploadField
+          uploadFile={uploadFile}
+          uploadFormat={uploadFormat}
+          uploadError={uploadError}
           onFileSelect={handleFileSelect}
-          errorText={uploadError}
-          successText={
-            uploadFile && !uploadError && uploadFormat
-              ? `${formatToHumanLabel(uploadFormat)} file ready to upload`
-              : undefined
-          }
         />
       </div>
       <div className="mb-4">

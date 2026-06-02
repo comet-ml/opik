@@ -22,11 +22,10 @@ import { Textarea } from "@/ui/textarea";
 import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import DatasetUploadDescription from "@/shared/DatasetUploadDescription/DatasetUploadDescription";
-import UploadField from "@/shared/UploadField/UploadField";
+import DatasetUploadField from "@/shared/DatasetUploadField/DatasetUploadField";
 import { buildDocsUrl } from "@/v1/lib/utils";
 import { getApiErrorMessage } from "@/lib/api-error";
 import {
-  DATASET_UPLOAD_ACCEPTED_TYPES,
   formatToHumanLabel,
   getDatasetUploadFilenameWithoutExtension,
   UploadFormat,
@@ -319,17 +318,12 @@ const AddEditTestSuiteDialog = ({
                 fileSizeLimit={fileSizeLimit}
                 docsUrl={buildDocsUrl("/evaluation/manage_datasets")}
               />
-              <UploadField
-                disabled={isEdit}
-                description="Drop a CSV or JSON file to upload or"
-                accept={DATASET_UPLOAD_ACCEPTED_TYPES}
+              <DatasetUploadField
+                uploadFile={uploadFile}
+                uploadFormat={uploadFormat}
+                uploadError={uploadError}
                 onFileSelect={handleFileSelect}
-                errorText={uploadError}
-                successText={
-                  uploadFile && !uploadError && uploadFormat
-                    ? `${formatToHumanLabel(uploadFormat)} file ready to upload`
-                    : undefined
-                }
+                disabled={isEdit}
               />
             </div>
           )}
