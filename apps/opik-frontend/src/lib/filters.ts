@@ -1,9 +1,11 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
+import compact from "lodash/compact";
 import { Filter, Filters } from "@/types/filters";
 import { DatasetItemColumn } from "@/types/datasets";
 import {
   COLUMN_DATA_ID,
+  COLUMN_EXPERIMENT_IDS,
   COLUMN_TYPE,
   DYNAMIC_COLUMN_TYPE,
 } from "@/types/shared";
@@ -162,6 +164,20 @@ export const generateExperimentIdFilter = (experimentId?: string) => {
       type: COLUMN_TYPE.string,
       operator: "=",
       value: experimentId,
+    }),
+  ];
+};
+
+export const generateExperimentIdsFilter = (experimentIds: string[] = []) => {
+  const ids = compact(experimentIds);
+  if (!ids.length) return [];
+
+  return [
+    createFilter({
+      field: COLUMN_EXPERIMENT_IDS,
+      type: COLUMN_TYPE.string,
+      operator: "in",
+      value: ids.join(","),
     }),
   ];
 };

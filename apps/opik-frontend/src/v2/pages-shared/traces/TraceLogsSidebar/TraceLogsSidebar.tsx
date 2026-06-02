@@ -27,6 +27,7 @@ import useTracesFeedbackScoresNames from "@/api/traces/useTracesFeedbackScoresNa
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_EXPERIMENT_ID,
+  COLUMN_EXPERIMENT_IDS,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_CUSTOM_ID,
@@ -80,6 +81,7 @@ import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableState
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
+import ExperimentsSelectBoxFilterWrapper from "@/v2/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBoxFilterWrapper";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -336,7 +338,7 @@ const FILTERS_COLUMN_DATA: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: COLUMN_EXPERIMENT_ID,
+    id: COLUMN_EXPERIMENT_IDS,
     label: "Experiment",
     type: COLUMN_TYPE.string,
   },
@@ -510,6 +512,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             projectId,
             type,
           },
+        },
+        [COLUMN_EXPERIMENT_IDS]: {
+          keyComponent: ExperimentsSelectBoxFilterWrapper as never,
+          keyComponentProps: { projectId },
+          operators: [{ label: "is one of", value: "in" }],
+          defaultOperator: "in",
         },
       },
     }),
