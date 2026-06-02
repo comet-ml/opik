@@ -194,9 +194,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       page: 1,
       size: 1000,
       truncate: false,
+      fromTime: thread?.start_time,
+      toTime: thread?.end_time,
     },
     {
-      enabled: Boolean(threadId),
+      enabled: Boolean(threadId) && Boolean(thread),
     },
   );
 
@@ -495,7 +497,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const renderContent = () => {
-    if (isThreadPending || isTracesPending) {
+    if (isThreadPending) {
       return <Loader />;
     }
 
