@@ -1055,6 +1055,10 @@ serviceToggles:
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
   agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether traces are automatically summarized by an LLM after ingestion. Each completed trace
+  #   triggers a call to an OpenRouter model using the workspace's configured provider key.
+  traceSummarizationEnabled: ${TOGGLE_TRACE_SUMMARIZATION_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
