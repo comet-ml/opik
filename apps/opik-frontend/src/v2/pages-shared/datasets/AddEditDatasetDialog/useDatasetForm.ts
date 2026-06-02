@@ -5,13 +5,16 @@ import get from "lodash/get";
 import { useActiveProjectId } from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
-import useDatasetItemsFromJsonMutation, {
-  JsonUploadFormat,
-} from "@/api/datasets/useDatasetItemsFromJsonMutation";
+import useDatasetItemsFromJsonMutation from "@/api/datasets/useDatasetItemsFromJsonMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
 import { useToast } from "@/ui/use-toast";
-import { getDatasetUploadFilenameWithoutExtension } from "@/lib/file";
+import {
+  detectUploadFormat,
+  formatToHumanLabel,
+  getDatasetUploadFilenameWithoutExtension,
+  UploadFormat,
+} from "@/lib/file";
 import { packAssertions } from "@/lib/assertion-converters";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
@@ -19,19 +22,6 @@ import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const FILE_SIZE_LIMIT_IN_MB = 2000;
-
-type UploadFormat = "csv" | JsonUploadFormat;
-
-const detectUploadFormat = (filename: string): UploadFormat | null => {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".csv")) return "csv";
-  if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "jsonl";
-  if (lower.endsWith(".json")) return "json";
-  return null;
-};
-
-const formatToHumanLabel = (format: UploadFormat): string =>
-  format === "csv" ? "CSV" : format === "jsonl" ? "JSONL" : "JSON";
 
 type UseDatasetFormParams = {
   dataset?: Dataset;

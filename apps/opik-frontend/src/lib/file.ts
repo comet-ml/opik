@@ -1,5 +1,9 @@
 import { csv2json } from "json-2-csv";
 
+import { JsonUploadFormat } from "@/api/datasets/useDatasetItemsFromJsonMutation";
+
+export type UploadFormat = "csv" | JsonUploadFormat;
+
 interface CsvValidationResult {
   data?: Record<string, unknown>[];
   error?: string;
@@ -135,3 +139,21 @@ export const getDatasetUploadFilenameWithoutExtension = (
 ): string => {
   return filename.replace(/\.(csv|jsonl|ndjson|json)$/i, "");
 };
+
+/**
+ * Maps a dataset-upload filename to its UploadFormat, or null if the
+ * extension is not a supported dataset-upload type.
+ */
+export const detectUploadFormat = (filename: string): UploadFormat | null => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".csv")) return "csv";
+  if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "jsonl";
+  if (lower.endsWith(".json")) return "json";
+  return null;
+};
+
+/**
+ * Human-readable label for an UploadFormat (shown in UI messages).
+ */
+export const formatToHumanLabel = (format: UploadFormat): string =>
+  format === "csv" ? "CSV" : format === "jsonl" ? "JSONL" : "JSON";

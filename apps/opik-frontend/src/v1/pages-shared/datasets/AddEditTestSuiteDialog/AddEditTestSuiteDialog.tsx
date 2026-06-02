@@ -5,9 +5,7 @@ import get from "lodash/get";
 
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
-import useDatasetItemsFromJsonMutation, {
-  JsonUploadFormat,
-} from "@/api/datasets/useDatasetItemsFromJsonMutation";
+import useDatasetItemsFromJsonMutation from "@/api/datasets/useDatasetItemsFromJsonMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import { Button } from "@/ui/button";
 import { Description } from "@/ui/description";
@@ -27,25 +25,17 @@ import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import { buildDocsUrl } from "@/v1/lib/utils";
-import { getDatasetUploadFilenameWithoutExtension } from "@/lib/file";
+import {
+  detectUploadFormat,
+  formatToHumanLabel,
+  getDatasetUploadFilenameWithoutExtension,
+  UploadFormat,
+} from "@/lib/file";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 
 const ACCEPTED_TYPE = ".csv,.json,.jsonl,.ndjson";
 
 const FILE_SIZE_LIMIT_IN_MB = 2000;
-
-type UploadFormat = "csv" | JsonUploadFormat;
-
-const detectUploadFormat = (filename: string): UploadFormat | null => {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".csv")) return "csv";
-  if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "jsonl";
-  if (lower.endsWith(".json")) return "json";
-  return null;
-};
-
-const formatToHumanLabel = (format: UploadFormat): string =>
-  format === "csv" ? "CSV" : format === "jsonl" ? "JSONL" : "JSON";
 
 type AddEditTestSuiteDialogProps = {
   dataset?: Dataset;
