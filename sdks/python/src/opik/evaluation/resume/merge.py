@@ -20,7 +20,6 @@ from ...api_objects.experiment import experiment as experiment_module
 from .. import test_case as test_case_module
 from .. import test_result as test_result_module
 from ..metrics import score_result
-from . import context as context_module
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +56,11 @@ def reconstruct_previous_test_results(
         # outer dataset-item gate already filters to fully-completed items,
         # but a defensive per-trial check keeps stale output rows from
         # leaking into the merged result if data is ever inconsistent.
-        if not context_module.is_trial_fully_completed(experiment_item_content):
+        # Direct ``output is None`` check (rather than going through
+        # ``is_trial_fully_completed``) so mypy can narrow the type for
+        # the ``TestCase(...)`` call below.
+        task_output = experiment_item_content.evaluation_task_output
+        if task_output is None:
             continue
         if (
             experiment_item_content.dataset_item_id
@@ -82,7 +85,7 @@ def reconstruct_previous_test_results(
                 test_case=test_case_module.TestCase(
                     trace_id=experiment_item_content.trace_id,
                     dataset_item_id=experiment_item_content.dataset_item_id,
-                    task_output=experiment_item_content.evaluation_task_output,
+                    task_output=task_output,
                     dataset_item_content=dataset_item_data,
                 ),
                 score_results=[
