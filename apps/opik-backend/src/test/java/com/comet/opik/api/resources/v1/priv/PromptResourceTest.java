@@ -37,6 +37,7 @@ import com.comet.opik.api.resources.utils.resources.PromptVersionResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -973,6 +974,10 @@ class PromptResourceTest {
                 }
             }
         }
+    }
+
+    static Stream<String> demoPromptNames() {
+        return DemoData.PROMPTS.stream();
     }
 
     private UUID createPrompt(Prompt prompt, String apiKey, String workspaceName) {
@@ -2054,6 +2059,60 @@ class PromptResourceTest {
             assertPromptVersion(actualPromptVersion, expectedPromptVersion, promptId);
 
             assertPromptVersionCreatedEvent(promptId, actualPromptVersion.id(), WORKSPACE_ID, USER);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.PromptResourceTest#demoPromptNames")
+        @DisplayName("Success: demo prompt does not emit prompt_version_created event")
+        void shouldCreatePromptVersion__whenDemoPrompt__thenDoesNotEmitEvent(String demoPromptName) {
+
+            var demoPrompt = buildPrompt()
+                    .name(demoPromptName)
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID demoPromptId = createPrompt(demoPrompt, API_KEY, TEST_WORKSPACE);
+
+            var demoVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .commit(null)
+                    .id(null)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
+                    .build();
+
+            wireMock.server().resetRequests();
+
+            createPromptVersion(createPromptVersionRequest(demoPrompt.name(), demoVersion,
+                    demoPrompt.templateStructure()), API_KEY, TEST_WORKSPACE);
+
+            // Sentinel: a regular prompt version is created after the demo one and goes through the same async
+            // pipeline. Once its event arrives, the demo event would also have arrived if it were ever emitted.
+            var sentinelPrompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID sentinelPromptId = createPrompt(sentinelPrompt, API_KEY, TEST_WORKSPACE);
+
+            var sentinelVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .commit(null)
+                    .id(null)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
+                    .build();
+
+            PromptVersion createdSentinel = createPromptVersion(createPromptVersionRequest(sentinelPrompt.name(),
+                    sentinelVersion, sentinelPrompt.templateStructure()), API_KEY, TEST_WORKSPACE);
+
+            assertPromptVersionCreatedEvent(sentinelPromptId, createdSentinel.id(), WORKSPACE_ID, USER);
+
+            wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                    .withRequestBody(matchingJsonPath("$.event_type",
+                            equalTo(AnalyticsService.EVENT_PREFIX + "prompt_version_created"))
+                            .and(matchingJsonPath("$.event_properties.prompt_id", equalTo(demoPromptId.toString())))));
         }
 
         @Test
