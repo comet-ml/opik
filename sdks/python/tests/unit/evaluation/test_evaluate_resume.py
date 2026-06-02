@@ -19,6 +19,7 @@ from opik.evaluation.resume import context as resume_context
 def _make_dataset(items):
     """Build a mock dataset/version whose stream returns ``items``."""
     dataset_ = mock.Mock()
+    dataset_.dataset_items_count = len(items)
     dataset_.__internal_api__stream_items_as_dataclasses__ = mock.MagicMock(
         return_value=iter(items)
     )
@@ -114,13 +115,15 @@ class TestEvaluateResumeHappyFlow:
             )
 
         call_kwargs = mock_evaluate_task.call_args.kwargs
-        pending_ids = [item.id for item in call_kwargs["items"]]
+        forwarded = list(call_kwargs["items_iter"])
+        pending_ids = [item.id for item in forwarded]
         # done item filtered out; partial + fresh forwarded
         assert pending_ids == ["partial", "fresh"]
         # Both partial and fresh get the full trial count — partial items
         # have all 3 trials redone, not just the missing 2.
-        runs = [item.execution_policy.runs_per_item for item in call_kwargs["items"]]
+        runs = [item.execution_policy.runs_per_item for item in forwarded]
         assert runs == [3, 3]
+        assert call_kwargs["total_items"] == 2
         # context + user-supplied scoring_key_mapping wired through
         assert call_kwargs["experiment"] is context.experiment
         assert call_kwargs["dataset"] is context.dataset
@@ -153,7 +156,8 @@ class TestEvaluateResumeHappyFlow:
             evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
 
         call_kwargs = mock_evaluate_task.call_args.kwargs
-        assert call_kwargs["items"] == []
+        assert list(call_kwargs["items_iter"]) == []
+        assert call_kwargs["total_items"] == 0
         assert any(
             "already fully evaluated" in record.message
             and record.levelno == logging.INFO

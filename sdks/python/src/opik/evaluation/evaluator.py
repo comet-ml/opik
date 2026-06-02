@@ -4,6 +4,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -34,14 +35,13 @@ from . import (
 from . import resume as resume_module
 from .resume import integration as resume_integration
 from .resume import iteration as resume_iteration
-from .metrics import base_metric, score_result
+from .metrics import base_metric
 from .suite_evaluators.llm_judge import (
     metric as suite_evaluators_llm_judge_metric,
     strategy_selector as suite_evaluators_strategy,
 )
 from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
-from . import test_result
 from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
 from .. import url_helpers, exceptions
 from ..api_objects.dataset.test_suite import suite_result_constructor
@@ -66,6 +66,41 @@ def _try_notifying_about_experiment_completion(
             experiment.id,
             exc_info=True,
         )
+
+
+def _materialize_for_checkpoint(
+    *,
+    items_iter: Iterator[dataset_item.DatasetItem],
+    total_items: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+    dataset_sampler: Optional[samplers.BaseDatasetSampler],
+) -> Tuple[Iterator[dataset_item.DatasetItem], Optional[int], Optional[List[str]]]:
+    """
+    Resolve the (iterator, total, resolved_ids) tuple for the engine + the
+    resume checkpoint, without breaking lazy streaming when streaming is
+    possible.
+
+    Three cases:
+      * No sampler, no explicit ids → streaming. No checkpoint needed; the
+        iterator is passed straight to the engine.
+      * Explicit ``dataset_item_ids`` → ids are known up front; the checkpoint
+        gets them directly and the iterator is left untouched so the engine
+        can still consume it lazily.
+      * Sampler → the iterator was already built from a materialized list
+        inside ``resolve_dataset_items``; we drain it once to surface the
+        resolved ids for the checkpoint, then hand a fresh iterator over the
+        same list to the engine.
+    """
+    if dataset_item_ids is not None:
+        return items_iter, total_items, list(dataset_item_ids)
+    if dataset_sampler is not None:
+        materialized = list(items_iter)
+        return (
+            iter(materialized),
+            len(materialized),
+            [item.id for item in materialized],
+        )
+    return items_iter, total_items, None
 
 
 def evaluate(
@@ -232,18 +267,22 @@ def evaluate(
         project_name=project_name,
     )
 
-    items = helpers.resolve_dataset_items(
+    items_iter, total_items = helpers.resolve_dataset_items(
         dataset_=dataset,
         nb_samples=nb_samples,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         dataset_filter_string=dataset_filter_string,
     )
-    resume_integration.write_checkpoint_if_needed(
-        experiment_id=experiment.id,
-        resolved_items=items,
+    items_iter, total_items, resolved_ids = _materialize_for_checkpoint(
+        items_iter=items_iter,
+        total_items=total_items,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
+    )
+    resume_integration.write_checkpoint_if_needed(
+        experiment_id=experiment.id,
+        resolved_ids=resolved_ids,
     )
 
     # wrap scoring functions if any
@@ -257,7 +296,8 @@ def evaluate(
         client=client,
         experiment=experiment,
         dataset=dataset,
-        items=items,
+        items_iter=items_iter,
+        total_items=total_items,
         task=task,
         scoring_metrics=scoring_metrics,
         project_name=project_name,
@@ -353,7 +393,7 @@ def __internal_api__run_test_suite__(
 
     experiment_ = client.create_experiment(**create_experiment_kwargs)
 
-    items = helpers.resolve_dataset_items(
+    items_iter, total_items = helpers.resolve_dataset_items(
         dataset_=suite_dataset,
         nb_samples=None,
         dataset_item_ids=dataset_item_ids,
@@ -373,7 +413,8 @@ def __internal_api__run_test_suite__(
         client=client,
         experiment=experiment_,
         dataset=suite_dataset,
-        items=items,
+        items_iter=items_iter,
+        total_items=total_items,
         task=_validated_task,
         project_name=project_name,
         verbose=verbose,
@@ -505,7 +546,8 @@ def _evaluate_task(
     client: opik_client.Opik,
     experiment: experiment.Experiment,
     dataset: Union[dataset.Dataset, dataset.DatasetVersion],
-    items: List[dataset_item.DatasetItem],
+    items_iter: Iterator[dataset_item.DatasetItem],
+    total_items: Optional[int],
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
@@ -532,14 +574,14 @@ def _evaluate_task(
             source=source,
         )
         test_results = evaluation_engine.run_and_score(
-            dataset_items=iter(items),
+            dataset_items=items_iter,
             task=task,
             scoring_metrics=scoring_metrics,
             scoring_key_mapping=scoring_key_mapping,
             evaluator_model=None,
             experiment_=experiment,
             default_execution_policy=policy,
-            total_items=len(items),
+            total_items=total_items,
         )
 
     total_time = time.time() - start_time
@@ -611,7 +653,8 @@ def _evaluate_test_suite_task(
     client: opik_client.Opik,
     experiment: experiment.Experiment,
     dataset: Union[dataset.Dataset, dataset.DatasetVersion],
-    items: List[dataset_item.DatasetItem],
+    items_iter: Iterator[dataset_item.DatasetItem],
+    total_items: Optional[int],
     task: LLMTask,
     project_name: Optional[str],
     verbose: int,
@@ -665,14 +708,14 @@ def _evaluate_test_suite_task(
                 source=source,
             )
             test_results = evaluation_engine.run_and_score(
-                dataset_items=iter(items),
+                dataset_items=items_iter,
                 task=task,
                 scoring_metrics=scoring_metrics,
                 scoring_key_mapping=None,
                 evaluator_model=evaluator_model,
                 experiment_=experiment,
                 default_execution_policy=execution_policy,
-                total_items=len(items),
+                total_items=total_items,
                 show_scores_in_progress_bar=False,
             )
     finally:
@@ -1068,18 +1111,22 @@ def evaluate_prompt(
         project_name=project_name,
     )
 
-    items = helpers.resolve_dataset_items(
+    items_iter, total_items = helpers.resolve_dataset_items(
         dataset_=dataset,
         nb_samples=nb_samples,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         dataset_filter_string=dataset_filter_string,
     )
-    resume_integration.write_checkpoint_if_needed(
-        experiment_id=experiment.id,
-        resolved_items=items,
+    items_iter, total_items, resolved_ids = _materialize_for_checkpoint(
+        items_iter=items_iter,
+        total_items=total_items,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
+    )
+    resume_integration.write_checkpoint_if_needed(
+        experiment_id=experiment.id,
+        resolved_ids=resolved_ids,
     )
 
     # wrap scoring functions if any
@@ -1105,14 +1152,14 @@ def evaluate_prompt(
             source="experiment",
         )
         test_results = evaluation_engine.run_and_score(
-            dataset_items=iter(items),
+            dataset_items=items_iter,
             task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
             scoring_metrics=scoring_metrics,
             scoring_key_mapping=None,
             evaluator_model=None,
             experiment_=experiment,
             default_execution_policy=policy,
-            total_items=len(items),
+            total_items=total_items,
         )
 
     total_time = time.time() - start_time
@@ -1331,25 +1378,30 @@ def evaluate_optimization_trial(
         project_name=project_name,
     )
 
-    items = helpers.resolve_dataset_items(
+    items_iter, total_items = helpers.resolve_dataset_items(
         dataset_=dataset,
         nb_samples=nb_samples,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         dataset_filter_string=dataset_filter_string,
     )
-    resume_integration.write_checkpoint_if_needed(
-        experiment_id=experiment.id,
-        resolved_items=items,
+    items_iter, total_items, resolved_ids = _materialize_for_checkpoint(
+        items_iter=items_iter,
+        total_items=total_items,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
+    )
+    resume_integration.write_checkpoint_if_needed(
+        experiment_id=experiment.id,
+        resolved_ids=resolved_ids,
     )
 
     return _evaluate_task(
         client=client,
         experiment=experiment,
         dataset=dataset,
-        items=items,
+        items_iter=items_iter,
+        total_items=total_items,
         task=task,
         scoring_metrics=scoring_metrics,
         project_name=project_name,
@@ -1461,7 +1513,8 @@ def evaluate_resume(
         client=client,
         experiment=context.experiment,
         dataset=context.dataset,
-        items=pending,
+        items_iter=iter(pending),
+        total_items=len(pending),
         task=task,
         scoring_metrics=scoring_metrics,
         project_name=project_name,
@@ -1493,20 +1546,22 @@ def _resolve_resume_items(
     ``nb_samples``, against the version-pinned dataset.
     """
     if context.candidate_dataset_item_ids is not None:
-        return helpers.resolve_dataset_items(
+        items_iter, _ = helpers.resolve_dataset_items(
             dataset_=context.dataset,
             nb_samples=None,
             dataset_item_ids=context.candidate_dataset_item_ids,
             dataset_sampler=None,
             dataset_filter_string=None,
         )
-    return helpers.resolve_dataset_items(
+        return list(items_iter)
+    items_iter, _ = helpers.resolve_dataset_items(
         dataset_=context.dataset,
         nb_samples=context.nb_samples,
         dataset_item_ids=None,
         dataset_sampler=None,
         dataset_filter_string=context.dataset_filter_string,
     )
+    return list(items_iter)
 
 
 def evaluate_on_dict_items(

@@ -1,7 +1,6 @@
 import json
 from unittest import mock
 
-from opik.api_objects.dataset import dataset_item
 from opik.evaluation.resume import integration, state
 from opik.evaluation.samplers import base_dataset_sampler
 
@@ -89,47 +88,41 @@ class TestResumeStateForEvaluate:
 
 
 class TestWriteCheckpointIfNeeded:
-    def test_no_sampler_no_explicit_ids__writes_nothing(self):
+    def test_resolved_ids_none__writes_nothing(self):
+        """Streaming path: caller passes None when no checkpoint is needed."""
         writer = mock.Mock()
 
         integration.write_checkpoint_if_needed(
             experiment_id="exp-1",
-            resolved_items=[dataset_item.DatasetItem(id="r-1")],
-            dataset_item_ids=None,
-            dataset_sampler=None,
+            resolved_ids=None,
             checkpoint_writer=writer,
         )
 
         writer.assert_not_called()
 
-    def test_explicit_ids__writes_resolved_item_ids(self):
+    def test_resolved_ids_provided__writes_them(self):
         writer = mock.Mock()
 
         integration.write_checkpoint_if_needed(
             experiment_id="exp-1",
-            resolved_items=[
-                dataset_item.DatasetItem(id="r-1"),
-                dataset_item.DatasetItem(id="r-2"),
-            ],
-            dataset_item_ids=["a", "b"],
-            dataset_sampler=None,
+            resolved_ids=["a", "b"],
             checkpoint_writer=writer,
         )
 
-        writer.assert_called_once_with("exp-1", ["r-1", "r-2"])
+        writer.assert_called_once_with("exp-1", ["a", "b"])
 
-    def test_sampler__writes_resolved_item_ids(self):
+    def test_resolved_ids_copied_before_write(self):
+        """The writer should receive an independent list (callers may
+        mutate their copy later)."""
         writer = mock.Mock()
+        source = ["x", "y"]
 
         integration.write_checkpoint_if_needed(
             experiment_id="exp-1",
-            resolved_items=[
-                dataset_item.DatasetItem(id="sampled-1"),
-                dataset_item.DatasetItem(id="sampled-2"),
-            ],
-            dataset_item_ids=None,
-            dataset_sampler=_IdentitySampler(),
+            resolved_ids=source,
             checkpoint_writer=writer,
         )
 
-        writer.assert_called_once_with("exp-1", ["sampled-1", "sampled-2"])
+        written = writer.call_args.args[1]
+        assert written == source
+        assert written is not source

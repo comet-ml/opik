@@ -20,7 +20,7 @@ backends.
 import logging
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from ...api_objects.dataset import dataset, dataset_item
+from ...api_objects.dataset import dataset
 from ..samplers import base_dataset_sampler
 from . import checkpoint as checkpoint_module
 from . import state as state_module
@@ -73,28 +73,27 @@ def resume_state_for_evaluate(
 def write_checkpoint_if_needed(
     *,
     experiment_id: str,
-    resolved_items: List[dataset_item.DatasetItem],
-    dataset_item_ids: Optional[List[str]],
-    dataset_sampler: Optional[base_dataset_sampler.BaseDatasetSampler],
+    resolved_ids: Optional[List[str]],
     checkpoint_writer: Optional[CheckpointWriter] = None,
 ) -> None:
     """
-    Snapshot the resolved item ids when iteration cannot be rebuilt from
+    Snapshot resolved item ids when iteration cannot be rebuilt from
     configuration alone (sampler or explicit ``dataset_item_ids`` was used).
 
-    Called by the entrypoint after items have been materialized. No-op when
-    iteration is fully config-driven — the resume state alone is enough to
-    reproduce it on resume.
+    Callers pass ``resolved_ids`` directly: explicit ``dataset_item_ids`` is
+    known up front (no need to consume the iterator), and the sampler path
+    has already materialized the list to sample from. The streaming case
+    passes ``None`` and is a no-op — the resume state alone reproduces it.
 
     ``checkpoint_writer`` defaults to ``checkpoint.write_checkpoint``
     resolved at call time, so module-level patches on the checkpoint module
     take effect in tests.
     """
-    if dataset_sampler is None and dataset_item_ids is None:
+    if resolved_ids is None:
         return
 
     writer = checkpoint_writer or checkpoint_module.write_checkpoint
-    writer(experiment_id, [item.id for item in resolved_items])
+    writer(experiment_id, list(resolved_ids))
 
 
 def _dataset_version_name_or_none(
