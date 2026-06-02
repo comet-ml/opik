@@ -43,6 +43,14 @@ class ResumableState:
 
     ``dataset_version_name`` is non-optional: resume only operates against a
     pinned :class:`DatasetVersion`, never a moving ``Dataset`` HEAD.
+
+    ``requires_completion_marker`` tells ``evaluate_resume`` that this
+    experiment was written by an SDK that flips a marker on the trace at
+    happy-path completion. If the backend's experiment-item compare
+    response doesn't surface that field at all (older BE missing the
+    projection from OPIK-5269), resume bails out via
+    :class:`BackendTooOldForResume` rather than silently replaying every
+    item.
     """
 
     default_runs_per_item: int
@@ -50,6 +58,7 @@ class ResumableState:
     dataset_version_name: str
     nb_samples: Optional[int]
     requires_local_checkpoint: bool
+    requires_completion_marker: bool
 
 
 @dataclasses.dataclass(frozen=True)
@@ -83,6 +92,7 @@ def embed_resumable_state(
             "dataset_version_name": state.dataset_version_name,
             "nb_samples": state.nb_samples,
             "requires_local_checkpoint": state.requires_local_checkpoint,
+            "requires_completion_marker": state.requires_completion_marker,
         }
     )
     return new_config
@@ -162,6 +172,9 @@ def read_resume_state(
         nb_samples=_coerce_optional_positive_int(raw_state.get("nb_samples")),
         requires_local_checkpoint=bool(
             raw_state.get("requires_local_checkpoint", False)
+        ),
+        requires_completion_marker=bool(
+            raw_state.get("requires_completion_marker", False)
         ),
     )
 

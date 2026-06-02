@@ -102,14 +102,51 @@ def prepare_resume_context(
         dataset_version_name=persisted.dataset_version_name,
     )
 
+    experiment_items = list(experiment.get_items())
+    if persisted.requires_completion_marker:
+        _require_backend_projects_trace_marker(
+            experiment_id=experiment_id, experiment_items=experiment_items
+        )
+
     return ResumeContext(
         experiment=experiment,
         dataset=dataset_version,
-        completed_runs_by_item_id=_count_completed_runs_by_item_id(experiment),
+        completed_runs_by_item_id=_count_completed_runs_by_item_id(
+            experiment_items
+        ),
         default_runs_per_item=persisted.default_runs_per_item,
         dataset_filter_string=persisted.dataset_filter_string,
         nb_samples=persisted.nb_samples,
         candidate_dataset_item_ids=candidate_ids,
+    )
+
+
+def _require_backend_projects_trace_marker(
+    *,
+    experiment_id: str,
+    experiment_items: List[experiment_item.ExperimentItemContent],
+) -> None:
+    """
+    Bail out when the persisted state says the completion marker is
+    required but no experiment item carries any ``trace_metadata`` —
+    meaning the connected backend is older than the OPIK-5269
+    ``trace_metadata`` projection.
+
+    The marker is seeded on every trace at creation, so a marker-supporting
+    SDK + marker-supporting BE should always surface at least one
+    populated ``trace_metadata`` here.
+    """
+    if not experiment_items:
+        return
+    if any(item.trace_metadata for item in experiment_items):
+        return
+    raise opik_exceptions.BackendTooOldForResume(
+        f"Experiment {experiment_id} was created with a SDK that writes the "
+        "trace-level resume marker, but the connected backend does not "
+        "surface ``trace_metadata`` on the experiment-item compare endpoint. "
+        "Upgrade the backend to a version that includes the OPIK-5269 "
+        "``ExperimentItem.traceMetadata`` projection, or downgrade the SDK "
+        "to a version that does not depend on it."
     )
 
 
@@ -155,7 +192,7 @@ def _resolve_dataset_version(
 
 
 def _count_completed_runs_by_item_id(
-    experiment: experiment_module.Experiment,
+    experiment_items: List[experiment_item.ExperimentItemContent],
 ) -> Mapping[str, int]:
     """
     Count fully-completed trials per dataset item.
@@ -164,16 +201,10 @@ def _count_completed_runs_by_item_id(
     happy-path marker flipped to ``False``. The marker is seeded to
     ``True`` when the trace is built (see
     ``engine.helpers.EVALUATION_PENDING_METADATA_KEY``) and flipped only
-    after task + scoring + score-logging all returned. Any failure —
-    sync exception, KeyboardInterrupt, process kill before the happy
-    line — leaves the marker at its default and the trial is replayed.
-
-    Trials produced by an SDK version older than the marker rollout will
-    not carry the key at all; those are also treated as incomplete and
-    replayed, which is the safe default.
+    after task + scoring + score-logging all returned.
     """
     counts: Dict[str, int] = {}
-    for item in experiment.get_items():
+    for item in experiment_items:
         if not is_trial_fully_completed(item):
             continue
         counts[item.dataset_item_id] = counts.get(item.dataset_item_id, 0) + 1

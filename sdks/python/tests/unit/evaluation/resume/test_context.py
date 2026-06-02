@@ -316,3 +316,121 @@ class TestIsTrialFullyCompleted:
         ctx = context.prepare_resume_context(client, "exp-1")
 
         assert dict(ctx.completed_runs_by_item_id) == {"a": 1}
+
+
+class TestBackendTooOldDetection:
+    """``requires_completion_marker`` + empty trace_metadata → raise."""
+
+    def _marker_required_metadata(self):
+        return _metadata_with_blob(
+            {
+                "schema_version": 1,
+                "resumable": True,
+                "default_runs_per_item": 1,
+                "dataset_filter_string": None,
+                "dataset_version_name": "v1",
+                "nb_samples": None,
+                "requires_local_checkpoint": False,
+                "requires_completion_marker": True,
+            }
+        )
+
+    def _legacy_be_items(self):
+        # Old BE: trace_metadata is None on every item.
+        return [
+            SimpleNamespace(
+                dataset_item_id="a",
+                evaluation_task_output={"x": 1},
+                trace_metadata=None,
+            ),
+            SimpleNamespace(
+                dataset_item_id="b",
+                evaluation_task_output=None,
+                trace_metadata=None,
+            ),
+        ]
+
+    def test_old_be_raises_with_actionable_message(self):
+        client, _ = _make_client(
+            self._marker_required_metadata(),
+            experiment_items=self._legacy_be_items(),
+        )
+        client.get_dataset.return_value.get_version_view.return_value = (
+            mock.Mock(name="ds-v1")
+        )
+
+        with pytest.raises(exceptions.BackendTooOldForResume) as exc_info:
+            context.prepare_resume_context(client, "exp-1")
+
+        message = str(exc_info.value)
+        assert "trace_metadata" in message
+        assert "OPIK-5269" in message
+
+    def test_marker_present_on_any_item__no_raise(self):
+        items = [
+            SimpleNamespace(
+                dataset_item_id="a",
+                evaluation_task_output={"x": 1},
+                trace_metadata={
+                    engine_helpers.EVALUATION_PENDING_METADATA_KEY: False
+                },
+            ),
+            SimpleNamespace(
+                dataset_item_id="b",
+                evaluation_task_output=None,
+                trace_metadata=None,
+            ),
+        ]
+        client, _ = _make_client(
+            self._marker_required_metadata(), experiment_items=items
+        )
+        client.get_dataset.return_value.get_version_view.return_value = (
+            mock.Mock(name="ds-v1")
+        )
+
+        ctx = context.prepare_resume_context(client, "exp-1")
+
+        # Only "a" has the cleared marker; "b" has no marker, so it's
+        # incomplete under strict rules.
+        assert dict(ctx.completed_runs_by_item_id) == {"a": 1}
+
+    def test_marker_not_required__no_raise_even_with_empty_metadata(self):
+        """Old experiment blob without ``requires_completion_marker`` shouldn't
+        trigger the check — the SDK that wrote it didn't promise a marker."""
+        old_blob_metadata = _metadata_with_blob(
+            {
+                "schema_version": 1,
+                "resumable": True,
+                "default_runs_per_item": 1,
+                "dataset_filter_string": None,
+                "dataset_version_name": "v1",
+                "nb_samples": None,
+                "requires_local_checkpoint": False,
+                # No requires_completion_marker → defaults to False.
+            }
+        )
+        client, _ = _make_client(
+            old_blob_metadata, experiment_items=self._legacy_be_items()
+        )
+        client.get_dataset.return_value.get_version_view.return_value = (
+            mock.Mock(name="ds-v1")
+        )
+
+        # No raise; with no marker on any item, the strict predicate
+        # treats every trial as incomplete (the safe default).
+        ctx = context.prepare_resume_context(client, "exp-1")
+        assert dict(ctx.completed_runs_by_item_id) == {}
+
+    def test_empty_experiment__no_raise(self):
+        """An experiment with zero items can't trigger the check (nothing to
+        sample). Resume should still build the context — the iteration logic
+        will then process all dataset items as fresh."""
+        client, _ = _make_client(
+            self._marker_required_metadata(), experiment_items=[]
+        )
+        client.get_dataset.return_value.get_version_view.return_value = (
+            mock.Mock(name="ds-v1")
+        )
+
+        ctx = context.prepare_resume_context(client, "exp-1")
+        assert dict(ctx.completed_runs_by_item_id) == {}

@@ -126,6 +126,24 @@ class LocalCheckpointMissing(ExperimentNotResumable):
     """
 
 
+class BackendTooOldForResume(ExperimentNotResumable):
+    """
+    Raised when ``evaluate_resume`` reads an experiment whose persisted
+    resume state requires the trace-metadata completion marker, but the
+    backend does not surface ``trace_metadata`` on the experiment-item
+    compare endpoint at all.
+
+    The marker (``_opik_evaluation_pending`` on the trace's metadata) is
+    written by the SDK at evaluation time; resume reads it back through
+    the BE projection introduced by OPIK-5269. Without the projection,
+    resume cannot tell which trials reached the happy-path line and
+    would incorrectly replay every item.
+
+    Upgrade the backend to a version that includes the
+    ``ExperimentItem.traceMetadata`` projection.
+    """
+
+
 class DatasetNotFound(OpikException):
     pass
 
