@@ -1,8 +1,6 @@
 import React from "react";
-import { ExternalLink } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import { Description } from "@/ui/description";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -17,10 +15,9 @@ import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import UploadField from "@/shared/UploadField/UploadField";
+import DatasetUploadDescription from "@/shared/DatasetUploadDescription/DatasetUploadDescription";
+import DatasetUploadField from "@/shared/DatasetUploadField/DatasetUploadField";
 import type useDatasetForm from "./useDatasetForm";
-
-const ACCEPTED_TYPE = ".csv";
 
 type AddEditDatasetDialogWrapperProps = {
   open: boolean;
@@ -41,8 +38,9 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
     setNameError,
     description,
     setDescription,
-    csvFile,
-    csvError,
+    uploadFile,
+    uploadError,
+    uploadFormat,
     isEdit,
     isValid,
     confirmOpen,
@@ -79,7 +77,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
               onKeyDown={(event) => {
                 if (event.key === "Enter" && isValid) {
                   event.preventDefault();
-                  csvError ? setConfirmOpen(true) : submitHandler();
+                  uploadError ? setConfirmOpen(true) : submitHandler();
                 }
               }}
             />
@@ -105,30 +103,17 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
           {children}
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV</Label>
-              <Description className="tracking-normal">
-                Your CSV file can be up to {fileSizeLimit}MB in size. The file
-                will be processed in the background.
-                <Button variant="link" size="sm" className="h-5 px-1" asChild>
-                  <a
-                    href={buildDocsUrl("/evaluation/advanced/manage_datasets")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Learn more
-                    <ExternalLink className="ml-0.5 size-3 shrink-0" />
-                  </a>
-                </Button>
-              </Description>
-              <UploadField
-                disabled={isEdit}
-                description="Drop a CSV file to upload or"
-                accept={ACCEPTED_TYPE}
+              <Label>Upload a CSV or JSON file</Label>
+              <DatasetUploadDescription
+                fileSizeLimit={fileSizeLimit}
+                docsUrl={buildDocsUrl("/evaluation/advanced/manage_datasets")}
+              />
+              <DatasetUploadField
+                uploadFile={uploadFile}
+                uploadFormat={uploadFormat}
+                uploadError={uploadError}
                 onFileSelect={handleFileSelect}
-                errorText={csvError}
-                successText={
-                  csvFile && !csvError ? "CSV file ready to upload" : undefined
-                }
+                disabled={isEdit}
               />
             </div>
           )}
@@ -140,7 +125,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
           <Button
             type="submit"
             disabled={!isValid}
-            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+            onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
           >
             {buttonText}
           </Button>

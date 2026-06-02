@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
 import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
+import useDatasetItemsFromJsonMutation from "@/api/datasets/useDatasetItemsFromJsonMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import { Button } from "@/ui/button";
-import { Description } from "@/ui/description";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -22,12 +21,17 @@ import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
 import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import UploadField from "@/shared/UploadField/UploadField";
+import DatasetUploadDescription from "@/shared/DatasetUploadDescription/DatasetUploadDescription";
+import DatasetUploadField from "@/shared/DatasetUploadField/DatasetUploadField";
 import { buildDocsUrl } from "@/v1/lib/utils";
-import { getCsvFilenameWithoutExtension } from "@/lib/file";
+import { getApiErrorMessage } from "@/lib/api-error";
+import {
+  formatToHumanLabel,
+  getDatasetUploadFilenameWithoutExtension,
+  UploadFormat,
+  validateDatasetUploadFile,
+} from "@/lib/file";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
-
-const ACCEPTED_TYPE = ".csv";
 
 const FILE_SIZE_LIMIT_IN_MB = 2000;
 
@@ -53,10 +57,15 @@ const AddEditTestSuiteDialog = ({
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
+  const { mutate: createItemsFromJsonMutate } =
+    useDatasetItemsFromJsonMutation();
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
-  const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
-  const [csvError, setCsvError] = useState<string | undefined>(undefined);
+  const [uploadFile, setUploadFile] = useState<File | undefined>(undefined);
+  const [uploadError, setUploadError] = useState<string | undefined>(undefined);
+  const [uploadFormat, setUploadFormat] = useState<UploadFormat | undefined>(
+    undefined,
+  );
 
   const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.DATASET);
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
@@ -70,8 +79,9 @@ const AddEditTestSuiteDialog = ({
     setNameError(undefined);
 
     if (!open) {
-      setCsvFile(undefined);
-      setCsvError(undefined);
+      setUploadFile(undefined);
+      setUploadError(undefined);
+      setUploadFormat(undefined);
       setType(DATASET_TYPE.DATASET);
       if (!dataset) {
         setName("");
@@ -84,11 +94,11 @@ const AddEditTestSuiteDialog = ({
   }, [open, dataset]);
 
   const isEdit = Boolean(dataset);
-  const hasValidCsvFile = csvFile && !csvError;
+  const hasValidUploadFile = uploadFile && !uploadError;
   // Validation: name is required, and CSV is required only if csvRequired is true
   const isValid =
     name.length > 0 &&
-    (isEdit || hideUpload || !csvRequired || hasValidCsvFile);
+    (isEdit || hideUpload || !csvRequired || hasValidUploadFile);
 
   const typeLabel = type === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
   const title = isEdit ? "Edit" : "Create new";
@@ -98,42 +108,49 @@ const AddEditTestSuiteDialog = ({
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
-      if (hasValidCsvFile && csvFile && newDataset.id) {
-        createItemsFromCsvMutate(
-          {
-            datasetId: newDataset.id,
-            csvFile,
+      if (hasValidUploadFile && uploadFile && uploadFormat && newDataset.id) {
+        const label = formatToHumanLabel(uploadFormat);
+        const handlers = {
+          onSuccess: () => {
+            toast({
+              title: `${label} upload accepted`,
+              description: `Your ${label} file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.`,
+            });
           },
-          {
-            onSuccess: () => {
-              toast({
-                title: "CSV upload accepted",
-                description:
-                  "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
-              });
-            },
-            onError: (error: unknown) => {
-              console.error("Error uploading CSV file:", error);
-              const errorMessage =
-                (
-                  error as { response?: { data?: { errors?: string[] } } }
-                ).response?.data?.errors?.join(", ") ||
-                (error as { message?: string }).message ||
-                "Failed to upload CSV file";
-              toast({
-                title: "Error uploading CSV file",
-                description: errorMessage,
-                variant: "destructive",
-              });
-            },
-            onSettled: () => {
-              setOpen(false);
-              if (onDatasetCreated) {
-                onDatasetCreated(newDataset);
-              }
-            },
+          onError: (error: unknown) => {
+            console.error(`Error uploading ${label} file:`, error);
+            toast({
+              title: `Error uploading ${label} file`,
+              description: getApiErrorMessage(
+                error,
+                `Failed to upload ${label} file`,
+              ),
+              variant: "destructive",
+            });
           },
-        );
+          onSettled: () => {
+            setOpen(false);
+            if (onDatasetCreated) {
+              onDatasetCreated(newDataset);
+            }
+          },
+        };
+
+        if (uploadFormat === "csv") {
+          createItemsFromCsvMutate(
+            { datasetId: newDataset.id, csvFile: uploadFile },
+            handlers,
+          );
+        } else {
+          createItemsFromJsonMutate(
+            {
+              datasetId: newDataset.id,
+              jsonFile: uploadFile,
+              format: uploadFormat,
+            },
+            handlers,
+          );
+        }
       } else {
         setOpen(false);
         if (onDatasetCreated) {
@@ -142,9 +159,11 @@ const AddEditTestSuiteDialog = ({
       }
     },
     [
-      hasValidCsvFile,
-      csvFile,
+      hasValidUploadFile,
+      uploadFile,
+      uploadFormat,
       createItemsFromCsvMutate,
+      createItemsFromJsonMutate,
       onDatasetCreated,
       setOpen,
       toast,
@@ -220,27 +239,26 @@ const AddEditTestSuiteDialog = ({
 
   const handleFileSelect = useCallback(
     (file?: File) => {
-      setCsvError(undefined);
-      setCsvFile(undefined);
+      setUploadError(undefined);
+      setUploadFile(undefined);
+      setUploadFormat(undefined);
 
       if (!file) {
         return;
       }
 
-      if (file.size > fileSizeLimit * 1024 * 1024) {
-        setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
+      const result = validateDatasetUploadFile(file, fileSizeLimit);
+      if (result.error) {
+        setUploadError(result.error);
         return;
       }
+      if (!result.file || !result.format) return;
 
-      if (!file.name.toLowerCase().endsWith(".csv")) {
-        setCsvError("File must be in .csv format");
-        return;
-      }
-
-      setCsvFile(file);
+      setUploadFile(result.file);
+      setUploadFormat(result.format);
 
       if (!name.trim()) {
-        setName(getCsvFilenameWithoutExtension(file.name));
+        setName(getDatasetUploadFilenameWithoutExtension(result.file.name));
       }
     },
     [fileSizeLimit, name],
@@ -270,7 +288,7 @@ const AddEditTestSuiteDialog = ({
               onKeyDown={(event) => {
                 if (event.key === "Enter" && isValid) {
                   event.preventDefault();
-                  csvError ? setConfirmOpen(true) : submitHandler();
+                  uploadError ? setConfirmOpen(true) : submitHandler();
                 }
               }}
             />
@@ -295,30 +313,17 @@ const AddEditTestSuiteDialog = ({
           </div>
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV</Label>
-              <Description className="tracking-normal">
-                Your CSV file can be up to {fileSizeLimit}MB in size. The file
-                will be processed in the background.
-                <Button variant="link" size="sm" className="h-5 px-1" asChild>
-                  <a
-                    href={buildDocsUrl("/evaluation/manage_datasets")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Learn more
-                    <ExternalLink className="ml-0.5 size-3 shrink-0" />
-                  </a>
-                </Button>
-              </Description>
-              <UploadField
-                disabled={isEdit}
-                description="Drop a CSV file to upload or"
-                accept={ACCEPTED_TYPE}
+              <Label>Upload a CSV or JSON file</Label>
+              <DatasetUploadDescription
+                fileSizeLimit={fileSizeLimit}
+                docsUrl={buildDocsUrl("/evaluation/manage_datasets")}
+              />
+              <DatasetUploadField
+                uploadFile={uploadFile}
+                uploadFormat={uploadFormat}
+                uploadError={uploadError}
                 onFileSelect={handleFileSelect}
-                errorText={csvError}
-                successText={
-                  csvFile && !csvError ? "CSV file ready to upload" : undefined
-                }
+                disabled={isEdit}
               />
             </div>
           )}
@@ -330,7 +335,7 @@ const AddEditTestSuiteDialog = ({
           <Button
             type="submit"
             disabled={!isValid}
-            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+            onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
           >
             {buttonText}
           </Button>
