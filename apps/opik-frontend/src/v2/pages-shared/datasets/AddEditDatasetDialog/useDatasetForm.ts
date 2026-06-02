@@ -15,6 +15,7 @@ import {
   UploadFormat,
   validateDatasetUploadFile,
 } from "@/lib/file";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { packAssertions } from "@/lib/assertion-converters";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
@@ -199,18 +200,12 @@ const useDatasetForm = ({
         },
         onError: (error: unknown) => {
           console.error(`Error uploading ${label} file:`, error);
-          const serverMessage = get(error, ["response", "data", "message"]);
-          const serverErrors = get(error, ["response", "data", "errors"]);
-          const joinedErrors = Array.isArray(serverErrors)
-            ? serverErrors.join(", ")
-            : undefined;
-          const errorMessage =
-            [serverMessage, joinedErrors].filter(Boolean).join(": ") ||
-            get(error, ["message"]) ||
-            `Failed to upload ${label} file`;
           toast({
             title: `Error uploading ${label} file`,
-            description: errorMessage,
+            description: getApiErrorMessage(
+              error,
+              `Failed to upload ${label} file`,
+            ),
             variant: "destructive",
           });
         },

@@ -25,6 +25,7 @@ import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import { buildDocsUrl } from "@/v1/lib/utils";
+import { getApiErrorMessage } from "@/lib/api-error";
 import {
   DATASET_UPLOAD_ACCEPTED_TYPES,
   formatToHumanLabel,
@@ -120,18 +121,12 @@ const AddEditTestSuiteDialog = ({
           },
           onError: (error: unknown) => {
             console.error(`Error uploading ${label} file:`, error);
-            const serverMessage = get(error, ["response", "data", "message"]);
-            const serverErrors = get(error, ["response", "data", "errors"]);
-            const joinedErrors = Array.isArray(serverErrors)
-              ? serverErrors.join(", ")
-              : undefined;
-            const errorMessage =
-              [serverMessage, joinedErrors].filter(Boolean).join(": ") ||
-              get(error, ["message"]) ||
-              `Failed to upload ${label} file`;
             toast({
               title: `Error uploading ${label} file`,
-              description: errorMessage,
+              description: getApiErrorMessage(
+                error,
+                `Failed to upload ${label} file`,
+              ),
               variant: "destructive",
             });
           },
