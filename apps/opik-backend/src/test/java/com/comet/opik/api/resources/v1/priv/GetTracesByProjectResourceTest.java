@@ -1179,8 +1179,8 @@ class GetTracesByProjectResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        @DisplayName("When filtering by experiment_id with IN, should return traces from all listed experiments")
-        void whenFilterExperimentIdIn__thenReturnTracesFiltered(String endpoint,
+        @DisplayName("When filtering by experiment_ids with IN, should return traces from all listed experiments")
+        void whenFilterExperimentIdsIn__thenReturnTracesFiltered(String endpoint,
                 TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1245,7 +1245,7 @@ class GetTracesByProjectResourceTest {
 
             // Filter by both experiment ids with the IN operator
             var filters = List.of(TraceFilter.builder()
-                    .field(TraceField.EXPERIMENT_ID)
+                    .field(TraceField.EXPERIMENT_IDS)
                     .operator(Operator.IN)
                     .value("%s,%s".formatted(experiment1Id, experiment2Id))
                     .build());

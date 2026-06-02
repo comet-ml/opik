@@ -173,7 +173,7 @@ export const generateExperimentIdsFilter = (experimentIds: string[] = []) => {
 
   return [
     createFilter({
-      field: "experiment_id",
+      field: EXPERIMENT_IDS_FILTER_FIELD,
       type: COLUMN_TYPE.string,
       operator: "in",
       value: ids.join(","),

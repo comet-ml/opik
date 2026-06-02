@@ -39,6 +39,7 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { EXPERIMENT_IDS_FILTER_FIELD } from "@/lib/filters";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
@@ -337,7 +338,7 @@ const FILTERS_COLUMN_DATA: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: COLUMN_EXPERIMENT_ID,
+    id: EXPERIMENT_IDS_FILTER_FIELD,
     label: "Experiment",
     type: COLUMN_TYPE.string,
   },
@@ -512,7 +513,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             type,
           },
         },
-        [COLUMN_EXPERIMENT_ID]: {
+        [EXPERIMENT_IDS_FILTER_FIELD]: {
           keyComponent: ExperimentsSelectBoxFilterWrapper as never,
           keyComponentProps: { projectId },
           operators: [{ label: "is one of", value: "in" }],
