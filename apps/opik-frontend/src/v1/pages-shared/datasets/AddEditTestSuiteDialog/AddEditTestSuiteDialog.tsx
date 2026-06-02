@@ -121,11 +121,14 @@ const AddEditTestSuiteDialog = ({
           },
           onError: (error: unknown) => {
             console.error(`Error uploading ${label} file:`, error);
+            const serverMessage = get(error, ["response", "data", "message"]);
+            const serverErrors = get(error, ["response", "data", "errors"]);
+            const joinedErrors = Array.isArray(serverErrors)
+              ? serverErrors.join(", ")
+              : undefined;
             const errorMessage =
-              (
-                error as { response?: { data?: { errors?: string[] } } }
-              ).response?.data?.errors?.join(", ") ||
-              (error as { message?: string }).message ||
+              [serverMessage, joinedErrors].filter(Boolean).join(": ") ||
+              get(error, ["message"]) ||
               `Failed to upload ${label} file`;
             toast({
               title: `Error uploading ${label} file`,
