@@ -41,8 +41,8 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
     setNameError,
     description,
     setDescription,
-    csvFile,
-    csvError,
+    uploadFile,
+    uploadError,
     uploadFormat,
     isEdit,
     isValid,
@@ -80,7 +80,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
               onKeyDown={(event) => {
                 if (event.key === "Enter" && isValid) {
                   event.preventDefault();
-                  csvError ? setConfirmOpen(true) : submitHandler();
+                  uploadError ? setConfirmOpen(true) : submitHandler();
                 }
               }}
             />
@@ -127,9 +127,9 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
                 description="Drop a CSV or JSON file to upload or"
                 accept={ACCEPTED_TYPE}
                 onFileSelect={handleFileSelect}
-                errorText={csvError}
+                errorText={uploadError}
                 successText={
-                  csvFile && !csvError && uploadFormat
+                  uploadFile && !uploadError && uploadFormat
                     ? `${
                         uploadFormat === "csv"
                           ? "CSV"
@@ -150,7 +150,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
           <Button
             type="submit"
             disabled={!isValid}
-            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+            onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
           >
             {buttonText}
           </Button>

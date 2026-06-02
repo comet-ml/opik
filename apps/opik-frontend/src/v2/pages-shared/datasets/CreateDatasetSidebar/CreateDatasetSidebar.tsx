@@ -112,8 +112,8 @@ const CreateDatasetSidebar: React.FunctionComponent<
     runsPerItem,
     runsInput,
     thresholdInput,
-    csvFile,
-    csvError,
+    uploadFile,
+    uploadError,
     uploadFormat,
     confirmOpen,
     setConfirmOpen,
@@ -166,7 +166,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
     step !== Step.SUCCESS &&
     (name.length > 0 ||
       description.length > 0 ||
-      csvFile !== undefined ||
+      uploadFile !== undefined ||
       assertions.length > 0);
 
   const handleGoToEntity = useCallback(() => {
@@ -257,9 +257,9 @@ const CreateDatasetSidebar: React.FunctionComponent<
           description="Drop a CSV or JSON file to upload or"
           accept={ACCEPTED_TYPE}
           onFileSelect={handleFileSelect}
-          errorText={csvError}
+          errorText={uploadError}
           successText={
-            csvFile && !csvError && uploadFormat
+            uploadFile && !uploadError && uploadFormat
               ? `${
                   uploadFormat === "csv"
                     ? "CSV"
@@ -424,7 +424,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
               Cancel
             </Button>
             <Button
-              onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+              onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
             >
               Create
             </Button>

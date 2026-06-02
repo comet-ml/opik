@@ -59,8 +59,8 @@ const useDatasetForm = ({
   const { mutate: changesMutate } = useDatasetItemChangesMutation();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
-  const [csvError, setCsvError] = useState<string | undefined>(undefined);
+  const [uploadFile, setUploadFile] = useState<File | undefined>(undefined);
+  const [uploadError, setUploadError] = useState<string | undefined>(undefined);
   const [uploadFormat, setUploadFormat] = useState<UploadFormat | undefined>(
     undefined,
   );
@@ -100,8 +100,8 @@ const useDatasetForm = ({
 
     if (!open) {
       const timeout = setTimeout(() => {
-        setCsvFile(undefined);
-        setCsvError(undefined);
+        setUploadFile(undefined);
+        setUploadError(undefined);
         setUploadFormat(undefined);
         setType(datasetType);
         setRunsPerItem(1);
@@ -120,10 +120,10 @@ const useDatasetForm = ({
   }, [open, dataset, datasetType]);
 
   const isEdit = Boolean(dataset);
-  const hasValidCsvFile = csvFile && !csvError;
+  const hasValidUploadFile = uploadFile && !uploadError;
   const isValid =
     name.length > 0 &&
-    (isEdit || hideUpload || !csvRequired || hasValidCsvFile);
+    (isEdit || hideUpload || !csvRequired || hasValidUploadFile);
 
   const typeLabel = type === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
   const title = isEdit ? "Edit" : "Create new";
@@ -185,7 +185,7 @@ const useDatasetForm = ({
 
   const uploadItems = useCallback(
     (datasetId: string, onDone: () => void) => {
-      if (!csvFile || !uploadFormat) {
+      if (!uploadFile || !uploadFormat) {
         onDone();
         return;
       }
@@ -215,16 +215,16 @@ const useDatasetForm = ({
       };
 
       if (uploadFormat === "csv") {
-        createItemsFromCsvMutate({ datasetId, csvFile }, handlers);
+        createItemsFromCsvMutate({ datasetId, csvFile: uploadFile }, handlers);
       } else {
         createItemsFromJsonMutate(
-          { datasetId, jsonFile: csvFile, format: uploadFormat },
+          { datasetId, jsonFile: uploadFile, format: uploadFormat },
           handlers,
         );
       }
     },
     [
-      csvFile,
+      uploadFile,
       uploadFormat,
       createItemsFromCsvMutate,
       createItemsFromJsonMutate,
@@ -238,8 +238,8 @@ const useDatasetForm = ({
         trackEvent(OpikEvent.EVAL_SUITE_UI_CONFIGURED, {
           eval_suite_id: newDataset.id,
           eval_suite_name: newDataset.name,
-          has_csv_upload: hasValidCsvFile && uploadFormat === "csv",
-          upload_format: hasValidCsvFile ? uploadFormat : undefined,
+          has_csv_upload: hasValidUploadFile && uploadFormat === "csv",
+          upload_format: hasValidUploadFile ? uploadFormat : undefined,
           num_assertions: assertions.filter((a) => a.trim()).length,
           runs_per_item: runsPerItem,
         });
@@ -254,7 +254,7 @@ const useDatasetForm = ({
         ? () => onCreateSuccess(newDataset, navigateToDataset)
         : navigateToDataset;
 
-      if (hasValidCsvFile && newDataset.id) {
+      if (hasValidUploadFile && newDataset.id) {
         const uploadThenFinalize = () => {
           uploadItems(newDataset.id, finalize);
         };
@@ -266,7 +266,7 @@ const useDatasetForm = ({
     [
       applyEvaluationCriteria,
       uploadItems,
-      hasValidCsvFile,
+      hasValidUploadFile,
       uploadFormat,
       onDatasetCreated,
       onCreateSuccess,
@@ -350,22 +350,22 @@ const useDatasetForm = ({
 
   const handleFileSelect = useCallback(
     (file?: File) => {
-      setCsvError(undefined);
-      setCsvFile(undefined);
+      setUploadError(undefined);
+      setUploadFile(undefined);
       setUploadFormat(undefined);
 
       if (!file) return;
 
       if (file.size > fileSizeLimit * 1024 * 1024) {
-        setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
+        setUploadError(`File exceeds maximum size (${fileSizeLimit}MB).`);
         return;
       }
       const format = detectUploadFormat(file.name);
       if (!format) {
-        setCsvError("File must be .csv, .json, .jsonl, or .ndjson");
+        setUploadError("File must be .csv, .json, .jsonl, or .ndjson");
         return;
       }
-      setCsvFile(file);
+      setUploadFile(file);
       setUploadFormat(format);
       if (!name.trim()) {
         setName(getDatasetUploadFilenameWithoutExtension(file.name));
@@ -386,8 +386,8 @@ const useDatasetForm = ({
     runsPerItem,
     runsInput,
     thresholdInput,
-    csvFile,
-    csvError,
+    uploadFile,
+    uploadError,
     uploadFormat,
     isEdit,
     isValid,

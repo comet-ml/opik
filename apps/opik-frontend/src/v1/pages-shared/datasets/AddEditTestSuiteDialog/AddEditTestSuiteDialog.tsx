@@ -63,8 +63,8 @@ const AddEditTestSuiteDialog = ({
     useDatasetItemsFromJsonMutation();
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
-  const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
-  const [csvError, setCsvError] = useState<string | undefined>(undefined);
+  const [uploadFile, setUploadFile] = useState<File | undefined>(undefined);
+  const [uploadError, setUploadError] = useState<string | undefined>(undefined);
   const [uploadFormat, setUploadFormat] = useState<UploadFormat | undefined>(
     undefined,
   );
@@ -81,8 +81,8 @@ const AddEditTestSuiteDialog = ({
     setNameError(undefined);
 
     if (!open) {
-      setCsvFile(undefined);
-      setCsvError(undefined);
+      setUploadFile(undefined);
+      setUploadError(undefined);
       setUploadFormat(undefined);
       setType(DATASET_TYPE.DATASET);
       if (!dataset) {
@@ -96,11 +96,11 @@ const AddEditTestSuiteDialog = ({
   }, [open, dataset]);
 
   const isEdit = Boolean(dataset);
-  const hasValidCsvFile = csvFile && !csvError;
+  const hasValidUploadFile = uploadFile && !uploadError;
   // Validation: name is required, and CSV is required only if csvRequired is true
   const isValid =
     name.length > 0 &&
-    (isEdit || hideUpload || !csvRequired || hasValidCsvFile);
+    (isEdit || hideUpload || !csvRequired || hasValidUploadFile);
 
   const typeLabel = type === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
   const title = isEdit ? "Edit" : "Create new";
@@ -110,7 +110,7 @@ const AddEditTestSuiteDialog = ({
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
-      if (hasValidCsvFile && csvFile && uploadFormat && newDataset.id) {
+      if (hasValidUploadFile && uploadFile && uploadFormat && newDataset.id) {
         const label = formatToHumanLabel(uploadFormat);
         const handlers = {
           onSuccess: () => {
@@ -143,14 +143,14 @@ const AddEditTestSuiteDialog = ({
 
         if (uploadFormat === "csv") {
           createItemsFromCsvMutate(
-            { datasetId: newDataset.id, csvFile },
+            { datasetId: newDataset.id, csvFile: uploadFile },
             handlers,
           );
         } else {
           createItemsFromJsonMutate(
             {
               datasetId: newDataset.id,
-              jsonFile: csvFile,
+              jsonFile: uploadFile,
               format: uploadFormat,
             },
             handlers,
@@ -164,8 +164,8 @@ const AddEditTestSuiteDialog = ({
       }
     },
     [
-      hasValidCsvFile,
-      csvFile,
+      hasValidUploadFile,
+      uploadFile,
       uploadFormat,
       createItemsFromCsvMutate,
       createItemsFromJsonMutate,
@@ -244,8 +244,8 @@ const AddEditTestSuiteDialog = ({
 
   const handleFileSelect = useCallback(
     (file?: File) => {
-      setCsvError(undefined);
-      setCsvFile(undefined);
+      setUploadError(undefined);
+      setUploadFile(undefined);
       setUploadFormat(undefined);
 
       if (!file) {
@@ -253,17 +253,17 @@ const AddEditTestSuiteDialog = ({
       }
 
       if (file.size > fileSizeLimit * 1024 * 1024) {
-        setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
+        setUploadError(`File exceeds maximum size (${fileSizeLimit}MB).`);
         return;
       }
 
       const format = detectUploadFormat(file.name);
       if (!format) {
-        setCsvError("File must be .csv, .json, .jsonl, or .ndjson");
+        setUploadError("File must be .csv, .json, .jsonl, or .ndjson");
         return;
       }
 
-      setCsvFile(file);
+      setUploadFile(file);
       setUploadFormat(format);
 
       if (!name.trim()) {
@@ -297,7 +297,7 @@ const AddEditTestSuiteDialog = ({
               onKeyDown={(event) => {
                 if (event.key === "Enter" && isValid) {
                   event.preventDefault();
-                  csvError ? setConfirmOpen(true) : submitHandler();
+                  uploadError ? setConfirmOpen(true) : submitHandler();
                 }
               }}
             />
@@ -343,9 +343,9 @@ const AddEditTestSuiteDialog = ({
                 description="Drop a CSV or JSON file to upload or"
                 accept={ACCEPTED_TYPE}
                 onFileSelect={handleFileSelect}
-                errorText={csvError}
+                errorText={uploadError}
                 successText={
-                  csvFile && !csvError && uploadFormat
+                  uploadFile && !uploadError && uploadFormat
                     ? `${formatToHumanLabel(uploadFormat)} file ready to upload`
                     : undefined
                 }
@@ -360,7 +360,7 @@ const AddEditTestSuiteDialog = ({
           <Button
             type="submit"
             disabled={!isValid}
-            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+            onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
           >
             {buttonText}
           </Button>
