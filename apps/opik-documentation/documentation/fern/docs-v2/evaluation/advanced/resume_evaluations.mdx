@@ -8,18 +8,13 @@ title: Resume an interrupted evaluation
 ---
 
 <Note>
-  `evaluate_resume` is a Python SDK feature. It works on experiments created
-  with the Python SDK's `opik.evaluate(...)`.
+  `evaluate_resume` is a Python SDK feature for experiments created with
+  `opik.evaluate(...)`.
 </Note>
 
-Long evaluations are expensive. A 1,000-item dataset scored by an LLM judge can take an hour
-and burn real tokens. If the evaluation is interrupted halfway through — Ctrl-C, OOM, a
-network blip, a metric raising mid-scoring — the runs that did complete are still recorded
-on the backend, but a fresh `evaluate(...)` call would re-run every item from scratch.
-
-`opik.evaluate_resume(experiment_id, ...)` picks up where the original `evaluate(...)`
-stopped: runs that fully completed are reconstructed from the backend; runs that did not
-complete are replayed; everything is merged into one `EvaluationResult`.
+A long evaluation can be interrupted: Ctrl-C, OOM, a metric raising, a network blip.
+`opik.evaluate_resume(experiment_id, ...)` continues from where the original `evaluate(...)`
+stopped — replaying only the runs that didn't finish, keeping the runs that did.
 
 ## Quick start
 
@@ -35,129 +30,51 @@ result = opik.evaluate_resume(
     task=my_task,
     scoring_metrics=[Equals()],
 )
-
-print(f"Total test results: {len(result.test_results)}")
-print(f"Experiment URL: {result.experiment_url}")
 ```
 
-The returned `EvaluationResult` has the same shape as `evaluate()`. Its `test_results` covers
-the **whole** experiment — reconstructed prior runs plus runs this call executed.
+The returned `EvaluationResult` covers the **whole** experiment, not just the runs this call
+executed. You don't pass `dataset`, `nb_samples`, or `experiment_name` — resume reads them
+back from the experiment.
 
-## When you can resume an experiment
+## What resume does
 
-Two requirements:
+- **Keeps every run that already completed.** Outputs and feedback scores are preserved
+  as-is; the task is not re-invoked for them.
+- **Replays only the runs that didn't complete.** Failed task, failed scoring, never-reached
+  items, and missing runs for items with `trial_count > 1` all replay.
+- **Returns one merged result.** `EvaluationResult.test_results` covers both the kept runs
+  and the freshly replayed ones.
 
-- The experiment was created by an SDK version that supports resume.
-- The dataset had at least one version at the time of the original `evaluate(...)`.
+## Requirements
 
-If either is missing, `evaluate_resume` raises `opik.exceptions.ExperimentNotResumable` with
-the reason. Resume always iterates against the dataset **version** that was pinned at the
-moment of the original call — even if the dataset has grown or been mutated since.
+To call `evaluate_resume`, the experiment must have been created by:
 
-## What gets replayed vs reconstructed
+- A Python SDK version that supports resume.
+- An `evaluate(...)` call against a **versioned dataset**.
 
-`evaluate_resume` looks at each run the original evaluation produced and asks: did it
-complete cleanly? A run is **completed** when its trace has an `output` set — the engine
-writes the trace's `output` only at the end of the happy path, after the task ran and every
-metric scored cleanly.
+If either condition isn't met, `evaluate_resume` raises
+`opik.exceptions.ExperimentNotResumable`.
 
-| Outcome of the original run | What resume does |
-|---|---|
-| Task ran, scoring finished cleanly | **Reconstruct** from the stored experiment item — no re-run, no new feedback scores. |
-| Task ran but scoring crashed (e.g. metric raised `BaseException`, Ctrl-C between task and score-log) | **Replay** — the task is invoked again and metrics are scored against the new run. |
-| Task failed | **Replay** — the task is invoked again. |
-| Item was never reached | **Run fresh** — task + scoring run from scratch. |
+## Running on the same machine as the original `evaluate()`
 
-Runs of the same item are independent: when an item was set up with multiple runs
-(`trial_count > 1`) and only some completed, resume replays **only the missing ones**. The
-completed runs are reconstructed from the backend untouched, so a 3-run item that finished
-1 of 3 ends up with 1 reconstructed run + 2 freshly replayed runs in the returned
-`EvaluationResult`.
+If the original `evaluate(...)` used a custom `dataset_sampler` or explicit
+`dataset_item_ids`, resume needs a local checkpoint that was written next to the experiment
+id. Run resume from the same machine that ran the original call — otherwise
+`opik.exceptions.LocalCheckpointMissing` is raised.
 
-## Custom samplers and explicit `dataset_item_ids`
-
-Most evaluations iterate the dataset deterministically — apply the dataset filter, optionally
-cap at `nb_samples`, walk the items. That recipe is fully captured in the resume blob.
-
-Two cases need a little more: a **custom `dataset_sampler`** (non-deterministic by design)
-and **explicit `dataset_item_ids`** (an arbitrary list of ids that isn't recoverable from the
-filter alone). In these cases the SDK writes a small local checkpoint next to the experiment
-id containing the resolved ids the engine actually iterated, so the resume call can
-reproduce the same iteration.
-
-This means: if you used a sampler or explicit ids when calling `evaluate(...)`, **resume
-must run on the same machine** that wrote the checkpoint. If you've moved hosts, the checkpoint
-file isn't there:
-
-```python
-import opik
-from opik import exceptions
-
-try:
-    opik.evaluate_resume(experiment_id="<id>", task=my_task)
-except exceptions.LocalCheckpointMissing as exc:
-    # The original run used a sampler or explicit dataset_item_ids.
-    # Resume from the original machine, or start a fresh evaluate()
-    # with the same explicit dataset_item_ids.
-    print(f"Checkpoint not found: {exc}")
-```
-
-## Putting it together
-
-A typical pattern: a script that starts the evaluation and a separate script that resumes it.
-
-```python title="start_evaluation.py" language="python"
-import opik
-from opik.evaluation.metrics import Equals
-
-dataset = opik.Opik().get_or_create_dataset("my-dataset")
-
-def my_task(item):
-    return {"output": call_my_model(item["input"])}
-
-result = opik.evaluate(
-    dataset=dataset,
-    task=my_task,
-    scoring_metrics=[Equals()],
-    experiment_name="my-experiment",
-)
-print(f"Experiment id: {result.experiment_id}")
-```
-
-If the script above crashes or is interrupted, look up the partially-completed experiment id
-and run:
-
-```python title="resume_evaluation.py" language="python"
-import opik
-from opik.evaluation.metrics import Equals
-
-def my_task(item):
-    return {"output": call_my_model(item["input"])}
-
-result = opik.evaluate_resume(
-    experiment_id="<id from start_evaluation.py>",
-    task=my_task,
-    scoring_metrics=[Equals()],
-)
-print(f"Resumed. Total test results: {len(result.test_results)}")
-```
-
-You don't need to pass `dataset`, `dataset_filter_string`, `nb_samples`, or `experiment_name`
-— resume reads those back from the experiment.
+Evaluations without a sampler or explicit ids do **not** need to run on the same machine.
 
 ## When `evaluate_resume` is the wrong tool
 
-- **You only want to re-score an existing experiment with new metrics.** Use
-  `opik.evaluate_experiment(...)` instead — it walks the existing completed runs and
-  computes new feedback scores without re-running the task.
-- **You want to extend the experiment with more items.** Resume only iterates the same set
-  the original evaluation saw. To add items, start a fresh evaluation against the larger
-  dataset.
-- **You changed the task implementation between calls.** Resume calls your new `task` for
-  the missing runs, but already-completed runs keep their original outputs. If the change
-  should affect every run, start a fresh `evaluate()` instead.
+- **You want to re-score an existing experiment with new metrics.** Use
+  `opik.evaluate_experiment(...)` — it scores existing runs without re-running the task.
+- **You want to add more items to the experiment.** Resume only iterates the items the
+  original evaluation saw. Start a fresh `evaluate()` against the larger dataset.
+- **You changed the `task` implementation between calls.** Resume calls your new `task`
+  only for the missing runs; already-completed runs keep their original outputs. If the
+  change should affect every run, start a fresh `evaluate()`.
 
 ## Reference
 
-- Python: `opik.evaluate_resume`
-- Exceptions: `opik.exceptions.ExperimentNotResumable`, `opik.exceptions.LocalCheckpointMissing`
+- `opik.evaluate_resume`
+- `opik.exceptions.ExperimentNotResumable`, `opik.exceptions.LocalCheckpointMissing`
