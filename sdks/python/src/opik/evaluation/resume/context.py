@@ -29,7 +29,6 @@ from ...api_objects import opik_client
 from ...api_objects.dataset import dataset
 from ...api_objects.experiment import experiment as experiment_module
 from ...api_objects.experiment import experiment_item
-from .. import _completion_marker as completion_marker
 from . import checkpoint as checkpoint_module
 from . import state as state_module
 
@@ -102,16 +101,11 @@ def prepare_resume_context(
         dataset_version_name=persisted.dataset_version_name,
     )
 
-    experiment_items = list(experiment.get_items())
-    completion_marker.ensure_backend_supports_marker(
-        experiment_id=experiment_id, experiment_items=experiment_items
-    )
-
     return ResumeContext(
         experiment=experiment,
         dataset=dataset_version,
         completed_runs_by_item_id=_count_completed_runs_by_item_id(
-            experiment_items
+            experiment.get_items()
         ),
         default_runs_per_item=persisted.default_runs_per_item,
         dataset_filter_string=persisted.dataset_filter_string,
@@ -167,15 +161,21 @@ def _count_completed_runs_by_item_id(
     """Count fully-completed trials per dataset item."""
     counts: Dict[str, int] = {}
     for item in experiment_items:
-        if not completion_marker.is_trial_fully_completed(item):
+        if not is_trial_fully_completed(item):
             continue
         counts[item.dataset_item_id] = counts.get(item.dataset_item_id, 0) + 1
     return counts
 
 
-# Re-exported so ``resume.merge`` and the e2e verifier helpers can ask
-# "is this trial done?" without each having to know about the
-# completion-marker module. The implementation lives in
-# ``opik.evaluation._completion_marker`` — this name is the resume-side
-# entry point.
-is_trial_fully_completed = completion_marker.is_trial_fully_completed
+def is_trial_fully_completed(
+    item: experiment_item.ExperimentItemContent,
+) -> bool:
+    """True iff the trial reached the engine's happy-path-only line.
+
+    The engine sets ``trace.output`` only after task + scoring +
+    score-logging all returned (see
+    :func:`opik.evaluation.engine.helpers.evaluate_llm_task_context`).
+    A persisted trace's output presence is therefore exactly the
+    completion signal resume needs.
+    """
+    return item.evaluation_task_output is not None

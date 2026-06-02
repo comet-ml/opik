@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 from typing import Any, Dict, Optional, Iterator
 
 from opik.api_objects import experiment, opik_client, trace
@@ -9,6 +10,20 @@ from opik.types import ErrorInfoDict
 import opik.context_storage as context_storage
 
 
+@dataclasses.dataclass
+class EvaluationContextState:
+    """
+    Mutable state yielded by :func:`evaluate_llm_task_context`. The engine
+    sets :attr:`evaluation_completed` on the happy-path-only line after
+    task + scoring + score-logging all returned; the context manager's
+    ``finally`` strips ``trace_data.output`` when the flag stays unset,
+    so a persisted trace has ``output`` populated iff the trial
+    completed cleanly. ``evaluate_resume`` relies on that invariant.
+    """
+
+    evaluation_completed: bool = False
+
+
 @contextlib.contextmanager
 def evaluate_llm_task_context(
     experiment: Optional[experiment.Experiment],
@@ -16,11 +31,12 @@ def evaluate_llm_task_context(
     trace_data: trace.TraceData,
     client: opik_client.Opik,
     execution_policy: Optional[Dict[str, Any]] = None,
-) -> Iterator[None]:
+) -> Iterator[EvaluationContextState]:
+    state = EvaluationContextState()
     error_info: Optional[ErrorInfoDict] = None
     try:
         context_storage.set_trace_data(trace_data)
-        yield
+        yield state
     except Exception as exception:
         error_info = error_info_collector.collect(exception)
         raise
@@ -31,6 +47,13 @@ def evaluate_llm_task_context(
 
         if error_info is not None:
             trace_data.error_info = error_info
+
+        if not state.evaluation_completed:
+            # The trace did not reach the happy-path-only line — the
+            # output we collected (if any) reflects a half-finished
+            # trial. Strip it so the persisted trace's ``output`` field
+            # is the resume contract: present iff the trial completed.
+            trace_data.output = None
 
         trace_data.init_end_time()
 

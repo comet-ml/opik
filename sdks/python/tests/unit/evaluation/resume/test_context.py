@@ -5,23 +5,12 @@ from unittest import mock
 import pytest
 
 from opik import exceptions
-from opik.evaluation import _completion_marker as completion_marker
 from opik.evaluation.resume import context, state
 
 
 def _metadata_with_blob(blob_dict):
     """Wrap a resume-blob dict in the on-the-wire JSON-string form."""
     return {state.RESUME_METADATA_KEY: json.dumps(blob_dict)}
-
-
-def _completed_trace_metadata():
-    """Trace metadata that marks a trial as fully completed."""
-    return completion_marker.completed_metadata()
-
-
-def _pending_trace_metadata():
-    """Trace metadata at the marker's initial value — not yet completed."""
-    return completion_marker.initial_metadata()
 
 
 def _make_client(
@@ -32,29 +21,18 @@ def _make_client(
     experiment_items=None,
 ):
     if experiment_items is None:
-        # The two "a" items and the "c" item are fully completed (marker
-        # flipped to False); "b" never finished — marker stays True — and
-        # is the case resume must replay.
+        # The two "a" items and the "c" item completed (output set);
+        # "b" never finished (output stripped to None by the engine).
         experiment_items = [
             SimpleNamespace(
-                dataset_item_id="a",
-                evaluation_task_output={"x": 1},
-                trace_metadata=_completed_trace_metadata(),
+                dataset_item_id="a", evaluation_task_output={"x": 1}
             ),
             SimpleNamespace(
-                dataset_item_id="a",
-                evaluation_task_output={"x": 2},
-                trace_metadata=_completed_trace_metadata(),
+                dataset_item_id="a", evaluation_task_output={"x": 2}
             ),
+            SimpleNamespace(dataset_item_id="b", evaluation_task_output=None),
             SimpleNamespace(
-                dataset_item_id="b",
-                evaluation_task_output=None,
-                trace_metadata=_pending_trace_metadata(),
-            ),
-            SimpleNamespace(
-                dataset_item_id="c",
-                evaluation_task_output={"x": 3},
-                trace_metadata=_completed_trace_metadata(),
+                dataset_item_id="c", evaluation_task_output={"x": 3}
             ),
         ]
 
@@ -103,8 +81,8 @@ class TestPrepareResumeContext:
         client.get_dataset.return_value.get_version_view.assert_called_once_with(
             "v1"
         )
-        # only trials whose trace metadata marks them fully completed are
-        # counted; "b" (marker=True) is skipped even though output is null
+        # only trials whose ``evaluation_task_output`` is set are counted;
+        # "b" (output stripped to None on failure) is skipped
         assert dict(ctx.completed_runs_by_item_id) == {"a": 2, "c": 1}
         # no checkpoint required → reader should not be touched
         unused_reader.assert_not_called()
@@ -246,156 +224,15 @@ class TestIsTrialFullyCompleted:
             }
         )
 
-    def test_marker_false_counts_as_completed(self):
+    def test_output_set_counts_as_completed(self):
         item = SimpleNamespace(
-            dataset_item_id="a",
-            evaluation_task_output={"x": 1},
-            trace_metadata=_completed_trace_metadata(),
+            dataset_item_id="a", evaluation_task_output={"x": 1}
         )
         assert context.is_trial_fully_completed(item) is True
 
-    def test_marker_true_does_not_count(self):
-        """Output present but happy line never reached → must replay."""
+    def test_output_none_does_not_count(self):
+        """The engine strips ``output`` if the happy line never ran."""
         item = SimpleNamespace(
-            dataset_item_id="a",
-            evaluation_task_output={"x": 1},
-            trace_metadata=_pending_trace_metadata(),
+            dataset_item_id="a", evaluation_task_output=None
         )
         assert context.is_trial_fully_completed(item) is False
-
-    def test_missing_trace_metadata_does_not_count(self):
-        """Pre-marker SDK / external traces are treated as incomplete."""
-        item = SimpleNamespace(
-            dataset_item_id="a",
-            evaluation_task_output={"x": 1},
-            trace_metadata=None,
-        )
-        assert context.is_trial_fully_completed(item) is False
-
-    def test_marker_key_absent_from_metadata_does_not_count(self):
-        item = SimpleNamespace(
-            dataset_item_id="a",
-            evaluation_task_output={"x": 1},
-            trace_metadata={"some_other_key": "value"},
-        )
-        assert context.is_trial_fully_completed(item) is False
-
-    def test_count_completed_runs_uses_marker_only(self):
-        """
-        Defense in depth: a trial with output set but marker=True must
-        not contribute to the per-item count even though under the old
-        rule it would have. This is the bug case the marker exists for.
-        """
-        items = [
-            SimpleNamespace(
-                dataset_item_id="a",
-                evaluation_task_output={"x": 1},
-                trace_metadata=_completed_trace_metadata(),
-            ),
-            # Output is set (task succeeded) but marker is still pending
-            # — scoring crashed or process was interrupted between task
-            # and the happy-path-only line.
-            SimpleNamespace(
-                dataset_item_id="a",
-                evaluation_task_output={"x": 2},
-                trace_metadata=_pending_trace_metadata(),
-            ),
-        ]
-        client, _ = _make_client(
-            self._resumable_metadata(), experiment_items=items
-        )
-        client.get_dataset.return_value.get_version_view.return_value = (
-            mock.Mock(name="ds-v1")
-        )
-
-        ctx = context.prepare_resume_context(client, "exp-1")
-
-        assert dict(ctx.completed_runs_by_item_id) == {"a": 1}
-
-
-class TestBackendTooOldDetection:
-    """Empty ``trace_metadata`` across all items → raise."""
-
-    def _resumable_metadata(self):
-        return _metadata_with_blob(
-            {
-                "schema_version": 1,
-                "resumable": True,
-                "default_runs_per_item": 1,
-                "dataset_filter_string": None,
-                "dataset_version_name": "v1",
-                "nb_samples": None,
-                "requires_local_checkpoint": False,
-            }
-        )
-
-    def _legacy_be_items(self):
-        # Old BE: trace_metadata is None on every item.
-        return [
-            SimpleNamespace(
-                dataset_item_id="a",
-                evaluation_task_output={"x": 1},
-                trace_metadata=None,
-            ),
-            SimpleNamespace(
-                dataset_item_id="b",
-                evaluation_task_output=None,
-                trace_metadata=None,
-            ),
-        ]
-
-    def test_old_be_raises_with_actionable_message(self):
-        client, _ = _make_client(
-            self._resumable_metadata(),
-            experiment_items=self._legacy_be_items(),
-        )
-        client.get_dataset.return_value.get_version_view.return_value = (
-            mock.Mock(name="ds-v1")
-        )
-
-        with pytest.raises(exceptions.BackendTooOldForResume) as exc_info:
-            context.prepare_resume_context(client, "exp-1")
-
-        message = str(exc_info.value)
-        assert "trace_metadata" in message
-        assert "OPIK-5269" in message
-
-    def test_marker_present_on_any_item__no_raise(self):
-        items = [
-            SimpleNamespace(
-                dataset_item_id="a",
-                evaluation_task_output={"x": 1},
-                trace_metadata=_completed_trace_metadata(),
-            ),
-            SimpleNamespace(
-                dataset_item_id="b",
-                evaluation_task_output=None,
-                trace_metadata=None,
-            ),
-        ]
-        client, _ = _make_client(
-            self._resumable_metadata(), experiment_items=items
-        )
-        client.get_dataset.return_value.get_version_view.return_value = (
-            mock.Mock(name="ds-v1")
-        )
-
-        ctx = context.prepare_resume_context(client, "exp-1")
-
-        # Only "a" has the cleared marker; "b" has no marker, so it's
-        # incomplete under strict rules.
-        assert dict(ctx.completed_runs_by_item_id) == {"a": 1}
-
-    def test_empty_experiment__no_raise(self):
-        """An experiment with zero items can't trigger the check (nothing to
-        sample). Resume should still build the context — the iteration logic
-        will then process all dataset items as fresh."""
-        client, _ = _make_client(
-            self._resumable_metadata(), experiment_items=[]
-        )
-        client.get_dataset.return_value.get_version_view.return_value = (
-            mock.Mock(name="ds-v1")
-        )
-
-        ctx = context.prepare_resume_context(client, "exp-1")
-        assert dict(ctx.completed_runs_by_item_id) == {}

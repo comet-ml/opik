@@ -372,12 +372,11 @@ def verify_experiment_items_completed(
     completed experiment item matches ``expected_completed_dataset_item_ids``
     exactly.
 
-    A trial is considered fully completed when its trace metadata carries
-    the happy-path marker flipped to ``False`` — the same predicate
-    ``opik.evaluate_resume`` uses to decide which trials to replay. This
-    correctly excludes both task-side failures (output never written) and
-    scoring-side failures (output written but happy-path line never
-    reached).
+    Goes through the same predicate ``opik.evaluate_resume`` uses
+    (``trace.output`` is set only when the engine's happy-path-only line
+    runs), so this check correctly excludes both task-side failures
+    (task raised before producing output) and scoring-side failures
+    (output stripped by the engine when scoring did not finish).
     """
     from opik.evaluation.resume import context as resume_context
 

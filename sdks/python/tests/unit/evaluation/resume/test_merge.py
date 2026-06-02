@@ -1,14 +1,7 @@
 from types import SimpleNamespace
 from unittest import mock
 
-from opik.evaluation import _completion_marker as completion_marker
 from opik.evaluation.resume import merge
-
-
-# Default trace metadata: marks a trial as fully completed. Tests that
-# want a partial/failed trial pass ``trace_metadata=None`` or
-# ``completion_marker.initial_metadata()`` (the pending state).
-_COMPLETED_TRACE_METADATA = completion_marker.completed_metadata()
 
 
 def _experiment_item(
@@ -18,7 +11,6 @@ def _experiment_item(
     trace_id: str,
     evaluation_task_output,
     feedback_scores=None,
-    trace_metadata=_COMPLETED_TRACE_METADATA,
 ):
     return SimpleNamespace(
         id=id,
@@ -26,7 +18,6 @@ def _experiment_item(
         trace_id=trace_id,
         evaluation_task_output=evaluation_task_output,
         feedback_scores=feedback_scores or [],
-        trace_metadata=trace_metadata,
     )
 
 
@@ -43,23 +34,19 @@ def _experiment_with(experiment_items):
 
 
 class TestReconstructPreviousTestResults:
-    def test_items_without_completion_marker__skipped(self):
-        """The marker, not output presence, decides reconstruction.
-
-        Item 'a' has output set but its trace metadata still carries the
-        pending marker (the engine never reached the happy-path line —
-        scoring crashed or was interrupted). Even if the caller passes it
-        in ``fully_completed_dataset_item_ids`` by mistake, the per-trial
-        defensive check in ``reconstruct_previous_test_results`` keeps the
-        stale row from leaking into the merged result.
-        """
+    def test_items_without_output__skipped(self):
+        """The engine strips ``output`` on any failed trial, so output
+        presence is the completion signal. Even if the caller passes a
+        failed item in ``fully_completed_dataset_item_ids`` by mistake,
+        the per-trial defensive check inside
+        ``reconstruct_previous_test_results`` keeps the stale row out of
+        the merged result."""
         experiment = _experiment_with(
             [
                 _experiment_item(
                     dataset_item_id="a",
                     trace_id="t-a",
-                    evaluation_task_output={"output": "stale"},
-                    trace_metadata=completion_marker.initial_metadata(),
+                    evaluation_task_output=None,
                 ),
                 _experiment_item(
                     dataset_item_id="b",

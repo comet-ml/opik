@@ -20,7 +20,6 @@ from opik.types import TraceSource
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
 from .types import EvaluationTask
-from .. import _completion_marker as completion_marker
 from ..metrics import base_metric, score_result
 
 
@@ -285,7 +284,6 @@ class EvaluationEngine:
             created_by="evaluation",
             project_name=self._project_name,
             source=self._source,
-            metadata=completion_marker.initial_metadata(),
         )
 
         execution_policy_dict = None
@@ -298,7 +296,7 @@ class EvaluationEngine:
             trace_data=trace_data,
             client=self._client,
             execution_policy=execution_policy_dict or None,
-        ):
+        ) as eval_state:
             if experiment_ is not None and experiment_.prompts:
                 for prompt_obj in experiment_.prompts:
                     opik_context.attach_prompt_to_current_trace(prompt_obj)
@@ -367,12 +365,12 @@ class EvaluationEngine:
                 ],
             )
 
-            # Happy-path-only line: hands the marker to ``completion_marker``
-            # to flip; any failure before here leaves the trace's marker
-            # at its initial state and ``evaluate_resume`` replays the trial.
-            opik_context.update_current_trace(
-                metadata=completion_marker.completed_metadata()
-            )
+            # Happy-path-only line: tells the surrounding context manager
+            # to keep ``trace_data.output`` on the persisted trace.
+            # Any failure before here leaves the flag unset, the
+            # ``finally`` strips ``output`` back to ``None``, and
+            # ``evaluate_resume`` reads ``output is None`` as "replay".
+            eval_state.evaluation_completed = True
 
         return test_result_
 
