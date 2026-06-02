@@ -773,10 +773,42 @@ clickhouse:
         export backupname=backup$(date +'%Y%m%d%H%M')
         echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
         clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+    restore:
+      # Set to true to create the restore job (does not run by default).
+      # IMPORTANT: set this back to false once the restore has completed.
+      # Otherwise the next `helm upgrade` re-creates the job and restores again.
+      createJob: false
+      # Name of the backup to restore. REQUIRED when createJob is true (Helm
+      # rendering fails otherwise). Must match a backup name from the backup
+      # server's /backup/list, e.g. "backup202401011200" as produced by the
+      # backup CronJob above.
+      backupName: ""
+      image: "amazon/aws-cli:2.27.49"
+      # Hard cap on the job runtime (seconds) so a stuck restore whose status
+      # never resolves cannot run forever. Default: 24h.
+      activeDeadlineSeconds: 86400
+      extraEnv: {}
+      resources:
+        limits:
+          cpu: 10m
+          memory: 64Mi
+        requests:
+          cpu: 10m
+          memory: 32Mi
+      nodeSelector: {}  # Defaults to .Values.clickhouse.nodeSelector if not specified
+      affinity: {}  # Defaults to .Values.clickhouse.affinity if not specified
+      tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
     image: altinity/clickhouse-backup:2.6.39
     port: 7171
+    # Service the restore job uses to reach the clickhouse-backup REST API.
+    # The backup port is exposed on the operator's per-replica service, so this
+    # defaults (in the restore job template) to chi-<release>-clickhouse-cluster-0-0
+    # on backupServer.port. Override name/port if your shard/replica layout differs.
+    service:
+      name: ""
+      port: ""
     monitoring:
       enabled: false
       additionalLabels: {}
