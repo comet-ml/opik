@@ -1,0 +1,178 @@
+---
+headline: Resume an interrupted evaluation | Opik Documentation
+og:description: Continue a long-running Opik evaluation after a crash, network blip, or Ctrl-C — replaying only the trials that didn't finish.
+og:site_name: Opik Documentation
+og:title: Resume an interrupted evaluation - Opik
+subtitle: Continue an evaluation from where it stopped
+title: Resume an interrupted evaluation
+---
+
+<Note>
+  `evaluate_resume` is a Python SDK feature. It works on experiments created
+  with the Python SDK's `opik.evaluate(...)` (and `evaluate_prompt`,
+  `evaluate_optimization_trial`).
+</Note>
+
+Long evaluations are expensive. A 1,000-item dataset scored by an LLM judge can take an hour
+and burn real tokens. If the run is interrupted halfway through — Ctrl-C, OOM, a network blip,
+a metric raising mid-scoring — the trials that did complete are still on the backend, but a
+fresh `evaluate(...)` call would re-run every item from scratch.
+
+`opik.evaluate_resume(experiment_id, ...)` picks up where the original `evaluate(...)` stopped:
+trials that fully completed are reconstructed from the backend; trials that did not complete
+are replayed; everything is merged into one `EvaluationResult`.
+
+## Quick start
+
+```python title="Python" language="python"
+import opik
+from opik.evaluation.metrics import Equals
+
+def my_task(item):
+    return {"output": call_my_model(item["input"])}
+
+result = opik.evaluate_resume(
+    experiment_id="<id of the experiment to resume>",
+    task=my_task,
+    scoring_metrics=[Equals()],
+)
+
+print(f"Total test results: {len(result.test_results)}")
+print(f"Experiment URL: {result.experiment_url}")
+```
+
+The returned `EvaluationResult` has the same shape as `evaluate()`. Its `test_results` covers
+the **whole** experiment — reconstructed prior trials plus trials this call executed.
+
+## When you can resume an experiment
+
+`evaluate_resume` only works on experiments that were created by a Python SDK version that
+knows how to record resume state. When `opik.evaluate(...)` runs, it embeds a small JSON blob
+in the experiment's `experiment_config` capturing the pinned dataset version, the iteration
+knobs (`dataset_filter_string`, `nb_samples`), and the default per-item trial count. On
+resume, that blob is read back to reproduce the exact same iteration.
+
+If the experiment was created with an older SDK — or by a path that didn't pin a dataset
+version — `evaluate_resume` will refuse to continue, with a clear error:
+
+```python
+import opik
+from opik import exceptions
+
+try:
+    opik.evaluate_resume(experiment_id="<some old experiment id>", task=my_task)
+except exceptions.ExperimentNotResumable as exc:
+    # The original evaluate() did not record enough state for safe resume.
+    # Iterating against a moving dataset HEAD would break the resume contract.
+    print(f"Cannot resume: {exc}")
+```
+
+The dataset is pinned by version at the moment of the original `evaluate()`. That means
+resume always re-iterates against the same set of items the first run saw, even if the
+dataset has grown or been mutated since.
+
+## What gets replayed vs reconstructed
+
+`evaluate_resume` looks at each trial that the original run produced and asks: did it fully
+complete? A trial is **fully completed** when its trace has an `output` set — the engine
+writes the trace's `output` only at the end of the happy path, after the task ran and every
+metric scored cleanly.
+
+| Outcome of the original trial | What resume does |
+|---|---|
+| Task ran, scoring finished cleanly | **Reconstruct** from the stored experiment item — no re-run, no new feedback scores. |
+| Task ran but scoring crashed (e.g. metric raised `BaseException`, Ctrl-C between task and score-log) | **Replay** — the task is invoked again and metrics are scored against the new run. |
+| Task failed | **Replay** — the task is invoked again. |
+| Item was never reached | **Run fresh** — task + scoring run from scratch. |
+
+When an item was set up with multiple trials (`trial_count > 1`) and only some completed,
+resume **redoes all** trials for that item — not just the missing ones. This is intentional:
+trial outputs depend on the task / metric state at the time they ran, so mixing partial old
+trials with new ones could produce internally inconsistent results.
+
+## Custom samplers and explicit `dataset_item_ids`
+
+Most evaluations iterate the dataset deterministically — apply the dataset filter, optionally
+cap at `nb_samples`, walk the items. That recipe is fully captured in the resume blob.
+
+Two cases need a little more: a **custom `dataset_sampler`** (non-deterministic by design)
+and **explicit `dataset_item_ids`** (an arbitrary list of ids that isn't recoverable from the
+filter alone). In these cases the SDK writes a small local checkpoint next to the experiment
+id containing the resolved ids the engine actually iterated, so the resume call can
+reproduce the same iteration.
+
+This means: if you used a sampler or explicit ids when calling `evaluate(...)`, **resume
+must run on the same machine** that wrote the checkpoint. If you've moved hosts, the checkpoint
+file isn't there:
+
+```python
+import opik
+from opik import exceptions
+
+try:
+    opik.evaluate_resume(experiment_id="<id>", task=my_task)
+except exceptions.LocalCheckpointMissing as exc:
+    # The original run used a sampler or explicit dataset_item_ids.
+    # Resume from the original machine, or start a fresh evaluate()
+    # with the same explicit dataset_item_ids.
+    print(f"Checkpoint not found: {exc}")
+```
+
+## Putting it together
+
+A typical pattern: a script that starts the evaluation and a separate script that resumes it.
+
+```python title="start_evaluation.py" language="python"
+import opik
+from opik.evaluation.metrics import Equals
+
+dataset = opik.Opik().get_or_create_dataset("my-dataset")
+
+def my_task(item):
+    return {"output": call_my_model(item["input"])}
+
+result = opik.evaluate(
+    dataset=dataset,
+    task=my_task,
+    scoring_metrics=[Equals()],
+    experiment_name="my-experiment",
+)
+print(f"Experiment id: {result.experiment_id}")
+```
+
+If the script above crashes or is interrupted, look up the partially-completed experiment id
+and run:
+
+```python title="resume_evaluation.py" language="python"
+import opik
+from opik.evaluation.metrics import Equals
+
+def my_task(item):
+    return {"output": call_my_model(item["input"])}
+
+result = opik.evaluate_resume(
+    experiment_id="<id from start_evaluation.py>",
+    task=my_task,
+    scoring_metrics=[Equals()],
+)
+print(f"Resumed. Total test results: {len(result.test_results)}")
+```
+
+You don't need to pass `dataset`, `dataset_filter_string`, `nb_samples`, or `experiment_name`
+— resume reads those back from the experiment.
+
+## When `evaluate_resume` is the wrong tool
+
+- **You only want to re-score an existing run with new metrics.** Use `opik.evaluate_experiment(...)`
+  instead — it walks completed trials and computes new feedback scores without re-running the
+  task.
+- **You want to extend the experiment with more items.** Resume only iterates the same set
+  the original run saw. To add items, start a fresh evaluation against the larger dataset.
+- **You want to change the task implementation between runs.** Resume calls your new `task`
+  for replayed items, but reconstructed items keep the old run's outputs. If you've changed
+  the task in a way that should affect every item, start a fresh `evaluate()` instead.
+
+## Reference
+
+- Python: `opik.evaluate_resume`
+- Exceptions: `opik.exceptions.ExperimentNotResumable`, `opik.exceptions.LocalCheckpointMissing`
