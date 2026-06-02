@@ -497,7 +497,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const renderContent = () => {
-    if (isThreadPending || isTracesPending) {
+    if (isThreadPending) {
       return <Loader />;
     }
 
