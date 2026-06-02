@@ -55,15 +55,6 @@ To call `evaluate_resume`, the experiment must have been created by:
 If either condition isn't met, `evaluate_resume` raises
 `opik.exceptions.ExperimentNotResumable`.
 
-## Running on the same machine as the original `evaluate()`
-
-If the original `evaluate(...)` used a custom `dataset_sampler` or explicit
-`dataset_item_ids`, resume needs a local checkpoint that was written next to the experiment
-id. Run resume from the same machine that ran the original call — otherwise
-`opik.exceptions.LocalCheckpointMissing` is raised.
-
-Evaluations without a sampler or explicit ids do **not** need to run on the same machine.
-
 ## When `evaluate_resume` is the wrong tool
 
 - **You want to re-score an existing experiment with new metrics.** Use
@@ -73,6 +64,15 @@ Evaluations without a sampler or explicit ids do **not** need to run on the same
 - **You changed the `task` implementation between calls.** Resume calls your new `task`
   only for the missing runs; already-completed runs keep their original outputs. If the
   change should affect every run, start a fresh `evaluate()`.
+
+## Running on the same machine as the original `evaluate()`
+
+If the original `evaluate(...)` used a custom `dataset_sampler` or explicit
+`dataset_item_ids`, resume needs a local checkpoint that was written next to the experiment
+id. Run resume from the same machine that ran the original call — otherwise
+`opik.exceptions.LocalCheckpointMissing` is raised.
+
+Evaluations without a sampler or explicit ids do **not** need to run on the same machine.
 
 ## Reference
 
