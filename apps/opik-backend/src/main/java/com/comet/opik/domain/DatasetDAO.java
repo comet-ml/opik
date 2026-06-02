@@ -315,4 +315,26 @@ public interface DatasetDAO {
     Set<UUID> findOrphanDatasetIdsInWorkspace(
             @Bind("workspace_id") String workspaceId,
             @BindList("demoDatasetNames") List<String> demoDatasetNames);
+
+    /**
+     * Bulk lookup of {@code (dataset_id, project_id)} pairs scoped to a workspace. Returns one row
+     * per matching dataset_id; datasets whose {@code project_id} is still {@code NULL} are
+     * <b>omitted</b>, so callers detect them by diffing against their candidate set.
+     *
+     * <p>Used by {@code OptimizationProjectMigrationService} for Path B inference: orphan
+     * optimizations that Path A (experiments) does not classify look up their dataset's
+     * {@code project_id} here in a single round-trip per workspace cycle.
+     */
+    @SqlQuery("""
+            SELECT id, project_id FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND id IN (<ids>)
+            AND project_id IS NOT NULL
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    @RegisterConstructorMapper(DatasetProjectIdRow.class)
+    List<DatasetProjectIdRow> findProjectIdsByDatasetIds(
+            @Bind("workspace_id") String workspaceId,
+            @BindList("ids") Set<UUID> ids);
 }

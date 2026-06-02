@@ -3,7 +3,7 @@ import { Download, Loader2 } from "lucide-react";
 import FileSaver from "file-saver";
 import { json2csv } from "json-2-csv";
 import get from "lodash/get";
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ type ExportToButtonProps = {
   disabled: boolean;
   tooltipContent?: string;
   buttonVariant?: "outline" | "ghost" | "ghostInverted";
+  buttonSize?: ButtonProps["size"];
 };
 
 const ExportToButton: React.FC<ExportToButtonProps> = ({
@@ -27,6 +28,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
   disabled,
   tooltipContent,
   buttonVariant = "outline",
+  buttonSize = "icon-sm",
 }) => {
   const [open, setOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -101,7 +103,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
   const buttonElement = (
     <Button
       variant={buttonVariant}
-      size="icon-sm"
+      size={buttonSize}
       disabled={disabled || loading}
     >
       {loading ? <Loader2 className="animate-spin" /> : <Download />}

@@ -88,7 +88,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { LOGS_TYPE } from "@/constants/traces";
 import { useHotkeys } from "react-hotkeys-hook";
 
-type ThreadDetailsPanelProps = {
+export type ThreadDetailsPanelProps = {
   projectId: string;
   projectName: string;
   threadId: string;
@@ -99,6 +99,7 @@ type ThreadDetailsPanelProps = {
   open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
+  container?: HTMLElement | null;
   hideAnnotateActions?: boolean;
 };
 
@@ -115,6 +116,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   open,
   onClose,
   onRowChange,
+  container,
   hideAnnotateActions,
 }) => {
   const navigate = useNavigate();
@@ -707,6 +709,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       initialWidth={0.5}
       minWidth={700}
       horizontalNavigation={horizontalNavigation}
+      container={container}
     >
       {renderContent()}
     </ResizableSidePanel>

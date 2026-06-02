@@ -33,6 +33,11 @@ jobs:
 
     strategy:
       fail-fast: true
+      # Throttle concurrent matrix jobs so we keep full Python coverage
+      # without re-multiplying live Vertex AI calls into 429 RESOURCE_EXHAUSTED
+      # against the shared opik-sdk-tests GCP project (shared with the ADK
+      # suite, so any uncapped suite re-multiplies their contention too).
+      max-parallel: 2
       matrix:
         python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
 

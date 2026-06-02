@@ -27,14 +27,14 @@ const SelectionActionBar: React.FC<SelectionActionBarProps> = ({
       direction="bidirectional"
       limitWidth
     >
-      <div className="comet-body-s flex h-10 w-full items-center justify-between rounded-md bg-selection-bar px-4 text-white">
+      <div className="comet-body-xs flex h-8 w-full items-center justify-between rounded-md bg-selection-bar px-4 text-white">
         <div className="flex items-center gap-3">
           <span>Selected: {selectedCount}</span>
           <button
-            className="text-white/80 ml-1 flex items-center gap-1 hover:text-white"
+            className="text-white/80 ml-1 flex items-center gap-1 font-medium hover:text-white"
             onClick={onDeselectAll}
           >
-            <X className="mr-0.5 size-3.5" />
+            <X className="mr-0.5 size-3" />
             Deselect all
           </button>
         </div>
