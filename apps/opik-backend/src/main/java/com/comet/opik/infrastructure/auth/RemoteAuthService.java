@@ -192,6 +192,8 @@ class RemoteAuthService implements AuthService {
                 .queryParam("withoutExtendedData", true)
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
+                // avoid gzip double-decompression issue in case of huge workspaces list
+                .acceptEncoding("identity")
                 .cookie(sessionToken)
                 .get()) {
             if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {

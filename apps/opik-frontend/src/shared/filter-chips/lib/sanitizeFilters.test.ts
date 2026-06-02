@@ -7,6 +7,7 @@ import {
   DICTIONARY_OPERATORS,
   FEEDBACK_SCORE_OPERATORS,
   TAGS_OPERATORS,
+  STRING_OPERATORS,
 } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 
 const f = (overrides: Partial<Filter>): Filter => ({
@@ -60,18 +61,20 @@ const pseudoTextDef: ChipDefinition = {
   id: "input",
   field: "input",
   label: "Input",
-  kind: "pseudo-search",
-  searchMode: "contains",
+  kind: "query-builder",
   columnType: COLUMN_TYPE.string,
+  operators: STRING_OPERATORS,
+  defaultOperator: "contains",
 };
 
 const pseudoIdDef: ChipDefinition = {
   id: "thread_id",
   field: "thread_id",
   label: "Thread ID",
-  kind: "pseudo-search",
-  searchMode: "equals",
+  kind: "query-builder",
   columnType: COLUMN_TYPE.string,
+  operators: STRING_OPERATORS,
+  defaultOperator: "=",
 };
 
 const tagsDef: ChipDefinition = {
@@ -346,16 +349,18 @@ describe("sanitizeFilters — time", () => {
   });
 });
 
-describe("sanitizeFilters — pseudo-search", () => {
+describe("sanitizeFilters — text/ID query-builder fields", () => {
   it("accepts contains on a text field", () => {
     const res = sanitizeFilters(
       [f({ field: "input", operator: "contains", value: "hello" })],
       DEFS,
     );
-    expect(res.values.input).toEqual({ value: "hello" });
+    expect(res.values.input).toEqual({
+      rows: [expect.objectContaining({ operator: "contains", value: "hello" })],
+    });
   });
 
-  it("drops starts_with / ends_with / not_contains / = on a text field", () => {
+  it("accepts not_contains / starts_with / ends_with / = on a text field", () => {
     const res = sanitizeFilters(
       [
         f({ id: "a", field: "input", operator: "starts_with", value: "x" }),
@@ -365,11 +370,15 @@ describe("sanitizeFilters — pseudo-search", () => {
       ],
       DEFS,
     );
-    expect(res.values.input).toBeUndefined();
-    expect(res.dropped).toHaveLength(4);
-    expect(res.dropped.every((d) => d.reason === "unsupported_operator")).toBe(
-      true,
-    );
+    expect(res.values.input).toEqual({
+      rows: [
+        expect.objectContaining({ operator: "starts_with", value: "x" }),
+        expect.objectContaining({ operator: "ends_with", value: "y" }),
+        expect.objectContaining({ operator: "not_contains", value: "z" }),
+        expect.objectContaining({ operator: "=", value: "w" }),
+      ],
+    });
+    expect(res.dropped).toHaveLength(0);
   });
 
   it("accepts = on an ID field", () => {
@@ -377,16 +386,19 @@ describe("sanitizeFilters — pseudo-search", () => {
       [f({ field: "thread_id", operator: "=", value: "abc-123" })],
       DEFS,
     );
-    expect(res.values.thread_id).toEqual({ value: "abc-123" });
+    expect(res.values.thread_id).toEqual({
+      rows: [expect.objectContaining({ operator: "=", value: "abc-123" })],
+    });
   });
 
-  it("drops contains on an ID field", () => {
+  it("accepts contains on an ID field", () => {
     const res = sanitizeFilters(
       [f({ field: "thread_id", operator: "contains", value: "abc" })],
       DEFS,
     );
-    expect(res.values.thread_id).toBeUndefined();
-    expect(res.dropped[0].reason).toBe("unsupported_operator");
+    expect(res.values.thread_id).toEqual({
+      rows: [expect.objectContaining({ operator: "contains", value: "abc" })],
+    });
   });
 });
 

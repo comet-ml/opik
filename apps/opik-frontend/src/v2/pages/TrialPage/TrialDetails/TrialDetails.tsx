@@ -9,7 +9,7 @@ import NavigationTag from "@/shared/NavigationTag";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Tag } from "@/ui/tag";
 import { LOGS_SOURCE } from "@/types/traces";
-import { generateExperimentIdFilter } from "@/lib/filters";
+import { generateExperimentIdsFilter } from "@/lib/filters";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import {
@@ -96,7 +96,7 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
           <TraceLogsSidebarButton
             projectId={experiment.project_id}
             logsSource={LOGS_SOURCE.optimization}
-            sourceFilters={generateExperimentIdFilter(experiment.id)}
+            sourceFilters={generateExperimentIdsFilter([experiment.id])}
             title="Optimization logs"
           />
         )}

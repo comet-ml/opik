@@ -23,6 +23,7 @@ class ExperimentItem(UniversalBaseModel):
     project_name: typing.Optional[str] = None
     input: typing.Optional[JsonListString] = None
     output: typing.Optional[JsonListString] = None
+    trace_metadata: typing.Optional[JsonListString] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     total_estimated_cost: typing.Optional[float] = None
