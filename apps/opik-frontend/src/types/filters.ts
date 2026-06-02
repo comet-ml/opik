@@ -10,6 +10,7 @@ export type FilterOperator =
   | "is_not_empty"
   | "not_in"
   | "="
+  | "!="
   | ">"
   | ">="
   | "<"
