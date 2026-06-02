@@ -438,7 +438,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search input" },
   },
   {
@@ -449,7 +448,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search output" },
   },
   {
@@ -460,7 +458,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search name" },
   },
   {
@@ -479,7 +476,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Enter trace ID" },
   },
   {
@@ -490,7 +486,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Enter thread ID" },
   },
   {
@@ -501,7 +496,6 @@ const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.list,
     operators: LIST_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Enter annotation queue ID" },
   },
 ];
@@ -569,7 +563,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search input" },
   },
   {
@@ -580,7 +573,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search output" },
   },
   {
@@ -591,7 +583,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search name" },
   },
   {
@@ -610,7 +601,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Enter span ID" },
   },
   {
@@ -621,7 +611,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Enter trace ID" },
   },
 ];

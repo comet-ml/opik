@@ -305,7 +305,6 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search first message" },
   },
   {
@@ -316,7 +315,6 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Search last message" },
   },
   {
@@ -327,7 +325,6 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Enter thread ID" },
   },
   {
@@ -338,7 +335,6 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     columnType: COLUMN_TYPE.list,
     operators: LIST_OPERATORS,
     defaultOperator: "contains",
-    addLabel: "Add condition",
     value: { placeholder: "Enter annotation queue ID" },
   },
 ];
