@@ -6,7 +6,6 @@ import FilterManagerPopover, {
 } from "@/shared/filter-chips/FilterManagerPopover/FilterManagerPopover";
 import ChipShell from "@/shared/filter-chips/chips/BaseChip/ChipShell";
 import SingleSelectChip from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip";
-import PseudoSearchChip from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip";
 import BooleanChip from "@/shared/filter-chips/chips/BooleanChip/BooleanChip";
 import NumericChip from "@/shared/filter-chips/chips/NumericChip/NumericChip";
 import TimeChip from "@/shared/filter-chips/chips/TimeChip/TimeChip";
@@ -17,7 +16,6 @@ import {
   ChipValue,
   ChipValueMap,
   NumericChipValue,
-  PseudoSearchChipValue,
   QueryBuilderChipValue,
   SingleSelectChipValue,
   TimeChipValue,
@@ -80,18 +78,6 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
                 key={def.id}
                 definition={def}
                 value={values[def.id] as SingleSelectChipValue}
-                onApply={(value) => onApplyValue(def.id, value)}
-                onClear={(source) => onClearValue(def.id, source)}
-                open={isOpen}
-                onOpenChange={handleOpenChange}
-              />
-            );
-          case "pseudo-search":
-            return (
-              <PseudoSearchChip
-                key={def.id}
-                definition={def}
-                value={values[def.id] as PseudoSearchChipValue}
                 onApply={(value) => onApplyValue(def.id, value)}
                 onClear={(source) => onClearValue(def.id, source)}
                 open={isOpen}

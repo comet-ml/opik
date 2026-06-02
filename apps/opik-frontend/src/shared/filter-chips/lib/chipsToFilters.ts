@@ -5,13 +5,11 @@ import {
   ChipDefinition,
   ChipValueMap,
   NumericChipValue,
-  PseudoSearchChipValue,
   QueryBuilderChipValue,
   SingleSelectChipValue,
   TimeChipValue,
 } from "@/shared/filter-chips/types";
 import { singleSelectToFilters } from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip.logic";
-import { pseudoSearchToFilters } from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip.logic";
 import { booleanToFilters } from "@/shared/filter-chips/chips/BooleanChip/BooleanChip.logic";
 import { numericToFilters } from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
 import { timeToFilters } from "@/shared/filter-chips/chips/TimeChip/TimeChip.logic";
@@ -31,11 +29,6 @@ export const chipsToFilters = (
       case "single-select":
         result.push(
           ...singleSelectToFilters(value as SingleSelectChipValue, def),
-        );
-        break;
-      case "pseudo-search":
-        result.push(
-          ...pseudoSearchToFilters(value as PseudoSearchChipValue, def),
         );
         break;
       case "boolean":
