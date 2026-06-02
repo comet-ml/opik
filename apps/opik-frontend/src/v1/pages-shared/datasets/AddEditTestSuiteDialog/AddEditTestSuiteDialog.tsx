@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
 import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
@@ -8,7 +7,6 @@ import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCs
 import useDatasetItemsFromJsonMutation from "@/api/datasets/useDatasetItemsFromJsonMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import { Button } from "@/ui/button";
-import { Description } from "@/ui/description";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -23,6 +21,7 @@ import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
 import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import DatasetUploadDescription from "@/shared/DatasetUploadDescription/DatasetUploadDescription";
 import UploadField from "@/shared/UploadField/UploadField";
 import { buildDocsUrl } from "@/v1/lib/utils";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -316,21 +315,10 @@ const AddEditTestSuiteDialog = ({
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Upload a CSV or JSON file</Label>
-              <Description className="tracking-normal">
-                Supported formats: .csv, .json, .jsonl/.ndjson. File can be up
-                to {fileSizeLimit}MB in size and will be processed in the
-                background.
-                <Button variant="link" size="sm" className="h-5 px-1" asChild>
-                  <a
-                    href={buildDocsUrl("/evaluation/manage_datasets")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Learn more
-                    <ExternalLink className="ml-0.5 size-3 shrink-0" />
-                  </a>
-                </Button>
-              </Description>
+              <DatasetUploadDescription
+                fileSizeLimit={fileSizeLimit}
+                docsUrl={buildDocsUrl("/evaluation/manage_datasets")}
+              />
               <UploadField
                 disabled={isEdit}
                 description="Drop a CSV or JSON file to upload or"
