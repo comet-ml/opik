@@ -547,8 +547,16 @@ def _verify_experiment_metadata(
     experiment_metadata = experiment_content.metadata
     if experiment_content.metadata is not None:
         experiment_metadata = {**experiment_content.metadata}
+        # SDK-managed keys that ``evaluate()`` writes into the
+        # experiment config; tests assert on user-supplied keys only.
         experiment_metadata.pop("prompt", None)
         experiment_metadata.pop("prompts", None)
+        experiment_metadata.pop("_opik_resume", None)
+        # Tests that supplied no ``experiment_config`` expect
+        # ``metadata=None``; after stripping SDK keys we may be left
+        # with an empty dict for the same case.
+        if not experiment_metadata:
+            experiment_metadata = None
 
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
 
