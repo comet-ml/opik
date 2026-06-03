@@ -260,11 +260,11 @@ class DatasetsCsvUploadResourceTest {
 
         // Prepare CSV with special characters
         String csvContent = """
-          input,output
-          "What's the weather?","It's sunny!"
-          "Quote: ""Hello""\","Response: ""Hi""\"
-          "Comma, test","Value, with, commas"
-          """;
+                input,output
+                "What's the weather?","It's sunny!"
+                "Quote: ""Hello""\","Response: ""Hi""\"
+                "Comma, test","Value, with, commas"
+                """;
 
         // When: Upload CSV file
         try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
@@ -320,10 +320,10 @@ class DatasetsCsvUploadResourceTest {
         // Simulating customer's issue where CSV has BOM in first column name
         byte[] bomBytes = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
         String csvContentWithoutBom = """
-          Standard Question,Standard Answer,Other Field
-          "如何强制触发4G/5G后台搜索？","测试答案","测试值"
-          "Second question","Second answer","Value2"
-          """;
+                Standard Question,Standard Answer,Other Field
+                "如何强制触发4G/5G后台搜索？","测试答案","测试值"
+                "Second question","Second answer","Value2"
+                """;
 
         byte[] csvBytesWithBom = new byte[bomBytes.length
                 + csvContentWithoutBom.getBytes(StandardCharsets.UTF_8).length];
