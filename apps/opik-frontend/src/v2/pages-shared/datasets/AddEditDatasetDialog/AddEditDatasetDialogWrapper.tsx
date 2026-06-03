@@ -15,8 +15,8 @@ import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import DatasetUploadDescription from "@/shared/DatasetUploadDescription/DatasetUploadDescription";
-import DatasetUploadField from "@/shared/DatasetUploadField/DatasetUploadField";
+import DatasetUploadDescription from "@/v2/pages-shared/datasets/DatasetUploadDescription";
+import DatasetUploadField from "@/v2/pages-shared/datasets/DatasetUploadField";
 import type useDatasetForm from "./useDatasetForm";
 
 type AddEditDatasetDialogWrapperProps = {
