@@ -206,6 +206,12 @@ mcpOAuth:
   # Default: PT30S
   # Description: Grace window during which a just-rotated refresh token is still accepted
   refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT30S}
+  # Default: 20
+  # Description: Max dynamic client registrations (RFC 7591) accepted per source IP per window
+  registrationRateLimit: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT:-20}
+  # Default: PT1H
+  # Description: Window for the dynamic client registration rate limit
+  registrationRateLimitDuration: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT_DURATION:-PT1H}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:

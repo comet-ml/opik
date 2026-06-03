@@ -77,26 +77,27 @@ public class McpOAuthService {
         String codeHash = McpOAuthTokens.hash(code);
         Instant now = Instant.now();
 
-        return template.inTransaction(WRITE, handle -> {
+        // Burn the code in its own committed transaction: a thrown exception rolls the enclosing
+        // transaction back, so single-use consumption must commit before the client/redirect/PKCE
+        // checks below — a failed exchange attempt must not leave the code replayable.
+        McpOAuthCode row = template.inTransaction(WRITE, handle -> {
             var codeDao = handle.attach(McpOAuthCodeDAO.class);
-
             if (codeDao.markUsed(codeHash) != 1) {
                 throw new BadRequestException(ERROR_INVALID_GRANT);
             }
+            return codeDao.findByHash(codeHash);
+        });
 
-            McpOAuthCode row = codeDao.findByHash(codeHash);
-            if (!row.clientId().equals(clientId) || !row.redirectUri().equals(redirectUri)) {
-                throw new BadRequestException(ERROR_INVALID_GRANT);
-            }
+        if (!row.clientId().equals(clientId) || !row.redirectUri().equals(redirectUri)
+                || !verifyPkce(codeVerifier, row.codeChallenge())) {
+            throw new BadRequestException(ERROR_INVALID_GRANT);
+        }
 
-            if (!verifyPkce(codeVerifier, row.codeChallenge())) {
-                throw new BadRequestException(ERROR_INVALID_GRANT);
-            }
+        String familyId = idGenerator.generateId().toString();
+        String accessToken = McpOAuthTokens.generateAccessToken();
+        String refreshToken = McpOAuthTokens.generateRefreshToken();
 
-            String familyId = idGenerator.generateId().toString();
-            String accessToken = McpOAuthTokens.generateAccessToken();
-            String refreshToken = McpOAuthTokens.generateRefreshToken();
-
+        return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
             tokenDao.save(McpOAuthToken.builder()
                     .tokenHash(McpOAuthTokens.hash(accessToken))
@@ -129,29 +130,37 @@ public class McpOAuthService {
         String tokenHash = McpOAuthTokens.hash(refreshToken);
         Instant now = Instant.now();
 
+        McpOAuthToken row = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(McpOAuthTokenDAO.class).findByHash(tokenHash));
+
+        if (row == null || !TYPE_REFRESH.equals(row.type()) || !row.clientId().equals(clientId)
+                || !row.expiresAt().isAfter(now)) {
+            throw new BadRequestException(ERROR_INVALID_GRANT);
+        }
+
+        if (row.revokedAt() != null) {
+            boolean benignRetry = REASON_ROTATED.equals(row.revokedReason())
+                    && !now.isAfter(row.revokedAt().plus(config().getRefreshRotationGrace()));
+            if (!benignRetry) {
+                // Reuse detected: kill the whole lineage. Must run in its own committed transaction —
+                // throwing invalid_grant from inside the same transaction would roll the revocation back.
+                template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
+                        .revokeFamily(row.familyId(), REASON_REUSE));
+            }
+            throw new BadRequestException(ERROR_INVALID_GRANT);
+        }
+
+        String accessToken = McpOAuthTokens.generateAccessToken();
+        String newRefreshToken = McpOAuthTokens.generateRefreshToken();
+
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
 
-            McpOAuthToken row = tokenDao.findByHash(tokenHash);
-            if (row == null || !TYPE_REFRESH.equals(row.type()) || !row.clientId().equals(clientId)) {
+            // Atomic rotation guard: only the request that flips revoked_at mints the next pair; a
+            // concurrent duplicate sees 0 rows and gets invalid_grant (same outcome as the grace path).
+            if (tokenDao.revoke(row.tokenHash(), REASON_ROTATED) != 1) {
                 throw new BadRequestException(ERROR_INVALID_GRANT);
             }
-
-            if (!row.expiresAt().isAfter(now)) {
-                throw new BadRequestException(ERROR_INVALID_GRANT);
-            }
-
-            if (row.revokedAt() != null) {
-                boolean benignRetry = REASON_ROTATED.equals(row.revokedReason())
-                        && !now.isAfter(row.revokedAt().plus(config().getRefreshRotationGrace()));
-                if (!benignRetry) {
-                    tokenDao.revokeFamily(row.familyId(), REASON_REUSE);
-                }
-                throw new BadRequestException(ERROR_INVALID_GRANT);
-            }
-
-            String accessToken = McpOAuthTokens.generateAccessToken();
-            String newRefreshToken = McpOAuthTokens.generateRefreshToken();
 
             tokenDao.save(McpOAuthToken.builder()
                     .tokenHash(McpOAuthTokens.hash(accessToken))
@@ -177,8 +186,6 @@ public class McpOAuthService {
                     .rotatedFrom(row.tokenHash())
                     .expiresAt(row.expiresAt())
                     .build());
-
-            tokenDao.revoke(row.tokenHash(), REASON_ROTATED);
 
             return buildTokenResponse(accessToken, newRefreshToken, row.workspaceId(), row.workspaceName());
         });

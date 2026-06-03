@@ -54,11 +54,29 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
         });
     }
 
+    // Field caps mirror the mcp_oauth_clients column sizes so oversized DCR metadata fails as a
+    // proper invalid_client_metadata 400 instead of a raw SQL error.
+    private static final int MAX_REDIRECT_URIS = 10;
+    private static final int MAX_NAME_LENGTH = 255;
+    private static final int MAX_URI_LENGTH = 2048;
+
     private void validate(ClientRegistrationRequest request) {
         if (CollectionUtils.isEmpty(request.redirectUris())) {
             throw new BadRequestException("redirect_uris is required");
         }
+        if (request.redirectUris().size() > MAX_REDIRECT_URIS) {
+            throw new BadRequestException("too many redirect_uris (max %d)".formatted(MAX_REDIRECT_URIS));
+        }
+        if (request.clientName() != null && request.clientName().length() > MAX_NAME_LENGTH) {
+            throw new BadRequestException("client_name too long (max %d)".formatted(MAX_NAME_LENGTH));
+        }
+        if (request.logoUri() != null && request.logoUri().length() > MAX_URI_LENGTH) {
+            throw new BadRequestException("logo_uri too long (max %d)".formatted(MAX_URI_LENGTH));
+        }
         for (String redirectUri : request.redirectUris()) {
+            if (redirectUri.length() > MAX_URI_LENGTH) {
+                throw new BadRequestException("redirect_uri too long (max %d)".formatted(MAX_URI_LENGTH));
+            }
             try {
                 if (!new URI(redirectUri).isAbsolute()) {
                     throw new BadRequestException("redirect_uri must be absolute: " + redirectUri);
