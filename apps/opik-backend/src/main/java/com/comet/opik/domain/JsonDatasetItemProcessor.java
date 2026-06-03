@@ -32,7 +32,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -301,7 +300,7 @@ public class JsonDatasetItemProcessor {
 
         Map<String, JsonNode> data = new LinkedHashMap<>();
         for (Map.Entry<String, JsonNode> entry : node.properties()) {
-          data.put(entry.getKey(), entry.getValue());
+            data.put(entry.getKey(), entry.getValue());
         }
 
         if (data.isEmpty()) {
