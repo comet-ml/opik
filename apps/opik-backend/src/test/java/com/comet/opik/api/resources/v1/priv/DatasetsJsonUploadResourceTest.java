@@ -280,6 +280,17 @@ class DatasetsJsonUploadResourceTest {
     }
 
     @Test
+    @DisplayName("Nonexistent dataset -> 404 Not Found")
+    void uploadToNonexistentDataset__notFound() {
+        UUID datasetId = UUID.randomUUID();
+        String jsonContent = "[{\"input\":\"q1\",\"expected_output\":\"a1\"}]";
+
+        try (var response = uploadJsonFile(datasetId, jsonContent, "JSON")) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
     @DisplayName("Empty file -> 400 Bad Request")
     void uploadEmptyFile__rejected() {
         UUID datasetId = createDataset();
@@ -380,7 +391,7 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertProcessingThenCompletedWithItems(datasetId, 1, items -> {
-            assertThat(items.get(0).data().get("input").asText()).isEqualTo("q1");
+            assertThat(items.getFirst().data().get("input").asText()).isEqualTo("q1");
         });
     }
 
@@ -443,8 +454,11 @@ class DatasetsJsonUploadResourceTest {
 
     private void assertProcessingThenCompletedWithItems(UUID datasetId, int expectedCount,
             java.util.function.Consumer<List<DatasetItem>> itemsCheck) {
+        // Accept PROCESSING or COMPLETED here: on a fast machine the boundedElastic worker
+        // can flip the status to COMPLETED before this read lands. Either value proves the
+        // upload was accepted and is not in a terminal failure state.
         Dataset afterUpload = datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE);
-        assertThat(afterUpload.status()).isEqualTo(DatasetStatus.PROCESSING);
+        assertThat(afterUpload.status()).isIn(DatasetStatus.PROCESSING, DatasetStatus.COMPLETED);
 
         Awaitility.await()
                 .atMost(Duration.ofSeconds(15))
