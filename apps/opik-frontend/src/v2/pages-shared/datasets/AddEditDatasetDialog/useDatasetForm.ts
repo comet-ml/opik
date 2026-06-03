@@ -60,6 +60,7 @@ const useDatasetForm = ({
   const { mutate: changesMutate } = useDatasetItemChangesMutation();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | undefined>(undefined);
   const [uploadError, setUploadError] = useState<string | undefined>(undefined);
   const [uploadFormat, setUploadFormat] = useState<UploadFormat | undefined>(
@@ -108,6 +109,7 @@ const useDatasetForm = ({
         setRunsPerItem(1);
         setPassThreshold(1);
         setAssertions([]);
+        setIsSubmitting(false);
         if (!dataset) {
           setName("");
           setDescription("");
@@ -248,9 +250,14 @@ const useDatasetForm = ({
         onDatasetCreated?.(newDataset);
       };
 
-      const finalize = onCreateSuccess
-        ? () => onCreateSuccess(newDataset, navigateToDataset)
-        : navigateToDataset;
+      const finalize = () => {
+        setIsSubmitting(false);
+        if (onCreateSuccess) {
+          onCreateSuccess(newDataset, navigateToDataset);
+        } else {
+          navigateToDataset();
+        }
+      };
 
       if (hasValidUploadFile && newDataset.id) {
         const uploadThenFinalize = () => {
@@ -277,6 +284,7 @@ const useDatasetForm = ({
 
   const handleMutationError = useCallback(
     (error: AxiosError, action: "create" | "update") => {
+      setIsSubmitting(false);
       const statusCode = get(error, ["response", "status"]);
       const errorMessage =
         get(error, ["response", "data", "message"]) ||
@@ -299,6 +307,7 @@ const useDatasetForm = ({
   );
 
   const submitHandler = useCallback(() => {
+    setIsSubmitting(true);
     if (isEdit) {
       updateMutate(
         {
@@ -310,6 +319,7 @@ const useDatasetForm = ({
         },
         {
           onSuccess: () => {
+            setIsSubmitting(false);
             setOpen(false);
           },
           onError: (error: AxiosError) => handleMutationError(error, "update"),
@@ -387,6 +397,7 @@ const useDatasetForm = ({
     uploadFormat,
     isEdit,
     isValid,
+    isSubmitting,
     confirmOpen,
     setConfirmOpen,
     fileSizeLimit,

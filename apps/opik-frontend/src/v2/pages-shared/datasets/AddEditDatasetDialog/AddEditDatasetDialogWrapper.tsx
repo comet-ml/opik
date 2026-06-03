@@ -12,6 +12,7 @@ import {
 } from "@/ui/dialog";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
+import { Spinner } from "@/ui/spinner";
 import { Textarea } from "@/ui/textarea";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -43,6 +44,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
     uploadFormat,
     isEdit,
     isValid,
+    isSubmitting,
     confirmOpen,
     setConfirmOpen,
     fileSizeLimit,
@@ -75,7 +77,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
                 setNameError(undefined);
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && isValid) {
+                if (event.key === "Enter" && isValid && !isSubmitting) {
                   event.preventDefault();
                   uploadError ? setConfirmOpen(true) : submitHandler();
                 }
@@ -120,14 +122,17 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
         </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="outline" disabled={isSubmitting}>
+              Cancel
+            </Button>
           </DialogClose>
           <Button
             type="submit"
-            disabled={!isValid}
+            disabled={!isValid || isSubmitting}
             onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
           >
-            {buttonText}
+            {isSubmitting && <Spinner size="small" className="mr-2" />}
+            {isSubmitting ? `${buttonText}...` : buttonText}
           </Button>
         </DialogFooter>
       </DialogContent>

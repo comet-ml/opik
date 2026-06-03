@@ -19,6 +19,7 @@ import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/shared/CodeHighlighter/CodeHighlighter";
 
+import { Spinner } from "@/ui/spinner";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
@@ -113,6 +114,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
     uploadFile,
     uploadError,
     uploadFormat,
+    isSubmitting,
     confirmOpen,
     setConfirmOpen,
     fileSizeLimit,
@@ -394,17 +396,24 @@ const CreateDatasetSidebar: React.FunctionComponent<
           <Button
             variant="outline"
             onClick={() => setStep(Step.NAME_DESCRIPTION)}
+            disabled={isSubmitting}
           >
             Back
           </Button>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleClose}>
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
             <Button
+              disabled={isSubmitting}
               onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
             >
-              Create
+              {isSubmitting && <Spinner size="small" className="mr-2" />}
+              {isSubmitting ? "Creating..." : "Create"}
             </Button>
           </div>
         </div>
