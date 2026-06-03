@@ -82,7 +82,7 @@ data:
     {{- range $name,$limit := .Values.component.frontend.throttling }}
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
     {{- end }}
-    
+
     server {
         listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
         server_name _;
@@ -93,7 +93,7 @@ data:
         client_max_body_size {{ .Values.component.frontend.clientMaxBodySize | default "500M" }};
         client_header_buffer_size 16k;
         large_client_header_buffers 4 64k;
-        
+
         # Add custom header to identify this nginx instance in multi-proxy setups
         add_header X-Opik-Nginx "frontend" always;
         # Add trace ID header for OpenTelemetry
@@ -125,7 +125,7 @@ data:
         add_header {{ $name }} {{ $value | squote }} always;
         {{- end }}
         {{- end }}
-        
+
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
         # Dedicated healthcheck endpoint
         # Returns 200 OK if nginx is running and can serve requests
@@ -154,13 +154,13 @@ data:
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }
-        
+
         location {{ $rootPath }}/api/ {
           try_files /dev/null @api;
         }
         {{- if .Values.mcpOAuth.enabled }}
 
-        # --- MCP OAuth (OPIK-6666) — Option B issuer at {{ $rootPath | default "/" }} -------
+        # --- MCP OAuth (OPIK-6666) — issuer at {{ $rootPath | default "/" }} -------
         # AS endpoints are mounted directly at /oauth/* on opik-backend
         # (no /api prefix in @Path). The exact-match `consent` route MUST
         # come before the prefix block — nginx exact-match wins, so the
@@ -196,7 +196,7 @@ data:
           proxy_set_header X-Forwarded-Proto $scheme;
         }
         {{- if .Values.mcpOAuth.opikMcpUpstream.enabled }}
-        # --- MCP resource server (Flavor 5: hosted opik-mcp) -----------------
+        # --- MCP resource server (hosted/in-cluster opik-mcp) ----------------
         # SSE-friendly: buffering off, long read timeout, bearer + workspace
         # headers pass through verbatim so opik-mcp can forward them to the
         # backend data API. The /api prefix is preserved on the upstream
