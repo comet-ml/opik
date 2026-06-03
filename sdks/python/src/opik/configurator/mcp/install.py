@@ -76,7 +76,7 @@ def setup_mcp_server(
     selected_targets = _select_targets(detected_targets)
     if len(selected_targets) == 0:
         LOGGER.info(
-            "Skipped MCP server setup. Run `opik mcp install` anytime to set it up."
+            "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
         )
         return
 
@@ -149,7 +149,7 @@ def _create_server_spec(
             return None, (
                 "The Opik MCP server runs via `uvx`, which was not found on your "
                 f"PATH. Install uv ({UV_INSTALL_DOCS_URL}), then run `opik mcp "
-                "install` to set it up. uvx fetches opik-mcp and a compatible "
+                "configure` to set it up. uvx fetches opik-mcp and a compatible "
                 "Python automatically."
             )
 

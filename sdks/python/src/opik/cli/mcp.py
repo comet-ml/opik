@@ -65,8 +65,8 @@ def mcp() -> None:
     """Manage the Opik MCP server integration."""
 
 
-@mcp.command(name="install")
-def install() -> None:
+@mcp.command(name="configure")
+def configure() -> None:
     """Register the Opik MCP server with your AI assistant(s).
 
     Reuses your existing Opik configuration (~/.opik.config), so run
@@ -74,7 +74,7 @@ def install() -> None:
     """
     if not interactive_helpers.is_interactive():
         raise click.ClickException(
-            "`opik mcp install` needs an interactive terminal to pick your AI host."
+            "`opik mcp configure` needs an interactive terminal to pick your AI host."
         )
 
     params = _resolve_setup_params(OpikConfig())
@@ -84,7 +84,7 @@ def install() -> None:
             "Opik is not configured yet. Configure it now?", default=True
         ):
             raise click.ClickException(
-                "Run `opik configure` first, then `opik mcp install`."
+                "Run `opik configure` first, then `opik mcp configure`."
             )
         # Skip configure's own MCP prompt — we install right after.
         run_interactive_configure(install_mcp=False)

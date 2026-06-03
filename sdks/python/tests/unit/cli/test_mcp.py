@@ -1,4 +1,4 @@
-"""Tests for the ``opik mcp install`` command."""
+"""Tests for the ``opik mcp configure`` command."""
 
 from unittest.mock import patch
 
@@ -57,7 +57,7 @@ class TestInstallCommand:
             ),
             patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "install"])
+            result = runner.invoke(cli, ["mcp", "configure"])
 
         assert result.exit_code == 0
         setup_spy.assert_called_once()
@@ -72,7 +72,7 @@ class TestInstallCommand:
             ),
             patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "install"])
+            result = runner.invoke(cli, ["mcp", "configure"])
 
         assert result.exit_code != 0
         assert "interactive terminal" in result.output
@@ -88,7 +88,7 @@ class TestInstallCommand:
             patch.object(mcp_cli, "run_interactive_configure") as configure_spy,
             patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "install"], input="n\n")
+            result = runner.invoke(cli, ["mcp", "configure"], input="n\n")
 
         assert result.exit_code != 0
         assert "opik configure" in result.output
@@ -106,7 +106,7 @@ class TestInstallCommand:
             patch.object(mcp_cli, "run_interactive_configure") as configure_spy,
             patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "install"], input="y\n")
+            result = runner.invoke(cli, ["mcp", "configure"], input="y\n")
 
         assert result.exit_code == 0
         configure_spy.assert_called_once_with(install_mcp=False)
@@ -128,7 +128,7 @@ class TestInstallCommand:
             ),
             patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "install"])
+            result = runner.invoke(cli, ["mcp", "configure"])
 
         assert result.exit_code == 0
         setup_spy.assert_called_once()
