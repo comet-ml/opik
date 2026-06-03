@@ -123,7 +123,8 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         "user",
     ] + server_spec.to_claude_add_args()
 
-    result = subprocess.run(command, capture_output=True, text=True)
+    # Let `claude mcp add` print its own output so the user sees the result.
+    result = subprocess.run(command)
     if result.returncode == 0:
         return InstallResult(
             target_display_name="Claude Code",
@@ -134,7 +135,7 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     return InstallResult(
         target_display_name="Claude Code",
         succeeded=False,
-        detail=f"`claude mcp add` failed: {result.stderr.strip() or result.stdout.strip()}",
+        detail=f"`claude mcp add` failed (exit {result.returncode}) — see output above",
     )
 
 

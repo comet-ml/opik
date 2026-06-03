@@ -103,16 +103,15 @@ def test_install_claude_code__cli_failure__reports_failure(monkeypatch):
     monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
 
     def fake_run(command, **kwargs):
-        if command[2] == "remove":
-            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-        return subprocess.CompletedProcess(command, 1, stdout="", stderr="boom")
+        return subprocess.CompletedProcess(command, 0 if command[2] == "remove" else 1)
 
     monkeypatch.setattr(targets.subprocess, "run", fake_run)
 
     result = targets._install_claude_code(SERVER_SPEC)
 
     assert result.succeeded is False
-    assert "boom" in result.detail
+    assert "`claude mcp add` failed" in result.detail
+    assert "exit 1" in result.detail
 
 
 def test_install_via_json_file__invalid_json__returns_manual_instructions(
