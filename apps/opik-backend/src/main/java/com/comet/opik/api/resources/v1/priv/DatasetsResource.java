@@ -20,6 +20,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.JsonUploadFormat;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.DatasetFilter;
@@ -40,6 +41,7 @@ import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.JsonDatasetItemProcessor;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -122,6 +124,7 @@ public class DatasetsResource {
     private final @NonNull Streamer streamer;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
+    private final @NonNull JsonDatasetItemProcessor jsonProcessor;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull CsvDatasetExportService csvExportService;
     private final @NonNull AnalyticsService analyticsService;
@@ -614,6 +617,40 @@ public class DatasetsResource {
         csvProcessor.processUploadedCsv(fileInputStream, datasetId, workspaceId, userName, visibility);
 
         log.info("CSV upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
+                workspaceId);
+
+        return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    @POST
+    @Path("/items/from-json")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @Operation(operationId = "createDatasetItemsFromJson", summary = "Create dataset items from JSON file", description = """
+            Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+            JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+            Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+            corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+            To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+            Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.""", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - JSON processing started"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromJson(
+            @FormDataParam("file") @NotNull InputStream fileInputStream,
+            @FormDataParam("dataset_id") @NotNull UUID datasetId,
+            @FormDataParam("format") @NotNull JsonUploadFormat format) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        Visibility visibility = requestContext.get().getVisibility();
+
+        log.info("JSON upload request for dataset '{}' on workspaceId '{}', format '{}'",
+                datasetId, workspaceId, format);
+
+        jsonProcessor.processUploadedJson(fileInputStream, datasetId, workspaceId, userName, visibility, format);
+
+        log.info("JSON upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
                 workspaceId);
 
         return Response.status(Response.Status.ACCEPTED).build();
