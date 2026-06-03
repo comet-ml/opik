@@ -380,19 +380,14 @@ public interface DatasetVersionDAO {
     int updateChangeDescription(@Bind("id") UUID id, @Bind("change_description") String changeDescription,
             @Bind("last_updated_by") String lastUpdatedBy, @Bind("workspace_id") String workspaceId);
 
+    // 'latest' is always the max-id version, so its version number is the dataset's total count;
+    // COUNT avoids a ROW_NUMBER() window over every version (on-disk temp table at scale).
     @SqlQuery("""
-            WITH version_sequences AS (
-                SELECT
-                    id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
-                FROM dataset_versions
-                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
-            )
             SELECT
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                CONCAT('v', vs.seq_num) AS version_name,
+                CONCAT('v', vc.version_count) AS version_name,
                 dv.items_total,
                 dv.items_added,
                 dv.items_modified,
@@ -408,12 +403,21 @@ public interface DatasetVersionDAO {
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 true AS is_latest
             FROM dataset_versions AS dv
-            INNER JOIN version_sequences vs ON dv.id = vs.id
+            INNER JOIN dataset_version_tags dvt
+                ON dvt.workspace_id = dv.workspace_id
+                AND dvt.dataset_id = dv.dataset_id
+                AND dvt.version_id = dv.id
+                AND dvt.tag = 'latest'
             INNER JOIN (
+                SELECT dataset_id, COUNT(*) AS version_count
+                FROM dataset_versions
+                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
+                GROUP BY dataset_id
+            ) AS vc ON vc.dataset_id = dv.dataset_id
+            LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
-                WHERE tag = 'latest'
-                AND version_id in (select id from version_sequences)
+                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id IN (<dataset_ids>)
