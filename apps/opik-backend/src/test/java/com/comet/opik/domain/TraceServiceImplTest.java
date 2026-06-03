@@ -69,6 +69,9 @@ class TraceServiceImplTest {
     @Mock
     private AttachmentReinjectorService attachmentReinjectorService;
 
+    @Mock
+    private TraceSummaryDAO traceSummaryDAO;
+
     private final PodamFactory factory = new PodamFactoryImpl();
     private final TraceThreadSortingFactory traceThreadSortingFactory = new TraceThreadSortingFactory();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
@@ -89,7 +92,8 @@ class TraceServiceImplTest {
                 traceSortingFactory,
                 attachmentStripperService,
                 attachmentService,
-                attachmentReinjectorService);
+                attachmentReinjectorService,
+                traceSummaryDAO);
     }
 
     @Nested

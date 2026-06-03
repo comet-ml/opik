@@ -81,7 +81,9 @@ public record Trace(
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Experiment associated with this trace") ExperimentItemReference experiment,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) Source source,
         @JsonView({Trace.View.Public.class,
-                Trace.View.Write.class}) @Size(max = 150, message = "cannot exceed 150 characters") String environment) {
+                Trace.View.Write.class}) @Size(max = 150, message = "cannot exceed 150 characters") String environment,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "LLM-generated summary of the trace, included only when explicitly requested") String summary) {
 
     @Builder(toBuilder = true)
     public record TracePage(

@@ -18,6 +18,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
+import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
@@ -88,6 +89,44 @@ class TraceSummaryDAOTest {
         assertThat(stored).hasSize(2);
         assertThat(stored).containsEntry(summaryA.traceId(), summaryA.summary());
         assertThat(stored).containsEntry(summaryB.traceId(), summaryB.summary());
+    }
+
+    @Test
+    @DisplayName("when a summary exists for the trace, then findByTraceId returns it")
+    void findByTraceId__whenExists__thenReturnsSummary(TraceSummaryDAO traceSummaryDAO) {
+        var workspaceId = "workspace-" + UUID.randomUUID();
+        var summary = TraceSummary.builder()
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .summary("The user asked to summarize a document.")
+                .build();
+
+        traceSummaryDAO.batchInsert(List.of(summary))
+                .contextWrite(ctx -> withContext(ctx, workspaceId))
+                .block();
+
+        String found = traceSummaryDAO.findByTraceId(summary.traceId())
+                .contextWrite(ctx -> withContext(ctx, workspaceId))
+                .block();
+
+        assertThat(found).isEqualTo(summary.summary());
+    }
+
+    @Test
+    @DisplayName("when no summary exists for the trace, then findByTraceId is empty")
+    void findByTraceId__whenMissing__thenEmpty(TraceSummaryDAO traceSummaryDAO) {
+        var workspaceId = "workspace-" + UUID.randomUUID();
+
+        String found = traceSummaryDAO.findByTraceId(UUID.randomUUID())
+                .contextWrite(ctx -> withContext(ctx, workspaceId))
+                .block();
+
+        assertThat(found).isNull();
+    }
+
+    private Context withContext(Context ctx, String workspaceId) {
+        return ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                .put(RequestContext.USER_NAME, "user-" + UUID.randomUUID());
     }
 
     private Map<UUID, String> readByWorkspace(TransactionTemplateAsync templateAsync, String workspaceId) {

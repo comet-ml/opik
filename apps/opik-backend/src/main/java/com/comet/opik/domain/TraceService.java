@@ -82,6 +82,8 @@ public interface TraceService {
 
     Mono<Trace> get(UUID id, boolean stripAttachments);
 
+    Mono<Trace> get(UUID id, boolean stripAttachments, boolean includeSummary);
+
     Flux<Trace> getByIds(List<UUID> ids);
 
     Mono<TraceDetails> getTraceDetailsById(UUID id);
@@ -128,6 +130,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
+    private final @NonNull TraceSummaryDAO traceSummaryDAO;
 
     @Override
     @WithSpan
@@ -433,9 +436,22 @@ class TraceServiceImpl implements TraceService {
 
     @WithSpan
     public Mono<Trace> get(@NonNull UUID id, boolean stripAttachments) {
+        return get(id, stripAttachments, false);
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Trace> get(@NonNull UUID id, boolean stripAttachments, boolean includeSummary) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))))
-                .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, !stripAttachments));
+                .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, !stripAttachments))
+                .flatMap(trace -> includeSummary ? withSummary(trace) : Mono.just(trace));
+    }
+
+    private Mono<Trace> withSummary(Trace trace) {
+        return traceSummaryDAO.findByTraceId(trace.id())
+                .map(summary -> trace.toBuilder().summary(summary).build())
+                .defaultIfEmpty(trace);
     }
 
     @Override

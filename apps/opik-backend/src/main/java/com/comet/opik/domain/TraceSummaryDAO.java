@@ -15,6 +15,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -22,6 +23,8 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 @ImplementedBy(TraceSummaryDAOImpl.class)
 public interface TraceSummaryDAO {
     Mono<Long> batchInsert(List<TraceSummary> summaries);
+
+    Mono<String> findByTraceId(UUID traceId);
 }
 
 @Singleton
@@ -51,6 +54,14 @@ class TraceSummaryDAOImpl implements TraceSummaryDAO {
             ;
             """;
 
+    private static final String SELECT_BY_TRACE_ID = """
+            SELECT summary
+            FROM trace_summaries FINAL
+            WHERE workspace_id = :workspace_id
+            AND id = :id
+            ;
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
@@ -67,6 +78,18 @@ class TraceSummaryDAOImpl implements TraceSummaryDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
+        });
+    }
+
+    @Override
+    public Mono<String> findByTraceId(@NonNull UUID traceId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_BY_TRACE_ID)
+                    .bind("id", traceId.toString());
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, metadata) -> row.get("summary", String.class)))
+                    .singleOrEmpty();
         });
     }
 

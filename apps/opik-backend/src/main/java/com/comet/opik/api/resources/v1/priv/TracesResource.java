@@ -252,14 +252,15 @@ public class TracesResource {
     @JsonView(Trace.View.Public.class)
     public Response getById(
             @PathParam("id") UUID id,
-            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments) {
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments,
+            @QueryParam("include_summary") @DefaultValue("false") @Schema(description = "If true, includes the LLM-generated trace summary; if false (default), the summary table is not queried") boolean includeSummary) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting trace by id '{}' on workspace_id '{}', stripAttachments '{}'", id,
-                workspaceId, stripAttachments);
+        log.info("Getting trace by id '{}' on workspace_id '{}', stripAttachments '{}', includeSummary '{}'", id,
+                workspaceId, stripAttachments, includeSummary);
 
-        Trace trace = service.get(id, stripAttachments)
+        Trace trace = service.get(id, stripAttachments, includeSummary)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
