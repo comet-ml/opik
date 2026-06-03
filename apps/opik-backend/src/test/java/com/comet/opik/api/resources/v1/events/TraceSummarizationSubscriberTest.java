@@ -1,11 +1,9 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TraceToSummarize;
 import com.comet.opik.domain.TraceSummaryService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.TraceSummaryConfig;
-import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,7 +12,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.UUID;
 
@@ -41,8 +38,6 @@ class TraceSummarizationSubscriberTest {
     @Mock
     private TraceSummaryService traceSummaryService;
 
-    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-
     private TraceSummarizationSubscriber subscriber;
 
     @BeforeEach
@@ -55,19 +50,18 @@ class TraceSummarizationSubscriberTest {
     }
 
     private TraceToSummarize message() {
-        var trace = podamFactory.manufacturePojo(Trace.class);
-        return TraceToSummarize.builder().trace(trace).workspaceId(WORKSPACE_ID).userName(USER).build();
+        return TraceToSummarize.builder().traceId(UUID.randomUUID()).workspaceId(WORKSPACE_ID).userName(USER).build();
     }
 
     @Test
     @DisplayName("processEvent delegates to the summary service for the message trace and workspace")
     void processEvent__delegatesToSummaryService() {
         var message = message();
-        when(traceSummaryService.summarize(eq(message.trace()), eq(WORKSPACE_ID))).thenReturn(Mono.empty());
+        when(traceSummaryService.summarize(eq(message.traceId()), eq(WORKSPACE_ID))).thenReturn(Mono.empty());
 
         subscriber.processEvent(message).block();
 
-        verify(traceSummaryService).summarize(message.trace(), WORKSPACE_ID);
+        verify(traceSummaryService).summarize(message.traceId(), WORKSPACE_ID);
     }
 
     @Test

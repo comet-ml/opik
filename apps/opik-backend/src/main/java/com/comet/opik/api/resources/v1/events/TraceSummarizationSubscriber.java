@@ -51,7 +51,7 @@ public class TraceSummarizationSubscriber extends BaseRedisSubscriber<TraceToSum
     @Override
     protected Mono<Void> processEvent(@NonNull TraceToSummarize message) {
         // Errors are intentionally NOT caught here: they propagate so BaseRedisSubscriber retries the message.
-        return traceSummaryService.summarize(message.trace(), message.workspaceId())
+        return traceSummaryService.summarize(message.traceId(), message.workspaceId())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName()));
     }

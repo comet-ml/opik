@@ -61,6 +61,16 @@ public final class TraceCompressor implements EntityCompressor {
     }
 
     /**
+     * Builds the adaptively-compressed composite for a one-shot trace summary (no read tool).
+     * Uses {@link PathAwareTruncator.SuffixStyle#BARE} since there's no cache to drill into, so a
+     * {@code use jq(...) to see full} pointer would be misleading.
+     */
+    public CompressionResult compressForSummary(@NonNull Trace trace, @NonNull List<Span> spans) {
+        var fullJson = buildFullJson(trace, spans);
+        return compress(fullJson, trace, spans, null, PathAwareTruncator.SuffixStyle.BARE);
+    }
+
+    /**
      * Variant that lets the caller pick the truncation suffix style. Pass
      * {@link PathAwareTruncator.SuffixStyle#BARE} when the cache itself was
      * capped, since the {@code use jq(...) to see full} pointer would be a

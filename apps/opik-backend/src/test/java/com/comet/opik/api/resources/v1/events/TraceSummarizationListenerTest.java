@@ -5,7 +5,6 @@ import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.events.TraceToSummarize;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
-import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.TraceSummaryPublisher;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -15,7 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -44,15 +42,12 @@ class TraceSummarizationListenerTest {
     private TraceSummaryPublisher traceSummaryPublisher;
 
     @Mock
-    private TraceService traceService;
-
-    @Mock
     private ServiceTogglesConfig serviceTogglesConfig;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private TraceSummarizationListener listener(double samplingRate) {
-        return new TraceSummarizationListener(traceSummaryPublisher, traceService, serviceTogglesConfig, samplingRate);
+        return new TraceSummarizationListener(traceSummaryPublisher, serviceTogglesConfig, samplingRate);
     }
 
     private Trace completeTrace() {
@@ -67,11 +62,10 @@ class TraceSummarizationListenerTest {
         listener(ALWAYS).onTracesCreated(new TracesCreated(List.of(completeTrace()), WORKSPACE_ID, USER));
 
         verifyNoInteractions(traceSummaryPublisher);
-        verifyNoInteractions(traceService);
     }
 
     @Test
-    @DisplayName("when created traces are complete and sampled, then enqueue only the complete ones")
+    @DisplayName("when created traces are complete and sampled, then enqueue only the complete ids")
     void onTracesCreated__whenCompleteAndSampled__thenEnqueueCompleteOnly() {
         when(serviceTogglesConfig.isTraceSummarizationEnabled()).thenReturn(true);
         when(traceSummaryPublisher.enqueue(anyList())).thenReturn(Mono.empty());
@@ -86,7 +80,7 @@ class TraceSummarizationListenerTest {
 
         List<TraceToSummarize> enqueued = captor.getValue();
         assertThat(enqueued).hasSize(1);
-        assertThat(enqueued.getFirst().trace().id()).isEqualTo(complete.id());
+        assertThat(enqueued.getFirst().traceId()).isEqualTo(complete.id());
         assertThat(enqueued.getFirst().workspaceId()).isEqualTo(WORKSPACE_ID);
         assertThat(enqueued.getFirst().userName()).isEqualTo(USER);
     }
@@ -103,7 +97,7 @@ class TraceSummarizationListenerTest {
     }
 
     @Test
-    @DisplayName("when updated trace has no end_time, then do not fetch or enqueue")
+    @DisplayName("when updated trace has no end_time, then do not enqueue")
     void onTracesUpdated__whenNoEndTime__thenDoNothing() {
         when(serviceTogglesConfig.isTraceSummarizationEnabled()).thenReturn(true);
 
@@ -111,38 +105,30 @@ class TraceSummarizationListenerTest {
         listener(ALWAYS).onTracesUpdated(new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(UUID.randomUUID()),
                 WORKSPACE_ID, USER, update));
 
-        verify(traceService, never()).getByIds(anyList());
         verify(traceSummaryPublisher, never()).enqueue(anyList());
     }
 
     @Test
-    @DisplayName("when update sets end_time and is sampled, then fetch ids and enqueue complete traces")
-    void onTracesUpdated__whenEndTimeSetAndSampled__thenFetchAndEnqueue() {
+    @DisplayName("when update sets end_time and is sampled, then enqueue the sampled ids")
+    void onTracesUpdated__whenEndTimeSetAndSampled__thenEnqueueIds() {
         when(serviceTogglesConfig.isTraceSummarizationEnabled()).thenReturn(true);
         when(traceSummaryPublisher.enqueue(anyList())).thenReturn(Mono.empty());
 
-        var complete = completeTrace();
-        var stillIncomplete = podamFactory.manufacturePojo(Trace.class).toBuilder().endTime(null).build();
-        when(traceService.getByIds(anyList())).thenReturn(Flux.just(complete, stillIncomplete));
-
-        var traceId = complete.id();
+        var traceId = UUID.randomUUID();
         var update = podamFactory.manufacturePojo(TraceUpdate.class).toBuilder().endTime(Instant.now()).build();
-        listener(ALWAYS).onTracesUpdated(new TracesUpdated(Set.of(complete.projectId()), Set.of(traceId),
+        listener(ALWAYS).onTracesUpdated(new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(traceId),
                 WORKSPACE_ID, USER, update));
 
-        var idsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(traceService, timeout(2_000)).getByIds(idsCaptor.capture());
-        assertThat(idsCaptor.getValue()).containsExactly(traceId);
+        var captor = ArgumentCaptor.forClass(List.class);
+        verify(traceSummaryPublisher, timeout(2_000)).enqueue(captor.capture());
 
-        var enqueueCaptor = ArgumentCaptor.forClass(List.class);
-        verify(traceSummaryPublisher, timeout(2_000)).enqueue(enqueueCaptor.capture());
-        List<TraceToSummarize> enqueued = enqueueCaptor.getValue();
+        List<TraceToSummarize> enqueued = captor.getValue();
         assertThat(enqueued).hasSize(1);
-        assertThat(enqueued.getFirst().trace().id()).isEqualTo(complete.id());
+        assertThat(enqueued.getFirst().traceId()).isEqualTo(traceId);
     }
 
     @Test
-    @DisplayName("when update is sampled out, then never fetch or enqueue")
+    @DisplayName("when update is sampled out, then never enqueue")
     void onTracesUpdated__whenSampledOut__thenDoNothing() {
         when(serviceTogglesConfig.isTraceSummarizationEnabled()).thenReturn(true);
 
@@ -150,7 +136,6 @@ class TraceSummarizationListenerTest {
         listener(NEVER).onTracesUpdated(new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(UUID.randomUUID()),
                 WORKSPACE_ID, USER, update));
 
-        verify(traceService, never()).getByIds(anyList());
         verify(traceSummaryPublisher, never()).enqueue(anyList());
     }
 }
