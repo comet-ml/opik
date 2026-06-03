@@ -47,13 +47,6 @@ data:
       keepalive 16;
     }
     {{- end }}
-    {{- if and .Values.mcpOAuth.enabled .Values.mcpOAuth.opikMcpUpstream.enabled }}
-    {{- $mcpService := required "mcpOAuth.opikMcpUpstream.serviceName must be set when mcpOAuth.opikMcpUpstream.enabled=true" .Values.mcpOAuth.opikMcpUpstream.serviceName }}
-    upstream opik-mcp {
-      server {{ $mcpService }}:{{ .Values.mcpOAuth.opikMcpUpstream.port }};
-      keepalive 16;
-    }
-    {{- end }}
 
     {{- range .Values.component.frontend.maps }}
     map {{ .source }} ${{ .variable }} {
@@ -195,46 +188,6 @@ data:
           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
           proxy_set_header X-Forwarded-Proto $scheme;
         }
-        {{- if .Values.mcpOAuth.opikMcpUpstream.enabled }}
-        # --- MCP resource server (hosted/in-cluster opik-mcp) ----------------
-        # SSE-friendly: buffering off, long read timeout, bearer + workspace
-        # headers pass through verbatim so opik-mcp can forward them to the
-        # backend data API. The /api prefix is preserved on the upstream
-        # because opik-mcp mounts /mcp at the application root and we route
-        # via the same `{{ $rootPath }}/api/v1/mcp` path here.
-        location @opik_mcp {
-          rewrite ^{{ $rootPath }}/api/(.*)$ /$1 break;
-          proxy_pass http://opik-mcp;
-          proxy_redirect off;
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          proxy_set_header X-Forwarded-Proto $scheme;
-          proxy_http_version 1.1;
-          proxy_set_header Connection "";
-          proxy_buffering off;
-          proxy_request_buffering off;
-          proxy_read_timeout 86400s;
-          proxy_send_timeout 86400s;
-        }
-        location ^~ {{ $rootPath }}/api/v1/mcp {
-          try_files /dev/null @opik_mcp;
-        }
-        # RFC 9728 protected-resource discovery — host-relative form.
-        location = /.well-known/oauth-protected-resource {
-          proxy_pass http://opik-mcp/.well-known/oauth-protected-resource;
-          proxy_redirect off;
-          proxy_set_header Host $host;
-        }
-        # RFC 9728 path-suffix form (resource URI = <host>{{ $rootPath }}/api/v1/mcp).
-        # opik-mcp only serves the host-relative form; rewrite before proxying.
-        location = /.well-known/oauth-protected-resource{{ $rootPath }}/api/v1/mcp {
-          rewrite ^.*$ /.well-known/oauth-protected-resource break;
-          proxy_pass http://opik-mcp;
-          proxy_redirect off;
-          proxy_set_header Host $host;
-        }
-        {{- end }}
         # --- end MCP OAuth -------------------------------------------------
         {{- end }}
 
