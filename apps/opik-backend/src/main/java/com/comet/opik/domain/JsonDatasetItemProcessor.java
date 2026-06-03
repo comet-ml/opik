@@ -228,8 +228,9 @@ public class JsonDatasetItemProcessor {
             }
 
             long totalProcessed = accumulator.finish();
-            log.info("Completed JSON array processing for dataset '{}', total items: '{}', batches: '{}'",
-                    datasetId, totalProcessed, accumulator.batchNumber());
+            log.info(
+                    "Completed JSON array processing for dataset '{}' on workspaceId '{}', userName '{}', total items: '{}', batches: '{}'",
+                    datasetId, workspaceId, userName, totalProcessed, accumulator.batchNumber());
             return totalProcessed;
         }
     }
@@ -276,8 +277,9 @@ public class JsonDatasetItemProcessor {
         }
 
         long totalProcessed = accumulator.finish();
-        log.info("Completed JSONL processing for dataset '{}', total items: '{}', batches: '{}'",
-                datasetId, totalProcessed, accumulator.batchNumber());
+        log.info(
+                "Completed JSONL processing for dataset '{}' on workspaceId '{}', userName '{}', total items: '{}', batches: '{}'",
+                datasetId, workspaceId, userName, totalProcessed, accumulator.batchNumber());
         return totalProcessed;
     }
 

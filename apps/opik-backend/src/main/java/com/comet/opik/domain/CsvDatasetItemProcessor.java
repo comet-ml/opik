@@ -185,8 +185,9 @@ public class CsvDatasetItemProcessor {
                 }
 
                 long totalProcessed = accumulator.finish();
-                log.info("Completed CSV processing for dataset '{}', total items: '{}', batches: '{}'",
-                        datasetId, totalProcessed, accumulator.batchNumber());
+                log.info(
+                        "Completed CSV processing for dataset '{}' on workspaceId '{}', userName '{}', total items: '{}', batches: '{}'",
+                        datasetId, workspaceId, userName, totalProcessed, accumulator.batchNumber());
                 return totalProcessed;
             } catch (IOException e) {
                 log.warn("Failed to process CSV file for dataset '{}'", datasetId, e);
