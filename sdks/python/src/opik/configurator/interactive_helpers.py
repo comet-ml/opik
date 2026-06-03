@@ -98,6 +98,21 @@ def ask_user_for_approval(message: str) -> bool:
         LOGGER.error("Wrong choice. Please try again.")
 
 
+def ask_user_for_approval_default_no(message: str) -> bool:
+    """Prompt the user for approval, defaulting to "no" on empty input.
+
+    Mirrors :func:`ask_user_for_approval` but treats an empty answer as a "no",
+    for opt-in steps that should not happen unless explicitly requested.
+    """
+    while True:
+        users_choice = input(message).strip().upper()
+        if users_choice in ("N", "NO", ""):
+            return False
+        if users_choice in ("Y", "YES"):
+            return True
+        LOGGER.error("Wrong choice. Please try again.")
+
+
 class DeploymentType(enum.Enum):
     CLOUD = (1, "Opik Cloud (default)")
     SELF_HOSTED = (2, "Self-hosted Comet platform")
