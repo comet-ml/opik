@@ -40,7 +40,7 @@ class _PromptVersionRow:
 
     Field set mirrors the Fern model: ``id``, ``prompt_id``, ``commit``,
     ``template`` (required), plus optional metadata / type / change_description
-    / tags / template_structure.
+    / tags / environments / template_structure.
     """
 
     def __init__(
@@ -54,6 +54,7 @@ class _PromptVersionRow:
         type: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        environments: Optional[List[str]] = None,
         template_structure: Optional[str] = "text",
     ) -> None:
         self.id = id
@@ -64,6 +65,7 @@ class _PromptVersionRow:
         self.type = type
         self.change_description = change_description
         self.tags = tags
+        self.environments = environments
         self.template_structure = template_structure
 
 

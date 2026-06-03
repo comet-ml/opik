@@ -77,6 +77,7 @@ def _seed_source_prompt_with_versions(
             type=spec.get("type"),
             change_description=spec.get("change_description"),
             tags=spec.get("tags"),
+            environments=spec.get("environments"),
         )
         created = rest_client.prompts.create_prompt_version(
             name=name,
@@ -156,3 +157,73 @@ class TestMigratePromptE2E:
         ]
         assert len(replay_records) == len(source_commits)
         assert all(a["status"] == "ok" for a in replay_records)
+
+    def test_environment_ownership_round_trips(
+        self,
+        opik_client: opik.Opik,
+        source_project_name: str,
+        target_project_name: str,
+        prompt_name: str,
+        tmp_path: Path,
+    ) -> None:
+        # A version that owns an environment on the source must own the
+        # same environment on the destination after migration. The BE
+        # accepts ``environments`` inline on create_prompt_version and
+        # auto-registers unknown names in the workspace registry, so the
+        # replay carries the set verbatim without a follow-up PATCH.
+        rest = opik_client.rest_client
+        environment_name = f"prod-{random_chars()}"
+        source_commits = _seed_source_prompt_with_versions(
+            rest,
+            name=prompt_name,
+            project_name=source_project_name,
+            version_specs=[
+                {"template": "hi {{name}}", "type": "mustache"},
+                {"template": "hello {{name}}", "type": "mustache"},
+                {
+                    "template": "greetings {{name}}",
+                    "type": "mustache",
+                    "environments": [environment_name],
+                },
+            ],
+        )
+
+        audit_log_path = tmp_path / "audit.json"
+        result = run_migrate_cli(
+            ["prompt", prompt_name, "--to-project", target_project_name],
+            audit_log_path=str(audit_log_path),
+        )
+        assert result.returncode == 0, (
+            f"migrate prompt failed: stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+
+        dest_page = rest.prompts.get_prompts(name=prompt_name, size=10)
+        assert dest_page.content, "destination prompt not found at original name"
+        dest_prompt = dest_page.content[0]
+
+        dest_versions_page = rest.prompts.get_prompt_versions(
+            id=dest_prompt.id, page=1, size=100
+        )
+        dest_versions = list(reversed(dest_versions_page.content or []))
+        dest_commits = [v.commit for v in dest_versions]
+        assert dest_commits == source_commits
+
+        # Exactly one destination version owns the environment, and it is
+        # the last one (the source owner), proving ownership round-tripped
+        # without leaking onto the env-less versions.
+        owners = [
+            v.commit
+            for v in dest_versions
+            if environment_name in (v.environments or [])
+        ]
+        assert owners == [source_commits[-1]]
+
+        audit = json.loads(audit_log_path.read_text())
+        env_records = [
+            a
+            for a in audit["actions"]
+            if a["type"] == "replay_prompt_version" and a.get("source_environments")
+        ]
+        assert len(env_records) == 1
+        assert env_records[0]["source_environments"] == [environment_name]
+        assert env_records[0]["target_environments"] == [environment_name]
