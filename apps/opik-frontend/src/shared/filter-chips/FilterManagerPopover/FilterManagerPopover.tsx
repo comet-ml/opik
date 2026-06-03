@@ -11,7 +11,6 @@ import { Separator } from "@/ui/separator";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { isSingleSelectApplied } from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip.logic";
-import { isPseudoSearchApplied } from "@/shared/filter-chips/chips/PseudoSearchChip/PseudoSearchChip.logic";
 import { isBooleanApplied } from "@/shared/filter-chips/chips/BooleanChip/BooleanChip.logic";
 import { isNumericApplied } from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
 import { isTimeApplied } from "@/shared/filter-chips/chips/TimeChip/TimeChip.logic";
@@ -22,7 +21,6 @@ import {
   ChipValue,
   ChipValueMap,
   NumericChipValue,
-  PseudoSearchChipValue,
   QueryBuilderChipValue,
   SingleSelectChipValue,
   TimeChipValue,
@@ -48,8 +46,6 @@ export const chipHasAppliedValue = (
   switch (definition.kind) {
     case "single-select":
       return isSingleSelectApplied(value as SingleSelectChipValue | undefined);
-    case "pseudo-search":
-      return isPseudoSearchApplied(value as PseudoSearchChipValue | undefined);
     case "boolean":
       return isBooleanApplied(value as BooleanChipValue | undefined);
     case "numeric":

@@ -1179,6 +1179,89 @@ class GetTracesByProjectResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
+        @DisplayName("When filtering by experiment_ids with IN, should return traces from all listed experiments")
+        void whenFilterExperimentIdsIn__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(project.name())
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, 1)
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
+                                    .projectName(project.name())
+                                    .traceId(trace.id())
+                                    .type(SpanType.general)
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var updatedTraces = traces.stream()
+                    .map(trace -> trace.toBuilder().spanCount(1).build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(project.name())
+                    .build());
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(UUID.randomUUID())
+                    .build();
+            var experiment1Id = experimentResourceClient.create(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(UUID.randomUUID())
+                    .build();
+            var experiment2Id = experimentResourceClient.create(experiment2, apiKey, workspaceName);
+
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment1Id)
+                    .traceId(updatedTraces.getFirst().id())
+                    .build();
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment2Id)
+                    .traceId(updatedTraces.get(1).id())
+                    .build();
+
+            experimentResourceClient.createExperimentItem(
+                    Set.of(experimentItem1, experimentItem2), apiKey, workspaceName);
+
+            // Filter by both experiment ids with the IN operator
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.EXPERIMENT_IDS)
+                    .operator(Operator.IN)
+                    .value("%s,%s".formatted(experiment1Id, experiment2Id))
+                    .build());
+
+            var expectedTraces = List.of(updatedTraces.getFirst(), updatedTraces.get(1));
+            var values = testAssertion.transformTestParams(updatedTraces, expectedTraces.reversed(),
+                    unexpectedTraces);
+
+            testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
         void whenFilterNameNotContains__thenReturnTracesFiltered(String endpoint,
                 TracePageTestAssertion testAssertion) {
 

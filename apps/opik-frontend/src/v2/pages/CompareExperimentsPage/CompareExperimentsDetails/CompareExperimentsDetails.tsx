@@ -19,7 +19,7 @@ import {
   SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
-import { generateExperimentIdFilter } from "@/lib/filters";
+import { generateExperimentIdsFilter } from "@/lib/filters";
 import { isTestSuiteExperiment } from "@/lib/experiments";
 import { LOGS_SOURCE } from "@/types/traces";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -49,7 +49,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
   }, [title, setBreadcrumbParam]);
 
   const experimentSourceFilters = useMemo(
-    () => generateExperimentIdFilter(experimentsIds[0]),
+    () => generateExperimentIdsFilter(experimentsIds),
     [experimentsIds],
   );
 

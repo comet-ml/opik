@@ -6,7 +6,6 @@ import {
   ChipValue,
   ChipValueMap,
   NumericChipValue,
-  PseudoSearchChipValue,
   QueryBuilderChipValue,
   SingleSelectChipValue,
   TimeChipValue,
@@ -27,12 +26,6 @@ const getFilterEventProps = (
         ...base,
         operator: "=",
         value: (value as SingleSelectChipValue).value,
-      };
-    case "pseudo-search":
-      return {
-        ...base,
-        operator: def.searchMode,
-        value: (value as PseudoSearchChipValue).value,
       };
     case "numeric": {
       const v = value as NumericChipValue;
