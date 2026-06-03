@@ -138,7 +138,7 @@ const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
           onUpdateFeedbackScore={onUpdateFeedbackScore}
           onDeleteFeedbackScore={onDeleteFeedbackScore}
           className="mt-4 px-4"
-          header={<FeedbackScoresEditor.Header isThread={true} />}
+          header={<FeedbackScoresEditor.Header title="Human review" />}
           footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
         />
 
