@@ -68,14 +68,23 @@ def _install_via_json_file(
             server_name=SERVER_NAME,
             server_block=server_spec.to_block(),
         )
-    except json.JSONDecodeError:
+    except ValueError:  # JSONDecodeError, or non-object JSON root (see json_config)
         return InstallResult(
             target_display_name=display_name,
             succeeded=False,
             detail=(
-                f"{config_path} exists but is not valid JSON (it may contain "
-                f"comments). Add this entry manually:\n"
-                f"{_manual_block_text(top_level_key, server_spec)}"
+                f"{config_path} exists but is not a valid JSON object (it may "
+                f"contain comments or a non-object value). Add this entry "
+                f"manually:\n{_manual_block_text(top_level_key, server_spec)}"
+            ),
+        )
+    except OSError as error:
+        return InstallResult(
+            target_display_name=display_name,
+            succeeded=False,
+            detail=(
+                f"Could not write {config_path}: {error}. Add this entry "
+                f"manually:\n{_manual_block_text(top_level_key, server_spec)}"
             ),
         )
 

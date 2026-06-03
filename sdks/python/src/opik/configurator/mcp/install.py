@@ -101,16 +101,25 @@ def _prefetch_opik_mcp() -> None:
         return
 
     LOGGER.info("Pre-fetching the Opik MCP server (uv tool install opik-mcp)...")
-    result = subprocess.run(
-        [uv_executable, "tool", "install", "opik-mcp"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
+    # Stream uv's own output (download/build progress, and any error detail)
+    # straight to the terminal rather than capturing it — the install can take a
+    # while, and hiding its logs leaves the user staring at a frozen prompt.
+    try:
+        result = subprocess.run([uv_executable, "tool", "install", "opik-mcp"])
+    except OSError as error:
         LOGGER.warning(
             "Could not pre-fetch opik-mcp: %s. Your AI host will download it on "
             "first use instead.",
-            result.stderr.strip() or "`uv tool install opik-mcp` failed",
+            error,
+        )
+        return
+
+    if result.returncode != 0:
+        LOGGER.warning(
+            "Could not pre-fetch opik-mcp (`uv tool install opik-mcp` exited %s, "
+            "see its output above). Your AI host will download it on first use "
+            "instead.",
+            result.returncode,
         )
 
 

@@ -86,3 +86,32 @@ def test_merge_server_into_json_file__invalid_json__raises(tmp_path):
             server_name="opik-mcp",
             server_block=SERVER_BLOCK,
         )
+
+
+def test_merge_server_into_json_file__non_object_root__raises_value_error(tmp_path):
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text('["not", "an", "object"]', encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        json_config.merge_server_into_json_file(
+            config_path=config_path,
+            top_level_key="mcpServers",
+            server_name="opik-mcp",
+            server_block=SERVER_BLOCK,
+        )
+
+
+def test_merge_server_into_json_file__empty_existing_file__treated_as_empty(tmp_path):
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text("", encoding="utf-8")
+
+    was_new = json_config.merge_server_into_json_file(
+        config_path=config_path,
+        top_level_key="mcpServers",
+        server_name="opik-mcp",
+        server_block=SERVER_BLOCK,
+    )
+
+    assert was_new is True
+    written = json.loads(config_path.read_text(encoding="utf-8"))
+    assert written["mcpServers"]["opik-mcp"] == SERVER_BLOCK

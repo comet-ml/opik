@@ -136,6 +136,47 @@ def test_setup_mcp_server__select_all__installs_every_detected_host(monkeypatch)
     cursor_spy.assert_called_once()
 
 
+def test_setup_mcp_server__comma_separated_selection__installs_each(monkeypatch):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
+    cursor_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    vscode_spy = mock.Mock(return_value=targets.InstallResult("VS Code", True, "Added"))
+    monkeypatch.setattr(
+        targets,
+        "HOST_TARGETS",
+        [
+            _target("Claude Code", True, claude_spy),
+            _target("Cursor", True, cursor_spy),
+            _target("VS Code Copilot", True, vscode_spy),
+        ],
+    )
+    monkeypatch.setattr("builtins.input", lambda message: "1,3")  # Claude + VS Code
+
+    install.setup_mcp_server(**_make_args())
+
+    claude_spy.assert_called_once()
+    vscode_spy.assert_called_once()
+    cursor_spy.assert_not_called()
+
+
+def test_setup_mcp_server__invalid_menu_choice_then_valid__retries(monkeypatch):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
+    cursor_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(
+        targets,
+        "HOST_TARGETS",
+        [_target("Claude Code", True, claude_spy), _target("Cursor", True, cursor_spy)],
+    )
+    # invalid (non-digit), out-of-range, then a valid single choice
+    monkeypatch.setattr("builtins.input", mock.Mock(side_effect=["x", "99", "2"]))
+
+    install.setup_mcp_server(**_make_args())
+
+    cursor_spy.assert_called_once()
+    claude_spy.assert_not_called()
+
+
 def test_setup_mcp_server__select_subset__installs_only_chosen(monkeypatch):
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
     claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
@@ -189,6 +230,20 @@ def test_setup_mcp_server__prefetch_failure__is_non_fatal(monkeypatch, prefetch_
     monkeypatch.setattr("builtins.input", lambda message: "y")
 
     install.setup_mcp_server(**_make_args())
+
+    install_spy.assert_called_once()
+
+
+def test_setup_mcp_server__prefetch_raises_oserror__is_non_fatal(
+    monkeypatch, prefetch_run
+):
+    prefetch_run.side_effect = OSError("uv vanished mid-flight")
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args())  # must not raise
 
     install_spy.assert_called_once()
 

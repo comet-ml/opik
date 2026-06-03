@@ -18,12 +18,18 @@ def merge_server_into_json_file(
     Returns ``True`` when the entry was newly added, ``False`` when an existing
     entry was overwritten.
 
-    Raises ``json.JSONDecodeError`` if the file exists but is not valid JSON (for
-    example a JSONC file with comments); the caller is expected to fall back to
-    printing manual instructions in that case.
+    Raises ``ValueError`` if the file exists but is not valid JSON (for example a
+    JSONC file with comments — a ``json.JSONDecodeError``) or parses to something
+    other than a JSON object; the caller is expected to fall back to printing
+    manual instructions in that case.
     """
     if config_path.exists() and config_path.stat().st_size > 0:
         existing_config = json.loads(config_path.read_text(encoding="utf-8"))
+        if not isinstance(existing_config, dict):
+            raise ValueError(
+                f"expected a JSON object at the root, got "
+                f"{type(existing_config).__name__}"
+            )
     else:
         existing_config = {}
 

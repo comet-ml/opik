@@ -134,3 +134,40 @@ def test_install_via_json_file__invalid_json__returns_manual_instructions(
     # the API key must not leak into the (logged) manual-setup instructions
     assert "some-key" not in result.detail
     assert "***REDACTED***" in result.detail
+
+
+def test_install_via_json_file__non_object_root__returns_manual_instructions(tmp_path):
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text('"a bare string"', encoding="utf-8")
+
+    result = targets._install_via_json_file(
+        config_path=config_path,
+        top_level_key="mcpServers",
+        display_name="Cursor",
+        server_spec=SERVER_SPEC,
+    )
+
+    assert result.succeeded is False
+    assert "manually" in result.detail
+    assert "some-key" not in result.detail
+
+
+def test_install_via_json_file__os_error__returns_failed_result(monkeypatch, tmp_path):
+    config_path = tmp_path / "mcp.json"
+
+    def boom(**kwargs):
+        raise PermissionError("read-only file system")
+
+    monkeypatch.setattr(targets.json_config, "merge_server_into_json_file", boom)
+
+    result = targets._install_via_json_file(
+        config_path=config_path,
+        top_level_key="mcpServers",
+        display_name="Cursor",
+        server_spec=SERVER_SPEC,
+    )
+
+    assert result.succeeded is False
+    assert "read-only file system" in result.detail
+    assert "manually" in result.detail
+    assert "some-key" not in result.detail
