@@ -37,6 +37,13 @@ public class McpOAuthConfig {
     @Valid @JsonProperty
     @NotNull private Duration refreshRotationGrace = Duration.ofSeconds(30);
 
+    // DCR (RFC 7591) is deliberately unauthenticated, so cap registrations per source IP per window.
+    @Valid @JsonProperty
+    private long registrationRateLimit = 20;
+
+    @Valid @JsonProperty
+    @NotNull private Duration registrationRateLimitDuration = Duration.ofHours(1);
+
     public String getIssuer() {
         return StringUtils.stripEnd(baseUrl, "/");
     }

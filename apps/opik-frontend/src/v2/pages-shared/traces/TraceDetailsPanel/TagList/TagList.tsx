@@ -83,7 +83,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       {...tagsProps}
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
-      size="sm"
+      size="md"
       className={className}
       canAdd={canLogTraceSpanThread}
       tagVariant={tagVariant}

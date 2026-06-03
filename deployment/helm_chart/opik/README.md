@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.0.55](https://img.shields.io/badge/Version-2.0.55-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.55](https://img.shields.io/badge/AppVersion-2.0.55-informational?style=flat-square)
+![Version: 2.0.56](https://img.shields.io/badge/Version-2.0.56-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.56](https://img.shields.io/badge/AppVersion-2.0.56-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -442,8 +442,8 @@ Call opik api on http://localhost:5173/api
 | global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
-| mcpOAuth.enabled | bool | `false` | Render Option B nginx locations (AS endpoints, consent UI, RFC 8414 discovery URL). Off by default — existing installs unaffected. Turn on together with backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik). |
-| mcpOAuth.opikMcpUpstream.enabled | bool | `false` | Add an nginx upstream + routes for hosted opik-mcp (Flavor 5): /opik/api/v1/mcp -> the upstream service (SSE-friendly, long-idle timeout, header passthrough); /.well-known/oauth-protected-resource + path-suffix variant -> the upstream's RFC 9728 doc. Leave disabled when opik-mcp runs on the user's laptop (Flavor 4). |
+| mcpOAuth.enabled | bool | `false` | Render nginx locations (AS endpoints, consent UI, RFC 8414 discovery URL). Off by default — existing installs unaffected. Turn on together with backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik). |
+| mcpOAuth.opikMcpUpstream.enabled | bool | `false` | Add an nginx upstream + routes for an in-cluster (hosted) opik-mcp: /opik/api/v1/mcp -> the upstream service (SSE-friendly, long-idle timeout, header passthrough); /.well-known/oauth-protected-resource + path-suffix variant -> the upstream's RFC 9728 doc. Leave disabled when opik-mcp runs outside the cluster (e.g. on the user's machine). |
 | mcpOAuth.opikMcpUpstream.port | int | `8080` | Service port for opik-mcp's HTTP transport. |
 | mcpOAuth.opikMcpUpstream.serviceName | string | `""` | Kubernetes Service name of the hosted opik-mcp instance. Resolved via the cluster DNS; usually in the same namespace as the Opik release. |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
