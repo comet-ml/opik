@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -119,5 +120,72 @@ public class DatasetItemUploadSupport {
                 .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility))
                 .block();
         return items.size();
+    }
+
+    /**
+     * Creates a {@link BatchAccumulator} that buffers items up to {@link #getBatchSize()} and
+     * flushes through {@link #saveBatch} automatically. Callers feed items via
+     * {@link BatchAccumulator#add} and finalize with {@link BatchAccumulator#finish}, which
+     * returns the total item count saved.
+     */
+    public BatchAccumulator newBatchAccumulator(UUID datasetId, String workspaceId, String userName,
+            Visibility visibility) {
+        return new BatchAccumulator(this, datasetId, workspaceId, userName, visibility);
+    }
+
+    /**
+     * Buffers dataset items and flushes them in fixed-size batches through
+     * {@link DatasetItemUploadSupport#saveBatch}. Not thread-safe — single-producer use only.
+     */
+    public static final class BatchAccumulator {
+
+        private final DatasetItemUploadSupport support;
+        private final int batchSize;
+        private final UUID datasetId;
+        private final String workspaceId;
+        private final String userName;
+        private final Visibility visibility;
+        private final List<DatasetItem> buffer;
+        private long totalProcessed = 0;
+        private int batchNumber = 0;
+
+        private BatchAccumulator(DatasetItemUploadSupport support, UUID datasetId, String workspaceId,
+                String userName, Visibility visibility) {
+            this.support = support;
+            this.batchSize = support.getBatchSize();
+            this.datasetId = datasetId;
+            this.workspaceId = workspaceId;
+            this.userName = userName;
+            this.visibility = visibility;
+            this.buffer = new ArrayList<>(batchSize);
+        }
+
+        /** Adds an item; flushes automatically when the buffer reaches the configured batch size. */
+        public void add(DatasetItem item) {
+            buffer.add(item);
+            if (buffer.size() >= batchSize) {
+                flush(false);
+            }
+        }
+
+        /** Flushes any remaining items and returns the total saved. */
+        public long finish() {
+            if (!buffer.isEmpty()) {
+                flush(true);
+            }
+            return totalProcessed;
+        }
+
+        public int batchNumber() {
+            return batchNumber;
+        }
+
+        private void flush(boolean isFinal) {
+            batchNumber++;
+            log.debug("Saving {}batch '{}' for dataset '{}', batch size: '{}'",
+                    isFinal ? "final " : "", batchNumber, datasetId, buffer.size());
+            totalProcessed += support.saveBatch(buffer, datasetId, workspaceId, userName, visibility);
+            buffer.clear();
+        }
     }
 }

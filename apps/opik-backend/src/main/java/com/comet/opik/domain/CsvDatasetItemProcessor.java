@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.domain.DatasetItemUploadSupport.BatchAccumulator;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.inject.Inject;
@@ -26,7 +27,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -147,12 +147,9 @@ public class CsvDatasetItemProcessor {
                     throw new BadRequestException("CSV file must contain headers");
                 }
 
-                int batchSize = uploadSupport.getBatchSize();
                 int logFrequency = uploadSupport.getLogFrequency();
-
-                List<DatasetItem> batch = new ArrayList<>(batchSize);
-                long totalProcessed = 0;
-                int batchNumber = 0;
+                BatchAccumulator accumulator = uploadSupport.newBatchAccumulator(datasetId, workspaceId, userName,
+                        visibility);
                 long recordCount = 0;
                 boolean hasDataRows = false;
 
@@ -180,30 +177,16 @@ public class CsvDatasetItemProcessor {
                             .data(dataMap)
                             .build();
 
-                    batch.add(item);
-
-                    if (batch.size() >= batchSize) {
-                        batchNumber++;
-                        log.debug("Saving batch '{}' for dataset '{}', batch size: '{}'",
-                                batchNumber, datasetId, batch.size());
-                        totalProcessed += uploadSupport.saveBatch(batch, datasetId, workspaceId, userName, visibility);
-                        batch.clear();
-                    }
+                    accumulator.add(item);
                 }
 
                 if (!hasDataRows) {
                     throw new BadRequestException("CSV file contains no data rows");
                 }
 
-                if (!batch.isEmpty()) {
-                    batchNumber++;
-                    log.debug("Saving final batch '{}' for dataset '{}', batch size: '{}'",
-                            batchNumber, datasetId, batch.size());
-                    totalProcessed += uploadSupport.saveBatch(batch, datasetId, workspaceId, userName, visibility);
-                }
-
+                long totalProcessed = accumulator.finish();
                 log.info("Completed CSV processing for dataset '{}', total items: '{}', batches: '{}'",
-                        datasetId, totalProcessed, batchNumber);
+                        datasetId, totalProcessed, accumulator.batchNumber());
                 return totalProcessed;
             } catch (IOException e) {
                 log.warn("Failed to process CSV file for dataset '{}'", datasetId, e);
@@ -220,7 +203,7 @@ public class CsvDatasetItemProcessor {
                 .setIgnoreHeaderCase(true)
                 .setTrim(true)
                 .setIgnoreEmptyLines(true)
-                .build()
+                .get()
                 .parse(reader);
     }
 }

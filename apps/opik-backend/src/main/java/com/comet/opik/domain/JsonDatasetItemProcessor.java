@@ -6,6 +6,7 @@ import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.JsonUploadFormat;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.domain.DatasetItemUploadSupport.BatchAccumulator;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
@@ -31,7 +32,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -199,11 +199,9 @@ public class JsonDatasetItemProcessor {
                 throw new BadRequestException("JSON file must contain a top-level array of objects");
             }
 
-            int batchSize = uploadSupport.getBatchSize();
             int logFrequency = uploadSupport.getLogFrequency();
-            List<DatasetItem> batch = new ArrayList<>(batchSize);
-            long totalProcessed = 0;
-            int batchNumber = 0;
+            BatchAccumulator accumulator = uploadSupport.newBatchAccumulator(datasetId, workspaceId, userName,
+                    visibility);
             long rowIndex = 0;
 
             JsonToken token;
@@ -223,30 +221,16 @@ public class JsonDatasetItemProcessor {
                     log.debug("Processing element '{}' for dataset '{}'", rowIndex, datasetId);
                 }
 
-                batch.add(buildDatasetItem((ObjectNode) node, rowIndex));
-
-                if (batch.size() >= batchSize) {
-                    batchNumber++;
-                    log.debug("Saving batch '{}' for dataset '{}', batch size: '{}'",
-                            batchNumber, datasetId, batch.size());
-                    totalProcessed += uploadSupport.saveBatch(batch, datasetId, workspaceId, userName, visibility);
-                    batch.clear();
-                }
+                accumulator.add(buildDatasetItem((ObjectNode) node, rowIndex));
             }
 
             if (rowIndex == 0) {
                 throw new BadRequestException("JSON file contains no items");
             }
 
-            if (!batch.isEmpty()) {
-                batchNumber++;
-                log.debug("Saving final batch '{}' for dataset '{}', batch size: '{}'",
-                        batchNumber, datasetId, batch.size());
-                totalProcessed += uploadSupport.saveBatch(batch, datasetId, workspaceId, userName, visibility);
-            }
-
+            long totalProcessed = accumulator.finish();
             log.info("Completed JSON array processing for dataset '{}', total items: '{}', batches: '{}'",
-                    datasetId, totalProcessed, batchNumber);
+                    datasetId, totalProcessed, accumulator.batchNumber());
             return totalProcessed;
         }
     }
@@ -254,11 +238,8 @@ public class JsonDatasetItemProcessor {
     private long processJsonLines(InputStreamReader reader, UUID datasetId, String workspaceId,
             String userName, Visibility visibility) throws IOException {
         ObjectMapper mapper = JsonUtils.getMapper();
-        int batchSize = uploadSupport.getBatchSize();
         int logFrequency = uploadSupport.getLogFrequency();
-        List<DatasetItem> batch = new ArrayList<>(batchSize);
-        long totalProcessed = 0;
-        int batchNumber = 0;
+        BatchAccumulator accumulator = uploadSupport.newBatchAccumulator(datasetId, workspaceId, userName, visibility);
         long lineNumber = 0;
         long rowIndex = 0;
 
@@ -287,15 +268,7 @@ public class JsonDatasetItemProcessor {
                     log.debug("Processing line '{}' for dataset '{}'", lineNumber, datasetId);
                 }
 
-                batch.add(buildDatasetItem((ObjectNode) node, lineNumber));
-
-                if (batch.size() >= batchSize) {
-                    batchNumber++;
-                    log.debug("Saving batch '{}' for dataset '{}', batch size: '{}'",
-                            batchNumber, datasetId, batch.size());
-                    totalProcessed += uploadSupport.saveBatch(batch, datasetId, workspaceId, userName, visibility);
-                    batch.clear();
-                }
+                accumulator.add(buildDatasetItem((ObjectNode) node, lineNumber));
             }
         }
 
@@ -303,15 +276,9 @@ public class JsonDatasetItemProcessor {
             throw new BadRequestException("JSON file contains no items");
         }
 
-        if (!batch.isEmpty()) {
-            batchNumber++;
-            log.debug("Saving final batch '{}' for dataset '{}', batch size: '{}'",
-                    batchNumber, datasetId, batch.size());
-            totalProcessed += uploadSupport.saveBatch(batch, datasetId, workspaceId, userName, visibility);
-        }
-
+        long totalProcessed = accumulator.finish();
         log.info("Completed JSONL processing for dataset '{}', total items: '{}', batches: '{}'",
-                datasetId, totalProcessed, batchNumber);
+                datasetId, totalProcessed, accumulator.batchNumber());
         return totalProcessed;
     }
 
@@ -333,10 +300,8 @@ public class JsonDatasetItemProcessor {
                 RESERVED_EXECUTION_POLICY_SNAKE, RESERVED_EXECUTION_POLICY_CAMEL);
 
         Map<String, JsonNode> data = new LinkedHashMap<>();
-        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-        while (fields.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fields.next();
-            data.put(entry.getKey(), entry.getValue());
+        for (Map.Entry<String, JsonNode> entry : node.properties()) {
+          data.put(entry.getKey(), entry.getValue());
         }
 
         if (data.isEmpty()) {
