@@ -899,7 +899,11 @@ def test_opik_tracing_processor__litellm_vertex_ai_model__provider_is_google_ver
 
     input_message = "Write a haiku about recursion in programming."
     project_name = "opik-test-openai-agents"
-    litellm_model_id = "vertex_ai/gemini-2.0-flash"
+    # Pinned to the same Gemini version the rest of the test suite uses
+    # (``tests/llm_constants.GEMINI_FLASH``). ``gemini-2.0-flash`` was
+    # deprecated and is no longer available in the test GCP project,
+    # producing a ``NotFoundError`` from the Vertex AI publisher.
+    litellm_model_id = "vertex_ai/gemini-2.5-flash"
 
     set_trace_processors(processors=[OpikTracingProcessor(project_name)])
 
