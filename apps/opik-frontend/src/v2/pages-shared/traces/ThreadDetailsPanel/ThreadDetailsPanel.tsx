@@ -494,22 +494,26 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           </TabsList>
         </div>
         <TabsContent value="messages">
-          <MediaProvider media={media}>
-            {media.length > 0 && (
-              <div className="mb-4 px-4">
-                <Accordion type="multiple" defaultValue={["attachments"]}>
-                  <AttachmentsList media={media} />
-                </Accordion>
+          {isTracesPending ? (
+            <ThreadMessagesSkeleton />
+          ) : (
+            <MediaProvider media={media}>
+              {media.length > 0 && (
+                <div className="mb-4 px-4">
+                  <Accordion type="multiple" defaultValue={["attachments"]}>
+                    <AttachmentsList media={media} />
+                  </Accordion>
+                </div>
+              )}
+              <div style={bodyStyle}>
+                <TraceMessages
+                  traces={traces}
+                  handleOpenTrace={handleOpenTrace}
+                  traceId={traceId}
+                />
               </div>
-            )}
-            <div style={bodyStyle}>
-              <TraceMessages
-                traces={traces}
-                handleOpenTrace={handleOpenTrace}
-                traceId={traceId}
-              />
-            </div>
-          </MediaProvider>
+            </MediaProvider>
+          )}
         </TabsContent>
         <TabsContent value="feedback_scores">
           <div style={bodyStyle} className="overflow-y-auto px-4">
@@ -540,9 +544,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const renderContent = () => {
-    const isLoading = isThreadPending || (Boolean(thread) && isTracesPending);
-
-    if (!isLoading && !thread) {
+    if (!isThreadPending && !thread) {
       return <NoData />;
     }
 
@@ -563,7 +565,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                     dataType="threads"
                     buttonVariant="ghost"
                     buttonSize="2xs"
-                    disabled={isLoading}
+                    disabled={isThreadPending}
                   />
                 )}
                 {canAnnotateTraceSpanThread && !hideAnnotateActions && (
@@ -580,10 +582,10 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               </div>
               <div ref={ref} className="relative min-h-0 flex-auto">
                 <div className="p-4" data-panel-header="true">
-                  {isLoading ? <ThreadHeaderSkeleton /> : renderHeader()}
+                  {isThreadPending ? <ThreadHeaderSkeleton /> : renderHeader()}
                 </div>
                 <div data-panel-body="true">
-                  {isLoading ? <ThreadMessagesSkeleton /> : renderBody()}
+                  {isThreadPending ? <ThreadMessagesSkeleton /> : renderBody()}
                 </div>
               </div>
             </div>
