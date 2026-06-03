@@ -39,6 +39,7 @@ const PromptTagsList: React.FC<PromptTagsListProps> = ({
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
       align="start"
+      size="sm"
       tagVariant="lavender"
     />
   );
