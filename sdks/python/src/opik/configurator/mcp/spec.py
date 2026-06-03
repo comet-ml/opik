@@ -21,6 +21,28 @@ from opik.configurator.mcp import env as mcp_env
 
 SERVER_NAME = "opik-mcp"
 
+_SECRET_ENV_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "PASSWORD")
+_REDACTED = "***REDACTED***"
+
+
+def redact_block_for_display(block: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a copy of a server block with secret ``env`` values masked.
+
+    Used only for blocks that get logged or printed as manual-setup snippets —
+    never for the block actually written to a host config, which needs the real
+    values. Masks env keys ending in ``_KEY`` / ``_TOKEN`` / ``_SECRET`` /
+    ``PASSWORD`` (e.g. ``OPIK_API_KEY``).
+    """
+    env = block.get("env")
+    if not isinstance(env, dict):
+        return block
+
+    redacted_env = {
+        key: (_REDACTED if key.upper().endswith(_SECRET_ENV_SUFFIXES) else value)
+        for key, value in env.items()
+    }
+    return {**block, "env": redacted_env}
+
 
 class McpConnectionMode(enum.Enum):
     """How the configured MCP server connects to Opik.

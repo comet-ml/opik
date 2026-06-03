@@ -131,3 +131,6 @@ def test_install_via_json_file__invalid_json__returns_manual_instructions(
     assert result.succeeded is False
     assert "manually" in result.detail
     assert "opik-mcp" in result.detail
+    # the API key must not leak into the (logged) manual-setup instructions
+    assert "some-key" not in result.detail
+    assert "***REDACTED***" in result.detail

@@ -50,7 +50,8 @@ def _vscode_user_config_path() -> pathlib.Path:
 
 
 def _manual_block_text(top_level_key: str, server_spec: mcp_spec.McpServerSpec) -> str:
-    snippet = {top_level_key: {SERVER_NAME: server_spec.to_block()}}
+    block = mcp_spec.redact_block_for_display(server_spec.to_block())
+    snippet = {top_level_key: {SERVER_NAME: block}}
     return json.dumps(snippet, indent=2)
 
 

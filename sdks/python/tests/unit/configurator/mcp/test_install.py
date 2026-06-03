@@ -62,6 +62,21 @@ def test_setup_mcp_server__no_host_detected__does_not_install(monkeypatch):
     install_spy.assert_not_called()
 
 
+def test_setup_mcp_server__no_host__manual_config_redacts_api_key(monkeypatch):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    monkeypatch.setattr(
+        targets, "HOST_TARGETS", [_target("cursor", False, mock.Mock())]
+    )
+    logger_spy = mock.Mock()
+    monkeypatch.setattr(install, "LOGGER", logger_spy)
+
+    install.setup_mcp_server(**_make_args())
+
+    logged = " ".join(str(call) for call in logger_spy.info.call_args_list)
+    assert "some-key" not in logged
+    assert "***REDACTED***" in logged
+
+
 def test_setup_mcp_server__single_host_selected__installs(monkeypatch):
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
     install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))

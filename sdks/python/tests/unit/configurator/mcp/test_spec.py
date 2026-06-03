@@ -28,3 +28,19 @@ def test_stdio_server_spec__to_claude_add_args__transport_env_and_command():
 
     separator_index = args.index("--")
     assert args[separator_index + 1 :] == ["/usr/bin/uvx", "opik-mcp"]
+
+
+def test_redact_block_for_display__masks_secret_env_values():
+    block = _stdio_spec().to_block()
+
+    redacted = mcp_spec.redact_block_for_display(block)
+
+    assert redacted["env"]["OPIK_API_KEY"] == "***REDACTED***"
+    assert redacted["env"]["COMET_WORKSPACE"] == "ws"  # not a secret
+    # original block is untouched (the real config write must keep the key)
+    assert block["env"]["OPIK_API_KEY"] == "some-key"
+
+
+def test_redact_block_for_display__no_env_is_passthrough():
+    block = {"type": "http", "url": "https://example.com"}
+    assert mcp_spec.redact_block_for_display(block) == block

@@ -54,7 +54,14 @@ def setup_mcp_server(
     ]
     if len(detected_targets) == 0:
         manual_config = json.dumps(
-            {"mcpServers": {"opik-mcp": server_spec.to_block()}}, indent=2
+            {
+                "mcpServers": {
+                    "opik-mcp": mcp_spec.redact_block_for_display(
+                        server_spec.to_block()
+                    )
+                }
+            },
+            indent=2,
         )
         LOGGER.info(
             "No supported AI host (Claude Code, Cursor, VS Code) was detected.\n"
