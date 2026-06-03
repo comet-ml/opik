@@ -307,6 +307,7 @@ const useDatasetForm = ({
   );
 
   const submitHandler = useCallback(() => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     if (isEdit) {
       updateMutate(
@@ -342,6 +343,7 @@ const useDatasetForm = ({
       );
     }
   }, [
+    isSubmitting,
     isEdit,
     updateMutate,
     dataset,
