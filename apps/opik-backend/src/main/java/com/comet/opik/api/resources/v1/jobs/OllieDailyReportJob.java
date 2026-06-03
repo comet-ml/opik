@@ -63,7 +63,7 @@ public class OllieDailyReportJob extends Job {
                 JOB_LOCK,
                 Mono.fromRunnable(() -> triggerReports(startStr, endStr)),
                 Mono.defer(() -> {
-                    log.info("Could not acquire lock for daily report job, another instance is running");
+                    log.debug("Could not acquire lock for daily report job, another instance is running");
                     return Mono.empty();
                 }),
                 Duration.ofMinutes(5),

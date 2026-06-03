@@ -64,7 +64,7 @@ public class ReportsResource {
                 .block();
 
         if (reportId == null) {
-            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+            return Response.status(Response.Status.NOT_IMPLEMENTED)
                     .entity(Map.of("error", "Report generation is not configured"))
                     .build();
         }

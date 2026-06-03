@@ -323,7 +323,7 @@ export default function DailyBriefingSection() {
     window.opikBridge?.startConversation(action.prompt);
   };
 
-  const isLoading = isPreferencePending || (isEnabled && isReportsPending);
+  const isLoading = isPreferencePending || isReportsPending;
 
   return (
     <section>

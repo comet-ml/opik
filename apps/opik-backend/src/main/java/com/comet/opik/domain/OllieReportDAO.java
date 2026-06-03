@@ -13,6 +13,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RegisterConstructorMapper(OllieReport.class)
@@ -22,8 +23,10 @@ import java.util.UUID;
 interface OllieReportDAO {
 
     @SqlUpdate("INSERT INTO ollie_reports (id, workspace_id, project_id, status) " +
-            "VALUES (:id, :workspaceId, :projectId, :status)")
-    void insert(@Bind("id") UUID id,
+            "SELECT :id, :workspaceId, :projectId, :status " +
+            "WHERE NOT EXISTS (SELECT 1 FROM ollie_reports " +
+            "WHERE workspace_id = :workspaceId AND project_id = :projectId AND status = 'pending')")
+    int insert(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
             @Bind("status") String status);
@@ -53,9 +56,9 @@ interface OllieReportDAO {
     long countByProjectId(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
-    @SqlQuery("SELECT COUNT(*) FROM ollie_reports WHERE workspace_id = :workspaceId " +
-            "AND project_id = :projectId AND status = 'pending'")
-    long countPendingByProjectId(@Bind("workspaceId") String workspaceId,
+    @SqlQuery("SELECT id FROM ollie_reports WHERE workspace_id = :workspaceId " +
+            "AND project_id = :projectId AND status = 'pending' ORDER BY created_at DESC LIMIT 1")
+    Optional<UUID> findPendingByProjectId(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
     @SqlUpdate("UPDATE ollie_reports SET status = 'failed' " +

@@ -118,6 +118,7 @@ export default function SettingsDialog({
                   onChange={(e) => setLocalCustomPrompt(e.target.value)}
                   placeholder='e.g. "Focus on latency regressions and cost anomalies"'
                   rows={4}
+                  maxLength={5000}
                   className="min-h-0"
                 />
               </div>
