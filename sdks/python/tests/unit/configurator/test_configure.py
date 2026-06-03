@@ -2460,3 +2460,56 @@ class TestConfigure:
             "workspace", OPIK_WORKSPACE_DEFAULT_NAME
         )
         mock_update_session_config.assert_any_call("project_name", "new_project")
+
+
+class TestShouldSetupMcpServer:
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__install_mcp_false__returns_false(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=False)
+        assert configurator._should_setup_mcp_server() is False
+
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    def test_should_setup_mcp_server__non_interactive__returns_false(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=True)
+        assert configurator._should_setup_mcp_server() is False
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__install_mcp_true__returns_true(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=True)
+        assert configurator._should_setup_mcp_server() is True
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__automatic_approvals__returns_false_without_prompt(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=True)
+        assert configurator._should_setup_mcp_server() is False
+
+    @patch(
+        "opik.configurator.configure.ask_user_for_approval_default_no",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__interactive_prompt_yes__returns_true(
+        self, mock_is_interactive, mock_prompt
+    ):
+        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
+        assert configurator._should_setup_mcp_server() is True
+        mock_prompt.assert_called_once()
+
+    @patch(
+        "opik.configurator.configure.ask_user_for_approval_default_no",
+        return_value=False,
+    )
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__interactive_prompt_no__returns_false(
+        self, mock_is_interactive, mock_prompt
+    ):
+        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
+        assert configurator._should_setup_mcp_server() is False

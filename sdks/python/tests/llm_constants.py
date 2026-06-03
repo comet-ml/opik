@@ -66,6 +66,8 @@ AISUITE_ANTHROPIC_CLAUDE_SONNET = f"anthropic:{ANTHROPIC_CLAUDE_SONNET}"
 # Current default: Gemini 2.5 Flash — cheap, fast, widely supported.
 GEMINI_FLASH = "gemini-2.5-flash"
 
+LITELLM_VERTEX_GEMINI_FLASH = f"vertex_ai/{GEMINI_FLASH}"
+
 # ---------------------------------------------------------------------------
 # AWS Bedrock
 # ---------------------------------------------------------------------------
