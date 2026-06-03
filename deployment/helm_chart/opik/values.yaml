@@ -92,18 +92,6 @@ mcpOAuth:
   # together with backend MCP_OAUTH_ENABLED=true and a path-prefix
   # OPIK_BASE_URL (e.g. https://www.comet.com/opik).
   enabled: false
-  opikMcpUpstream:
-    # -- Add an nginx upstream + routes for an in-cluster (hosted) opik-mcp:
-    # /opik/api/v1/mcp -> the upstream service (SSE-friendly, long-idle
-    # timeout, header passthrough); /.well-known/oauth-protected-resource +
-    # path-suffix variant -> the upstream's RFC 9728 doc. Leave disabled
-    # when opik-mcp runs outside the cluster (e.g. on the user's machine).
-    enabled: false
-    # -- Kubernetes Service name of the hosted opik-mcp instance. Resolved
-    # via the cluster DNS; usually in the same namespace as the Opik release.
-    serviceName: ""
-    # -- Service port for opik-mcp's HTTP transport.
-    port: 8080
 
 component:
   backend:
