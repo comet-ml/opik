@@ -65,6 +65,7 @@ import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
+import ClaudeCodePage from "@/v2/pages/ClaudeCodePage/ClaudeCodePage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -250,6 +251,16 @@ const projectDashboardsIndexRoute = createRoute({
   path: "/",
   getParentRoute: () => projectDashboardsRoute,
   component: ProjectDashboardsPage,
+});
+
+// ----------- coding harness (project-scoped)
+const claudeCodeRoute = createRoute({
+  path: "/claude-code",
+  getParentRoute: () => projectScopedRoute,
+  component: ClaudeCodePage,
+  staticData: {
+    title: "Coding Harness",
+  },
 });
 
 // ----------- traces redirect (old path → /logs, handles ?tab= params)
@@ -631,6 +642,7 @@ const routeTree = rootRoute.addChildren([
           projectHomeRoute,
           ollieRoute,
           logsRoute,
+          claudeCodeRoute,
           projectDashboardsRoute.addChildren([projectDashboardsIndexRoute]),
           tracesRedirectRoute,
           experimentsRoute.addChildren([

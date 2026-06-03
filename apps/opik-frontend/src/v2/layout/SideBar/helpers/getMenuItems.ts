@@ -11,6 +11,7 @@ import {
   Rows3,
   Settings2,
   Sparkles,
+  Terminal,
   UserPen,
   Brain,
   GitBranch,
@@ -25,7 +26,6 @@ const getMenuItems = ({
   projectId,
   canViewExperiments,
   canViewDatasets,
-  canViewDashboards,
   canUsePlayground,
   canViewOptimizationRuns,
   showOlliePage,
@@ -76,18 +76,14 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
-        ...(canViewDashboards
-          ? [
-              {
-                id: "dashboards",
-                path: projectPath("/dashboards"),
-                type: MENU_ITEM_TYPE.router as const,
-                icon: ChartLine,
-                label: "Dashboards",
-                disabled: !projectPrefix,
-              },
-            ]
-          : []),
+        {
+          id: "claude_code",
+          path: projectPath("/claude-code"),
+          type: MENU_ITEM_TYPE.router,
+          icon: Terminal,
+          label: "Coding Harness",
+          disabled: !projectPrefix,
+        },
       ],
     },
     {
