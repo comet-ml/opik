@@ -32,10 +32,6 @@ client.set_prompt_environments("system-prompt", ["production"], version="v3")
 
 The Traces, Spans, and Threads tabs now have a redesigned filter bar that makes it faster to narrow down what you're looking at. Filters appear as chips directly in the toolbar — pick a field, set a value, and the table updates instantly. Frequently-used filters can be **pinned** to the bar so they're always one click away, and filter state is preserved in the URL so you can share an exact filtered view with a teammate.
 
-<Frame>
-  <img src="/img/v2/observability/logs-filter-chips.png" alt="Logs view showing the new chip-based filter bar with an active filter" />
-</Frame>
-
 ## Bug Fixes & Improvements
 
 - **Test suite assertions: sub-span inspection** — the evaluator LLM can now issue `get_trace_spans` and `read` tool calls to inspect intermediate spans during evaluation, enabling correctness checks about tool usage, model selection, and per-span errors inside complex agents

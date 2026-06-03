@@ -887,6 +887,9 @@ navigation:
       - page: Overview
         path: ../docs-v2/self-host/overview.mdx
         slug: overview
+      - page: Migrating to Opik 2.0
+        path: ../docs-v2/self-host/v1_to_v2_migration.mdx
+        slug: v1-to-v2-migration
       - page: Local deployment
         path: ../docs-v2/self-host/local_deployment.mdx
         slug: local_deployment
