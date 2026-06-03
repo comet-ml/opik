@@ -3,8 +3,7 @@ import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
 import { getApiErrorMessage } from "@/lib/api-error";
-
-export type JsonUploadFormat = "json" | "jsonl";
+import { JsonUploadFormat } from "@/types/datasets";
 
 type UseDatasetItemsFromJsonMutationParams = {
   datasetId: string;

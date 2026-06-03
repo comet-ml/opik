@@ -1,6 +1,6 @@
 import { csv2json } from "json-2-csv";
 
-import { JsonUploadFormat } from "@/api/datasets/useDatasetItemsFromJsonMutation";
+import { JsonUploadFormat } from "@/types/datasets";
 
 export type UploadFormat = "csv" | JsonUploadFormat;
 
