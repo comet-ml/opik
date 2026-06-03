@@ -57,12 +57,15 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
   const [submitError, setSubmitError] = useState<string>("");
   const [colorPopoverOpen, setColorPopoverOpen] = useState(false);
 
-  const { mutate: createMutation } = useEnvironmentCreateMutation({
-    showErrorToast: false,
-  });
-  const { mutate: updateMutation } = useEnvironmentUpdateMutation({
-    showErrorToast: false,
-  });
+  const { mutate: createMutation, isPending: isCreating } =
+    useEnvironmentCreateMutation({
+      showErrorToast: false,
+    });
+  const { mutate: updateMutation, isPending: isUpdating } =
+    useEnvironmentUpdateMutation({
+      showErrorToast: false,
+    });
+  const isSubmitting = isCreating || isUpdating;
 
   const trimmedName = name.trim();
   const nameError = useMemo(() => {
@@ -118,7 +121,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
   }, []);
 
   const submitHandler = useCallback(() => {
-    if (!isValid) return;
+    if (!isValid || isSubmitting) return;
 
     const payload = {
       name: trimmedName,
@@ -143,6 +146,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
     }
   }, [
     isValid,
+    isSubmitting,
     trimmedName,
     description,
     color,
@@ -218,7 +222,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
                 />
               </div>
               {nameError || submitError ? (
-                <p className="comet-body-xs text-destructive">
+                <p role="alert" className="comet-body-xs text-destructive">
                   {nameError || submitError}
                 </p>
               ) : (
@@ -247,7 +251,11 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" disabled={!isValid} onClick={submitHandler}>
+          <Button
+            type="submit"
+            disabled={!isValid || isSubmitting}
+            onClick={submitHandler}
+          >
             {submitText}
           </Button>
         </DialogFooter>

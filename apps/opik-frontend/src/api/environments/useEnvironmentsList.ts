@@ -21,7 +21,7 @@ const getEnvironmentsList = async ({ signal }: QueryFunctionContext) => {
     { signal },
   );
 
-  return { ...data, content: sortEnvironments(data.content) };
+  return { ...data, content: sortEnvironments(data.content ?? []) };
 };
 
 export default function useEnvironmentsList(
