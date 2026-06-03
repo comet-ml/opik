@@ -260,16 +260,24 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           value={selectedTab!}
           onValueChange={setTab}
         >
-          <TabsList variant="segmented">
+          <TabsList variant="segmented-primary">
             {canShowMessagesTab && (
-              <TabsTrigger variant="segmented" value="messages">
+              <TabsTrigger
+                variant="segmented-primary"
+                size="sm"
+                value="messages"
+              >
                 Messages
               </TabsTrigger>
             )}
-            <TabsTrigger variant="segmented" value="details">
+            <TabsTrigger variant="segmented-primary" size="sm" value="details">
               Details
             </TabsTrigger>
-            <TabsTrigger variant="segmented" value="feedback_scores">
+            <TabsTrigger
+              variant="segmented-primary"
+              size="sm"
+              value="feedback_scores"
+            >
               Feedback scores
               <ExplainerIcon
                 className="ml-1"
@@ -277,12 +285,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               />
             </TabsTrigger>
             {hasPrompts && (
-              <TabsTrigger variant="segmented" value="prompts">
+              <TabsTrigger
+                variant="segmented-primary"
+                size="sm"
+                value="prompts"
+              >
                 Prompts
               </TabsTrigger>
             )}
             {hasSpanAgentGraph && (
-              <TabsTrigger variant="segmented" value="graph">
+              <TabsTrigger variant="segmented-primary" size="sm" value="graph">
                 Agent graph
               </TabsTrigger>
             )}
