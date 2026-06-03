@@ -1057,7 +1057,7 @@ serviceToggles:
   agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
   # Default: false
   # Description: Whether traces are automatically summarized by an LLM after ingestion. Each completed trace
-  #   triggers a call to an OpenRouter model using the workspace's configured provider key.
+  #   triggers a call to the summarization model using the workspace's configured provider key.
   traceSummarizationEnabled: ${TOGGLE_TRACE_SUMMARIZATION_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.

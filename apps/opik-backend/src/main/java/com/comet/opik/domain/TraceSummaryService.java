@@ -4,7 +4,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import dev.langchain4j.data.message.SystemMessage;
@@ -34,9 +34,15 @@ class TraceSummaryServiceImpl implements TraceSummaryService {
 
     private static final int MAX_CONCURRENCY = 4;
 
+    // Using Claude Haiku via the Anthropic provider until an OpenRouter key is available. To switch back, uncomment
+    // the OpenRouter model below and remove the Anthropic one (the commented line uses a fully-qualified name so no
+    // import change is needed).
     private static final LlmAsJudgeModelParameters SUMMARY_MODEL = LlmAsJudgeModelParameters.builder()
-            .name(OpenRouterModelName.Z_AI_GLM_4_7_FLASH.toString())
+            .name(AnthropicModelName.CLAUDE_HAIKU_4_5.toString())
             .build();
+    // private static final LlmAsJudgeModelParameters SUMMARY_MODEL = LlmAsJudgeModelParameters.builder()
+    //         .name(com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName.Z_AI_GLM_4_7_FLASH.toString())
+    //         .build();
 
     private static final String SYSTEM_PROMPT = """
             You are analyzing an AI trace. Explain what is generally happening in this trace \

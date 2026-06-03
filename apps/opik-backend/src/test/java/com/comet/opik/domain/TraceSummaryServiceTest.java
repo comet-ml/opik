@@ -79,7 +79,7 @@ class TraceSummaryServiceTest {
         var modelCaptor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
         verify(chatCompletionService).scoreTrace(requestCaptor.capture(), modelCaptor.capture(), eq(WORKSPACE_ID));
 
-        assertThat(modelCaptor.getValue().name()).isEqualTo("z-ai/glm-4.7-flash");
+        assertThat(modelCaptor.getValue().name()).isEqualTo("claude-haiku-4-5-20251001");
         assertThat(userText(requestCaptor.getValue()))
                 .contains("how do I reset my password")
                 .contains("go to settings");
