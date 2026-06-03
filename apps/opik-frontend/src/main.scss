@@ -104,7 +104,7 @@
     --thread-inactive: #e2effd;
     --thread-icon-background: #3438d0;
     --thread-icon-text: #ffffff;
-    --message-input-background: #e7ecff;
+    --message-input-background: #f2f2ff;
 
     /* Action cards */
     --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
@@ -916,6 +916,15 @@
   max-width: 100%;
   overflow-wrap: break-word;
   word-break: break-word;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-medium;
+  }
 
   pre {
     color: hsl(var(--foreground));
