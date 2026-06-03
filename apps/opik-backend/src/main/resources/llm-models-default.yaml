@@ -132,6 +132,7 @@ openai:
 anthropic:
   - id: "claude-opus-4-8"
     label: "Claude Opus 4.8"
+    structuredOutput: true
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
     structuredOutput: true
@@ -1058,6 +1059,8 @@ openrouter:
   - id: "openrouter/free"
     label: "openrouter/free"
     structuredOutput: true
+  - id: "openrouter/fusion"
+    label: "openrouter/fusion"
   - id: "openrouter/healer-alpha"
     label: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"

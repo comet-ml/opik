@@ -465,6 +465,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_BODYBUILDER = "openrouter/bodybuilder",
   OPENROUTER_ELEPHANT_ALPHA = "openrouter/elephant-alpha",
   OPENROUTER_FREE = "openrouter/free",
+  OPENROUTER_FUSION = "openrouter/fusion",
   OPENROUTER_HEALER_ALPHA = "openrouter/healer-alpha",
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
   OPENROUTER_OWL_ALPHA = "openrouter/owl-alpha",

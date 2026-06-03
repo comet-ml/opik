@@ -1564,6 +1564,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_FUSION,
+      label: "openrouter/fusion",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_HEALER_ALPHA,
       label: "openrouter/healer-alpha",
     },
