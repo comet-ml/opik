@@ -23,13 +23,12 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,17 +52,8 @@ class TraceSummaryServiceTest {
     }
 
     @Test
-    @DisplayName("when traces are empty, then do nothing")
-    void summarize__whenTracesAreEmpty__thenDoNothing() {
-        service.summarize(List.of(), WORKSPACE_ID).block();
-
-        verifyNoInteractions(chatCompletionService);
-        verifyNoInteractions(traceSummaryDAO);
-    }
-
-    @Test
-    @DisplayName("when traces are summarized, then call the model and batch insert the results")
-    void summarize__whenTracesAreSummarized__thenCallModelAndInsert() {
+    @DisplayName("when a trace is summarized, then call the model and insert the result")
+    void summarize__whenTraceIsSummarized__thenCallModelAndInsert() {
         var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .input(JsonUtils.getJsonNodeFromString("{\"prompt\":\"how do I reset my password\"}"))
                 .output(JsonUtils.getJsonNodeFromString("{\"response\":\"go to settings\"}"))
@@ -73,7 +63,7 @@ class TraceSummaryServiceTest {
                 .thenReturn(chatResponse("The user wanted to reset their password."));
         when(traceSummaryDAO.batchInsert(any())).thenReturn(Mono.just(1L));
 
-        service.summarize(List.of(trace), WORKSPACE_ID).block();
+        service.summarize(trace, WORKSPACE_ID).block();
 
         var requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
         var modelCaptor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
@@ -95,48 +85,16 @@ class TraceSummaryServiceTest {
     }
 
     @Test
-    @DisplayName("when one trace fails, then skip it and insert the rest")
-    void summarize__whenOneTraceFails__thenSkipItAndInsertTheRest() {
-        var goodTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                .input(JsonUtils.getJsonNodeFromString("{\"prompt\":\"good-input\"}"))
-                .output(JsonUtils.getJsonNodeFromString("{\"response\":\"good-output\"}"))
-                .build();
-        var badTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                .input(JsonUtils.getJsonNodeFromString("{\"prompt\":\"bad-input\"}"))
-                .output(JsonUtils.getJsonNodeFromString("{\"response\":\"bad-output\"}"))
-                .build();
-
-        when(chatCompletionService.scoreTrace(any(), any(), anyString())).thenAnswer(invocation -> {
-            ChatRequest request = invocation.getArgument(0);
-            if (userText(request).contains("bad-input")) {
-                throw new RuntimeException("LLM provider error");
-            }
-            return chatResponse("good summary");
-        });
-        when(traceSummaryDAO.batchInsert(any())).thenReturn(Mono.just(1L));
-
-        service.summarize(List.of(goodTrace, badTrace), WORKSPACE_ID).block();
-
-        verify(chatCompletionService, times(2)).scoreTrace(any(), any(), eq(WORKSPACE_ID));
-
-        var summariesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(traceSummaryDAO).batchInsert(summariesCaptor.capture());
-
-        List<TraceSummary> summaries = summariesCaptor.getValue();
-        assertThat(summaries).hasSize(1);
-        assertThat(summaries.getFirst().traceId()).isEqualTo(goodTrace.id());
-        assertThat(summaries.getFirst().summary()).isEqualTo("good summary");
-    }
-
-    @Test
-    @DisplayName("when all traces fail, then skip the batch insert")
-    void summarize__whenAllTracesFail__thenSkipBatchInsert() {
+    @DisplayName("when the model call fails, then the error propagates and nothing is inserted")
+    void summarize__whenModelFails__thenErrorPropagatesAndNoInsert() {
         var trace = podamFactory.manufacturePojo(Trace.class);
 
         when(chatCompletionService.scoreTrace(any(), any(), anyString()))
                 .thenThrow(new RuntimeException("LLM provider error"));
 
-        service.summarize(List.of(trace), WORKSPACE_ID).block();
+        assertThatThrownBy(() -> service.summarize(trace, WORKSPACE_ID).block())
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("LLM provider error");
 
         verify(traceSummaryDAO, never()).batchInsert(any());
     }

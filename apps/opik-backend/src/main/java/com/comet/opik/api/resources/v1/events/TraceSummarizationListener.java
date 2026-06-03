@@ -1,10 +1,11 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.TraceToSummarize;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.TraceService;
-import com.comet.opik.domain.TraceSummaryService;
+import com.comet.opik.domain.TraceSummaryPublisher;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
@@ -27,24 +28,24 @@ public class TraceSummarizationListener {
     // traces are summarized. Sampling is per-trace, mirroring OnlineScoringSampler's per-trace sampling.
     private static final double SAMPLING_RATE = 0.1;
 
-    private final TraceSummaryService traceSummaryService;
+    private final TraceSummaryPublisher traceSummaryPublisher;
     private final TraceService traceService;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final double samplingRate;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Inject
-    public TraceSummarizationListener(@NonNull TraceSummaryService traceSummaryService,
+    public TraceSummarizationListener(@NonNull TraceSummaryPublisher traceSummaryPublisher,
             @NonNull TraceService traceService,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
-        this(traceSummaryService, traceService, serviceTogglesConfig, SAMPLING_RATE);
+        this(traceSummaryPublisher, traceService, serviceTogglesConfig, SAMPLING_RATE);
     }
 
-    TraceSummarizationListener(@NonNull TraceSummaryService traceSummaryService,
+    TraceSummarizationListener(@NonNull TraceSummaryPublisher traceSummaryPublisher,
             @NonNull TraceService traceService,
             @NonNull ServiceTogglesConfig serviceTogglesConfig,
             double samplingRate) {
-        this.traceSummaryService = traceSummaryService;
+        this.traceSummaryPublisher = traceSummaryPublisher;
         this.traceService = traceService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.samplingRate = samplingRate;
@@ -73,7 +74,7 @@ public class TraceSummarizationListener {
         log.info("Received TracesCreated for summarization, sampled '{}', total '{}', workspace '{}'",
                 sampledTraces.size(), event.traces().size(), event.workspaceId());
 
-        summarizeAsync(Mono.just(sampledTraces), event.workspaceId(), event.userName());
+        enqueueAsync(Mono.just(sampledTraces), event.workspaceId(), event.userName());
     }
 
     /**
@@ -108,22 +109,29 @@ public class TraceSummarizationListener {
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
                         .put(RequestContext.USER_NAME, event.userName()));
 
-        summarizeAsync(completedTraces, event.workspaceId(), event.userName());
+        enqueueAsync(completedTraces, event.workspaceId(), event.userName());
     }
 
     private boolean shouldSample() {
         return secureRandom.nextDouble() < samplingRate;
     }
 
-    private void summarizeAsync(Mono<List<Trace>> traces, String workspaceId, String userName) {
+    private void enqueueAsync(Mono<List<Trace>> traces, String workspaceId, String userName) {
         traces.filter(completedTraces -> !completedTraces.isEmpty())
-                .flatMap(completedTraces -> traceSummaryService.summarize(completedTraces, workspaceId))
+                .flatMap(completedTraces -> traceSummaryPublisher.enqueue(completedTraces.stream()
+                        .map(trace -> TraceToSummarize.builder()
+                                .trace(trace)
+                                .workspaceId(workspaceId)
+                                .userName(userName)
+                                .build())
+                        .toList()))
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         unused -> {
                         },
-                        error -> log.error("Failed to summarize traces for workspace '{}'", workspaceId, error));
+                        error -> log.error("Failed to enqueue traces for summarization, workspace '{}'", workspaceId,
+                                error));
     }
 }

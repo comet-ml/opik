@@ -376,6 +376,18 @@ datasetExport:
   cleanupLockWaitTime: 1s
   cleanupBatchSize: 100
 
+traceSummary:
+  streamName: 'trace-summary-test'
+  consumerGroupName: 'trace_summary_consumers_test'
+  consumerBatchSize: 10
+  poolingInterval: 1s
+  longPollingDuration: 500ms
+  claimIntervalRatio: 10
+  pendingMessageDuration: 5m
+  maxRetries: 3
+  streamMaxLen: 10000
+  streamTrimLimit: 100
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s

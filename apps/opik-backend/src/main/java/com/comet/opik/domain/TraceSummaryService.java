@@ -15,7 +15,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -24,15 +23,13 @@ import java.util.Optional;
 
 @ImplementedBy(TraceSummaryServiceImpl.class)
 public interface TraceSummaryService {
-    Mono<Void> summarize(List<Trace> traces, String workspaceId);
+    Mono<Void> summarize(Trace trace, String workspaceId);
 }
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class TraceSummaryServiceImpl implements TraceSummaryService {
-
-    private static final int MAX_CONCURRENCY = 4;
 
     private static final LlmAsJudgeModelParameters SUMMARY_MODEL = LlmAsJudgeModelParameters.builder()
             .name(OpenRouterModelName.Z_AI_GLM_4_7_FLASH.toString())
@@ -46,27 +43,8 @@ class TraceSummaryServiceImpl implements TraceSummaryService {
     private final @NonNull TraceSummaryDAO traceSummaryDAO;
 
     @Override
-    public Mono<Void> summarize(@NonNull List<Trace> traces, @NonNull String workspaceId) {
-        if (traces.isEmpty()) {
-            return Mono.empty();
-        }
-
-        return Flux.fromIterable(traces)
-                .flatMap(trace -> summarizeTrace(trace, workspaceId), MAX_CONCURRENCY)
-                .collectList()
-                .flatMap(summaries -> {
-                    if (summaries.isEmpty()) {
-                        log.info("No trace summaries produced for workspace '{}'", workspaceId);
-                        return Mono.empty();
-                    }
-                    log.info("Inserting '{}' trace summaries for workspace '{}'", summaries.size(), workspaceId);
-                    return traceSummaryDAO.batchInsert(summaries);
-                })
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
-                .then();
-    }
-
-    private Mono<TraceSummary> summarizeTrace(Trace trace, String workspaceId) {
+    public Mono<Void> summarize(@NonNull Trace trace, @NonNull String workspaceId) {
+        // Errors propagate intentionally so the Redis consumer (BaseRedisSubscriber) can retry the message.
         return Mono.fromCallable(() -> {
             var chatResponse = chatCompletionService.scoreTrace(buildRequest(trace), SUMMARY_MODEL, workspaceId);
             return TraceSummary.builder()
@@ -76,11 +54,9 @@ class TraceSummaryServiceImpl implements TraceSummaryService {
                     .build();
         })
                 .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(error -> {
-                    log.warn("Failed to summarize traceId '{}' for workspace '{}', skipping",
-                            trace.id(), workspaceId, error);
-                    return Mono.empty();
-                });
+                .flatMap(summary -> traceSummaryDAO.batchInsert(List.of(summary)))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                .then();
     }
 
     private ChatRequest buildRequest(Trace trace) {
