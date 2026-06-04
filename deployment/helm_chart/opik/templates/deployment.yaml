@@ -36,10 +36,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "service.serviceAccountName" ( merge . (dict "serviceName" $key ) ) }}
-      {{- with $.Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "opik.imagePullSecrets" (dict "context" $ "local" $.Values.imagePullSecrets) | nindent 6 }}
       {{- with $value.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 10 }}

@@ -119,6 +119,40 @@ Note: Directives are sorted alphabetically to ensure deterministic output
 {{- end -}}
 
 {{/*
+Render the `imagePullSecrets:` block with the precedence required by DND-487:
+
+  1. .context.Values.global.imagePullSecrets   — propagated from the parent chart's
+                                                  global block; when set, used exclusively
+  2. .local                                     — chart-local imagePullSecrets list
+                                                  (e.g. .Values.imagePullSecrets for app pods,
+                                                  .Values.clickhouse.imagePullSecrets for CH)
+
+Emits nothing when no source resolves to a non-empty list.
+Caller controls indentation of the parent-key column via `nindent`.
+
+Usage:
+  Main app pods:
+    {{- include "opik.imagePullSecrets" (dict "context" $ "local" $.Values.imagePullSecrets) | nindent 6 }}
+  ClickHouse pods:
+    {{- include "opik.imagePullSecrets" (dict "context" . "local" .Values.clickhouse.imagePullSecrets) | nindent 10 }}
+*/}}
+{{- define "opik.imagePullSecrets" -}}
+{{- $global := default (dict) .context.Values.global -}}
+{{- $secrets := list -}}
+{{- if $global.imagePullSecrets -}}
+  {{- $secrets = $global.imagePullSecrets -}}
+{{- else if .local -}}
+  {{- $secrets = .local -}}
+{{- end -}}
+{{- if $secrets -}}
+imagePullSecrets:
+{{- range $secrets }}
+  - name: {{ .name }}
+{{- end }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Renders a value that contains template perhaps with scope if the scope is present.
 Usage:
 {{ include "common.tplvalues.render" (dict "value" .Values.path.to.value "context" $) }}

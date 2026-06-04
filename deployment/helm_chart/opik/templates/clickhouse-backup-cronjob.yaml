@@ -21,13 +21,10 @@ spec:
             {{- end }}
         spec:
           serviceAccountName: {{ include "clickhouse.backup.serviceAccountName" . }}
+          {{- include "opik.imagePullSecrets" (dict "context" . "local" .Values.clickhouse.imagePullSecrets) | nindent 10 }}
           containers:
           - name: clickhouse-backup-job
             image: {{ .Values.clickhouse.backup.image | default .Values.clickhouse.image }}
-            {{- with .Values.clickhouse.imagePullSecrets }}
-            imagePullSecrets:
-              {{- toYaml . | nindent 8 }}
-            {{- end }}
             command:
             {{- .Values.clickhouse.backup.command | toYaml | nindent 14 }}
             {{- with .Values.clickhouse.backup.resources }}

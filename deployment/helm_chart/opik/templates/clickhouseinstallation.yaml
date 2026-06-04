@@ -109,10 +109,7 @@ spec:
               kubectl.kubernetes.io/default-container: clickhouse
             labels:
             {{- include "opik.clickhouse.labels" . | nindent 14 }}
-        {{- if .Values.clickhouse.imagePullSecrets }}
-          imagePullSecrets:
-            {{- .Values.clickhouse.imagePullSecrets | toYaml | nindent 12 }}
-        {{- end }}
+          {{- include "opik.imagePullSecrets" (dict "context" . "local" .Values.clickhouse.imagePullSecrets) | nindent 10 }}
           containers:
           - name: clickhouse
             image: {{ .Values.clickhouse.image }}
