@@ -1,4 +1,5 @@
 import { Thread, Trace, TraceFeedbackScore } from "@/types/traces";
+import { AnnotationQueueItemLockInfo } from "@/types/annotation-queues";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import omit from "lodash/omit";
@@ -6,6 +7,16 @@ import { isObjectThread } from "@/lib/traces";
 import { CommentItem, CommentItems } from "@/types/comment";
 import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
 import { formatDate } from "@/lib/date";
+
+export const DEFAULT_LOCK_TIMEOUT_MINUTES = 5;
+
+export const hashCode = (str: string): number => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  }
+  return hash;
+};
 
 export const generateSMEURL = (workspace: string, id: string): string => {
   const basePath = import.meta.env.VITE_BASE_URL || "/";
@@ -110,6 +121,7 @@ export type AnnotationState = {
 
 export enum ITEM_STATE {
   DEFAULT = "default",
+  IN_REVIEW = "in_review",
   SCORED = "scored",
   COMPLETED = "completed",
 }
@@ -162,14 +174,24 @@ export const getItemState = (
   feedbackScoreNames: string[],
   userName: string | undefined,
   annotatorsPerItem: number,
+  lockStatus?: AnnotationQueueItemLockInfo,
 ): ITEM_STATE => {
-  if (
-    getDistinctAnnotatorCount(item, feedbackScoreNames) >= annotatorsPerItem
-  ) {
+  const scoredCount = getDistinctAnnotatorCount(item, feedbackScoreNames);
+  if (scoredCount >= annotatorsPerItem) {
     return ITEM_STATE.COMPLETED;
   }
   if (isItemProcessedByUser(item, feedbackScoreNames, userName)) {
     return ITEM_STATE.SCORED;
+  }
+  const activeLocks = lockStatus?.active_locks ?? 0;
+  const lockedByCurrentUser =
+    userName && lockStatus?.locked_by.includes(userName);
+  if (
+    activeLocks > 0 &&
+    !lockedByCurrentUser &&
+    scoredCount + activeLocks >= annotatorsPerItem
+  ) {
+    return ITEM_STATE.IN_REVIEW;
   }
   return ITEM_STATE.DEFAULT;
 };

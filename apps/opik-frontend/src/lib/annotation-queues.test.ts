@@ -3,6 +3,7 @@ import {
   getItemState,
   getDistinctAnnotatorCount,
   isItemProcessedByUser,
+  hashCode,
   ITEM_STATE,
 } from "./annotation-queues";
 import { Trace, FEEDBACK_SCORE_TYPE } from "@/types/traces";
@@ -171,5 +172,89 @@ describe("isItemProcessedByUser", () => {
       ],
     } as Partial<Trace>);
     expect(isItemProcessedByUser(item, [], "alice")).toBe(true);
+  });
+});
+
+describe("getItemState with lockStatus", () => {
+  it("should return IN_REVIEW when all slots taken by other users' locks", () => {
+    const item = makeTrace();
+    const lockStatus = { active_locks: 1, locked_by: ["bob"] };
+    expect(getItemState(item, ["accuracy"], "alice", 1, lockStatus)).toBe(
+      ITEM_STATE.IN_REVIEW,
+    );
+  });
+
+  it("should return DEFAULT when locked by current user", () => {
+    const item = makeTrace();
+    const lockStatus = { active_locks: 1, locked_by: ["alice"] };
+    expect(getItemState(item, ["accuracy"], "alice", 1, lockStatus)).toBe(
+      ITEM_STATE.DEFAULT,
+    );
+  });
+
+  it("should return DEFAULT when locked but slots still available", () => {
+    const item = makeTrace();
+    const lockStatus = { active_locks: 1, locked_by: ["bob"] };
+    expect(getItemState(item, ["accuracy"], "alice", 2, lockStatus)).toBe(
+      ITEM_STATE.DEFAULT,
+    );
+  });
+
+  it("should return IN_REVIEW when scored + locks fill all slots", () => {
+    const item = makeTrace({
+      feedback_scores: [makeScore("accuracy", "bob")],
+    });
+    const lockStatus = { active_locks: 1, locked_by: ["charlie"] };
+    expect(getItemState(item, ["accuracy"], "alice", 2, lockStatus)).toBe(
+      ITEM_STATE.IN_REVIEW,
+    );
+  });
+
+  it("should return COMPLETED over IN_REVIEW when fully scored", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        makeScore("accuracy", "bob"),
+        makeScore("accuracy", "charlie"),
+      ],
+    });
+    const lockStatus = { active_locks: 1, locked_by: ["dave"] };
+    expect(getItemState(item, ["accuracy"], "alice", 2, lockStatus)).toBe(
+      ITEM_STATE.COMPLETED,
+    );
+  });
+
+  it("should return SCORED over IN_REVIEW when current user has scored", () => {
+    const item = makeTrace({
+      feedback_scores: [makeScore("accuracy", "alice")],
+    });
+    const lockStatus = { active_locks: 1, locked_by: ["bob"] };
+    expect(getItemState(item, ["accuracy"], "alice", 2, lockStatus)).toBe(
+      ITEM_STATE.SCORED,
+    );
+  });
+
+  it("should return DEFAULT when no lockStatus provided", () => {
+    const item = makeTrace();
+    expect(getItemState(item, ["accuracy"], "alice", 1)).toBe(
+      ITEM_STATE.DEFAULT,
+    );
+  });
+});
+
+describe("hashCode", () => {
+  it("should return the same value for the same input", () => {
+    expect(hashCode("test")).toBe(hashCode("test"));
+  });
+
+  it("should return different values for different inputs", () => {
+    expect(hashCode("alice+queue1")).not.toBe(hashCode("bob+queue1"));
+  });
+
+  it("should return a number", () => {
+    expect(typeof hashCode("test")).toBe("number");
+  });
+
+  it("should handle empty string", () => {
+    expect(hashCode("")).toBe(0);
   });
 });

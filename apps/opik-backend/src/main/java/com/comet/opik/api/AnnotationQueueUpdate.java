@@ -22,5 +22,6 @@ public record AnnotationQueueUpdate(
         String instructions,
         Boolean commentsEnabled,
         List<@NotBlank String> feedbackDefinitionNames,
-        @Min(1) @Max(1000) Integer annotatorsPerItem) {
+        @Min(1) @Max(1000) Integer annotatorsPerItem,
+        @Min(1) @Max(60) Integer lockTimeoutMinutes) {
 }

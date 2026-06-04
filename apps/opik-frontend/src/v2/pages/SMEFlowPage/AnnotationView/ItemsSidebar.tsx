@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from "react";
+import React, { useEffect, useRef, useMemo, useState } from "react";
 import { CornerDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tag } from "@/ui/tag";
@@ -48,15 +48,31 @@ const getItemPreviews = (
 const STATE_CONFIG = {
   [ITEM_STATE.COMPLETED]: { dotClass: "bg-emerald-400", label: "Completed" },
   [ITEM_STATE.SCORED]: { dotClass: "bg-sky-400", label: "Reviewed" },
+  [ITEM_STATE.IN_REVIEW]: { dotClass: "bg-orange-400", label: "In review" },
   [ITEM_STATE.DEFAULT]: {
     dotClass: "border border-light-slate",
     label: "To review",
   },
 };
 
-const ItemsSidebar: React.FunctionComponent = () => {
-  const { queueItems, currentIndex, itemStates, navigateToItem } = useSMEFlow();
+type SidebarFilter = "to_review" | "processed";
+type SidebarEntry = {
+  index: number;
+  itemId: string;
+  state: ITEM_STATE;
+  lastUpdatedAt: string;
+};
 
+const ItemsSidebar: React.FunctionComponent = () => {
+  const {
+    queueItems,
+    currentIndex,
+    itemStates,
+    navigateToItem,
+    shuffledItemIds,
+  } = useSMEFlow();
+
+  const [filter, setFilter] = useState<SidebarFilter>("to_review");
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -64,6 +80,34 @@ const ItemsSidebar: React.FunctionComponent = () => {
   }, [currentIndex]);
 
   const previews = useMemo(() => queueItems.map(getItemPreviews), [queueItems]);
+
+  const { toReviewItems, processedItems } = useMemo(() => {
+    const byId: Record<string, SidebarEntry> = {};
+    queueItems.forEach((item, index) => {
+      const itemId = getAnnotationQueueItemId(item);
+      const state = itemStates[itemId] ?? ITEM_STATE.DEFAULT;
+      byId[itemId] = {
+        index,
+        itemId,
+        state,
+        lastUpdatedAt: item.last_updated_at ?? "",
+      };
+    });
+
+    const entries = shuffledItemIds.map((id) => byId[id]);
+
+    const toReview = entries.filter(
+      (e) => e.state === ITEM_STATE.DEFAULT || e.index === currentIndex,
+    );
+
+    const processed = entries
+      .filter((e) => e.state !== ITEM_STATE.DEFAULT)
+      .sort((a, b) => b.lastUpdatedAt.localeCompare(a.lastUpdatedAt));
+
+    return { toReviewItems: toReview, processedItems: processed };
+  }, [queueItems, itemStates, shuffledItemIds, currentIndex]);
+
+  const filteredItems = filter === "to_review" ? toReviewItems : processedItems;
 
   const defaultCount = useMemo(
     () =>
@@ -88,10 +132,32 @@ const ItemsSidebar: React.FunctionComponent = () => {
           {allDone ? "All scored" : `${defaultCount} remaining`}
         </span>
       </div>
+      <div className="flex shrink-0 gap-1 border-b border-border px-3 py-1.5">
+        <button
+          onClick={() => setFilter("to_review")}
+          className={cn(
+            "comet-body-xs rounded-md px-2 py-0.5 transition-colors",
+            filter === "to_review"
+              ? "bg-primary/10 text-primary"
+              : "text-muted-slate hover:bg-primary-foreground",
+          )}
+        >
+          To review
+        </button>
+        <button
+          onClick={() => setFilter("processed")}
+          className={cn(
+            "comet-body-xs rounded-md px-2 py-0.5 transition-colors",
+            filter === "processed"
+              ? "bg-primary/10 text-primary"
+              : "text-muted-slate hover:bg-primary-foreground",
+          )}
+        >
+          Processed
+        </button>
+      </div>
       <div className="flex-1 overflow-y-auto">
-        {queueItems.map((item, index) => {
-          const itemId = getAnnotationQueueItemId(item);
-          const state = itemStates[itemId] ?? ITEM_STATE.DEFAULT;
+        {filteredItems.map(({ index, itemId, state }) => {
           const isActive = index === currentIndex;
           const { name, input, output } = previews[index];
           const { dotClass, label } = STATE_CONFIG[state];
