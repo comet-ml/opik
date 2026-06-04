@@ -454,6 +454,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     QWEN_QWEN3_6_PLUS_PREVIEW_FREE("qwen/qwen3.6-plus-preview:free"),
     QWEN_QWEN3_6_PLUS_FREE("qwen/qwen3.6-plus:free"),
     QWEN_QWEN3_7_MAX("qwen/qwen3.7-max"),
+    QWEN_QWEN3_7_PLUS("qwen/qwen3.7-plus"),
     QWEN_QWQ_32B("qwen/qwq-32b"),
     RAIFLE_SORCERERLM_8X22B("raifle/sorcererlm-8x22b"),
     REKA_REKA_EDGE("reka/reka-edge"),
