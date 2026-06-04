@@ -698,7 +698,12 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
-from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
+from .datasets import (
+    CreateDatasetItemsFromJsonRequestFormat,
+    DatasetUpdateVisibility,
+    DatasetWriteType,
+    DatasetWriteVisibility,
+)
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
@@ -920,6 +925,7 @@ __all__ = [
     "CompletionTokensDetails",
     "ConflictError",
     "CountValueStatPublic",
+    "CreateDatasetItemsFromJsonRequestFormat",
     "CreatePromptVersionDetailTemplateStructure",
     "CreateSessionRequestType",
     "CreateSessionResponse",
