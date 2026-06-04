@@ -1,0 +1,37 @@
+name: Scout Feedback Sync
+
+on:
+  # GitHub emits no event for comment reactions, so poll on a schedule.
+  schedule:
+    - cron: '*/30 * * * *'  # every 30 minutes
+  # Allow manual runs (and an optional wider scan window for backfills).
+  workflow_dispatch:
+    inputs:
+      since_days:
+        description: How many days back to scan issues for reactions
+        required: false
+        default: '7'
+        type: string
+
+# Don't let overlapping syncs double up.
+concurrency:
+  group: scout-feedback-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-feedback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      issues: read
+      contents: read
+
+    steps:
+      - name: Sync reactions to Opik
+        uses: comet-ml/scout-repo-agent/actions/feedback@main
+        with:
+          github_token: ${{ github.token }}
+          since_days: ${{ github.event.inputs.since_days || '7' }}
+        env:
+          OPIK_API_KEY: ${{ secrets.SCOUT_OPIK_API_KEY }}
+          OPIK_WORKSPACE: ${{ vars.SCOUT_OPIK_WORKSPACE }}
