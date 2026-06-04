@@ -29,6 +29,7 @@ from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
+from .types.create_dataset_items_from_json_request_format import CreateDatasetItemsFromJsonRequestFormat
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -389,6 +390,49 @@ class DatasetsClient:
         """
         _response = self._raw_client.create_dataset_items_from_csv(
             file=file, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.create_dataset_items_from_json(file={'key': 'value'
+        }, dataset_id='dataset_id', format="json", )
+        """
+        _response = self._raw_client.create_dataset_items_from_json(
+            file=file, dataset_id=dataset_id, format=format, request_options=request_options
         )
         return _response.data
 
@@ -1867,6 +1911,52 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.create_dataset_items_from_csv(
             file=file, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    async def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.create_dataset_items_from_json(file={'key': 'value'
+            }, dataset_id='dataset_id', format="json", )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_dataset_items_from_json(
+            file=file, dataset_id=dataset_id, format=format, request_options=request_options
         )
         return _response.data
 
