@@ -4612,6 +4612,47 @@ class GetTracesByProjectResourceTest {
         }
 
         @Test
+        @DisplayName("when truncate=true and a wide field is excluded, the deferred-wide query stays valid and that field is excluded (OPIK-6747)")
+        void getTracesByProject__whenTruncatingAndExcludingWideField__thenQueryStaysValidAndFieldExcluded() {
+            // Regression lock for the two-phase deferred-wide EXCEPT lists. With truncate=true AND a wide
+            // field (input) excluded, page_wide projects only the *other* field's truncated_* column, so the
+            // final SELECT must not EXCEPT a column page_wide dropped (e.g. truncated_input). ClickHouse
+            // tolerates EXCEPT of an absent column today, so this can't fail on the current engine — it asserts
+            // the response is correct AND guards against a stricter ClickHouse that would reject such a query.
+            // (The actual EXCEPT-list correctness was verified separately via the rendered SQL.)
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .input(JsonUtils.getJsonNodeFromString("{\"k\":\"in\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"k\":\"out\"}"))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("project_name", projectName);
+            queryParams.put("page", "1");
+            queryParams.put("size", "5");
+            queryParams.put("truncate", "true");
+            queryParams.put("exclude", toURLEncodedQueryParam(List.of(Trace.TraceField.INPUT)));
+
+            try (var response = traceResourceClient.callGetTracesWithQueryParams(apiKey, workspaceName, queryParams)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var content = response.readEntity(Trace.TracePage.class).content();
+                assertThat(content).hasSize(1);
+                assertThat(content.getFirst().input()).as("excluded wide field is absent").isNull();
+                assertThat(content.getFirst().output()).as("non-excluded wide field is present").isNotNull();
+            }
+        }
+
+        @Test
         void createAndRetrieveTraces__spanCountReflectsActualSpans_andTotalCountMatches() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();

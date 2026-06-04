@@ -1343,7 +1343,7 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1 BY id
             )
             SELECT
-                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><if(truncate)>, truncated_input, truncated_output<endif>) <else> EXCEPT (input, output, metadata<if(truncate)>, truncated_input, truncated_output<endif>)<endif>
+                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><if(truncate)><if(!exclude_input)>, truncated_input<endif><if(!exclude_output)>, truncated_output<endif><endif>) <else> EXCEPT (input, output, metadata<if(truncate)>, truncated_input, truncated_output<endif>)<endif>
                   <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(t.truncated_input, '<truncate>', '"[image]"') as input <else> t.input as input <endif><endif>
                   <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(t.truncated_output, '<truncate>', '"[image]"') as output <else> t.output as output <endif><endif>
                   <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(t.metadata, '<truncate>', '"[image]"') as metadata <else> t.metadata as metadata <endif><endif>
