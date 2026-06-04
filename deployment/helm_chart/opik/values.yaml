@@ -7,10 +7,10 @@ global:
   useHelmHooks: true
   security:
     allowInsecureImages: true
-  # imagePullSecrets propagated to every Opik pod (app pods + ClickHouse pods + CH backup CronJob).
-  # When set, takes precedence over the chart-local `imagePullSecrets` and
-  # `clickhouse.imagePullSecrets` fields. Items are `- name: <secret-name>`.
-  # When unset, the chart-local fields are used as before.
+  # -- (list) imagePullSecrets propagated to every Opik pod (app pods, ClickHouse pods, CH backup CronJob).
+  # When set, takes precedence over the chart-local `imagePullSecrets` and `clickhouse.imagePullSecrets` fields.
+  # Items take the form `- name: <secret-name>`.
+  # @default -- `null`
   imagePullSecrets:
 
 nameOverride: "opik"
