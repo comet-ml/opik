@@ -3,7 +3,7 @@ name: Scout Feedback Sync
 on:
   # GitHub emits no event for comment reactions, so poll on a schedule.
   schedule:
-    - cron: '*/30 * * * *'  # every 30 minutes
+    - cron: '0 * * * *'  # hourly
   # Allow manual runs (and an optional wider scan window for backfills).
   workflow_dispatch:
     inputs:
