@@ -196,7 +196,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
 
   const lockMutation = useAnnotationQueueItemLockMutation();
 
-  const locks = locksData?.locks ?? {};
+  const locks = useMemo(() => locksData?.locks ?? {}, [locksData?.locks]);
 
   const isItemsError =
     annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.TRACE
@@ -426,7 +426,13 @@ export const SMEFlowProvider: React.FunctionComponent<{
     return () => {
       clearInterval(heartbeatInterval);
     };
-  }, [currentItem, queueId, annotationQueue?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentItem,
+    queueId,
+    annotationQueue?.id,
+    annotationQueue?.lock_timeout_minutes,
+  ]);
 
   // --- Initialize annotation state when navigating to a different item ---
 
