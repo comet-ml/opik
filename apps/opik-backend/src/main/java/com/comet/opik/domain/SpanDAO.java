@@ -1010,9 +1010,6 @@ public class SpanDAO {
                 <endif>
                 LIMIT 1 BY id
             ), page_ids AS (
-                -- Phase 1: paginate on the light, deduped id+sort-key set only.
-                -- Selecting just `id` keeps this CTE (and the heavy spans_deduped scan it
-                -- inlines) referenced exactly once, so the filtered scan runs a single time.
                 SELECT sd.id
                 FROM spans_deduped sd
                 <if(sort_has_feedback_scores)>
@@ -1025,9 +1022,6 @@ public class SpanDAO {
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             ), page_wide AS (
-                -- Phase 2: re-read the full rows (incl. wide text columns) for just the page ids.
-                -- This is the single source for the final SELECT, so page_ids/spans_deduped are
-                -- not re-evaluated. Wide columns are read for ~page-size rows, not the whole match set.
                 SELECT
                     s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(exclude_input)>, input<endif><if(exclude_output)>, output<endif><if(exclude_metadata)>, metadata<endif><endif>)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
                     <if(truncate)><if(!exclude_input)>truncated_input,<endif><if(!exclude_output)>truncated_output,<endif><endif>
