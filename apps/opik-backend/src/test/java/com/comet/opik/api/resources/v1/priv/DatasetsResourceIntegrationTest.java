@@ -15,6 +15,7 @@ import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.JsonDatasetItemProcessor;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -62,6 +63,7 @@ class DatasetsResourceIntegrationTest {
     private static final DatasetVersionService versionService = mock(DatasetVersionService.class);
     private static final RequestContext requestContext = mock(RequestContext.class);
     private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
+    private static final JsonDatasetItemProcessor jsonProcessor = mock(JsonDatasetItemProcessor.class);
     private static final FeatureFlags featureFlags = mock(FeatureFlags.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
     private static final CsvDatasetExportService csvExportService = mock(CsvDatasetExportService.class);
@@ -74,7 +76,7 @@ class DatasetsResourceIntegrationTest {
                 .addResource(new DatasetsResource(
                         service, itemService, expansionService, versionService, () -> requestContext,
                         new FiltersFactory(new FilterQueryBuilder()),
-                        new IdGeneratorImpl(), new Streamer(), sortingFactory, csvProcessor,
+                        new IdGeneratorImpl(), new Streamer(), sortingFactory, csvProcessor, jsonProcessor,
                         featureFlags, csvExportService, analyticsService))
                 .addProvider(JsonNodeMessageBodyWriter.class)
                 .addProvider(MultiPartFeature.class)

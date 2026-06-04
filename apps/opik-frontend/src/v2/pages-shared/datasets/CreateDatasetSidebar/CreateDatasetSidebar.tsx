@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import { Description } from "@/ui/description";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
@@ -20,11 +19,13 @@ import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/shared/CodeHighlighter/CodeHighlighter";
 
+import { Spinner } from "@/ui/spinner";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import UploadField from "@/shared/UploadField/UploadField";
+import DatasetUploadDescription from "@/v2/pages-shared/datasets/DatasetUploadDescription";
+import DatasetUploadField from "@/v2/pages-shared/datasets/DatasetUploadField";
 import useDatasetForm from "@/v2/pages-shared/datasets/AddEditDatasetDialog/useDatasetForm";
 import useProjectById from "@/api/projects/useProjectById";
 import { useActiveProjectId } from "@/store/AppStore";
@@ -35,8 +36,6 @@ import {
   PASS_CRITERIA_TITLE,
   PASS_CRITERIA_DESCRIPTION,
 } from "@/constants/test-suites";
-
-const ACCEPTED_TYPE = ".csv";
 
 enum Step {
   NAME_DESCRIPTION,
@@ -112,8 +111,10 @@ const CreateDatasetSidebar: React.FunctionComponent<
     runsPerItem,
     runsInput,
     thresholdInput,
-    csvFile,
-    csvError,
+    uploadFile,
+    uploadError,
+    uploadFormat,
+    isSubmitting,
     confirmOpen,
     setConfirmOpen,
     fileSizeLimit,
@@ -165,7 +166,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
     step !== Step.SUCCESS &&
     (name.length > 0 ||
       description.length > 0 ||
-      csvFile !== undefined ||
+      uploadFile !== undefined ||
       assertions.length > 0);
 
   const handleGoToEntity = useCallback(() => {
@@ -237,29 +238,17 @@ const CreateDatasetSidebar: React.FunctionComponent<
         </p>
       </div>
       <div className="mb-4">
-        <Label className="mb-2 block">Upload CSV</Label>
-        <Description className="mb-2 tracking-normal">
-          Your CSV file can be up to {fileSizeLimit}MB in size. The file will be
-          processed in the background.
-          <Button variant="link" size="sm" className="h-5 px-1" asChild>
-            <a
-              href={buildDocsUrl("/evaluation/advanced/manage_datasets")}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learn more
-              <ExternalLink className="ml-0.5 size-3 shrink-0" />
-            </a>
-          </Button>
-        </Description>
-        <UploadField
-          description="Drop a CSV file to upload or"
-          accept={ACCEPTED_TYPE}
+        <Label className="mb-2 block">Upload CSV or JSON</Label>
+        <DatasetUploadDescription
+          fileSizeLimit={fileSizeLimit}
+          docsUrl={buildDocsUrl("/evaluation/advanced/manage_datasets")}
+          className="mb-2 tracking-normal"
+        />
+        <DatasetUploadField
+          uploadFile={uploadFile}
+          uploadFormat={uploadFormat}
+          uploadError={uploadError}
           onFileSelect={handleFileSelect}
-          errorText={csvError}
-          successText={
-            csvFile && !csvError ? "CSV file ready to upload" : undefined
-          }
         />
       </div>
       <div className="mb-4">
@@ -407,17 +396,24 @@ const CreateDatasetSidebar: React.FunctionComponent<
           <Button
             variant="outline"
             onClick={() => setStep(Step.NAME_DESCRIPTION)}
+            disabled={isSubmitting}
           >
             Back
           </Button>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleClose}>
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
             <Button
-              onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+              disabled={isSubmitting}
+              onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
             >
-              Create
+              {isSubmitting && <Spinner size="small" className="mr-2" />}
+              {isSubmitting ? "Creating..." : "Create"}
             </Button>
           </div>
         </div>
