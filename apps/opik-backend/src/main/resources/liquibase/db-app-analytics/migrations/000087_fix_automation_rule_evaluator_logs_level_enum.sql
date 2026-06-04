@@ -5,4 +5,4 @@
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs ON CLUSTER '{cluster}'
     MODIFY COLUMN level Enum8('TRACE' = 0, 'DEBUG' = 1, 'INFO' = 2, 'WARN' = 3, 'ERROR' = 4);
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs ON CLUSTER '{cluster}' MODIFY COLUMN level Enum8('TRACE' = 0, 'DEBUG' = 1, 'INFO' = 2, 'WARM' = 3, 'ERROR' = 4);
+--rollback empty
