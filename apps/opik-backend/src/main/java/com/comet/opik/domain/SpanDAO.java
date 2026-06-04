@@ -977,7 +977,7 @@ public class SpanDAO {
             <endif>
             <endif>, spans_deduped AS (
                 SELECT
-                      s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)>, input, output, metadata<endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
+                      s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       input_length,
                       output_length,
                       duration
@@ -1023,7 +1023,7 @@ public class SpanDAO {
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             ), page_wide AS (
                 SELECT
-                    s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(exclude_input)>, input<endif><if(exclude_output)>, output<endif><if(exclude_metadata)>, metadata<endif><endif>)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
+                    s.* EXCEPT (input_slim, output_slim)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
                     <if(truncate)><if(!exclude_input)>truncated_input,<endif><if(!exclude_output)>truncated_output,<endif><endif>
                     input_length,
                     output_length,
@@ -1040,7 +1040,7 @@ public class SpanDAO {
                 LIMIT 1 BY id
             )
             SELECT
-                s.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata, truncated_input, truncated_output) <else> EXCEPT (input, output, metadata, truncated_input, truncated_output)<endif>
+                s.* <if(exclude_fields)>EXCEPT (<exclude_fields><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><if(truncate)>, truncated_input, truncated_output<endif>) <else> EXCEPT (input, output, metadata<if(truncate)>, truncated_input, truncated_output<endif>)<endif>
                 <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.truncated_input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
                 <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.truncated_output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
                 <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
