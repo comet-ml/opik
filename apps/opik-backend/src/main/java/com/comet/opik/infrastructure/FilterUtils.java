@@ -13,6 +13,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.template.TemplateUtils;
 import io.dropwizard.db.DataSourceFactory;
 import io.r2dbc.spi.Statement;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -40,7 +41,7 @@ public class FilterUtils {
      * so the *_deduped CTE keeps those columns for the ORDER BY instead of deferring them to page_wide. Shared by all
      * renderers of SELECT_BY_PROJECT_ID (paginated and stream paths in TraceDAO/SpanDAO) to keep the logic in sync.
      */
-    public static void addSortNeedsWideFlag(ST template, List<SortingField> sortingFields) {
+    public static void addSortNeedsWideFlag(@NonNull ST template, List<SortingField> sortingFields) {
         if (SortableFields.sortsByWideTextColumn(sortingFields)) {
             template.add("sort_needs_wide", true);
         }

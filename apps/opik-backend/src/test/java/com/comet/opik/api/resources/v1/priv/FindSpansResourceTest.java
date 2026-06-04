@@ -3943,6 +3943,157 @@ class FindSpansResourceTest {
                                     .build()));
         }
 
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when sorting by a field while excluding a field, then sort applies and full page content is correct (OPIK-6747)")
+        void whenSortingAndExcludingField__thenReturnSortedExcludingField(Comparator<Span> comparator,
+                SortingField sorting, Span.SpanField excludeField) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            AtomicInteger index = new AtomicInteger(0);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .projectName(projectName)
+                            .endTime(span.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                            .totalEstimatedCost(null)
+                            .usage(Map.of("total_tokens", RandomUtils.secure().randomInt()))
+                            .createdAt(Instant.now().plusMillis(index.getAndIncrement()))
+                            .lastUpdatedAt(Instant.now().plusMillis(index.getAndIncrement()))
+                            .build())
+                    .map(span -> span.toBuilder()
+                            .duration(span.startTime().until(span.endTime(), ChronoUnit.MICROS) / 1000.0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Sort by the requested field first (the value is still present), then null the excluded field
+            // in the expectation so we assert the FULL page content of the deferred-wide-column path.
+            var expectedSpans = spans.stream()
+                    .sorted(comparator)
+                    .map(span -> SpanAssertions.EXCLUDE_FUNCTIONS.get(excludeField).apply(span))
+                    .toList();
+
+            getAndAssertPage(workspaceName, projectName, List.of(), spans, expectedSpans, List.of(), apiKey,
+                    List.of(sorting), List.of(excludeField));
+        }
+
+        static Stream<Arguments> whenSortingAndExcludingField__thenReturnSortedExcludingField() {
+            Comparator<Span> inputComparator = Comparator.comparing(span -> span.input().toString());
+            Comparator<Span> outputComparator = Comparator.comparing(span -> span.output().toString());
+
+            return Stream.of(
+                    // Sort by a wide text field while excluding that same field (the OPIK-6747 core case).
+                    Arguments.of(inputComparator,
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build(),
+                            Span.SpanField.INPUT),
+                    Arguments.of(inputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.DESC).build(),
+                            Span.SpanField.INPUT),
+                    // Sort by a regular field while excluding a wide field (deferred-wide pre-filter must still page right).
+                    Arguments.of(Comparator.comparing(Span::name),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build(),
+                            Span.SpanField.INPUT),
+                    // Sort by a computed field while excluding a wide field.
+                    Arguments.of(Comparator.comparing(Span::duration)
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.ASC).build(),
+                            Span.SpanField.OUTPUT),
+                    // Sort by a wide field while excluding a different wide field.
+                    Arguments.of(outputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.OUTPUT).direction(Direction.DESC).build(),
+                            Span.SpanField.METADATA));
+        }
+
+        @Test
+        @DisplayName("when paginating a sorted result with null/sparse data and a field excluded, then every page is consistent with the full sorted order and the excluded field stays null (OPIK-6747)")
+        void whenPaginatingSortedWithNullData__thenPagesConsistentAndExcludeApplied() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int total = 9;
+            AtomicInteger index = new AtomicInteger(0);
+
+            // Mix null data into the SORTED field (input) and into a non-sort field (error_info) on every 3rd row,
+            // so the two-phase pre-filter has to page null-bearing rows correctly.
+            var spans = IntStream.range(0, total)
+                    .mapToObj(i -> {
+                        var base = podamFactory.manufacturePojo(Span.class);
+                        var builder = base.toBuilder()
+                                .projectId(null)
+                                .feedbackScores(null)
+                                .comments(null)
+                                .projectName(projectName)
+                                .endTime(base.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                                .totalEstimatedCost(null)
+                                .usage(Map.of("total_tokens", RandomUtils.secure().randomInt()))
+                                .createdAt(Instant.now().plusMillis(index.getAndIncrement()))
+                                .lastUpdatedAt(Instant.now().plusMillis(index.getAndIncrement()));
+                        if (i % 3 == 0) {
+                            builder.input(null).errorInfo(null);
+                        } else {
+                            builder.input(JsonUtils.getJsonNodeFromString("{\"order\":\"%03d\"}".formatted(i)));
+                        }
+                        var span = builder.build();
+                        return span.toBuilder()
+                                .duration(span.startTime().until(span.endTime(), ChronoUnit.MICROS) / 1000.0)
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var sorting = SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build();
+            var excludeField = Span.SpanField.OUTPUT;
+
+            // The single full page is the DB's authoritative sorted order with the null/sparse data present.
+            var fullPage = spanResourceClient.findSpans(workspaceName, apiKey, projectName, null, 1, total, null, null,
+                    List.of(), List.of(sorting), List.of(excludeField));
+            assertThat(fullPage.total()).isEqualTo(total);
+            assertThat(fullPage.content()).hasSize(total);
+
+            // Content correctness (order-independent: both sides sorted by id) — every field matches, the excluded
+            // field is null, and the null/sparse values survived the page_wide re-read.
+            var expectedById = spans.stream()
+                    .map(s -> SpanAssertions.EXCLUDE_FUNCTIONS.get(excludeField).apply(s))
+                    .sorted(Comparator.comparing(Span::id))
+                    .toList();
+            var actualFullById = fullPage.content().stream()
+                    .sorted(Comparator.comparing(Span::id))
+                    .toList();
+            SpanAssertions.assertSpan(actualFullById, expectedById, List.of(), USER);
+            assertThat(fullPage.content()).allSatisfy(s -> assertThat(s.output()).isNull());
+
+            var fullOrderIds = fullPage.content().stream().map(Span::id).toList();
+
+            // Walk every page (size < total). If the page_ids pre-filter dropped the sort key, the paged slices would
+            // diverge from the full sorted order.
+            int pageSize = 2;
+            var pagedIds = new ArrayList<UUID>();
+            int pages = (total + pageSize - 1) / pageSize;
+            for (int p = 1; p <= pages; p++) {
+                var page = spanResourceClient.findSpans(workspaceName, apiKey, projectName, null, p, pageSize, null,
+                        null, List.of(), List.of(sorting), List.of(excludeField));
+                assertThat(page.total()).isEqualTo(total);
+                pagedIds.addAll(page.content().stream().map(Span::id).toList());
+            }
+            assertThat(pagedIds).as("pagination consistent with the full sorted order").isEqualTo(fullOrderIds);
+        }
+
         @Test
         void whenSortingByInvalidField__thenIgnoreAndReturnSuccess() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);

@@ -106,7 +106,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -4445,9 +4444,11 @@ class GetTracesByProjectResourceTest {
                     sortingFields, Set.of());
         }
 
-        @Test
-        @DisplayName("when sorting by a wide text field while excluding that same field, then sort still applies (OPIK-6747)")
-        void getTracesByProject__whenSortingByWideField_andExcludingSameField__thenSortStillApplied() {
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when sorting by a field while excluding a field, then sort applies and full page content is correct (OPIK-6747)")
+        void getTracesByProject__whenSortingAndExcludingField__thenReturnSortedExcludingField(
+                Comparator<Trace> comparator, SortingField sorting, Trace.TraceField excludeField) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -4456,50 +4457,178 @@ class GetTracesByProjectResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            // Distinct input.order values so sorting by the dynamic path "input.order" produces a deterministic order.
-            var traces = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectId(null)
-                            .projectName(projectName)
-                            .input(JsonUtils.getJsonNodeFromString("{\"order\":\"%03d\"}".formatted(i)))
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> {
+                        var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
+                        return trace.toBuilder()
+                                .projectId(null)
+                                .projectName(projectName)
+                                .usage(null)
+                                .feedbackScores(null)
+                                .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                                .comments(null)
+                                .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
+                                .llmSpanCount(llmSpanCount)
+                                .build();
+                    })
+                    .map(trace -> trace.toBuilder()
+                            .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
                             .build())
                     .toList();
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Fetch the page sorted by the dynamic path, optionally EXCLUDING the base "input" field.
-            BiFunction<Direction, Boolean, List<UUID>> sortedIds = (direction, excludeInput) -> {
-                Map<String, String> queryParams = new HashMap<>();
-                queryParams.put("project_name", projectName);
-                queryParams.put("page", "1");
-                queryParams.put("size", "10");
-                queryParams.put("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(
-                        List.of(SortingField.builder().field(SortableFields.INPUT).direction(direction).build())),
-                        StandardCharsets.UTF_8));
-                if (excludeInput) {
-                    queryParams.put("exclude", toURLEncodedQueryParam(List.of(Trace.TraceField.INPUT)));
-                }
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, trace.spanCount())
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
+                                    .build()))
+                    .toList();
 
-                try (var response = traceResourceClient.callGetTracesWithQueryParams(apiKey, workspaceName,
-                        queryParams)) {
-                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                    return response.readEntity(Trace.TracePage.class).content().stream().map(Trace::id).toList();
-                }
-            };
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            // Control: sorting by the wide field WITHOUT exclude works (ASC == reverse(DESC), and they differ).
-            var ascNoExclude = sortedIds.apply(Direction.ASC, false);
-            var descNoExclude = sortedIds.apply(Direction.DESC, false);
-            assertThat(descNoExclude).as("wide-field sort works without exclude").isEqualTo(ascNoExclude.reversed());
-            assertThat(descNoExclude).isNotEqualTo(ascNoExclude);
+            var spansByTrace = spans.stream().collect(Collectors.groupingBy(Span::traceId));
+            traces = traces.stream()
+                    .map(t -> t.toBuilder()
+                            .usage(aggregateSpansUsage(spansByTrace.get(t.id())))
+                            .build())
+                    .toList();
 
-            // Case under test (the area Baz flagged): excluding the same wide field must not drop the sort or error.
-            var ascExclude = sortedIds.apply(Direction.ASC, true);
-            var descExclude = sortedIds.apply(Direction.DESC, true);
-            assertThat(descExclude).as("wide-field sort still applied when that field is excluded")
-                    .isEqualTo(ascExclude.reversed());
-            assertThat(descExclude).isNotEqualTo(ascExclude);
-            assertThat(ascExclude).as("sort order consistent with/without exclude").isEqualTo(ascNoExclude);
+            // Sort by the requested field first (the value is still present), then null the excluded field
+            // in the expectation so we assert the FULL page content of the deferred-wide-column path.
+            var expectedTraces = traces.stream()
+                    .sorted(comparator)
+                    .map(trace -> TraceAssertions.EXCLUDE_FUNCTIONS.get(excludeField).apply(trace))
+                    .toList();
+
+            getAndAssertPage(workspaceName, projectName, null, List.of(), traces, expectedTraces, List.of(), apiKey,
+                    List.of(sorting), Set.of(excludeField));
+        }
+
+        private Stream<Arguments> getTracesByProject__whenSortingAndExcludingField__thenReturnSortedExcludingField() {
+            Comparator<Trace> inputComparator = Comparator.comparing(trace -> trace.input().toString());
+            Comparator<Trace> outputComparator = Comparator.comparing(trace -> trace.output().toString());
+
+            return Stream.of(
+                    // Sort by a wide text field while excluding that same field (the OPIK-6747 core case).
+                    Arguments.of(inputComparator,
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build(),
+                            Trace.TraceField.INPUT),
+                    Arguments.of(inputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.DESC).build(),
+                            Trace.TraceField.INPUT),
+                    // Sort by a regular field while excluding a wide field (deferred-wide pre-filter must still page right).
+                    Arguments.of(Comparator.comparing(Trace::name),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build(),
+                            Trace.TraceField.INPUT),
+                    // Sort by a computed field while excluding a wide field.
+                    Arguments.of(Comparator.comparing(Trace::duration)
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.ASC).build(),
+                            Trace.TraceField.OUTPUT),
+                    // Sort by a wide field while excluding a different wide field.
+                    Arguments.of(outputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.OUTPUT).direction(Direction.DESC).build(),
+                            Trace.TraceField.METADATA));
+        }
+
+        @Test
+        @DisplayName("when paginating a sorted result with null/sparse data and a field excluded, then every page is consistent with the full sorted order and the excluded field stays null (OPIK-6747)")
+        void getTracesByProject__whenPaginatingSortedWithNullData__thenPagesConsistentAndExcludeApplied() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int total = 9;
+
+            // Mix null data into the SORTED field (input) and into a non-sort field (error_info) on every 3rd row,
+            // so the two-phase pre-filter has to page null-bearing rows correctly.
+            var traces = IntStream.range(0, total)
+                    .mapToObj(i -> {
+                        var base = factory.manufacturePojo(Trace.class);
+                        var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
+                        var builder = base.toBuilder()
+                                .projectId(null)
+                                .projectName(projectName)
+                                .usage(null)
+                                .feedbackScores(null)
+                                .comments(null)
+                                .endTime(base.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                                .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
+                                .llmSpanCount(llmSpanCount);
+                        if (i % 3 == 0) {
+                            builder.input(null).errorInfo(null);
+                        } else {
+                            builder.input(JsonUtils.getJsonNodeFromString("{\"order\":\"%03d\"}".formatted(i)));
+                        }
+                        var trace = builder.build();
+                        return trace.toBuilder()
+                                .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
+                                .build();
+                    })
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, trace.spanCount())
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var spansByTrace = spans.stream().collect(Collectors.groupingBy(Span::traceId));
+            var createdTraces = traces.stream()
+                    .map(t -> t.toBuilder().usage(aggregateSpansUsage(spansByTrace.get(t.id()))).build())
+                    .toList();
+
+            var sorting = SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build();
+            var excludeField = Trace.TraceField.OUTPUT;
+            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                    StandardCharsets.UTF_8);
+            var excludeParam = toURLEncodedQueryParam(List.of(excludeField));
+
+            // The single full page is the DB's authoritative sorted order with the null/sparse data present.
+            var fullPage = fetchTracePage(apiKey, workspaceName, projectName, sortingParam, excludeParam, 1, total);
+            assertThat(fullPage.total()).isEqualTo(total);
+            assertThat(fullPage.content()).hasSize(total);
+
+            // Content correctness (order-independent: both sides sorted by id) — every field matches, the excluded
+            // field is null, and the null/sparse values survived the page_wide re-read.
+            var expectedById = createdTraces.stream()
+                    .map(t -> TraceAssertions.EXCLUDE_FUNCTIONS.get(excludeField).apply(t))
+                    .sorted(Comparator.comparing(Trace::id))
+                    .toList();
+            var actualFullById = fullPage.content().stream()
+                    .sorted(Comparator.comparing(Trace::id))
+                    .toList();
+            TraceAssertions.assertTraces(actualFullById, expectedById, USER);
+            assertThat(fullPage.content()).allSatisfy(t -> assertThat(t.output()).isNull());
+
+            var fullOrderIds = fullPage.content().stream().map(Trace::id).toList();
+
+            // Walk every page (size < total). If the page_ids pre-filter dropped the sort key, the paged slices would
+            // diverge from the full sorted order.
+            int pageSize = 2;
+            var pagedIds = new ArrayList<UUID>();
+            int pages = (total + pageSize - 1) / pageSize;
+            for (int p = 1; p <= pages; p++) {
+                var page = fetchTracePage(apiKey, workspaceName, projectName, sortingParam, excludeParam, p, pageSize);
+                assertThat(page.total()).isEqualTo(total);
+                pagedIds.addAll(page.content().stream().map(Trace::id).toList());
+            }
+            assertThat(pagedIds).as("pagination consistent with the full sorted order").isEqualTo(fullOrderIds);
         }
 
         @Test
@@ -5036,6 +5165,21 @@ class GetTracesByProjectResourceTest {
 
     private static int randomNumber(int minValue, int maxValue) {
         return PodamUtils.getIntegerInRange(minValue, maxValue);
+    }
+
+    private Trace.TracePage fetchTracePage(String apiKey, String workspaceName, String projectName,
+            String sortingParam, String excludeParam, int page, int size) {
+        Map<String, String> queryParams = new HashMap<>();
+        queryParams.put("project_name", projectName);
+        queryParams.put("page", String.valueOf(page));
+        queryParams.put("size", String.valueOf(size));
+        queryParams.put("sorting", sortingParam);
+        queryParams.put("exclude", excludeParam);
+
+        try (var response = traceResourceClient.callGetTracesWithQueryParams(apiKey, workspaceName, queryParams)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Trace.TracePage.class);
+        }
     }
 
     private void getAndAssertPage(String workspaceName, String projectName, UUID projectId,

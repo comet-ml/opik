@@ -64,7 +64,7 @@ public class SortableFields {
     public static final String CHANGE_DESCRIPTION = "change_description";
     public static final String ENVIRONMENT = "environment";
 
-    // Wide text columns deferred past pagination by the TraceDAO/SpanDAO page_wide optimization.
+    /** Wide text columns deferred past pagination by the TraceDAO/SpanDAO page_wide optimization. */
     private static final Set<String> WIDE_TEXT_FIELDS = Set.of(INPUT, OUTPUT, METADATA);
 
     /**

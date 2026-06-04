@@ -817,6 +817,17 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * Two-phase, wide-column-deferred trace page query.
+     * <p>
+     * Phase 1 ({@code page_ids}) paginates on the light, deduped id + sort-key set only — wide text columns
+     * (input/output/metadata) are dropped from the scanned {@code traces_deduped} CTE unless the sort targets them
+     * ({@code sort_needs_wide}). Phase 2 ({@code page_wide}) re-reads the full rows, including wide columns, for just
+     * the page ids. The custom {@code sort_fields} are rendered into both the {@code page_ids} ORDER BY (so pagination
+     * picks the right page) and the final ORDER BY (so the page is returned in order); {@code page_wide}'s own order is
+     * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
+     * truncation are layered on top without dropping the sort key.
+     */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
