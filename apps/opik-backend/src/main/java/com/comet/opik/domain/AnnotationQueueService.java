@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
+import com.comet.opik.api.AnnotationQueueItemLock;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.Project;
@@ -41,6 +42,8 @@ public interface AnnotationQueueService {
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds);
 
     Mono<Long> deleteBatch(Set<UUID> ids);
+
+    Mono<AnnotationQueueItemLock.LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId);
 }
 
 @Singleton
@@ -49,6 +52,7 @@ public interface AnnotationQueueService {
 class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
+    private final @NonNull AnnotationQueueItemLockService lockService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ProjectService projectService;
 
@@ -156,6 +160,28 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))
                 .doOnError(error -> log.info("Failed to delete annotation queue batch", error));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueueItemLock.LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return annotationQueueDAO.findById(queueId)
+                    .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
+                    .flatMap(queue -> annotationQueueDAO.getDistinctAnnotatorCount(
+                            itemId, queue.projectId(),
+                            queue.feedbackDefinitionNames() != null
+                                    ? queue.feedbackDefinitionNames()
+                                    : List.of())
+                            .flatMap(scoredCount -> lockService.tryLock(
+                                    workspaceId, queueId, itemId, userName,
+                                    queue.annotatorsPerItem(),
+                                    scoredCount,
+                                    queue.lockTimeoutMinutes())));
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<AnnotationQueue> enhanceWithProjectName(AnnotationQueue annotationQueue) {

@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, Eye } from "lucide-react";
 import FeedbackScoresEditor from "@/v2/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor";
 import UserCommentForm from "@/shared/UserComment/UserCommentForm";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
@@ -34,6 +34,7 @@ const CommentAndScoreViewer: React.FC = () => {
     currentAnnotationState,
     annotationQueue,
     itemStates,
+    currentItemLockDenied,
     updateComment,
     updateFeedbackScore,
     deleteFeedbackScore,
@@ -57,7 +58,12 @@ const CommentAndScoreViewer: React.FC = () => {
       )
     : false;
 
-  const isLockedForUser = isCompleted && !userHasAnnotated;
+  const isInReview = currentItem
+    ? itemStates[getAnnotationQueueItemId(currentItem)] === ITEM_STATE.IN_REVIEW
+    : false;
+
+  const isLockedForUser =
+    (isCompleted && !userHasAnnotated) || isInReview || currentItemLockDenied;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackScoresRef = useRef<HTMLDivElement>(null);
@@ -101,6 +107,17 @@ const CommentAndScoreViewer: React.FC = () => {
     { enableOnFormTags: true },
     [hasFeedbackDefinitions, isLockedForUser],
   );
+
+  if (isInReview || currentItemLockDenied) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
+        <Eye className="size-5 text-orange-400" />
+        <p className="comet-body-xs max-w-[250px]">
+          This item is currently being reviewed by another annotator
+        </p>
+      </div>
+    );
+  }
 
   if (isLockedForUser) {
     return (

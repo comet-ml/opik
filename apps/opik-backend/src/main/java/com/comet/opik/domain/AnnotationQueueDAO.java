@@ -61,6 +61,8 @@ public interface AnnotationQueueDAO {
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
+
+    Mono<Integer> getDistinctAnnotatorCount(UUID itemId, UUID projectId, List<String> feedbackDefinitionNames);
 }
 
 @Singleton
@@ -71,7 +73,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     // Best-effort threshold enforced client-side: the FE skips items once N distinct
     // annotators are counted, but the BE does not reject if N+1 submit concurrently.
 
-    private static final int MIN_ANNOTATORS_PER_ITEM = 1;
+    private static final int DEFAULT_MIN_ANNOTATORS_PER_ITEM = 1;
+    private static final int DEFAULT_LOCK_TIMEOUT_MINUTES = 5;
 
     private static final String BATCH_INSERT = """
             INSERT INTO annotation_queues (
@@ -85,6 +88,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 comments_enabled,
                 feedback_definitions,
                 annotators_per_item,
+                lock_timeout_minutes,
                 created_by,
                 last_updated_by
             ) VALUES
@@ -100,6 +104,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         :comments_enabled<item.index>,
                         :feedback_definitions<item.index>,
                         :annotators_per_item<item.index>,
+                        :lock_timeout_minutes<item.index>,
                         :user_name,
                         :user_name
                     )
@@ -120,6 +125,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 comments_enabled,
                 feedback_definitions,
                 annotators_per_item,
+                lock_timeout_minutes,
                 created_at,
             	created_by,
             	last_updated_by
@@ -135,6 +141,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 <if(comments_enabled)> :comments_enabled <else> comments_enabled <endif> as comments_enabled,
                 <if(has_feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
                 <if(has_annotators_per_item)> :annotators_per_item <else> annotators_per_item <endif> as annotators_per_item,
+                <if(has_lock_timeout_minutes)> :lock_timeout_minutes <else> lock_timeout_minutes <endif> as lock_timeout_minutes,
                 created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -183,6 +190,31 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND id IN :ids
             """;
 
+    private static final String COUNT_DISTINCT_ANNOTATORS = """
+            SELECT uniqExact(author) AS cnt
+            FROM (
+                SELECT last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND entity_id = :item_id
+                    AND name IN :feedback_names
+                UNION ALL
+                SELECT author
+                FROM authored_feedback_scores FINAL
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND entity_id = :item_id
+                    AND name IN :feedback_names
+                UNION ALL
+                SELECT created_by AS author
+                FROM comments FINAL
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND entity_id = :item_id
+            )
+            """;
+
     private static final String SELECT_QUEUE_INFO_BY_ID = """
             SELECT
                 id,
@@ -207,6 +239,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     comments_enabled,
                     feedback_definitions,
                     annotators_per_item,
+                    lock_timeout_minutes,
                     created_by,
                     created_at,
                     last_updated_by,
@@ -368,6 +401,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 q.comments_enabled,
                 q.feedback_definitions,
                 q.annotators_per_item,
+                q.lock_timeout_minutes,
                 q.scope,
                 q.created_at,
                 q.created_by,
@@ -539,7 +573,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     .bind("annotators_per_item" + i,
                             annotationQueue.annotatorsPerItem() != null
                                     ? annotationQueue.annotatorsPerItem()
-                                    : MIN_ANNOTATORS_PER_ITEM);
+                                    : DEFAULT_MIN_ANNOTATORS_PER_ITEM)
+                    .bind("lock_timeout_minutes" + i,
+                            annotationQueue.lockTimeoutMinutes() != null
+                                    ? annotationQueue.lockTimeoutMinutes()
+                                    : DEFAULT_LOCK_TIMEOUT_MINUTES);
             i++;
         }
 
@@ -588,7 +626,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .feedbackDefinitionNames(Arrays.stream(row.get("feedback_definitions", String[].class))
                         .toList())
                 .annotatorsPerItem(Optional.ofNullable(row.get("annotators_per_item", Integer.class))
-                        .orElse(MIN_ANNOTATORS_PER_ITEM))
+                        .orElse(DEFAULT_MIN_ANNOTATORS_PER_ITEM))
+                .lockTimeoutMinutes(Optional.ofNullable(row.get("lock_timeout_minutes", Integer.class))
+                        .orElse(DEFAULT_LOCK_TIMEOUT_MINUTES))
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
@@ -702,6 +742,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 });
         Optional.ofNullable(update.annotatorsPerItem())
                 .ifPresent(annotatorsPerItem -> template.add("has_annotators_per_item", true));
+        Optional.ofNullable(update.lockTimeoutMinutes())
+                .ifPresent(lockTimeoutMinutes -> template.add("has_lock_timeout_minutes", true));
 
         return template;
     }
@@ -721,6 +763,26 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         feedbackDefinitionNames.toArray(String[]::new)));
         Optional.ofNullable(update.annotatorsPerItem())
                 .ifPresent(annotatorsPerItem -> statement.bind("annotators_per_item", annotatorsPerItem));
+        Optional.ofNullable(update.lockTimeoutMinutes())
+                .ifPresent(lockTimeoutMinutes -> statement.bind("lock_timeout_minutes", lockTimeoutMinutes));
+    }
+
+    @Override
+    public Mono<Integer> getDistinctAnnotatorCount(@NonNull UUID itemId, @NonNull UUID projectId,
+            @NonNull List<String> feedbackDefinitionNames) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(COUNT_DISTINCT_ANNOTATORS)
+                            .bind("item_id", itemId)
+                            .bind("project_id", projectId)
+                            .bind("feedback_names", feedbackDefinitionNames.toArray(String[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map(
+                        (row, rowMetadata) -> Optional.ofNullable(row.get("cnt", Long.class)).orElse(0L).intValue()))
+                .next()
+                .defaultIfEmpty(0);
     }
 
     private void bindSearchCriteria(Statement statement, AnnotationQueueSearchCriteria searchCriteria) {

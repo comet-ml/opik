@@ -20,6 +20,7 @@ export interface AnnotationQueue {
   comments_enabled: boolean;
   feedback_definition_names: string[];
   annotators_per_item?: number; // optional for v1 compat
+  lock_timeout_minutes?: number; // optional for v1 compat
   scope: ANNOTATION_QUEUE_SCOPE;
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];
@@ -29,6 +30,22 @@ export interface AnnotationQueue {
   last_updated_at: string;
   last_updated_by: string;
   last_scored_at: string;
+}
+
+export interface AnnotationQueueItemLockResponse {
+  acquired: boolean;
+  item_id: string;
+  locked_by: string;
+  expires_at: string | null;
+}
+
+export interface AnnotationQueueItemLockInfo {
+  active_locks: number;
+  locked_by: string[];
+}
+
+export interface AnnotationQueueLocksResponse {
+  locks: Record<string, AnnotationQueueItemLockInfo>;
 }
 
 export type CreateAnnotationQueue = Omit<

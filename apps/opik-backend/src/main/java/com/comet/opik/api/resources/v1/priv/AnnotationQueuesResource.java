@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
+import com.comet.opik.api.AnnotationQueueItemLock;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.BatchDelete;
@@ -11,6 +12,7 @@ import com.comet.opik.api.filter.AnnotationQueueFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.AnnotationQueueItemLockService;
 import com.comet.opik.domain.AnnotationQueueService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
@@ -35,6 +37,7 @@ import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -65,6 +68,7 @@ public class AnnotationQueuesResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull AnnotationQueueSortingFactory sortingFactory;
     private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull AnnotationQueueItemLockService lockService;
 
     @GET
     @Operation(operationId = "findAnnotationQueues", summary = "Find annotation queues", description = "Find annotation queues with filtering and sorting", responses = {
@@ -277,5 +281,42 @@ public class AnnotationQueuesResource {
                 request.ids().size(), queueId, workspaceId);
 
         return Response.noContent().build();
+    }
+
+    //    annotation queue item locks
+
+    @PUT
+    @Path("/{queueId}/items/{itemId}/lock")
+    @Operation(operationId = "lockAnnotationQueueItem", summary = "Create or extend annotation queue item lock", description = "Claim an annotation queue item for the current user, or extend an existing lock", responses = {
+            @ApiResponse(responseCode = "200", description = "Lock result", content = @Content(schema = @Schema(implementation = AnnotationQueueItemLock.LockResponse.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_ANNOTATE)
+    public Response lockItem(
+            @PathParam("queueId") UUID queueId,
+            @PathParam("itemId") UUID itemId) {
+
+        var result = annotationQueueService.tryLockItem(queueId, itemId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.ok().entity(result).build();
+    }
+
+    @GET
+    @Path("/{queueId}/locks")
+    @Operation(operationId = "getAnnotationQueueLocks", summary = "Get all active locks for an annotation queue", description = "Returns lock status for all actively locked items in the queue", responses = {
+            @ApiResponse(responseCode = "200", description = "Queue locks", content = @Content(schema = @Schema(implementation = AnnotationQueueItemLock.LocksResponse.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_ANNOTATE)
+    public Response getQueueLocks(@PathParam("queueId") UUID queueId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        var locks = lockService.getLocksForQueue(workspaceId, queueId)
+                .block();
+
+        return Response.ok()
+                .entity(AnnotationQueueItemLock.LocksResponse.builder().locks(locks).build())
+                .build();
     }
 }
