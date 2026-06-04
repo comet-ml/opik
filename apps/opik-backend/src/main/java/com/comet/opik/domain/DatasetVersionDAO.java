@@ -380,14 +380,24 @@ public interface DatasetVersionDAO {
     int updateChangeDescription(@Bind("id") UUID id, @Bind("change_description") String changeDescription,
             @Bind("last_updated_by") String lastUpdatedBy, @Bind("workspace_id") String workspaceId);
 
-    // 'latest' is always the max-id version, so its version number is the dataset's total count;
-    // COUNT avoids a ROW_NUMBER() window over every version (on-disk temp table at scale).
+    /**
+     * Resolves the 'latest'-tagged version per dataset. The latest version is always the max-id row,
+     * so its version number equals the dataset's total version count: a correlated {@code COUNT(*)}
+     * served by the covering index {@code idx_dataset_versions_workspace_id_dataset_id_id} replaces a
+     * {@code ROW_NUMBER()} window over every version, which sorted the full version set into an
+     * on-disk temp table at scale. The subquery runs once per result row (one latest row per dataset).
+     */
     @SqlQuery("""
             SELECT
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                CONCAT('v', vc.version_count) AS version_name,
+                CONCAT('v', (
+                    SELECT COUNT(*)
+                    FROM dataset_versions c
+                    WHERE c.workspace_id = dv.workspace_id
+                        AND c.dataset_id = dv.dataset_id
+                )) AS version_name,
                 dv.items_total,
                 dv.items_added,
                 dv.items_modified,
@@ -408,12 +418,6 @@ public interface DatasetVersionDAO {
                 AND dvt.dataset_id = dv.dataset_id
                 AND dvt.version_id = dv.id
                 AND dvt.tag = 'latest'
-            INNER JOIN (
-                SELECT dataset_id, COUNT(*) AS version_count
-                FROM dataset_versions
-                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
-                GROUP BY dataset_id
-            ) AS vc ON vc.dataset_id = dv.dataset_id
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags

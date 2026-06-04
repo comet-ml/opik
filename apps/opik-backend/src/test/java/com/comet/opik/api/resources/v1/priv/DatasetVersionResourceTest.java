@@ -15,6 +15,7 @@ import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.EvaluatorItem;
@@ -1917,11 +1918,11 @@ class DatasetVersionResourceTest {
         @Test
         @DisplayName("Success: GET datasets list returns correct latest version across many versions and multiple datasets")
         void getDatasets__whenManyVersions__thenLatestVersionNameTagsAndIdCorrect() {
-            // Given - two datasets with different, large-ish version counts so the latest
-            // version's name (= total version count) is unambiguous and an off-by-one or
-            // wrong-dataset join would be caught.
-            int dataset1Versions = 12;
-            int dataset2Versions = 5;
+            // Given - two datasets with different version counts so the latest version's name
+            // (= total version count) is unambiguous and an off-by-one or wrong-dataset join
+            // would be caught.
+            int dataset1Versions = 5;
+            int dataset2Versions = 3;
 
             var dataset1Id = createDataset(UUID.randomUUID().toString());
             IntStream.range(0, dataset1Versions).forEach(i -> createDatasetItems(dataset1Id, 1));
@@ -1934,26 +1935,38 @@ class DatasetVersionResourceTest {
             assertThat(latest1.versionName()).isEqualTo("v" + dataset1Versions);
             assertThat(latest2.versionName()).isEqualTo("v" + dataset2Versions);
 
+            var expectedSummary1 = toSummary(latest1);
+            var expectedSummary2 = toSummary(latest2);
+
             // When - the datasets list endpoint resolves the latest version per dataset
             var datasetsPage = datasetResourceClient.getDatasets(TEST_WORKSPACE, API_KEY);
 
-            var dataset1 = datasetsPage.content().stream()
-                    .filter(d -> d.id().equals(dataset1Id)).findFirst()
-                    .orElseThrow(() -> new AssertionError("dataset1 not found in list"));
-            var dataset2 = datasetsPage.content().stream()
-                    .filter(d -> d.id().equals(dataset2Id)).findFirst()
-                    .orElseThrow(() -> new AssertionError("dataset2 not found in list"));
+            // Then - each dataset reports its own latest version as a full summary object
+            assertThat(datasetsPage.content())
+                    .filteredOn(d -> d.id().equals(dataset1Id))
+                    .singleElement()
+                    .extracting(Dataset::latestVersion)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedSummary1);
 
-            // Then - each dataset reports its own latest version: correct id, name and 'latest' tag
-            assertThat(dataset1.latestVersion()).isNotNull();
-            assertThat(dataset1.latestVersion().id()).isEqualTo(latest1.id());
-            assertThat(dataset1.latestVersion().versionName()).isEqualTo("v" + dataset1Versions);
-            assertThat(dataset1.latestVersion().tags()).contains(DatasetVersionService.LATEST_TAG);
+            assertThat(datasetsPage.content())
+                    .filteredOn(d -> d.id().equals(dataset2Id))
+                    .singleElement()
+                    .extracting(Dataset::latestVersion)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedSummary2);
+        }
 
-            assertThat(dataset2.latestVersion()).isNotNull();
-            assertThat(dataset2.latestVersion().id()).isEqualTo(latest2.id());
-            assertThat(dataset2.latestVersion().versionName()).isEqualTo("v" + dataset2Versions);
-            assertThat(dataset2.latestVersion().tags()).contains(DatasetVersionService.LATEST_TAG);
+        private DatasetVersionSummary toSummary(DatasetVersion version) {
+            return DatasetVersionSummary.builder()
+                    .id(version.id())
+                    .versionHash(version.versionHash())
+                    .versionName(version.versionName())
+                    .changeDescription(version.changeDescription())
+                    .tags(version.tags())
+                    .build();
         }
 
         @Test
