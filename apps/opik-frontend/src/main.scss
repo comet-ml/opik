@@ -934,6 +934,19 @@
     overflow-wrap: break-word;
     word-break: break-word;
   }
+
+  :not(pre) > code {
+    @apply comet-code;
+    background-color: hsl(var(--muted));
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: inherit;
+
+    &::before,
+    &::after {
+      content: none;
+    }
+  }
 }
 
 .comet-button-badge {
