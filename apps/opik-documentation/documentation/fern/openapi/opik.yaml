@@ -2036,6 +2036,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/items/from-json:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from JSON file
+      description: |-
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+      operationId: createDatasetItemsFromJson
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - dataset_id
+              - file
+              - format
+              type: object
+              properties:
+                file:
+                  type: object
+                dataset_id:
+                  type: string
+                  format: uuid
+                format:
+                  type: string
+                  enum:
+                  - json
+                  - jsonl
+      responses:
+        "202":
+          description: Accepted - JSON processing started
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets/{dataset_id}/items/from-spans:
     post:
       tags:
