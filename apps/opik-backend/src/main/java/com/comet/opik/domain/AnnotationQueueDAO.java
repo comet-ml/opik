@@ -190,6 +190,14 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND id IN :ids
             """;
 
+    private static final String COUNT_DISTINCT_COMMENT_AUTHORS = """
+            SELECT uniqExact(created_by) AS cnt
+            FROM comments FINAL
+            WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id = :item_id
+            """;
+
     private static final String COUNT_DISTINCT_ANNOTATORS = """
             SELECT uniqExact(author) AS cnt
             FROM (
@@ -770,12 +778,19 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     @Override
     public Mono<Integer> getDistinctAnnotatorCount(@NonNull UUID itemId, @NonNull UUID projectId,
             @NonNull List<String> feedbackDefinitionNames) {
+        var query = feedbackDefinitionNames.isEmpty()
+                ? COUNT_DISTINCT_COMMENT_AUTHORS
+                : COUNT_DISTINCT_ANNOTATORS;
+
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(COUNT_DISTINCT_ANNOTATORS)
+                    var statement = connection.createStatement(query)
                             .bind("item_id", itemId)
-                            .bind("project_id", projectId)
-                            .bind("feedback_names", feedbackDefinitionNames.toArray(String[]::new));
+                            .bind("project_id", projectId);
+
+                    if (!feedbackDefinitionNames.isEmpty()) {
+                        statement.bind("feedback_names", feedbackDefinitionNames.toArray(String[]::new));
+                    }
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
