@@ -51,7 +51,8 @@ const ThreadDetailsTags: React.FunctionComponent<ThreadDetailsTagsProps> = ({
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
       canAdd={canLogTraceSpanThread}
-      tagVariant="gray"
+      size="md"
+      tagVariant="green"
     />
   );
 };

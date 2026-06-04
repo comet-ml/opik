@@ -132,6 +132,7 @@ openai:
 anthropic:
   - id: "claude-opus-4-8"
     label: "Claude Opus 4.8"
+    structuredOutput: true
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
     structuredOutput: true
@@ -182,12 +183,6 @@ gemini:
   - id: "gemini-2.5-flash-lite"
     label: "Gemini 2.5 Flash-Lite"
     structuredOutput: true
-  - id: "gemini-2.0-flash"
-    label: "Gemini 2.0 Flash"
-    structuredOutput: true
-  - id: "gemini-2.0-flash-lite"
-    label: "Gemini 2.0 Flash-Lite"
-    structuredOutput: true
   - id: "gemma-4-26b-a4b-it"
     label: "Gemma 4 26B A4B IT"
   - id: "gemma-4-31b-it"
@@ -201,6 +196,10 @@ gemini:
   - id: "gemini-1.5-flash-latest"
     structuredOutput: true
   - id: "gemini-1.5-pro-latest"
+    structuredOutput: true
+  - id: "gemini-2.0-flash"
+    structuredOutput: true
+  - id: "gemini-2.0-flash-lite"
     structuredOutput: true
   - id: "gemini-2.5-flash-image"
     structuredOutput: true
@@ -489,9 +488,6 @@ openrouter:
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
     label: "essentialai/rnj-1-instruct"
-  - id: "google/gemini-2.0-flash-001"
-    label: "google/gemini-2.0-flash-001"
-    structuredOutput: true
   - id: "google/gemini-2.0-flash-exp:free"
     label: "google/gemini-2.0-flash-exp:free"
     structuredOutput: true
@@ -709,6 +705,8 @@ openrouter:
     label: "minimax/minimax-m2.5:free"
   - id: "minimax/minimax-m2.7"
     label: "minimax/minimax-m2.7"
+  - id: "minimax/minimax-m3"
+    label: "minimax/minimax-m3"
   - id: "mistralai/codestral-2501"
     label: "mistralai/codestral-2501"
     structuredOutput: true
@@ -1061,6 +1059,8 @@ openrouter:
   - id: "openrouter/free"
     label: "openrouter/free"
     structuredOutput: true
+  - id: "openrouter/fusion"
+    label: "openrouter/fusion"
   - id: "openrouter/healer-alpha"
     label: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"
@@ -1227,6 +1227,8 @@ openrouter:
     label: "qwen/qwen3.6-plus:free"
   - id: "qwen/qwen3.7-max"
     label: "qwen/qwen3.7-max"
+  - id: "qwen/qwen3.7-plus"
+    label: "qwen/qwen3.7-plus"
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true
@@ -1386,3 +1388,5 @@ openrouter:
     label: "~openai/gpt-latest"
   - id: "~openai/gpt-mini-latest"
     label: "~openai/gpt-mini-latest"
+  - id: "google/gemini-2.0-flash-001"
+    structuredOutput: true

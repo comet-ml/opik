@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 type UseDatasetItemsFromCsvMutationParams = {
   datasetId: string;
@@ -25,11 +25,6 @@ const useDatasetItemsFromCsvMutation = () => {
       const { data } = await api.post(
         `${DATASETS_REST_ENDPOINT}items/from-csv`,
         formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
       );
       return data;
     },
@@ -39,15 +34,9 @@ const useDatasetItemsFromCsvMutation = () => {
       };
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
-
       toast({
         title: "Error",
-        description: message,
+        description: getApiErrorMessage(error),
         variant: "destructive",
       });
     },

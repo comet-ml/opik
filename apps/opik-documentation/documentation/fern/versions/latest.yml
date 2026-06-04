@@ -33,10 +33,10 @@ navigation:
             path: ../docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
-          - page: Upgrading to Opik 2.0
-            path: ../docs-v2/opik_v2_upgrade.mdx
-            slug: /opik-v2-upgrade
-            icon: fa-regular fa-circle-up
+          - page: MCP Server
+            path: ../docs-v2/prompt_engineering/mcp-server.mdx
+            slug: mcp-server
+            icon: fa-regular fa-network-wired
           - page: Ollie Agent
             path: ../docs-v2/ollie.mdx
             slug: ollie
@@ -49,6 +49,10 @@ navigation:
             title: Changelog
             slug: changelog
             icon: fa-regular fa-calendar
+          - page: Upgrading to Opik 2.0
+            path: ../docs-v2/opik_v2_upgrade.mdx
+            slug: /opik-v2-upgrade
+            icon: fa-regular fa-circle-up
       - section: Observability
         slug: /tracing
         contents:
@@ -133,9 +137,6 @@ navigation:
               - page: Text and chat prompts
                 path: ../docs-v2/prompt_engineering/prompt-types.mdx
                 slug: prompt-types
-              - page: MCP server
-                path: ../docs-v2/prompt_engineering/mcp-server.mdx
-                slug: mcp-server
               - page: Version control
                 path: ../docs-v2/prompt_engineering/version-control.mdx
                 slug: version-control
@@ -571,6 +572,13 @@ navigation:
       - page: Overview
         path: ../docs-v2/integrations/overview.mdx
         slug: overview
+      - section: AI Coding Assistants
+        skip-slug: true
+        icon: fa-regular fa-robot
+        contents:
+          - page: MCP Server
+            path: ../docs-v2/prompt_engineering/mcp-server.mdx
+            slug: mcp-server
       - section: TypeScript
         skip-slug: true
         icon: fa-brands fa-js
@@ -879,6 +887,9 @@ navigation:
       - page: Overview
         path: ../docs-v2/self-host/overview.mdx
         slug: overview
+      - page: Migrating to Opik 2.0
+        path: ../docs-v2/self-host/v1_to_v2_migration.mdx
+        slug: v1-to-v2-migration
       - page: Local deployment
         path: ../docs-v2/self-host/local_deployment.mdx
         slug: local_deployment

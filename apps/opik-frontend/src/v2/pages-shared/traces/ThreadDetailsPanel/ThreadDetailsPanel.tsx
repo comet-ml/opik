@@ -10,6 +10,7 @@ import {
   Hash,
   MessagesSquare,
   MoreHorizontal,
+  PenLine,
   Share,
   Trash,
 } from "lucide-react";
@@ -34,14 +35,16 @@ import {
 } from "@/lib/traces/exportUtils";
 import { Trace } from "@/types/traces";
 import { Filter } from "@/types/filters";
+import { cn } from "@/lib/utils";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
 import useAppStore from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
+import { Skeleton } from "@/ui/skeleton";
+import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
@@ -104,6 +107,50 @@ export type ThreadDetailsPanelProps = {
 };
 
 const DEFAULT_TAB = "messages";
+
+const ThreadHeaderSkeleton: React.FC = () => (
+  <div className="flex flex-col gap-2">
+    <div className="flex flex-wrap gap-2">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-5 w-24" />
+      <Skeleton className="h-5 w-16" />
+      <Skeleton className="h-5 w-20" />
+    </div>
+    <div className="flex gap-2">
+      <Skeleton className="h-6 w-[72px]" />
+      <Skeleton className="h-6 w-[72px]" />
+      <Skeleton className="h-6 w-[72px]" />
+    </div>
+  </div>
+);
+
+const MESSAGE_SKELETON_ROWS = [
+  { align: "end", width: "55%", height: 56 },
+  { align: "start", width: "80%", height: 96 },
+  { align: "end", width: "45%", height: 56 },
+  { align: "start", width: "75%", height: 160 },
+  { align: "end", width: "60%", height: 56 },
+  { align: "start", width: "70%", height: 128 },
+] as const;
+
+const ThreadMessagesSkeleton: React.FC = () => (
+  <div className="flex flex-col gap-4 px-6 pt-2">
+    {MESSAGE_SKELETON_ROWS.map((row, i) => (
+      <div
+        key={i}
+        className={cn(
+          "flex",
+          row.align === "end" ? "justify-end" : "justify-start",
+        )}
+      >
+        <Skeleton
+          className="rounded-xl"
+          style={{ width: row.width, height: row.height }}
+        />
+      </div>
+    ))}
+  </div>
+);
 
 const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   projectId,
@@ -194,9 +241,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       page: 1,
       size: 1000,
       truncate: false,
+      fromTime: thread?.start_time,
+      toTime: thread?.end_time,
     },
     {
-      enabled: Boolean(threadId),
+      enabled: Boolean(threadId) && Boolean(thread),
     },
   );
 
@@ -367,37 +416,27 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const renderHeader = () => {
-    if (isThreadPending) {
-      return <Loader />;
-    }
-
     return (
-      <div className="flex flex-col gap-1">
-        <div className=" flex w-full items-center gap-3 overflow-x-hidden py-1">
+      <div className="flex flex-col gap-2">
+        <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-foreground">
           <TooltipWrapper content="Thread start time">
-            <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
-              <Calendar className="size-4 shrink-0" />
-              <span className="comet-body-s truncate">
-                {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
-              </span>
+            <div className="flex items-center gap-1">
+              <Calendar className="size-3.5 shrink-0 text-muted-slate" />
+              {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
             </div>
           </TooltipWrapper>
           <TooltipWrapper content="Number of messages in the thread">
-            <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
-              <Hash className="size-4 shrink-0" />
-              <span className="comet-body-s truncate">
-                {thread?.number_of_messages
-                  ? `${thread.number_of_messages} messages`
-                  : "NA"}
-              </span>
+            <div className="flex items-center gap-1">
+              <Hash className="size-3.5 shrink-0 text-muted-slate" />
+              {thread?.number_of_messages
+                ? `${thread.number_of_messages} messages`
+                : "NA"}
             </div>
           </TooltipWrapper>
           <TooltipWrapper content="Thread duration">
-            <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
-              <Clock className="size-4 shrink-0" />
-              <span className="comet-body-s truncate">
-                {formatDuration(thread?.duration, false)}
-              </span>
+            <div className="flex items-center gap-1">
+              <Clock className="size-3.5 shrink-0 text-muted-slate" />
+              {formatDuration(thread?.duration, false)}
             </div>
           </TooltipWrapper>
           {!isUndefined(thread?.total_estimated_cost) && (
@@ -407,13 +446,19 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 { modifier: "full" },
               )}`}
             >
-              <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
-                <Coins className="size-4 shrink-0" />
-                <span className="comet-body-s truncate">
-                  {formatCost(thread?.total_estimated_cost)}
-                </span>
+              <div className="flex items-center gap-1">
+                <Coins className="size-3.5 shrink-0 text-muted-slate" />
+                {formatCost(thread?.total_estimated_cost)}
               </div>
             </TooltipWrapper>
+          )}
+          {Boolean(threadFeedbackScores.length) && (
+            <FeedbackScoreHoverCard scores={threadFeedbackScores}>
+              <div className="flex items-center gap-1">
+                <PenLine className="size-3.5 shrink-0 text-muted-slate" />
+                {threadFeedbackScores.length} scores
+              </div>
+            </FeedbackScoreHoverCard>
           )}
         </div>
         {thread && (
@@ -428,10 +473,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const renderBody = () => {
-    if (isTracesPending) {
-      return <Loader />;
-    }
-
     return (
       <Tabs
         defaultValue="messages"
@@ -439,32 +480,40 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         onValueChange={setActiveTab}
       >
         <div className="mx-4" data-panel-tabs="true">
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="messages">
+          <TabsList variant="segmented-primary">
+            <TabsTrigger variant="segmented-primary" size="sm" value="messages">
               Messages
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="feedback_scores">
+            <TabsTrigger
+              variant="segmented-primary"
+              size="sm"
+              value="feedback_scores"
+            >
               Feedback scores
             </TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="messages">
-          <MediaProvider media={media}>
-            {media.length > 0 && (
-              <div className="mb-4 px-4">
-                <Accordion type="multiple" defaultValue={["attachments"]}>
-                  <AttachmentsList media={media} />
-                </Accordion>
+          {isTracesPending ? (
+            <ThreadMessagesSkeleton />
+          ) : (
+            <MediaProvider media={media}>
+              {media.length > 0 && (
+                <div className="mb-4 px-4">
+                  <Accordion type="multiple" defaultValue={["attachments"]}>
+                    <AttachmentsList media={media} />
+                  </Accordion>
+                </div>
+              )}
+              <div style={bodyStyle}>
+                <TraceMessages
+                  traces={traces}
+                  handleOpenTrace={handleOpenTrace}
+                  traceId={traceId}
+                />
               </div>
-            )}
-            <div style={bodyStyle}>
-              <TraceMessages
-                traces={traces}
-                handleOpenTrace={handleOpenTrace}
-                traceId={traceId}
-              />
-            </div>
-          </MediaProvider>
+            </MediaProvider>
+          )}
         </TabsContent>
         <TabsContent value="feedback_scores">
           <div style={bodyStyle} className="overflow-y-auto px-4">
@@ -495,11 +544,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const renderContent = () => {
-    if (isThreadPending || isTracesPending) {
-      return <Loader />;
-    }
-
-    if (!thread) {
+    if (!isThreadPending && !thread) {
       return <NoData />;
     }
 
@@ -520,6 +565,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                     dataType="threads"
                     buttonVariant="ghost"
                     buttonSize="2xs"
+                    disabled={isThreadPending}
                   />
                 )}
                 {canAnnotateTraceSpanThread && !hideAnnotateActions && (
@@ -535,36 +581,40 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 )}
               </div>
               <div ref={ref} className="relative min-h-0 flex-auto">
-                <div className="px-4 pb-6 pt-4" data-panel-header="true">
-                  {renderHeader()}
+                <div className="p-4" data-panel-header="true">
+                  {isThreadPending ? <ThreadHeaderSkeleton /> : renderHeader()}
                 </div>
-                <div data-panel-body="true">{renderBody()}</div>
+                <div data-panel-body="true">
+                  {isThreadPending ? <ThreadMessagesSkeleton /> : renderBody()}
+                </div>
               </div>
             </div>
           </ResizablePanel>
-          {Boolean(currentActiveSection) && canAnnotateTraceSpanThread && (
-            <>
-              <ResizableHandle />
-              <ResizablePanel
-                id="thread-last-section-viewer"
-                defaultSize={30}
-                minSize={30}
-              >
-                {currentActiveSection === DetailsActionSection.Annotate && (
-                  <ThreadAnnotatePanel
-                    threadId={threadId}
-                    threadModelId={thread.thread_model_id}
-                    projectId={projectId}
-                    projectName={projectName}
-                    activeSection={activeSection}
-                    setActiveSection={setActiveSection}
-                    feedbackScores={threadFeedbackScores}
-                    comments={threadComments}
-                  />
-                )}
-              </ResizablePanel>
-            </>
-          )}
+          {Boolean(currentActiveSection) &&
+            canAnnotateTraceSpanThread &&
+            thread && (
+              <>
+                <ResizableHandle />
+                <ResizablePanel
+                  id="thread-last-section-viewer"
+                  defaultSize={30}
+                  minSize={30}
+                >
+                  {currentActiveSection === DetailsActionSection.Annotate && (
+                    <ThreadAnnotatePanel
+                      threadId={threadId}
+                      threadModelId={thread.thread_model_id}
+                      projectId={projectId}
+                      projectName={projectName}
+                      activeSection={activeSection}
+                      setActiveSection={setActiveSection}
+                      feedbackScores={threadFeedbackScores}
+                      comments={threadComments}
+                    />
+                  )}
+                </ResizablePanel>
+              </>
+            )}
         </ResizablePanelGroup>
       </div>
     );

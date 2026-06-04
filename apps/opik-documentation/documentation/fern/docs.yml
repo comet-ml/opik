@@ -107,7 +107,10 @@ redirects:
     destination: "/docs/opik/development/prompt-library/overview"
     permanent: true
   - source: "/docs/opik/development/agent-configuration/mcp-server"
-    destination: "/docs/opik/development/prompt-library/mcp-server"
+    destination: "/docs/opik/mcp-server"
+    permanent: true
+  - source: "/docs/opik/development/prompt-library/mcp-server"
+    destination: "/docs/opik/mcp-server"
     permanent: true
   # Common guessed paths for TypeScript SDK and integrations
   - source: "/docs/opik/typescript-sdk"

@@ -81,6 +81,8 @@ export enum DATASET_ITEM_DRAFT_STATUS {
   // deleted items are filtered out, not shown
 }
 
+export type JsonUploadFormat = "json" | "jsonl";
+
 export interface Evaluator {
   name: string;
   type: string;

@@ -10,6 +10,7 @@ export interface ExperimentItemCompare {
     projectId?: string;
     input?: OpikApi.JsonListStringCompare;
     output?: OpikApi.JsonListStringCompare;
+    traceMetadata?: OpikApi.JsonListStringCompare;
     feedbackScores?: OpikApi.FeedbackScoreCompare[];
     comments?: OpikApi.CommentCompare[];
     totalEstimatedCost?: number;

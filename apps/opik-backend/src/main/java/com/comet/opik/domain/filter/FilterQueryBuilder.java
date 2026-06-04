@@ -307,9 +307,11 @@ public class FilterQueryBuilder {
                             FieldType.ENUM,
                             "notEmpty(%1$s)")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
-                            FieldType.ENUM, "%1$s IN :filter%2$d")))
+                            FieldType.ENUM, "%1$s IN :filter%2$d",
+                            FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
                     .put(Operator.NOT_IN, new EnumMap<>(Map.of(
-                            FieldType.ENUM, "%1$s NOT IN :filter%2$d")))
+                            FieldType.ENUM, "%1$s NOT IN :filter%2$d",
+                            FieldType.STRING_LIST, "%1$s NOT IN :filter%2$d")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -340,6 +342,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
+                    .put(TraceField.EXPERIMENT_IDS, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(TraceField.SOURCE, SOURCE_DB)
@@ -556,6 +559,8 @@ public class FilterQueryBuilder {
                 TraceField.NAME,
                 TraceField.START_TIME,
                 TraceField.END_TIME,
+                TraceField.CREATED_AT,
+                TraceField.LAST_UPDATED_AT,
                 TraceField.INPUT,
                 TraceField.OUTPUT,
                 TraceField.INPUT_JSON,
@@ -575,7 +580,8 @@ public class FilterQueryBuilder {
                 TraceThreadField.ENVIRONMENT));
 
         map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
-                TraceField.EXPERIMENT_ID));
+                TraceField.EXPERIMENT_ID,
+                TraceField.EXPERIMENT_IDS));
 
         map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
                 TraceField.USAGE_COMPLETION_TOKENS,
@@ -1120,7 +1126,7 @@ public class FilterQueryBuilder {
 
                 if (!NO_VALUE_OPERATORS.contains(filter.operator())) {
                     if (Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())) {
-                        // Comma-separated values for ENUM IN/NOT_IN; bind as String[].
+                        // Comma-separated values for IN/NOT_IN (ENUM, STRING_LIST); bind as String[].
                         // Trim and drop empty tokens defensively against stray whitespace
                         // or trailing commas in client input.
                         binder.accept("filter%d".formatted(i),

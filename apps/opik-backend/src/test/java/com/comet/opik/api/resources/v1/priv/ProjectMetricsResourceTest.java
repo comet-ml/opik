@@ -94,6 +94,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -4148,7 +4149,6 @@ class ProjectMetricsResourceTest {
                 int count, Integer firstThreadTraceCount) {
             List<String> threadIds = new ArrayList<>();
             List<Double> threadDurations = new ArrayList<>();
-            List<Trace> allTraces = new ArrayList<>();
 
             for (int i = 0; i < count; i++) {
                 String threadId = RandomStringUtils.secure().nextAlphabetic(10);
@@ -4172,11 +4172,23 @@ class ProjectMetricsResourceTest {
                         })
                         .toList();
 
-                allTraces.addAll(traces);
-                threadDurations.add(threadStartTime.until(threadEndTime, ChronoUnit.MICROS) / 1000.0);
+                // A thread's created_at is min(trace.created_at), and trace.created_at defaults to
+                // now64(9) evaluated once per insert block. Inserting all threads in one batch would
+                // give them the same created_at, making CREATED_AT filters match multiple threads.
+                // Insert each thread in its own batch so every thread gets a distinct created_at.
+                traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+                // The backend computes thread duration as max(endTime) - min(startTime) across all
+                // traces. With small random durations an intermediate trace can end after the last
+                // one, so derive the expected duration from the actual trace bounds rather than
+                // assuming threadEndTime is the maximum.
+                Instant actualThreadEnd = traces.stream()
+                        .map(Trace::endTime)
+                        .max(Comparator.naturalOrder())
+                        .orElse(threadEndTime);
+                threadDurations.add(threadStartTime.until(actualThreadEnd, ChronoUnit.MICROS) / 1000.0);
             }
 
-            traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
             Mono.delay(Duration.ofMillis(100)).block();
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 

@@ -551,10 +551,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "essentialai/rnj-1-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_001,
-      label: "google/gemini-2.0-flash-001",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
       label: "google/gemini-2.0-flash-exp:free",
     },
@@ -949,6 +945,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_7,
       label: "minimax/minimax-m2.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3,
+      label: "minimax/minimax-m3",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
@@ -1564,6 +1564,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_FUSION,
+      label: "openrouter/fusion",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_HEALER_ALPHA,
       label: "openrouter/healer-alpha",
     },
@@ -1878,6 +1882,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_MAX,
       label: "qwen/qwen3.7-max",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_PLUS,
+      label: "qwen/qwen3.7-plus",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
@@ -2213,14 +2221,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       label: "Gemini 2.5 Flash-Lite",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
-      label: "Gemini 2.0 Flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
-      label: "Gemini 2.0 Flash-Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_26B_A4B_IT,

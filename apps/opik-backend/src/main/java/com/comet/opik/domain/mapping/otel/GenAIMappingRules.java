@@ -46,6 +46,9 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.system").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.usage.cost").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.COST).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.usage.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
