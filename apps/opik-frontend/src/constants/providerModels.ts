@@ -1884,6 +1884,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.7-max",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_PLUS,
+      label: "qwen/qwen3.7-plus",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
       label: "qwen/qwq-32b",
     },
