@@ -73,7 +73,8 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
                 Add human review
               </Button>
             )}
-            {(entityType === "experiment" || canUpdateOnlineEvaluationRules) && (
+            {(entityType === "experiment" ||
+              canUpdateOnlineEvaluationRules) && (
               <Button variant="secondary" size="sm" asChild>
                 <a
                   href={evaluationDocsLink}
