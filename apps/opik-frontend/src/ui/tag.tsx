@@ -27,7 +27,7 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
     size: {
       default: "comet-body-xs h-5 px-2 leading-5",
       sm: "comet-body-xs h-4 px-2 text-[11px] leading-4",
-      md: "comet-body-s h-6 rounded-md px-1.5 leading-6",
+      md: "comet-body-s h-6 px-2 leading-6",
       lg: "comet-body-s h-7 rounded-md px-3 leading-7",
     },
   },

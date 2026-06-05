@@ -3,12 +3,8 @@ import React from "react";
 import ResourceLink, {
   RESOURCE_TYPE,
   RESOURCE_MAP,
-  ResourceLinkProps,
 } from "@/shared/ResourceLink/ResourceLink";
 import { Filter } from "@/types/filters";
-import { TagProps } from "@/ui/tag";
-
-const DEFAULT_ICON_SIZE = 3;
 
 type NavigationTagProps = {
   id: string;
@@ -18,9 +14,8 @@ type NavigationTagProps = {
   tooltipContent?: string;
   className?: string;
   isSmall?: boolean;
-  iconSize?: ResourceLinkProps["iconSize"];
-  size?: TagProps["size"];
-  variant?: TagProps["variant"];
+  prefix?: string;
+  suffix?: React.ReactNode;
 };
 
 const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
@@ -31,12 +26,13 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
   tooltipContent,
   className,
   isSmall = false,
-  iconSize = DEFAULT_ICON_SIZE,
-  size = "md",
-  variant = "transparent",
+  prefix,
+  suffix,
 }) => {
   const resourceLabel = RESOURCE_MAP[resource].label;
-  const defaultTooltipContent = `Navigate to ${resourceLabel}: ${name}`;
+  const defaultTooltipContent = `Navigate to ${resourceLabel}${
+    name ? `: ${name}` : ""
+  }`;
 
   return (
     <ResourceLink
@@ -45,13 +41,11 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
       resource={resource}
       search={search}
       tooltipContent={tooltipContent ?? defaultTooltipContent}
-      variant={variant}
       className={className}
-      iconSize={iconSize}
-      gapSize={1}
       asTag
       isSmall={isSmall}
-      size={size}
+      prefix={prefix}
+      suffix={suffix}
     />
   );
 };
