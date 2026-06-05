@@ -18,8 +18,6 @@ import java.util.stream.Collectors;
 @Data
 public class ServiceTogglesConfig {
 
-    public static final String FORCE_WORKSPACE_VERSION_DISABLED = "disabled";
-
     @Valid @JsonProperty
     @NotNull boolean pythonEvaluatorEnabled;
     @JsonProperty
@@ -92,7 +90,7 @@ public class ServiceTogglesConfig {
                 .orElse(Set.of());
     }
 
-    @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
+    @NotBlank String forceWorkspaceVersion;
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;
