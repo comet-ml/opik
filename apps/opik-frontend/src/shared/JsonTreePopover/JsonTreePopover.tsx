@@ -64,23 +64,18 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     [onFocusedPathChange],
   );
 
-  useEffect(() => {
-    if (open) {
-      setExpandedPaths(new Set());
-    }
-  }, [open]);
-
   const { pathToExpand, searchTerm } = useMemo(
     () => parseSearchQuery(searchQuery),
     [searchQuery],
   );
 
-  // Auto-expand paths based on the typed path
   useEffect(() => {
-    if (pathToExpand) {
-      setExpandedPaths(computePathsToExpand(pathToExpand));
+    if (open) {
+      setExpandedPaths(
+        pathToExpand ? computePathsToExpand(pathToExpand) : new Set(),
+      );
     }
-  }, [pathToExpand]);
+  }, [open, pathToExpand]);
 
   const visiblePaths = useMemo(() => {
     if (

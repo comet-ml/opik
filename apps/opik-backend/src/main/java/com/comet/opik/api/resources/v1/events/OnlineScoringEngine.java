@@ -18,6 +18,7 @@ import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -331,10 +332,11 @@ public class OnlineScoringEngine {
      */
     public static ChatRequest prepareThreadLlmRequestWithTools(
             @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
-            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull StructuredOutputStrategy structuredOutputStrategy, int maxPromptFieldChars) {
+        int maxCharsPerField = maxPromptFieldChars / Math.max(1, traces.size());
         String skeleton;
         try {
-            skeleton = OBJECT_MAPPER.writeValueAsString(toThreadSkeleton(traces));
+            skeleton = OBJECT_MAPPER.writeValueAsString(toThreadSkeleton(traces, maxCharsPerField));
         } catch (JsonProcessingException ex) {
             throw new UncheckedIOException(ex);
         }
@@ -355,17 +357,34 @@ public class OnlineScoringEngine {
      * is ~1 MB, well under the model's window even without further compression. The
      * model picks ids from this list and drills in via ReadTool.
      */
-    static List<ThreadTraceSkeleton> toThreadSkeleton(List<Trace> traces) {
+    static List<ThreadTraceSkeleton> toThreadSkeleton(List<Trace> traces, int maxCharsPerField) {
         return traces.stream()
-                .map(trace -> new ThreadTraceSkeleton(
-                        trace.id(),
-                        trace.name(),
-                        trace.startTime(),
-                        trace.endTime(),
-                        trace.duration(),
-                        trace.spanCount(),
-                        trace.llmSpanCount()))
+                .map(trace -> {
+                    String hint = "use read(type=trace, id=" + trace.id() + ") to see full";
+                    return new ThreadTraceSkeleton(
+                            trace.id(),
+                            trace.name(),
+                            trace.startTime(),
+                            trace.endTime(),
+                            trace.duration(),
+                            trace.spanCount(),
+                            trace.llmSpanCount(),
+                            truncateJsonNode(trace.input(), maxCharsPerField, hint),
+                            truncateJsonNode(trace.output(), maxCharsPerField, hint),
+                            truncateJsonNode(trace.metadata(), maxCharsPerField, hint));
+                })
                 .toList();
+    }
+
+    private static String truncateJsonNode(JsonNode node, int maxChars, String hint) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        try {
+            return StringTruncator.truncate(OBJECT_MAPPER.writeValueAsString(node), maxChars, hint);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
@@ -378,6 +397,7 @@ public class OnlineScoringEngine {
      * {@code read(type=trace, id=X)} response. Camel-case here would surprise the
      * model with two different schemas for the same entity.
      */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Builder(toBuilder = true)
     public record ThreadTraceSkeleton(
@@ -387,7 +407,10 @@ public class OnlineScoringEngine {
             Instant endTime,
             Double duration,
             int spanCount,
-            int llmSpanCount) {
+            int llmSpanCount,
+            String input,
+            String output,
+            String metadata) {
     }
 
     /**
