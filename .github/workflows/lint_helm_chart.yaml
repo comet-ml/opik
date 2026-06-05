@@ -107,16 +107,26 @@ jobs:
               helm template opik . --values values.yaml > "${RUNNER_TEMP}/render-helm4.yaml"
               cd -
 
-        - name: Diff rendered output (whitespace-normalized; must be identical)
+        - name: Diff rendered output (semantically; must be identical)
           run: |
               set -e
-              # Normalize trailing whitespace + blank lines — the only thing Helm 4
-              # changes vs Helm 3 — so the diff catches real semantic differences only.
-              normalize() { sed -E 's/[[:space:]]+$//' "$1" | grep -v -E '^$'; }
-              normalize "${RUNNER_TEMP}/render-helm3.yaml" > "${RUNNER_TEMP}/render-helm3.norm.yaml"
-              normalize "${RUNNER_TEMP}/render-helm4.yaml" > "${RUNNER_TEMP}/render-helm4.norm.yaml"
+              # Compare by parsing every rendered YAML document and re-serializing it
+              # canonically (sorted keys), instead of a line-based diff. This ignores the
+              # ONLY thing Helm 4 changes vs Helm 3 — cosmetic inter-document spacing and
+              # trailing whitespace — while preserving real content, including blank lines
+              # *inside* block scalars (e.g. embedded config in ConfigMaps). A line-based
+              # blank-line strip would hide those; a YAML round-trip does not.
+              canonicalize() {
+                python3 - "$1" <<'PY'
+              import sys, yaml
+              docs = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d is not None]
+              sys.stdout.write(yaml.safe_dump_all(docs, sort_keys=True, default_flow_style=False))
+              PY
+              }
+              canonicalize "${RUNNER_TEMP}/render-helm3.yaml" > "${RUNNER_TEMP}/render-helm3.norm.yaml"
+              canonicalize "${RUNNER_TEMP}/render-helm4.yaml" > "${RUNNER_TEMP}/render-helm4.norm.yaml"
               if ! diff -u "${RUNNER_TEMP}/render-helm3.norm.yaml" "${RUNNER_TEMP}/render-helm4.norm.yaml"; then
-                echo "::error::Rendered manifests differ between Helm 3.x and Helm 4.x (beyond trailing whitespace). The chart must render equivalently on both."
+                echo "::error::Rendered manifests differ between Helm 3.x and Helm 4.x. The chart must render equivalently on both."
                 exit 1
               fi
-              echo "Helm 3.x and Helm 4.x produce equivalent rendered manifests (only trailing whitespace differs)."
+              echo "Helm 3.x and Helm 4.x produce equivalent rendered manifests."
