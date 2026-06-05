@@ -403,7 +403,9 @@ class WorkspaceVersionResourceTest {
                             .runtimeInfo(wireMock.runtimeInfo())
                             .usageReportUrl("%s%s".formatted(wireMock.runtimeInfo().getHttpBaseUrl(), ANALYTICS_PATH))
                             .usageReportEnabled(true)
-                            .customConfigs(List.of(new CustomConfig("analytics.enabled", "true")))
+                            .customConfigs(List.of(
+                                    new CustomConfig("serviceToggles.forceWorkspaceVersion", "disabled"),
+                                    new CustomConfig("analytics.enabled", "true")))
                             .build());
         }
 
@@ -638,6 +640,7 @@ class WorkspaceVersionResourceTest {
                             .databaseAnalyticsFactory(databaseAnalyticsFactory)
                             .redisUrl(REDIS.getRedisURI())
                             .customConfigs(List.of(
+                                    new CustomConfig("serviceToggles.forceWorkspaceVersion", "disabled"),
                                     new CustomConfig("cacheManager.enabled", "true"),
                                     new CustomConfig("cacheManager.caches.workspace_version", "PT1S")))
                             .build());
