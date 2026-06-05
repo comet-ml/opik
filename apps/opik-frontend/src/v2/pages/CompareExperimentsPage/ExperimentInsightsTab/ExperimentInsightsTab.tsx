@@ -13,8 +13,6 @@ import {
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { EXPERIMENT_COMPARISON_TEMPLATE } from "@/lib/dashboard/templates";
 import { DASHBOARD_TYPE } from "@/types/dashboard";
-import CompareExperimentsButton from "@/v2/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
-import { Separator } from "@/ui/separator";
 import { cn } from "@/lib/utils";
 
 interface ExperimentInsightsTabProps {
@@ -79,11 +77,6 @@ const ExperimentInsightsTab: React.FunctionComponent<
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <CompareExperimentsButton
-            variant="outline"
-            tooltipContent="Select experiments to compare"
-          />
-          <Separator orientation="vertical" className="mx-2 h-4" />
           <ShareDashboardButton />
         </div>
       </PageBodyStickyContainer>

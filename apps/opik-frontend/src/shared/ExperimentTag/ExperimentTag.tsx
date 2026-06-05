@@ -1,10 +1,6 @@
 import React from "react";
 import { FlaskConical } from "lucide-react";
 import { Tag } from "@/ui/tag";
-import {
-  RESOURCE_MAP,
-  RESOURCE_TYPE,
-} from "@/shared/ResourceLink/ResourceLink";
 
 interface ExperimentTagProps {
   experimentName?: string;
@@ -15,12 +11,13 @@ const ExperimentTag: React.FC<ExperimentTagProps> = ({
   experimentName,
   count,
 }) => {
-  const { color } = RESOURCE_MAP[RESOURCE_TYPE.experiment];
-
   if (experimentName) {
     return (
       <Tag size="md" variant="transparent" className="flex items-center gap-1">
-        <FlaskConical className="size-3 shrink-0" style={{ color }} />
+        <FlaskConical
+          className="size-3 shrink-0"
+          style={{ color: "var(--color-burgundy)" }}
+        />
         <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
           {experimentName}
         </div>
