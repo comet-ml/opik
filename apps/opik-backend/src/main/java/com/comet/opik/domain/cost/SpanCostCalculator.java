@@ -62,6 +62,34 @@ class SpanCostCalculator {
                 "original_usage.cacheWriteInputTokens");
     }
 
+    public static BigDecimal textGenerationWithCacheCostGoogle(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
+
+        // In Google/Gemini usage format, prompt_token_count already includes the cached (context-cache)
+        // tokens, so we subtract them to compute the non-cached input token count (similar to OpenAI).
+
+        // Get the input tokens (prompt_token_count); fall back to the normalized prompt_tokens key
+        int inputTokens = usage.getOrDefault("original_usage.prompt_token_count",
+                usage.getOrDefault("prompt_tokens", 0));
+
+        // Get the cached read tokens (cached_content_token_count); fall back to OTel bare key for LiteLLM/OTel spans
+        int cachedReadInputTokens = usage.getOrDefault("original_usage.cached_content_token_count",
+                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0));
+
+        // If we got cached tokens, subtract them from the input tokens count
+        if (cachedReadInputTokens > 0) {
+            inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
+        }
+
+        // Get the output tokens (completion_tokens includes reasoning/thought tokens); fall back to OTel key
+        int outputTokens = usage.getOrDefault("completion_tokens",
+                usage.getOrDefault("original_usage.candidates_token_count", 0));
+
+        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
+                .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
+                .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+    }
+
     /**
      * Calculates the cost of text generation where cached tokens are treated separately from input/output tokens.
      * In this case, cached tokens (both read and creation) are not included in the input or output token counts,

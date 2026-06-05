@@ -38,6 +38,23 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
+    @Test
+    void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 100,
+                "original_usage.prompt_token_count", 1000,
+                "original_usage.candidates_token_count", 100,
+                "original_usage.cached_content_token_count", 400);
+
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-flash", "google_vertexai", usage, null);
+
+        // gemini-2.5-flash: input 3e-7, output 2.5e-6, cache_read 3e-8
+        // non-cached input = 1000 - 400 = 600 -> 600*3e-7 + 100*2.5e-6 + 400*3e-8
+        // = 0.00018 + 0.00025 + 0.000012 = 0.000442
+        assertThat(cost).isEqualByComparingTo("0.000442");
+    }
+
     @ParameterizedTest
     @MethodSource("provideAudioSpeechModels")
     void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {

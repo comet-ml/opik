@@ -46,7 +46,9 @@ public class CostService {
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
-                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock);
+                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
+                    "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
+                    "gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle);
 
     static {
         try {
