@@ -62,8 +62,9 @@ const CommentAndScoreViewer: React.FC = () => {
     ? itemStates[getAnnotationQueueItemId(currentItem)] === ITEM_STATE.IN_REVIEW
     : false;
 
-  const isLockedForUser =
-    (isCompleted && !userHasAnnotated) || isInReview || currentItemLockDenied;
+  const completedByOthers = isCompleted && !userHasAnnotated;
+  const cannotAnnotate =
+    completedByOthers || isInReview || currentItemLockDenied;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackScoresRef = useRef<HTMLDivElement>(null);
@@ -75,13 +76,13 @@ const CommentAndScoreViewer: React.FC = () => {
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].key,
     (keyboardEvent: KeyboardEvent) => {
-      if (isLockedForUser) return;
+      if (cannotAnnotate) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       textareaRef.current?.focus();
     },
     { enableOnFormTags: true },
-    [isLockedForUser],
+    [cannotAnnotate],
   );
 
   useHotkeys(
@@ -96,7 +97,7 @@ const CommentAndScoreViewer: React.FC = () => {
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].key,
     (keyboardEvent: KeyboardEvent) => {
-      if (!hasFeedbackDefinitions || isLockedForUser) return;
+      if (!hasFeedbackDefinitions || cannotAnnotate) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       const firstInput = feedbackScoresRef.current?.querySelector(
@@ -105,8 +106,19 @@ const CommentAndScoreViewer: React.FC = () => {
       firstInput?.focus();
     },
     { enableOnFormTags: true },
-    [hasFeedbackDefinitions, isLockedForUser],
+    [hasFeedbackDefinitions, cannotAnnotate],
   );
+
+  if (completedByOthers) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
+        <CircleCheck className="size-5 text-success" />
+        <p className="comet-body-xs max-w-[250px]">
+          This item has already been scored by the required number of annotators
+        </p>
+      </div>
+    );
+  }
 
   if (isInReview || currentItemLockDenied) {
     return (
@@ -114,17 +126,6 @@ const CommentAndScoreViewer: React.FC = () => {
         <Eye className="size-5 text-orange-400" />
         <p className="comet-body-xs max-w-[250px]">
           This item is currently being reviewed by another annotator
-        </p>
-      </div>
-    );
-  }
-
-  if (isLockedForUser) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
-        <CircleCheck className="size-5 text-success" />
-        <p className="comet-body-xs max-w-[250px]">
-          This item has already been scored by the required number of annotators
         </p>
       </div>
     );

@@ -410,6 +410,13 @@ export const SMEFlowProvider: React.FunctionComponent<{
     if (!currentItem || !queueId || !annotationQueue) return;
 
     const itemId = getAnnotationQueueItemId(currentItem);
+    const state = itemStates[itemId];
+
+    // Only lock items available for review — scored/completed/in-review items don't need locks
+    if (state && state !== ITEM_STATE.DEFAULT) {
+      lockMutation.reset();
+      return;
+    }
 
     lockMutation.mutate({ queueId, itemId });
 
