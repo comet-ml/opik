@@ -65,20 +65,20 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
         className="min-w-min"
       >
         <PageBodyStickyContainer direction="horizontal" limitWidth>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="items">
-              Experiment items
+          <TabsList variant="segmented-primary">
+            <TabsTrigger variant="segmented-primary" value="items">
+              Results
             </TabsTrigger>
             {!isTestSuite && (
-              <TabsTrigger variant="underline" value="insights">
+              <TabsTrigger variant="segmented-primary" value="insights">
                 Insights
               </TabsTrigger>
             )}
-            <TabsTrigger variant="underline" value="config">
+            <TabsTrigger variant="segmented-primary" value="config">
               Configuration
             </TabsTrigger>
             {showScoresTab && (
-              <TabsTrigger variant="underline" value="scores">
+              <TabsTrigger variant="segmented-primary" value="scores">
                 Feedback scores
                 <ExplainerIcon
                   className="ml-1"
