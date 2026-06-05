@@ -20,7 +20,7 @@ and ask Ollie investigative questions, all from the chat.
 You will need:
 
 - **`OPIK_API_KEY`** — generate one at [`comet.com/api/my/settings`](https://www.comet.com/api/my/settings/).
-- **`COMET_WORKSPACE`** — the lowercase workspace name from your Comet URL. For example, `https://www.comet.com/acme-ai/...` → `COMET_WORKSPACE=acme-ai`.
+- **`OPIK_WORKSPACE`** — the lowercase workspace name from your Comet URL. For example, `https://www.comet.com/acme-ai/...` → `OPIK_WORKSPACE=acme-ai`. Optional — defaults to `default` (the Opik SDK convention), which is correct for local/OSS installs; cloud users with a named workspace should set it. `COMET_WORKSPACE` is accepted as a deprecated alias (`OPIK_WORKSPACE` wins if both are set).
 - **[`uv`](https://docs.astral.sh/uv/)** installed locally. The fastest way is `brew install uv` (macOS) or `curl -LsSf https://astral.sh/uv/install.sh | sh`. `uvx` (bundled with `uv`) fetches and runs the latest published `opik-mcp` on demand — no global install required.
 
 <Tip>
@@ -31,6 +31,13 @@ PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
 
 ## Setting up the MCP server
 
+<Tip>
+`OPIK_WORKSPACE` is **optional** — you can omit the `OPIK_WORKSPACE` line/key
+entirely and the server uses the `default` workspace (correct for local/OSS
+installs). The snippets below include it for completeness; set it only if you
+connect to a named cloud workspace.
+</Tip>
+
 <Tabs>
     <Tab title="Claude Code">
 
@@ -39,7 +46,7 @@ PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
     ```bash
     claude mcp add --transport stdio opik-mcp \
       --env OPIK_API_KEY=<your-key> \
-      --env COMET_WORKSPACE=<your-workspace> \
+      --env OPIK_WORKSPACE=<your-workspace> \
       -- uvx opik-mcp
     ```
 
@@ -54,7 +61,7 @@ PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
           "args": ["opik-mcp"],
           "env": {
             "OPIK_API_KEY": "<your-key>",
-            "COMET_WORKSPACE": "<your-workspace>"
+            "OPIK_WORKSPACE": "<your-workspace>"
           }
         }
       }
@@ -79,7 +86,7 @@ PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
           "args": ["opik-mcp"],
           "env": {
             "OPIK_API_KEY": "<your-key>",
-            "COMET_WORKSPACE": "<your-workspace>"
+            "OPIK_WORKSPACE": "<your-workspace>"
           }
         }
       }
@@ -110,7 +117,7 @@ PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
           "args": ["opik-mcp"],
           "env": {
             "OPIK_API_KEY": "<your-key>",
-            "COMET_WORKSPACE": "<your-workspace>"
+            "OPIK_WORKSPACE": "<your-workspace>"
           }
         }
       }
@@ -126,7 +133,7 @@ PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
     For manual testing or debugging, run the inspector against `opik-mcp`:
 
     ```bash
-    OPIK_API_KEY=<your-key> COMET_WORKSPACE=<your-workspace> \
+    OPIK_API_KEY=<your-key> OPIK_WORKSPACE=<your-workspace> \
       npx @modelcontextprotocol/inspector uvx opik-mcp
     ```
 

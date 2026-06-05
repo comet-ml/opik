@@ -3,32 +3,36 @@ import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { JsonUploadFormat } from "@/types/datasets";
 
-type UseDatasetItemsFromCsvMutationParams = {
+type UseDatasetItemsFromJsonMutationParams = {
   datasetId: string;
-  csvFile: File;
+  jsonFile: File;
+  format: JsonUploadFormat;
 };
 
-const useDatasetItemsFromCsvMutation = () => {
+const useDatasetItemsFromJsonMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({
       datasetId,
-      csvFile,
-    }: UseDatasetItemsFromCsvMutationParams) => {
+      jsonFile,
+      format,
+    }: UseDatasetItemsFromJsonMutationParams) => {
       const formData = new FormData();
-      formData.append("file", csvFile);
+      formData.append("file", jsonFile);
       formData.append("dataset_id", datasetId);
+      formData.append("format", format);
 
       const { data } = await api.post(
-        `${DATASETS_REST_ENDPOINT}items/from-csv`,
+        `${DATASETS_REST_ENDPOINT}items/from-json`,
         formData,
       );
       return data;
     },
-    onMutate: async (params: UseDatasetItemsFromCsvMutationParams) => {
+    onMutate: async (params: UseDatasetItemsFromJsonMutationParams) => {
       return {
         queryKey: ["dataset-items", { datasetId: params.datasetId }],
       };
@@ -52,4 +56,4 @@ const useDatasetItemsFromCsvMutation = () => {
   });
 };
 
-export default useDatasetItemsFromCsvMutation;
+export default useDatasetItemsFromJsonMutation;
