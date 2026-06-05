@@ -257,7 +257,7 @@ class CostServiceTest {
                 Arguments.of("gemini-3.1-pro", "google_ai"),
                 Arguments.of("gemini-embedding-002", "google_ai"),
                 Arguments.of("mistral-medium-3-5", "mistral"),
-                Arguments.of("mistral-small-4", "mistral"));
+                Arguments.of("mistral-small-2603", "mistral"));
     }
 
     /**
@@ -287,7 +287,7 @@ class CostServiceTest {
                 // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
                 Arguments.of("mistral-medium-3-5", "9.00"),
                 // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
-                Arguments.of("mistral-small-4", "0.75"));
+                Arguments.of("mistral-small-2603", "0.75"));
     }
 
     /**
