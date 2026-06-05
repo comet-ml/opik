@@ -3609,7 +3609,7 @@ paths:
               customllmProviderEnabled: true
               ollamaProviderEnabled: false
               collaboratorsTabEnabled: true
-              forceWorkspaceVersion: disabled
+              forceWorkspaceVersion: version_2
   /v1/private/experiments/batch:
     patch:
       x-fern-examples:

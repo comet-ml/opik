@@ -24,6 +24,15 @@ public enum OpikVersion {
      */
     public static final String UNKNOWN = "unknown";
 
+    /**
+     * Sentinel value for the {@code TOGGLE_FORCE_WORKSPACE_VERSION} feature flag meaning "no global force";
+     * version determination falls through to the auth gate and the entity check. (Workspace allowlists are
+     * evaluated before this flag and are unaffected by it.) Declared here as a {@code String} (not an enum
+     * constant) because it is a toggle-config marker, not a workspace version, and must never serialize on
+     * the {@code OpikVersion} public API.
+     */
+    public static final String DISABLED = "disabled";
+
     @JsonValue
     private final String value;
 

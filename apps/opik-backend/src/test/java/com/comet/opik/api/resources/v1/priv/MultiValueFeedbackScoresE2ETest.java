@@ -43,7 +43,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.EntityType;
@@ -132,7 +131,6 @@ class MultiValueFeedbackScoresE2ETest {
     private DatasetResourceClient datasetResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectMetricsResourceClient projectMetricsResourceClient;
-    private WorkspaceResourceClient workspaceResourceClient;
     private FeedbackScoreDAO feedbackScoreDAO;
 
     @BeforeAll
@@ -150,7 +148,6 @@ class MultiValueFeedbackScoresE2ETest {
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         this.projectMetricsResourceClient = new ProjectMetricsResourceClient(client, baseURI);
-        this.workspaceResourceClient = new WorkspaceResourceClient(client, baseURI, factory);
         this.feedbackScoreDAO = feedbackScoreDAO;
     }
 
@@ -988,10 +985,6 @@ class MultiValueFeedbackScoresE2ETest {
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
 
-        // Trigger the natural workspace-version determination flow so the legacy-scores probe
-        // runs against actual ClickHouse state and the workspace flag is set accordingly.
-        workspaceResourceClient.getWorkspaceVersion(apiKey, workspaceName);
-
         var expected = traceResourceClient.getById(traceId, workspaceName, apiKey).toBuilder()
                 .feedbackScores(List.of(
                         FeedbackScore.builder().name(authoredScore.name()).value(authoredScore.value()).build(),
@@ -1033,8 +1026,6 @@ class MultiValueFeedbackScoresE2ETest {
                         .put(RequestContext.USER_NAME, USER1)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
-
-        workspaceResourceClient.getWorkspaceVersion(apiKey, workspaceName);
 
         var expected = spanResourceClient.getById(spanId, workspaceName, apiKey).toBuilder()
                 .feedbackScores(List.of(
