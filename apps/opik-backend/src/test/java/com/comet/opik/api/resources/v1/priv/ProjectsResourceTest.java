@@ -41,7 +41,6 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -193,7 +192,6 @@ class ProjectsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
-    private WorkspaceResourceClient workspaceResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, ProjectService projectService) {
@@ -211,7 +209,6 @@ class ProjectsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
         this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
-        this.workspaceResourceClient = new WorkspaceResourceClient(this.client, baseURI, factory);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1462,10 +1459,6 @@ class ProjectsResourceTest {
                             .put(RequestContext.USER_NAME, USER)
                             .put(RequestContext.WORKSPACE_ID, workspaceId))
                     .block();
-
-            // Trigger the natural workspace-version determination flow so the legacy-scores
-            // probe runs against actual ClickHouse state and persists the workspace flag.
-            workspaceResourceClient.getWorkspaceVersion(apiKey, workspaceName);
 
             var expectedFeedback = new ArrayList<>(seeded.feedbackScores());
             expectedFeedback.add(FeedbackScoreAverage.builder()

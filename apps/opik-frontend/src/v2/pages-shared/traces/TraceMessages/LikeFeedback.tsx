@@ -50,7 +50,7 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
         {state === USER_FEEDBACK_SCORE.like ? (
           <ThumbUpFilled className="text-muted-slate" />
         ) : (
-          <ThumbsUp />
+          <ThumbsUp className="text-muted-slate" />
         )}
       </Button>
       <Button
@@ -65,7 +65,7 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
         {state === USER_FEEDBACK_SCORE.dislike ? (
           <ThumbDownFilled className="text-muted-slate" />
         ) : (
-          <ThumbsDown />
+          <ThumbsDown className="text-muted-slate" />
         )}
       </Button>
     </div>

@@ -7735,4 +7735,92 @@ class TracesResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Filter traces by created_at / last_updated_at")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FilterTracesByTimestamp {
+
+        private List<Trace> createPersistedTraces(String projectName, int count) {
+            List<Trace> persisted = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .build();
+                UUID id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+                persisted.add(traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY));
+            }
+            return persisted;
+        }
+
+        private Instant timestamp(Trace trace, TraceField field) {
+            return field == TraceField.CREATED_AT ? trace.createdAt() : trace.lastUpdatedAt();
+        }
+
+        Stream<Arguments> timestampFilterCases() {
+            return Stream.of(TraceField.CREATED_AT, TraceField.LAST_UPDATED_AT)
+                    .flatMap(field -> Stream.of(
+                            arguments(field, Operator.GREATER_THAN_EQUAL, List.of(2, 1)),
+                            arguments(field, Operator.GREATER_THAN, List.of(2)),
+                            arguments(field, Operator.LESS_THAN, List.of(0)),
+                            arguments(field, Operator.LESS_THAN_EQUAL, List.of(1, 0)),
+                            arguments(field, Operator.EQUAL, List.of(1)),
+                            arguments(field, Operator.NOT_EQUAL, List.of(2, 0))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("timestampFilterCases")
+        @DisplayName("honors all comparison operators against the persisted timestamp")
+        void filterByTimestampField(TraceField field, Operator operator, List<Integer> expectedIndexes) {
+            var projectName = "timestamp-filter-%s-%s-%s".formatted(field.name(), operator.name(), UUID.randomUUID());
+
+            var traces = createPersistedTraces(projectName, 3);
+            var boundary = timestamp(traces.get(1), field);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(operator)
+                    .value(boundary.toString())
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            var expected = expectedIndexes.stream().map(traces::get).toList();
+            var unexpected = IntStream.range(0, traces.size())
+                    .filter(i -> !expectedIndexes.contains(i))
+                    .mapToObj(traces::get)
+                    .toList();
+
+            TraceAssertions.assertTraces(page.content(), expected, unexpected, USER);
+        }
+
+        @Test
+        @DisplayName("supports a last_updated_at window combining lower and upper bounds")
+        void filterByLastUpdatedAtWindow() {
+            var projectName = "last-updated-window-" + UUID.randomUUID();
+
+            var traces = createPersistedTraces(projectName, 3);
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.LAST_UPDATED_AT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(traces.get(1).lastUpdatedAt().toString())
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.LAST_UPDATED_AT)
+                            .operator(Operator.LESS_THAN)
+                            .value(traces.get(2).lastUpdatedAt().toString())
+                            .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(traces.get(1)),
+                    List.of(traces.get(0), traces.get(2)), USER);
+        }
+    }
+
 }

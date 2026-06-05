@@ -11,6 +11,7 @@ from . import harbor
 from . import healthcheck
 from . import imports
 from . import local_runner
+from . import mcp
 from . import migrate
 from . import proxy
 from . import usage_report
@@ -51,4 +52,5 @@ cli.add_command(usage_report.usage_report)
 cli.add_command(harbor.harbor)
 cli.add_command(local_runner.connect)
 cli.add_command(local_runner.endpoint)
+cli.add_command(mcp.mcp)
 cli.add_command(migrate.migrate_group)

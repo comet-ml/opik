@@ -138,6 +138,13 @@ class SpanCostCalculatorTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300,
                                 "cache_read_input_tokens", 200),
                         "original_usage key takes precedence over OTel key",
+                        "10.50"),
+                // OpenAI Responses API reports cached tokens under input_tokens_details.cached_tokens
+                // non-cached input = 1000 - 300 = 700 -> 700*0.01 + 100*0.02 + 300*0.005 = 10.50
+                Arguments.of(
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.input_tokens_details.cached_tokens", 300),
+                        "Responses API input_tokens_details.cached_tokens key",
                         "10.50"));
     }
 

@@ -132,6 +132,7 @@ openai:
 anthropic:
   - id: "claude-opus-4-8"
     label: "Claude Opus 4.8"
+    structuredOutput: true
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
     structuredOutput: true
@@ -871,6 +872,12 @@ openrouter:
     label: "nvidia/nemotron-3-super-120b-a12b"
   - id: "nvidia/nemotron-3-super-120b-a12b:free"
     label: "nvidia/nemotron-3-super-120b-a12b:free"
+  - id: "nvidia/nemotron-3-ultra-550b-a55b"
+    label: "nvidia/nemotron-3-ultra-550b-a55b"
+  - id: "nvidia/nemotron-3-ultra-550b-a55b:free"
+    label: "nvidia/nemotron-3-ultra-550b-a55b:free"
+  - id: "nvidia/nemotron-3.5-content-safety:free"
+    label: "nvidia/nemotron-3.5-content-safety:free"
   - id: "nvidia/nemotron-nano-12b-v2-vl"
     label: "nvidia/nemotron-nano-12b-v2-vl"
   - id: "nvidia/nemotron-nano-12b-v2-vl:free"
@@ -1058,6 +1065,8 @@ openrouter:
   - id: "openrouter/free"
     label: "openrouter/free"
     structuredOutput: true
+  - id: "openrouter/fusion"
+    label: "openrouter/fusion"
   - id: "openrouter/healer-alpha"
     label: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"
@@ -1224,6 +1233,8 @@ openrouter:
     label: "qwen/qwen3.6-plus:free"
   - id: "qwen/qwen3.7-max"
     label: "qwen/qwen3.7-max"
+  - id: "qwen/qwen3.7-plus"
+    label: "qwen/qwen3.7-plus"
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true

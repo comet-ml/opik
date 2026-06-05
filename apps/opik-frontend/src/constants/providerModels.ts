@@ -1248,6 +1248,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/nemotron-3-super-120b-a12b:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B,
+      label: "nvidia/nemotron-3-ultra-550b-a55b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE,
+      label: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      label: "nvidia/nemotron-3.5-content-safety:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_NANO_12B_V2_VL,
       label: "nvidia/nemotron-nano-12b-v2-vl",
     },
@@ -1564,6 +1576,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_FUSION,
+      label: "openrouter/fusion",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_HEALER_ALPHA,
       label: "openrouter/healer-alpha",
     },
@@ -1878,6 +1894,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_MAX,
       label: "qwen/qwen3.7-max",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_PLUS,
+      label: "qwen/qwen3.7-plus",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,

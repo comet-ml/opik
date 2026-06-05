@@ -559,6 +559,8 @@ public class FilterQueryBuilder {
                 TraceField.NAME,
                 TraceField.START_TIME,
                 TraceField.END_TIME,
+                TraceField.CREATED_AT,
+                TraceField.LAST_UPDATED_AT,
                 TraceField.INPUT,
                 TraceField.OUTPUT,
                 TraceField.INPUT_JSON,

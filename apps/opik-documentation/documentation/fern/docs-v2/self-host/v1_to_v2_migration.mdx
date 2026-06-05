@@ -1,0 +1,287 @@
+---
+headline: Migrating to Opik 2.0 | Self-Hosting | Opik Documentation
+og:description: Step-by-step guide for self-hosted Opik operators to run the background migration jobs that scope existing 1.x data to projects in Opik 2.0.
+og:site_name: Opik Documentation
+og:title: Migrating to Opik 2.0 (Self-Hosted)
+subtitle: Enable the background jobs that move your existing 1.x data into projects
+title: Migrating to Opik 2.0
+---
+
+Opik 2.0 organizes everything around **projects**. Data created after upgrading is automatically project-scoped. Data created on Opik 1.x — datasets, prompts, experiments, optimizations, automation rules, and alerts — requires six background jobs to assign each item to the right project. This page walks you through running those jobs.
+
+<Warning>
+  **Upgrading from Opik 1.x with existing data?** Recent Opik images default `TOGGLE_FORCE_WORKSPACE_VERSION` to `version_2`, which loads the Opik 2.0 UI globally regardless of your existing entities. 1.x entities that have not yet been assigned to a project (no `project_id`) will not be visible in the 2.0 UI until you run the migration jobs below.
+</Warning>
+
+## Before you start
+
+1. **Update to the latest Opik image.** All six migration jobs ship with the 2.0 release. Make sure your `opik-backend` is running the 2.0 image before enabling any flag.
+2. **Take a database snapshot.** Each job writes to MySQL or ClickHouse. Back up both before starting — see [Advanced ClickHouse backup](/self-host/backup) for ClickHouse, and use `mysqldump` or your RDS snapshot tooling for MySQL.
+3. **Confirm your deployment is healthy.** The `opik-backend` container should be running with no restart loops, and MySQL and ClickHouse should be at baseline load.
+
+## How the jobs work
+
+Each job runs inside `opik-backend` on a 30-second cycle. They are:
+
+- **Safe to run alongside live traffic** — no user-visible locks; users can keep working throughout.
+- **Resumable** — stopping a job mid-run and re-enabling it picks up where it left off.
+- **Stoppable, not undoable** — already-committed writes stay; there is no rollback mode.
+
+When an item's associated data spans multiple projects, it is assigned to the **dominant project** — the one most referenced by its runs. When no project can be determined at all (no associated runs, or the original project was deleted), it falls back to the workspace's **Default Project**, which is created on demand if missing.
+
+## Order of execution
+
+<Warning>
+  Run the jobs in the order below. Datasets, prompts, and optimizations infer their project from
+  `experiments.project_id`. Starting them before the experiment job finishes silently routes those
+  items to Default Project with **no retry** — they are not re-evaluated once experiments land
+  their correct project later.
+</Warning>
+
+| Step | Jobs | Dependency |
+|------|------|------------|
+| 1 | Experiments | None — run first |
+| 2 | Datasets, Prompts | After Step 1 completes |
+| 3 | Optimizations | After Steps 1 and 2 complete |
+| 4 | Automation Rules, Alerts | Independent — run at any point |
+
+## Step 1 — Experiments
+
+### Enable
+
+<Tabs>
+  <Tab title="Docker Compose">
+    Add to a `docker-compose.override.yml` in your `deployment/docker-compose` directory:
+
+    ```yaml
+    services:
+      backend:
+        environment:
+          - EXPERIMENT_PROJECT_MIGRATION_ENABLED=true
+    ```
+
+    Apply:
+
+    ```bash
+    docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
+    ```
+  </Tab>
+  <Tab title="Kubernetes / Helm">
+    Add to your Helm values file:
+
+    ```yaml
+    component:
+      backend:
+        env:
+          EXPERIMENT_PROJECT_MIGRATION_ENABLED: "true"
+    ```
+
+    Apply:
+
+    ```bash
+    helm upgrade opik opik/opik -n opik -f values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+### Watch for completion
+
+<Tabs>
+  <Tab title="Docker Compose">
+    ```bash
+    docker compose -f deployment/docker-compose/docker-compose.yml logs -f backend \
+      | grep -i "experiment.*migration"
+    ```
+  </Tab>
+  <Tab title="Kubernetes / Helm">
+    ```bash
+    kubectl logs -n opik deployment/opik-backend -f | grep -i "experiment.*migration"
+    ```
+  </Tab>
+</Tabs>
+
+The job is done when this line appears consistently for several cycles:
+
+```
+No workspaces with eligible experiments found, consider disabling the job
+```
+
+### Disable
+
+Set `EXPERIMENT_PROJECT_MIGRATION_ENABLED=false` using the same method above and apply. Wait for the completion signal to be stable before moving to Step 2.
+
+## Step 2 — Datasets and prompts
+
+Enable both once Step 1 is complete. They are independent of each other and can run in parallel.
+
+<Tabs>
+  <Tab title="Docker Compose">
+    ```yaml
+    services:
+      backend:
+        environment:
+          - DATASET_PROJECT_MIGRATION_ENABLED=true
+          - PROMPT_PROJECT_MIGRATION_ENABLED=true
+    ```
+    ```bash
+    docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
+    ```
+  </Tab>
+  <Tab title="Kubernetes / Helm">
+    ```yaml
+    component:
+      backend:
+        env:
+          DATASET_PROJECT_MIGRATION_ENABLED: "true"
+          PROMPT_PROJECT_MIGRATION_ENABLED: "true"
+    ```
+    ```bash
+    helm upgrade opik opik/opik -n opik -f values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+**Completion signals:**
+
+```
+No workspaces with eligible datasets found, consider disabling the job
+No workspaces with orphan prompts found, consider disabling the job
+```
+
+Disable each flag individually once its completion signal is stable before moving to Step 3.
+
+## Step 3 — Optimizations
+
+Enable only after both Step 1 and Step 2 are complete. Optimizations infer their project from both experiments and datasets.
+
+<Tabs>
+  <Tab title="Docker Compose">
+    ```yaml
+    services:
+      backend:
+        environment:
+          - OPTIMIZATION_PROJECT_MIGRATION_ENABLED=true
+    ```
+    ```bash
+    docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
+    ```
+  </Tab>
+  <Tab title="Kubernetes / Helm">
+    ```yaml
+    component:
+      backend:
+        env:
+          OPTIMIZATION_PROJECT_MIGRATION_ENABLED: "true"
+    ```
+    ```bash
+    helm upgrade opik opik/opik -n opik -f values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+**Completion signal:**
+
+```
+No workspaces with eligible optimizations found, consider disabling the job
+```
+
+Disable the flag once the signal is stable.
+
+## Step 4 — Automation rules and alerts
+
+These jobs inspect project references already stored in their own rows and have no dependency on the other jobs. Run them at any point — before, during, or after Steps 1–3.
+
+<Tabs>
+  <Tab title="Docker Compose">
+    ```yaml
+    services:
+      backend:
+        environment:
+          - AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED=true
+          - ALERT_PROJECT_MIGRATION_ENABLED=true
+    ```
+    ```bash
+    docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
+    ```
+  </Tab>
+  <Tab title="Kubernetes / Helm">
+    ```yaml
+    component:
+      backend:
+        env:
+          AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED: "true"
+          ALERT_PROJECT_MIGRATION_ENABLED: "true"
+    ```
+    ```bash
+    helm upgrade opik opik/opik -n opik -f values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+**Completion signals:**
+
+```
+No workspaces with multi-project automation rules found, consider disabling the job
+No workspaces with orphan alerts found, consider disabling the job
+```
+
+Disable each flag once done.
+
+## Verifying the migration
+
+Once all six jobs have reported their completion signals and been disabled, run these queries to confirm the result.
+
+**ClickHouse — orphan experiments** (should be 0):
+
+```sql
+SELECT countIf(project_id = '') AS orphan_experiments
+FROM experiments FINAL;
+```
+
+**MySQL — orphan datasets** (should be 0):
+
+```sql
+SELECT COUNT(*) FROM datasets WHERE project_id IS NULL OR project_id = '';
+```
+
+**MySQL — orphan prompts** (should be 0):
+
+```sql
+SELECT COUNT(*) FROM prompts WHERE project_id IS NULL;
+```
+
+**ClickHouse — orphan optimizations** (should be 0):
+
+```sql
+SELECT countIf(project_id = '') AS orphan_optimizations
+FROM optimizations FINAL;
+```
+
+**MySQL — multi-project automation rules** (should be 0):
+
+```sql
+SELECT COUNT(*) FROM (
+  SELECT rule_id FROM automation_rule_projects
+  GROUP BY workspace_id, rule_id HAVING COUNT(project_id) > 1
+) t;
+```
+
+**MySQL — orphan alerts** (should be 0):
+
+```sql
+SELECT COUNT(*) FROM alerts WHERE project_id IS NULL;
+```
+
+## Troubleshooting
+
+| Symptom | Likely cause | Action |
+|---------|-------------|--------|
+| `Could not acquire lock` in logs | Normal on multi-replica deployments — only one replica runs per cycle | Harmless as long as `success` also appears each cycle |
+| No progress after several cycles | Flag didn't propagate | Verify: Docker: `docker compose exec backend env \| grep MIGRATION` · Kubernetes: `kubectl exec deploy/opik-backend -n opik -- env \| grep MIGRATION` |
+| Items landed in Default Project unexpectedly | A dependent job ran before its prerequisite finished | Use [`opik migrate`](/tracing/advanced/migrate-data) to relocate them |
+| High MySQL or ClickHouse load during the run | Too many workspaces per cycle | Contact the Opik team — the batch size defaults are tunable |
+| Sustained `error` results in job logs | Infrastructure or connectivity issue | Disable the job immediately, find the stack trace in the backend logs, resolve the underlying issue, then re-enable |
+
+## Next steps
+
+Once migration is complete, update your SDK and pass `project_name` on your API calls. See [Upgrading to Opik 2.0](/opik-v2-upgrade) for the full code reference and examples.
