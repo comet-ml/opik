@@ -8,10 +8,10 @@ set -euo pipefail
 DEBUG_MODE=${DEBUG_MODE:-false}
 ORIGINAL_COMMAND="$0 $@"
 
-# Force-v2 workspace gate for local dev so a fresh worktree's empty backend
-# doesn't trip the "Workspace upgrade required" pairing screen. Propagated
-# into both the JAR-mode backend (start_backend) and the docker-compose
-# backend (see docker-compose.yaml `TOGGLE_FORCE_WORKSPACE_VERSION`).
+# Local dev defaults to version_2 (matches the bundled config.yml and
+# docker-compose defaults) so a fresh worktree's empty backend doesn't trip
+# the "Workspace upgrade required" pairing screen. Exported here so the
+# JAR-mode backend (start_backend) inherits the same value as docker-compose.
 # Override by exporting TOGGLE_FORCE_WORKSPACE_VERSION=disabled (or
 # version_1) before invoking the script.
 export TOGGLE_FORCE_WORKSPACE_VERSION="${TOGGLE_FORCE_WORKSPACE_VERSION:-version_2}"

@@ -87,6 +87,9 @@ class ExperimentProjectMigrationServiceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
+                                // Entity-based determination required so the migration's V1 -> V2 transition
+                                // is observable.
+                                new CustomConfig("serviceToggles.forceWorkspaceVersion", "disabled"),
                                 new CustomConfig("migration.excludedWorkspaceIds",
                                         "%s,%s".formatted(EXCLUDED_WORKSPACE_ID_1, EXCLUDED_WORKSPACE_ID_2)),
                                 // Cache enabled with the production TTL so only the migration's

@@ -9,6 +9,10 @@ title: Migrating to Opik 2.0
 
 Opik 2.0 organizes everything around **projects**. Data created after upgrading is automatically project-scoped. Data created on Opik 1.x — datasets, prompts, experiments, optimizations, automation rules, and alerts — requires six background jobs to assign each item to the right project. This page walks you through running those jobs.
 
+<Warning>
+  **Upgrading from Opik 1.x with existing data?** Recent Opik images default `TOGGLE_FORCE_WORKSPACE_VERSION` to `version_2`, which loads the Opik 2.0 UI globally regardless of your existing entities. 1.x entities that have not yet been assigned to a project (no `project_id`) will not be visible in the 2.0 UI until you run the migration jobs below.
+</Warning>
+
 ## Before you start
 
 1. **Update to the latest Opik image.** All six migration jobs ship with the 2.0 release. Make sure your `opik-backend` is running the 2.0 image before enabling any flag.
