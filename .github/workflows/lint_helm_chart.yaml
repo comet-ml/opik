@@ -22,9 +22,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Prove dual compatibility: the chart must keep working on Helm 3.x
+        # while also rendering cleanly under Helm 4.x (DND-537).
+        helm-version:
+          - v3.21.0
+          - v4.2.0
+
+    name: lint-helm-chart (Helm ${{ matrix.helm-version }})
+
     steps:
         - name: Checkout
           uses: actions/checkout@v6
+
+        - name: Install Helm ${{ matrix.helm-version }}
+          uses: azure/setup-helm@v4.3.1
+          with:
+            version: ${{ matrix.helm-version }}
 
         - name: Run lint on Helm chart
           run: |
@@ -36,3 +52,50 @@ jobs:
               helm dependency build
               helm lint --values values.yaml .
               cd -
+
+  # Prove the chart renders byte-for-byte identically under Helm 3.x and Helm 4.x
+  # so we can ship Helm 4 support without changing behavior for Helm 3 users (DND-537).
+  render-equality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v6
+
+        - name: Render with Helm 3.x
+          uses: azure/setup-helm@v4.3.1
+          with:
+            version: v3.21.0
+
+        - name: helm template (Helm 3.x)
+          run: |
+              set -e
+              cd deployment/helm_chart/opik
+              helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
+              helm repo add bitnami https://charts.bitnami.com/bitnami
+              helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
+              helm dependency build
+              helm template opik . --values values.yaml > "${RUNNER_TEMP}/render-helm3.yaml"
+              cd -
+
+        - name: Render with Helm 4.x
+          uses: azure/setup-helm@v4.3.1
+          with:
+            version: v4.2.0
+
+        - name: helm template (Helm 4.x)
+          run: |
+              set -e
+              cd deployment/helm_chart/opik
+              helm template opik . --values values.yaml > "${RUNNER_TEMP}/render-helm4.yaml"
+              cd -
+
+        - name: Diff rendered output (must be identical)
+          run: |
+              set -e
+              if ! diff -u "${RUNNER_TEMP}/render-helm3.yaml" "${RUNNER_TEMP}/render-helm4.yaml"; then
+                echo "::error::Rendered manifests differ between Helm 3.x and Helm 4.x. The chart must render identically on both."
+                exit 1
+              fi
+              echo "Helm 3.x and Helm 4.x produce identical rendered manifests."
