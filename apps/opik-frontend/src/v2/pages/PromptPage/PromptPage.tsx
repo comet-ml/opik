@@ -74,9 +74,14 @@ const PromptPage: React.FunctionComponent = () => {
       >
         <div className="flex items-center overflow-x-auto">
           {prompt?.created_at && (
-            <DateTag date={prompt.created_at} resource={RESOURCE_TYPE.prompt} />
+            <>
+              <DateTag
+                date={prompt.created_at}
+                resource={RESOURCE_TYPE.prompt}
+              />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
           )}
-          <Separator orientation="vertical" className="mx-2 h-4" />
           <PromptTagsList
             tags={prompt?.tags ?? []}
             promptId={promptId}
