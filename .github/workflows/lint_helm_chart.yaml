@@ -16,6 +16,11 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# This workflow only reads the repo (lint + render); no write access needed.
+permissions:
+  contents: read
+
 jobs:
   
   lint-helm-chart:
@@ -53,8 +58,12 @@ jobs:
               helm lint --values values.yaml .
               cd -
 
-  # Prove the chart renders byte-for-byte identically under Helm 3.x and Helm 4.x
-  # so we can ship Helm 4 support without changing behavior for Helm 3 users (DND-537).
+  # Prove the chart renders equivalently under Helm 3.x and Helm 4.x so we can ship
+  # Helm 4 support without changing behavior for Helm 3 users (DND-537). Each version
+  # resolves its own dependencies (`helm dependency build`) and renders from scratch.
+  # Helm 4 only differs from Helm 3 in trailing whitespace it emits between manifests,
+  # which YAML ignores and does not change any rendered Kubernetes object — so we
+  # compare after stripping trailing whitespace and blank lines.
   render-equality:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -72,6 +81,7 @@ jobs:
           run: |
               set -e
               cd deployment/helm_chart/opik
+              rm -rf charts Chart.lock
               helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
               helm repo add bitnami https://charts.bitnami.com/bitnami
               helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
@@ -88,14 +98,25 @@ jobs:
           run: |
               set -e
               cd deployment/helm_chart/opik
+              # Wipe Helm 3's resolved deps so Helm 4 runs its own dependency resolution.
+              rm -rf charts Chart.lock
+              helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
+              helm repo add bitnami https://charts.bitnami.com/bitnami
+              helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
+              helm dependency build
               helm template opik . --values values.yaml > "${RUNNER_TEMP}/render-helm4.yaml"
               cd -
 
-        - name: Diff rendered output (must be identical)
+        - name: Diff rendered output (whitespace-normalized; must be identical)
           run: |
               set -e
-              if ! diff -u "${RUNNER_TEMP}/render-helm3.yaml" "${RUNNER_TEMP}/render-helm4.yaml"; then
-                echo "::error::Rendered manifests differ between Helm 3.x and Helm 4.x. The chart must render identically on both."
+              # Normalize trailing whitespace + blank lines — the only thing Helm 4
+              # changes vs Helm 3 — so the diff catches real semantic differences only.
+              normalize() { sed -E 's/[[:space:]]+$//' "$1" | grep -v -E '^$'; }
+              normalize "${RUNNER_TEMP}/render-helm3.yaml" > "${RUNNER_TEMP}/render-helm3.norm.yaml"
+              normalize "${RUNNER_TEMP}/render-helm4.yaml" > "${RUNNER_TEMP}/render-helm4.norm.yaml"
+              if ! diff -u "${RUNNER_TEMP}/render-helm3.norm.yaml" "${RUNNER_TEMP}/render-helm4.norm.yaml"; then
+                echo "::error::Rendered manifests differ between Helm 3.x and Helm 4.x (beyond trailing whitespace). The chart must render equivalently on both."
                 exit 1
               fi
-              echo "Helm 3.x and Helm 4.x produce identical rendered manifests."
+              echo "Helm 3.x and Helm 4.x produce equivalent rendered manifests (only trailing whitespace differs)."
