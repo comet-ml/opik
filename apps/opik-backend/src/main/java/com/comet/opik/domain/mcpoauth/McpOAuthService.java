@@ -1,6 +1,5 @@
 package com.comet.opik.domain.mcpoauth;
 
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
@@ -20,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_ACCESS;
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_REFRESH;
@@ -40,7 +40,6 @@ public class McpOAuthService {
     private static final Base64.Encoder URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
 
     private final @NonNull TransactionTemplate template;
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull OpikConfiguration opikConfig;
 
     private McpOAuthConfig config() {
@@ -52,7 +51,7 @@ public class McpOAuthService {
         Instant now = Instant.now();
 
         var code = McpOAuthCode.builder()
-                .id(idGenerator.generateId().toString())
+                .id(UUID.randomUUID().toString())
                 .codeHash(McpOAuthTokens.hash(rawCode))
                 .clientId(cmd.clientId())
                 .userName(cmd.userName())
@@ -94,14 +93,14 @@ public class McpOAuthService {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
-        String familyId = idGenerator.generateId().toString();
+        String familyId = UUID.randomUUID().toString();
         String accessToken = McpOAuthTokens.generateAccessToken();
         String refreshToken = McpOAuthTokens.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
             tokenDao.save(McpOAuthToken.builder()
-                    .id(idGenerator.generateId().toString())
+                    .id(UUID.randomUUID().toString())
                     .tokenHash(McpOAuthTokens.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
@@ -113,7 +112,7 @@ public class McpOAuthService {
                     .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
-                    .id(idGenerator.generateId().toString())
+                    .id(UUID.randomUUID().toString())
                     .tokenHash(McpOAuthTokens.hash(refreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)
@@ -166,7 +165,7 @@ public class McpOAuthService {
             }
 
             tokenDao.save(McpOAuthToken.builder()
-                    .id(idGenerator.generateId().toString())
+                    .id(UUID.randomUUID().toString())
                     .tokenHash(McpOAuthTokens.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
@@ -179,7 +178,7 @@ public class McpOAuthService {
                     .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
-                    .id(idGenerator.generateId().toString())
+                    .id(UUID.randomUUID().toString())
                     .tokenHash(McpOAuthTokens.hash(newRefreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)

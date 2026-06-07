@@ -1,6 +1,5 @@
 package com.comet.opik.domain.mcpoauth;
 
-import com.comet.opik.domain.IdGenerator;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -13,6 +12,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -22,7 +22,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 class DbOAuthClientStrategy implements OAuthClientStrategy {
 
     private final @NonNull TransactionTemplate template;
-    private final @NonNull IdGenerator idGenerator;
 
     @Override
     public boolean supports(@NonNull String clientId) {
@@ -39,7 +38,7 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
     public McpOAuthClient register(@NonNull ClientRegistrationRequest request) {
         validate(request);
 
-        String clientId = idGenerator.generateId().toString();
+        String clientId = UUID.randomUUID().toString();
         var client = McpOAuthClient.builder()
                 .clientId(clientId)
                 .name(StringUtils.defaultIfBlank(request.clientName(), clientId))
