@@ -4627,14 +4627,18 @@ class GetTracesByProjectResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(null)
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .input(JsonUtils.getJsonNodeFromString("{\"k\":\"in\"}"))
-                    .output(JsonUtils.getJsonNodeFromString("{\"k\":\"out\"}"))
-                    .build();
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            // Plain JSON (no images) so truncate is a no-op on the content; usage(null) + no spans keeps the
+            // span-derived fields null, so the expectation is exact.
+            var traces = Stream.of(createTrace())
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .input(JsonUtils.getJsonNodeFromString("{\"k\":\"in\"}"))
+                            .output(JsonUtils.getJsonNodeFromString("{\"k\":\"out\"}"))
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"k\":\"md\"}"))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             Map<String, String> queryParams = new HashMap<>();
             queryParams.put("project_name", projectName);
@@ -4645,10 +4649,15 @@ class GetTracesByProjectResourceTest {
 
             try (var response = traceResourceClient.callGetTracesWithQueryParams(apiKey, workspaceName, queryParams)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                var content = response.readEntity(Trace.TracePage.class).content();
-                assertThat(content).hasSize(1);
-                assertThat(content.getFirst().input()).as("excluded wide field is absent").isNull();
-                assertThat(content.getFirst().output()).as("non-excluded wide field is present").isNotNull();
+                var actualTraces = response.readEntity(Trace.TracePage.class).content();
+                assertThat(actualTraces).hasSize(1);
+
+                // Full actual-vs-expected assertion: the excluded wide field (input) is dropped; every other
+                // field round-trips unchanged.
+                var expectedTraces = traces.stream()
+                        .map(trace -> trace.toBuilder().input(null).build())
+                        .toList();
+                TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
             }
         }
 

@@ -4024,15 +4024,19 @@ class FindSpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(null)
-                    .parentSpanId(null)
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .input(JsonUtils.getJsonNodeFromString("{\"k\":\"in\"}"))
-                    .output(JsonUtils.getJsonNodeFromString("{\"k\":\"out\"}"))
-                    .build();
-            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+            // Plain JSON (no images) so truncate is a no-op on the content; that keeps the expectation exact.
+            var spans = Stream.of(podamFactory.manufacturePojo(Span.class))
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .parentSpanId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .input(JsonUtils.getJsonNodeFromString("{\"k\":\"in\"}"))
+                            .output(JsonUtils.getJsonNodeFromString("{\"k\":\"out\"}"))
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"k\":\"md\"}"))
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("page", 1)
@@ -4046,10 +4050,15 @@ class FindSpansResourceTest {
                     .get()) {
 
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var content = response.readEntity(Span.SpanPage.class).content();
-                assertThat(content).hasSize(1);
-                assertThat(content.getFirst().input()).as("excluded wide field is absent").isNull();
-                assertThat(content.getFirst().output()).as("non-excluded wide field is present").isNotNull();
+                var actualSpans = response.readEntity(Span.SpanPage.class).content();
+                assertThat(actualSpans).hasSize(1);
+
+                // Full actual-vs-expected assertion: the excluded wide field (input) is dropped; every other
+                // field round-trips unchanged.
+                var expectedSpans = spans.stream()
+                        .map(span -> span.toBuilder().input(null).build())
+                        .toList();
+                assertSpan(actualSpans, expectedSpans, USER);
             }
         }
 
