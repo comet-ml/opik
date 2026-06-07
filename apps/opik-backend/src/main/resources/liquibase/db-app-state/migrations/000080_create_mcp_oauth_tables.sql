@@ -3,18 +3,18 @@
 --comment: OAuth 2.1 Authorization Server tables for Opik MCP. Opaque tokens (sha256-hashed), PKCE S256, refresh-token rotation with family revocation. Keyed on user_name/workspace_name to match opik-backend's existing string-identifier convention; no scopes column (tokens grant the user's full workspace role, gated by @RequiredPermissions on each call).
 
 -- Registry of MCP host apps allowed to request tokens. Populated by Dynamic Client Registration
--- (RFC 7591) when remote hosts self-register, and by the admin endpoint for manual additions.
+-- (RFC 7591) when remote hosts self-register.
 CREATE TABLE mcp_oauth_clients
 (
-    client_id        VARCHAR(150)  NOT NULL,
+    client_id        VARCHAR(36)  NOT NULL,
     name             VARCHAR(255)  NOT NULL,
     redirect_uris    JSON          NOT NULL,
     logo_uri         VARCHAR(2048) NULL,
-    owner_user_name  VARCHAR(100)  NULL,
+    owner_user_name  VARCHAR(255)  NULL,
     created_at       TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    created_by       VARCHAR(100)  NOT NULL DEFAULT 'admin',
+    created_by       VARCHAR(255)  NOT NULL DEFAULT 'admin',
     last_updated_at  TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    last_updated_by  VARCHAR(100)  NOT NULL DEFAULT 'admin',
+    last_updated_by  VARCHAR(255)  NOT NULL DEFAULT 'admin',
     revoked_at       TIMESTAMP(6)  NULL,
 
     PRIMARY KEY (client_id)
@@ -25,10 +25,10 @@ CREATE TABLE mcp_oauth_clients
 CREATE TABLE mcp_oauth_codes
 (
     code_hash             CHAR(64)      NOT NULL,
-    client_id             VARCHAR(150)  NOT NULL,
-    user_name             VARCHAR(100)  NOT NULL,
+    client_id             VARCHAR(36)   NOT NULL,
+    user_name             VARCHAR(255)  NOT NULL,
     workspace_name        VARCHAR(255)  NOT NULL,
-    workspace_id          VARCHAR(150)  NOT NULL,
+    workspace_id          VARCHAR(255)  NOT NULL,
     code_challenge        VARCHAR(128)  NOT NULL,
     code_challenge_method ENUM('S256')  NOT NULL DEFAULT 'S256',
     redirect_uri          VARCHAR(2048) NOT NULL,
@@ -48,10 +48,10 @@ CREATE TABLE mcp_oauth_tokens
 (
     token_hash      CHAR(64)               NOT NULL,
     type            ENUM('access','refresh') NOT NULL,
-    client_id       VARCHAR(150)           NOT NULL,
-    user_name       VARCHAR(100)           NOT NULL,
+    client_id       VARCHAR(36)            NOT NULL,
+    user_name       VARCHAR(255)           NOT NULL,
     workspace_name  VARCHAR(255)           NOT NULL,
-    workspace_id    VARCHAR(150)           NOT NULL,
+    workspace_id    VARCHAR(255)           NOT NULL,
     resource        VARCHAR(2048)          NOT NULL,
     family_id       CHAR(36)               NOT NULL,
     rotated_from    CHAR(64)               NULL,
