@@ -400,8 +400,13 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * per-stream worker scheduler thread (OPIK-6308). Mirrors the trace scorer.
      */
     private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceThreadToScoreLlmAsJudge message) {
-        return Mono.fromCallable(() -> aiProxyService.scoreTrace(
-                request, message.code().model(), message.workspaceId()))
+        return Mono.fromCallable(() -> {
+            var response = aiProxyService.scoreTrace(
+                    request, message.code().model(), message.workspaceId());
+            OnlineScoringLlmMetrics.record(message.workspaceId(), message.ruleId().toString(),
+                    Constants.TRACE_THREAD_LLM_AS_JUDGE, message.code().model().name(), request, response);
+            return response;
+        })
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

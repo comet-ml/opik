@@ -121,6 +121,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
 
             var score = aiProxyService.scoreTrace(
                     scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
+            OnlineScoringLlmMetrics.record(message.workspaceId(), message.ruleId().toString(),
+                    Constants.SPAN_LLM_AS_JUDGE, message.llmAsJudgeCode().model().name(), scoreRequest, score);
             userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
 
             var parsed = OnlineScoringEngine.toFeedbackScores(score);
