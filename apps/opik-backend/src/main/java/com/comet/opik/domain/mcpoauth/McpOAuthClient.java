@@ -15,6 +15,5 @@ public record McpOAuthClient(
         Instant createdAt,
         String createdBy,
         Instant lastUpdatedAt,
-        String lastUpdatedBy,
-        Instant revokedAt) {
+        String lastUpdatedBy) {
 }
