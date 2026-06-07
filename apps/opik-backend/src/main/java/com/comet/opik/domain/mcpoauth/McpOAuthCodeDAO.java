@@ -12,10 +12,11 @@ import java.util.Optional;
 @RegisterConstructorMapper(McpOAuthCode.class)
 interface McpOAuthCodeDAO {
 
-    @SqlUpdate("INSERT INTO mcp_oauth_codes (code_hash, client_id, user_name, workspace_name, workspace_id, "
+    @SqlUpdate("INSERT INTO mcp_oauth_codes (id, code_hash, client_id, user_name, workspace_name, workspace_id, "
             +
             "code_challenge, code_challenge_method, redirect_uri, resource, expires_at) " +
-            "VALUES (:bean.codeHash, :bean.clientId, :bean.userName, :bean.workspaceName, :bean.workspaceId, " +
+            "VALUES (:bean.id, :bean.codeHash, :bean.clientId, :bean.userName, :bean.workspaceName, :bean.workspaceId, "
+            +
             ":bean.codeChallenge, :bean.codeChallengeMethod, :bean.redirectUri, :bean.resource, :bean.expiresAt)")
     void save(@BindMethods("bean") McpOAuthCode code);
 

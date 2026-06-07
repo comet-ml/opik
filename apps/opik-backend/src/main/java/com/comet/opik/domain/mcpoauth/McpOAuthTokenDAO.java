@@ -12,10 +12,10 @@ import java.util.Optional;
 @RegisterConstructorMapper(McpOAuthToken.class)
 interface McpOAuthTokenDAO {
 
-    @SqlUpdate("INSERT INTO mcp_oauth_tokens (token_hash, type, client_id, user_name, workspace_name, workspace_id, "
+    @SqlUpdate("INSERT INTO mcp_oauth_tokens (id, token_hash, type, client_id, user_name, workspace_name, workspace_id, "
             +
             "resource, family_id, rotated_from, expires_at) " +
-            "VALUES (:bean.tokenHash, :bean.type, :bean.clientId, :bean.userName, :bean.workspaceName, :bean.workspaceId, "
+            "VALUES (:bean.id, :bean.tokenHash, :bean.type, :bean.clientId, :bean.userName, :bean.workspaceName, :bean.workspaceId, "
             +
             ":bean.resource, :bean.familyId, :bean.rotatedFrom, :bean.expiresAt)")
     void save(@BindMethods("bean") McpOAuthToken token);

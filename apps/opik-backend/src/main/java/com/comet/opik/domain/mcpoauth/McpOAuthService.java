@@ -52,6 +52,7 @@ public class McpOAuthService {
         Instant now = Instant.now();
 
         var code = McpOAuthCode.builder()
+                .id(idGenerator.generateId().toString())
                 .codeHash(McpOAuthTokens.hash(rawCode))
                 .clientId(cmd.clientId())
                 .userName(cmd.userName())
@@ -100,6 +101,7 @@ public class McpOAuthService {
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
             tokenDao.save(McpOAuthToken.builder()
+                    .id(idGenerator.generateId().toString())
                     .tokenHash(McpOAuthTokens.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
@@ -111,6 +113,7 @@ public class McpOAuthService {
                     .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
+                    .id(idGenerator.generateId().toString())
                     .tokenHash(McpOAuthTokens.hash(refreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)
@@ -163,6 +166,7 @@ public class McpOAuthService {
             }
 
             tokenDao.save(McpOAuthToken.builder()
+                    .id(idGenerator.generateId().toString())
                     .tokenHash(McpOAuthTokens.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
@@ -171,10 +175,11 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(row.familyId())
-                    .rotatedFrom(row.tokenHash())
+                    .rotatedFrom(row.id())
                     .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
+                    .id(idGenerator.generateId().toString())
                     .tokenHash(McpOAuthTokens.hash(newRefreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)
@@ -183,7 +188,7 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(row.familyId())
-                    .rotatedFrom(row.tokenHash())
+                    .rotatedFrom(row.id())
                     .expiresAt(row.expiresAt())
                     .build());
 

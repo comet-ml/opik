@@ -6,6 +6,7 @@ import java.time.Instant;
 
 @Builder(toBuilder = true)
 public record McpOAuthCode(
+        String id,
         String codeHash,
         String clientId,
         String userName,
