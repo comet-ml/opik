@@ -6,7 +6,7 @@ import lombok.Builder;
 import java.util.Set;
 
 // RFC 7591 §2 client metadata; unknown fields are ignored.
-@Builder
+@Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ClientRegistrationRequest(String clientName, Set<String> redirectUris, String logoUri) {
 }
