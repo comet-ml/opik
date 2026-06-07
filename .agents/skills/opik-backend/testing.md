@@ -157,3 +157,27 @@ assertThatThrownBy(() -> service.create(invalid))
     .isInstanceOf(BadRequestException.class)
     .hasMessageContaining("Name is required");
 ```
+
+## Don't Run Two ClickHouse-Migrating Test Classes in One `mvn` Reactor
+
+Each resource test class that touches ClickHouse runs its own Liquibase migration against the
+Testcontainers instance. Running two such classes in a single `mvn` invocation (e.g. spans + traces
+together, or a wildcard that matches both) makes the second migration fail with
+`REPLICA_ALREADY_EXISTS` (the replicated table from migration `000017` already exists) — a confusing
+failure that looks like a product bug but is purely a test-harness collision.
+
+When a change spans both spans and traces (the usual case for shared query SQL), run each class in a
+**separate** `mvn` invocation:
+
+```bash
+# ✅ GOOD - separate invocations
+mvn test -o -Dtest='FindSpansResourceTest$FindSpans#whenFilterSortExcludeAcrossPages*'
+mvn test -o -Dtest='GetTracesByProjectResourceTest$FindTraces#getTracesByProject__whenFilterSortExcludeAcrossPages*'
+
+# ❌ BAD - one reactor migrates ClickHouse twice -> REPLICA_ALREADY_EXISTS
+mvn test -o -Dtest='FindSpansResourceTest,GetTracesByProjectResourceTest'
+```
+
+Surefire selectors for `@Nested` + parameterized tests: use `OuterClass$NestedClass#methodPattern`,
+and prefer a `*wildcard*` over the exact (long) method name — exact long names silently match 0 tests.
+Combine methods within a class with `+`, classes with `,` (but see the ClickHouse caveat above).
