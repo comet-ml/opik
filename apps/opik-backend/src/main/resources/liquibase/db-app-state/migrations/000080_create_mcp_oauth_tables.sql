@@ -12,9 +12,6 @@ CREATE TABLE mcp_oauth_clients
     logo_uri         VARCHAR(2048) NULL,
     owner_user_name  VARCHAR(255)  NULL,
     created_at       TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    created_by       VARCHAR(255)  NOT NULL DEFAULT 'admin',
-    last_updated_at  TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    last_updated_by  VARCHAR(255)  NOT NULL DEFAULT 'admin',
 
     PRIMARY KEY (client_id)
 ) ENGINE = InnoDB
