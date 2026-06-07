@@ -4662,6 +4662,91 @@ class GetTracesByProjectResourceTest {
         }
 
         @Test
+        @DisplayName("OPIK-6747 regression: filtered + sorted + excluded list paginates byte-for-byte (filter input CONTAINS, sort input ASC, exclude output)")
+        void getTracesByProject__whenFilterSortExcludeAcrossPages__thenEachPageMatchesFullPageAndReference() {
+            // Reproduces the production scenario that blew up memory: a filtered traces list with custom sort and a
+            // deferred wide column excluded, paged. Asserts each page == the corresponding slice of an independent
+            // Java-side (filter + sort) reference == the single full page, with full row content. Non-matching rows
+            // must be filtered out (absent + not counted in total).
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int matchingCount = 12; // > page size -> multiple pages
+            int nonMatchingCount = 5; // must be filtered out
+            int pageSize = 5;
+
+            // Matching rows: input contains "MATCH-<nnn>" (distinct, zero-padded -> deterministic input-ASC order).
+            // Non-matching rows: input never contains "MATCH".
+            var traces = IntStream.range(0, matchingCount + nonMatchingCount)
+                    .mapToObj(i -> {
+                        var base = factory.manufacturePojo(Trace.class);
+                        var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
+                        var q = (i < matchingCount ? "MATCH-%03d" : "OTHER-%03d").formatted(i);
+                        return base.toBuilder()
+                                .projectId(null)
+                                .projectName(projectName)
+                                .usage(null)
+                                .feedbackScores(null)
+                                .comments(null)
+                                .endTime(base.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                                .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
+                                .llmSpanCount(llmSpanCount)
+                                .input(JsonUtils.getJsonNodeFromString("{\"q\":\"%s\"}".formatted(q)))
+                                .build();
+                    })
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, trace.spanCount())
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var spansByTrace = spans.stream().collect(Collectors.groupingBy(Span::traceId));
+            var created = traces.stream()
+                    .map(t -> t.toBuilder().usage(aggregateSpansUsage(spansByTrace.get(t.id()))).build())
+                    .toList();
+
+            var matching = created.stream().filter(t -> t.input().toString().contains("MATCH")).toList();
+            var nonMatching = created.stream().filter(t -> !t.input().toString().contains("MATCH")).toList();
+
+            List<? extends TraceFilter> filters = List.of(TraceFilter.builder()
+                    .field(TraceField.INPUT).operator(Operator.CONTAINS).value("MATCH").build());
+            var sorting = List.of(SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build());
+            var exclude = Set.of(Trace.TraceField.OUTPUT);
+
+            // Independent reference: matching rows only, sorted by input ASC, with the excluded field nulled.
+            Comparator<Trace> byInput = Comparator.comparing(t -> t.input().toString());
+            var reference = matching.stream()
+                    .sorted(byInput)
+                    .map(t -> TraceAssertions.EXCLUDE_FUNCTIONS.get(Trace.TraceField.OUTPUT).apply(t))
+                    .toList();
+
+            // Single full page == reference (and non-matching rows are absent + not counted).
+            getAndAssertPage(1, matchingCount, projectName, null, filters, reference, nonMatching, workspaceName,
+                    apiKey, sorting, matchingCount, exclude);
+
+            // Every page == the corresponding slice of the same reference; total stays the filtered count.
+            int pages = (matchingCount + pageSize - 1) / pageSize;
+            for (int p = 1; p <= pages; p++) {
+                var slice = reference.subList((p - 1) * pageSize, Math.min(p * pageSize, matchingCount));
+                getAndAssertPage(p, pageSize, projectName, null, filters, slice, nonMatching, workspaceName, apiKey,
+                        sorting, matchingCount, exclude);
+            }
+        }
+
+        @Test
         void createAndRetrieveTraces__spanCountReflectsActualSpans_andTotalCountMatches() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();

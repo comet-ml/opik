@@ -4063,6 +4063,69 @@ class FindSpansResourceTest {
         }
 
         @Test
+        @DisplayName("OPIK-6747 regression: filtered + sorted + excluded list paginates byte-for-byte (filter input CONTAINS, sort input ASC, exclude output)")
+        void whenFilterSortExcludeAcrossPages__thenEachPageMatchesFullPageAndReference() {
+            // Reproduces the production scenario that blew up memory: a filtered spans list with custom sort and a
+            // deferred wide column excluded, paged. Asserts each page == the corresponding slice of an independent
+            // Java-side (filter + sort) reference == the single full page, with full row content. Non-matching rows
+            // must be filtered out (absent + not counted in total).
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int matchingCount = 12; // > page size -> multiple pages
+            int nonMatchingCount = 5; // must be filtered out
+            int pageSize = 5;
+
+            var spans = IntStream.range(0, matchingCount + nonMatchingCount)
+                    .mapToObj(i -> {
+                        var q = (i < matchingCount ? "MATCH-%03d" : "OTHER-%03d").formatted(i);
+                        return podamFactory.manufacturePojo(Span.class).toBuilder()
+                                .projectId(null)
+                                .parentSpanId(null)
+                                .projectName(projectName)
+                                .feedbackScores(null)
+                                .comments(null)
+                                .usage(Map.of("total_tokens", RandomUtils.secure().randomInt()))
+                                .input(JsonUtils.getJsonNodeFromString("{\"q\":\"%s\"}".formatted(q)))
+                                .output(JsonUtils.getJsonNodeFromString("{\"o\":\"%03d\"}".formatted(i)))
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var matching = spans.stream().filter(s -> s.input().toString().contains("MATCH")).toList();
+            var nonMatching = spans.stream().filter(s -> !s.input().toString().contains("MATCH")).toList();
+
+            List<? extends SpanFilter> filters = List.of(SpanFilter.builder()
+                    .field(SpanField.INPUT).operator(Operator.CONTAINS).value("MATCH").build());
+            var sorting = List.of(SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build());
+            var exclude = List.of(Span.SpanField.OUTPUT);
+
+            // Independent reference: matching rows only, sorted by input ASC, with the excluded field nulled.
+            Comparator<Span> byInput = Comparator.comparing(s -> s.input().toString());
+            var reference = matching.stream()
+                    .sorted(byInput)
+                    .map(s -> SpanAssertions.EXCLUDE_FUNCTIONS.get(Span.SpanField.OUTPUT).apply(s))
+                    .toList();
+
+            // Single full page == reference (and non-matching rows are absent + not counted).
+            getAndAssertPage(workspaceName, projectName, null, null, null, filters, 1, matchingCount, reference,
+                    matchingCount, nonMatching, apiKey, sorting, exclude);
+
+            // Every page == the corresponding slice of the same reference; total stays the filtered count.
+            int pages = (matchingCount + pageSize - 1) / pageSize;
+            for (int p = 1; p <= pages; p++) {
+                var slice = reference.subList((p - 1) * pageSize, Math.min(p * pageSize, matchingCount));
+                getAndAssertPage(workspaceName, projectName, null, null, null, filters, p, pageSize, slice,
+                        matchingCount, nonMatching, apiKey, sorting, exclude);
+            }
+        }
+
+        @Test
         void whenSortingByInvalidField__thenIgnoreAndReturnSuccess() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
