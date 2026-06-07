@@ -175,7 +175,7 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(row.familyId())
-                    .rotatedFrom(row.id())
+                    .rotatedFromId(row.id())
                     .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
@@ -188,7 +188,7 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(row.familyId())
-                    .rotatedFrom(row.id())
+                    .rotatedFromId(row.id())
                     .expiresAt(row.expiresAt())
                     .build());
 

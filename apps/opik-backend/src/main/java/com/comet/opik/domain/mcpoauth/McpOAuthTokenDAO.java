@@ -14,10 +14,10 @@ interface McpOAuthTokenDAO {
 
     @SqlUpdate("INSERT INTO mcp_oauth_tokens (id, token_hash, type, client_id, user_name, workspace_name, workspace_id, "
             +
-            "resource, family_id, rotated_from, expires_at) " +
+            "resource, family_id, rotated_from_id, expires_at) " +
             "VALUES (:bean.id, :bean.tokenHash, :bean.type, :bean.clientId, :bean.userName, :bean.workspaceName, :bean.workspaceId, "
             +
-            ":bean.resource, :bean.familyId, :bean.rotatedFrom, :bean.expiresAt)")
+            ":bean.resource, :bean.familyId, :bean.rotatedFromId, :bean.expiresAt)")
     void save(@BindMethods("bean") McpOAuthToken token);
 
     @SqlQuery("SELECT * FROM mcp_oauth_tokens WHERE token_hash = :tokenHash")

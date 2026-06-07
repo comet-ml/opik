@@ -15,7 +15,7 @@ public record McpOAuthToken(
         String workspaceId,
         String resource,
         String familyId,
-        String rotatedFrom,
+        String rotatedFromId,
         Instant issuedAt,
         Instant expiresAt,
         Instant revokedAt,

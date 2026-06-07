@@ -54,7 +54,7 @@ CREATE TABLE mcp_oauth_tokens
     workspace_id    VARCHAR(255)           NOT NULL,
     resource        VARCHAR(2048)          NOT NULL,
     family_id       CHAR(36)               NOT NULL,
-    rotated_from    CHAR(36)               NULL,
+    rotated_from_id CHAR(36)               NULL,
     issued_at       TIMESTAMP(6)           NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     expires_at      TIMESTAMP(6)           NOT NULL,
     revoked_at      TIMESTAMP(6)           NULL,
