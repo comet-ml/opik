@@ -3,7 +3,7 @@ package com.comet.opik.infrastructure;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
-import io.dropwizard.jobs.JobConfiguration;
+import io.dropwizard.jobs.MutableJobConfiguration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -12,7 +12,7 @@ import lombok.ToString;
 
 @Getter
 @Setter
-public class OpikConfiguration extends JobConfiguration {
+public class OpikConfiguration extends MutableJobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private DataSourceFactory database = new DataSourceFactory();
