@@ -28,7 +28,7 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
     @Override
     public Optional<McpOAuthClient> resolve(@NonNull String clientId) {
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(McpOAuthClientDAO.class).fetchActive(clientId));
+                handle -> handle.attach(McpOAuthClientDAO.class).findActiveById(clientId));
     }
 
     @Override
@@ -39,7 +39,8 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(McpOAuthClientDAO.class);
             dao.save(client);
-            return dao.findActiveById(clientId);
+            return dao.findActiveById(clientId)
+                    .orElseThrow(() -> new IllegalStateException("client not found after registration: " + clientId));
         });
     }
 

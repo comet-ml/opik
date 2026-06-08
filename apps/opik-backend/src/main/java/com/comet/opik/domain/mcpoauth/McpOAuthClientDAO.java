@@ -23,9 +23,5 @@ interface McpOAuthClientDAO {
     void save(@BindMethods("bean") McpOAuthClient client);
 
     @SqlQuery("SELECT * FROM mcp_oauth_clients WHERE client_id = :clientId")
-    McpOAuthClient findActiveById(@Bind("clientId") String clientId);
-
-    default Optional<McpOAuthClient> fetchActive(String clientId) {
-        return Optional.ofNullable(findActiveById(clientId));
-    }
+    Optional<McpOAuthClient> findActiveById(@Bind("clientId") String clientId);
 }
