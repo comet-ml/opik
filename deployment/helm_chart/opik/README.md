@@ -442,6 +442,7 @@ Call opik api on http://localhost:5173/api
 | global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
+| mcpOAuth.enabled | bool | `false` | Render nginx locations (AS endpoints, consent UI, RFC 8414 discovery URL). Off by default — existing installs unaffected. Turn on together with backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik). |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
 | minio.auth.rootUser | string | `"THAAIOSFODNN7EXAMPLE"` |  |
 | minio.config.browserEnabled | bool | `false` |  |

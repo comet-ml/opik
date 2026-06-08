@@ -76,6 +76,24 @@ caCerts:
     subPath: cacerts
 
 
+# MCP OAuth Authorization Server (OPIK-6666) — adds OAuth surfaces to the
+# frontend nginx so MCP hosts can run the OAuth 2.1 dance against opik-backend
+# at the deployment's `/opik/*` namespace (sibling to the
+# data API at `/opik/api/*`, not nested under it).
+#
+# The backend's OAuth 2.1 endpoints (/oauth/{authorize,token,register,revoke})
+# only respond when MCP_OAUTH_ENABLED=true is set on the backend env; this
+# chart flag adds the corresponding nginx routes at the edge so they're
+# reachable through the standard Opik ingress without requiring URL rewrites
+# on the platform's outer edge.
+mcpOAuth:
+  # -- Render nginx locations (AS endpoints, consent UI, RFC 8414
+  # discovery URL). Off by default — existing installs unaffected. Turn on
+  # together with backend MCP_OAUTH_ENABLED=true and a path-prefix
+  # OPIK_BASE_URL (e.g. https://www.comet.com/opik).
+  enabled: false
+
+
 component:
   backend:
     enabled: true

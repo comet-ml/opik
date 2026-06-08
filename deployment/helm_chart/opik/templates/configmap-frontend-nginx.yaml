@@ -151,6 +151,45 @@ data:
         location {{ $rootPath }}/api/ {
           try_files /dev/null @api;
         }
+        {{- if .Values.mcpOAuth.enabled }}
+
+        # --- MCP OAuth (OPIK-6666) — issuer at {{ $rootPath | default "/" }} -------
+        # AS endpoints are mounted directly at /oauth/* on opik-backend
+        # (no /api prefix in @Path). The exact-match `consent` route MUST
+        # come before the prefix block — nginx exact-match wins, so the
+        # React consent page renders from the SPA bundle while every other
+        # /oauth/* path is rewritten to / and proxied to the backend.
+        location = {{ $rootPath }}/oauth/consent {
+          try_files /dev/null {{ $rootPath }}/index.html;
+        }
+        location @mcp_oauth_backend {
+          rewrite ^{{ $rootPath }}/(.*)$ /$1 break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location ^~ {{ $rootPath }}/oauth/ {
+          try_files /dev/null @mcp_oauth_backend;
+        }
+        # RFC 8414 §3 — for issuer `<host>{{ $rootPath }}`, the AS metadata
+        # MUST live at `/.well-known/oauth-authorization-server{{ $rootPath }}`
+        # (the well-known segment is inserted between host and issuer path).
+        # Backend mounts the metadata at `/.well-known/oauth-authorization-server`
+        # directly, so we strip the path suffix before proxying.
+        location = /.well-known/oauth-authorization-server{{ $rootPath }} {
+          rewrite ^.*$ /.well-known/oauth-authorization-server break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        # --- end MCP OAuth -------------------------------------------------
+        {{- end }}
 
         location @swagger {
             rewrite /swagger/(.*) /$1 break;
