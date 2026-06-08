@@ -64,17 +64,19 @@ public class McpOAuthTokenUtils {
         return DigestUtils.sha256Hex(token);
     }
 
+    /**
+     * Masks a token for safe logging. Never emits token fragments: a SHA-256 prefix is non-reversible
+     * yet stable enough to correlate the same token across log lines.
+     *
+     * @param token the raw token; may be {@code null} or empty
+     * @return an empty string for null/empty input, otherwise {@code "sha256:"} followed by the first
+     *         12 hex characters of the token's SHA-256 hash
+     */
     public static String maskToken(String token) {
         if (StringUtils.isEmpty(token)) {
             return "";
         }
-        //expected Opik token size
-        if (token.length() > RANDOM_BYTES) {
-            return token.substring(0, 12) + "..." + token.substring(token.length() - 4);
-        } else {
-            //return full string as confirmed not to be expected token shape
-            return token;
-        }
+        return "sha256:" + hash(token).substring(0, 12);
     }
 
     private static SecureRandom getSecureRandom() {
