@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
@@ -15,8 +16,9 @@ import java.time.Duration;
 public class McpOAuthConfig {
 
     @Valid @JsonProperty
-    private boolean enabled = false;
+    private boolean enabled;
 
+    // Empty unless enabled; validated by isBaseUrlValidWhenEnabled() rather than @NotBlank.
     @Valid @JsonProperty
     private String baseUrl;
 
@@ -25,24 +27,24 @@ public class McpOAuthConfig {
     private String mcpResourceUri;
 
     @Valid @JsonProperty
-    @NotNull private Duration accessTokenTtl = Duration.ofHours(1);
+    @NotNull private Duration accessTokenTtl;
 
     @Valid @JsonProperty
-    @NotNull private Duration refreshTokenTtl = Duration.ofDays(7);
+    @NotNull private Duration refreshTokenTtl;
 
     @Valid @JsonProperty
-    @NotNull private Duration codeTtl = Duration.ofSeconds(60);
+    @NotNull private Duration codeTtl;
 
     // Grace window during which a just-rotated refresh token is still accepted
     @Valid @JsonProperty
-    @NotNull private Duration refreshRotationGrace = Duration.ofSeconds(30);
+    @NotNull private Duration refreshRotationGrace;
 
     // DCR (RFC 7591) is deliberately unauthenticated, so cap registrations per source IP per window.
     @Valid @JsonProperty
-    private long registrationRateLimit = 20;
+    @Min(1) private long registrationRateLimit;
 
     @Valid @JsonProperty
-    @NotNull private Duration registrationRateLimitDuration = Duration.ofHours(1);
+    @NotNull private Duration registrationRateLimitDuration;
 
     public String getIssuer() {
         return StringUtils.stripEnd(baseUrl, "/");
