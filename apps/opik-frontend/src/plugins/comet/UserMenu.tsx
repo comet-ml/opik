@@ -11,7 +11,9 @@ import {
   Shield,
   Sparkles,
   UserPlus,
+  Zap,
 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
@@ -51,6 +53,7 @@ import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
+import useAiSpendManager from "@/plugins/comet/useAiSpendManager";
 
 const UserMenu = () => {
   const { toast } = useToast();
@@ -84,6 +87,8 @@ const UserMenu = () => {
   );
 
   const { canInviteMembers } = useUserPermission();
+  const navigate = useNavigate();
+  const { hasAccess: hasAiSpendAccess } = useAiSpendManager();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
 
@@ -194,6 +199,20 @@ const UserMenu = () => {
                   <span>{ADMIN_DASHBOARD_LABEL}</span>
                 </DropdownMenuItem>
               </a>
+            ) : null}
+            {hasAiSpendAccess ? (
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() =>
+                  navigate({
+                    to: "/$workspaceName/ai-spend/home",
+                    params: { workspaceName },
+                  })
+                }
+              >
+                <Zap className="mr-2 size-4" />
+                <span>AI Spend Manager</span>
+              </DropdownMenuItem>
             ) : null}
             {organization?.role !== ORGANIZATION_ROLE_TYPE.viewOnly ? (
               <DropdownMenuSub>

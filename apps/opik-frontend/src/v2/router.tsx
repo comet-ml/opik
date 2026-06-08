@@ -65,6 +65,9 @@ import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
+import AiSpendGuard from "@/v2/pages/AiSpend/AiSpendGuard";
+import AiSpendHomePage from "@/v2/pages/AiSpend/AiSpendHomePage";
+import AiSpendLeaderboardPage from "@/v2/pages/AiSpend/AiSpendLeaderboardPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -594,6 +597,36 @@ const homeSMERoute = createRoute({
   component: lazy(() => import("@/v2/pages/SMEFlowPage/SMEFlowPage")),
 });
 
+// ----------- AI Spend Manager (reuses PageLayout via workspaceGuardRoute)
+const aiSpendRoute = createRoute({
+  path: "/$workspaceName/ai-spend",
+  getParentRoute: () => workspaceGuardRoute,
+  component: AiSpendGuard,
+});
+
+const aiSpendIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => aiSpendRoute,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/ai-spend/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
+});
+
+const aiSpendHomeRoute = createRoute({
+  path: "/home",
+  getParentRoute: () => aiSpendRoute,
+  component: AiSpendHomePage,
+});
+
+const aiSpendLeaderboardRoute = createRoute({
+  path: "/leaderboard",
+  getParentRoute: () => aiSpendRoute,
+  component: AiSpendLeaderboardPage,
+});
+
 // ----------- Automation logs
 const automationLogsRoute = createRoute({
   path: "/$workspaceName/automation-logs",
@@ -623,6 +656,11 @@ const routeTree = rootRoute.addChildren([
   workspaceGuardRoute.addChildren([
     baseRoute,
     homeRoute,
+    aiSpendRoute.addChildren([
+      aiSpendIndexRoute,
+      aiSpendHomeRoute,
+      aiSpendLeaderboardRoute,
+    ]),
     workspaceRoute.addChildren([
       // Projects: workspace-level list + project-scoped routes
       projectsRoute.addChildren([
