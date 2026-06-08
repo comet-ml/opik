@@ -40,6 +40,10 @@ import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import {
+  resolveSelectedModel,
+  resolveSelectedModelProvider,
+} from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -184,17 +188,25 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 <div className="flex h-10 items-center justify-center gap-2">
                   <PromptModelSelect
                     value={model}
-                    onChange={(m) => {
+                    onChange={(m, selectedProvider) => {
                       if (m) {
-                        field.onChange(m);
+                        const selectedModel = resolveSelectedModel(
+                          m,
+                          selectedProvider,
+                        );
+                        field.onChange(selectedModel);
                         // Update config to ensure reasoning models have temperature >= 1.0
-                        const newProvider = calculateModelProvider(m);
+                        const newProvider = resolveSelectedModelProvider(
+                          selectedModel,
+                          selectedProvider,
+                          calculateModelProvider,
+                        );
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
                         );
                         const adjustedConfig = updateProviderConfig(
                           currentConfig,
-                          { model: m, provider: newProvider },
+                          { model: selectedModel, provider: newProvider },
                         );
                         if (
                           adjustedConfig &&
