@@ -28,4 +28,13 @@ public interface StreamConfiguration {
     int getStreamMaxLen();
 
     int getStreamTrimLimit();
+
+    /**
+     * Upper bound, in bytes, on the estimated in-flight payload a single consumer may process
+     * concurrently. {@code 0} (the default) disables the memory-aware admission gate, preserving
+     * the count-only concurrency behavior. Only the online-scoring streams override this.
+     */
+    default long getMaxInFlightBytes() {
+        return 0;
+    }
 }

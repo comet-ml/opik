@@ -35,6 +35,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
@@ -81,6 +82,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private static final int BOUNDED_ELASTIC_SCHEDULER_TTL_SECONDS = 60;
 
     /**
+     * Granularity of the memory-aware admission gate: one semaphore permit per KiB of estimated
+     * in-flight payload. {@link Semaphore} permits are an {@code int}, so a byte-per-permit scheme
+     * would overflow above ~2 GiB; KiB permits push the ceiling to ~2 TiB while keeping the budget
+     * arithmetic exact enough for a coarse heap bound.
+     */
+    private static final int BYTES_PER_PERMIT = 1024;
+
+    /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
      */
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -111,12 +120,25 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongCounter listPendingErrors;
     private final LongHistogram listPendingTime;
     private final LongCounter unexpectedErrors;
+    private final LongHistogram admissionWaitTime;
+    private final LongCounter admissionWaits;
+    private final DoubleGauge inFlightBytesGauge;
+    private final DoubleGauge streamLength;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription;
     private volatile Scheduler timerScheduler;
     private volatile Scheduler consumerScheduler;
     private volatile Scheduler workersScheduler;
+
+    /**
+     * Memory-aware admission gate. Non-null only while the gate is active (subclass opts in via
+     * {@link #isAdmissionControlEnabled()} AND {@code maxInFlightBytes > 0}). When null the consumer
+     * keeps its count-only concurrency — identical to the pre-gate behavior.
+     */
+    private volatile Semaphore admissionBudget;
+    private volatile int maxInFlightPermits;
+    private final AtomicLong inFlightBytes = new AtomicLong();
 
     protected BaseRedisSubscriber(
             @NonNull StreamConfiguration config,
@@ -204,6 +226,53 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .counterBuilder("%s_%s_unexpected_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Unexpected errors caught")
                 .build();
+        this.admissionWaitTime = meter
+                .histogramBuilder("%s_%s_admission_wait_time".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Time a message waited on the memory-aware admission gate before processing")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+        this.admissionWaits = meter
+                .counterBuilder("%s_%s_admission_waits".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Number of messages that had to wait for in-flight budget before processing")
+                .build();
+        this.inFlightBytesGauge = meter
+                .gaugeBuilder("%s_%s_in_flight_bytes".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Estimated in-flight payload bytes currently admitted for processing")
+                .setUnit("bytes")
+                .build();
+        this.streamLength = meter
+                .gaugeBuilder("%s_%s_stream_length".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Number of entries currently in the Redis stream (backlog)")
+                .build();
+    }
+
+    /**
+     * Estimated in-flight payload size, in bytes, the given message will hold while being processed.
+     * Drives the memory-aware admission gate. Base returns {@code 0} (no weight) so subscribers that
+     * don't opt in are unaffected; online-scoring scorers override it per message type.
+     */
+    protected long estimateInFlightBytes(M message) {
+        return 0;
+    }
+
+    /**
+     * Whether the memory-aware admission gate is active for this subscriber. Base returns
+     * {@code false} (gate off); online-scoring scorers override it from the service toggle so it can
+     * be flipped off in production to revert to the count-only concurrency behavior.
+     */
+    protected boolean isAdmissionControlEnabled() {
+        return false;
+    }
+
+    /**
+     * Whether to sample the Redis stream backlog (XLEN) for observability on each poll tick. Base
+     * returns {@code false} so the extra round-trip isn't imposed on subscribers that don't need it;
+     * online scoring overrides it to {@code true} so backlog is observable independently of the gate
+     * toggle (e.g. to size the budget before enabling the gate).
+     */
+    protected boolean isStreamLengthSamplingEnabled() {
+        return false;
     }
 
     @Override
@@ -239,6 +308,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                             config.getConsumerGroupName(), config.getStreamName()),
                     BOUNDED_ELASTIC_SCHEDULER_TTL_SECONDS,
                     true);
+        }
+        if (admissionBudget == null && isAdmissionControlEnabled() && config.getMaxInFlightBytes() > 0) {
+            maxInFlightPermits = toPermits(config.getMaxInFlightBytes());
+            // Fair so a large, budget-clamped message admitted in order isn't starved by a steady
+            // stream of small ones.
+            admissionBudget = new Semaphore(maxInFlightPermits, true);
+            log.info("Memory-aware admission gate enabled: maxInFlightBytes='{}', permits='{}'",
+                    config.getMaxInFlightBytes(), maxInFlightPermits);
         }
         if (streamSubscription == null) {
             streamSubscription = setupStreamListener();
@@ -276,6 +353,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         if (consumerScheduler != null && !consumerScheduler.isDisposed()) {
             consumerScheduler.dispose();
         }
+        admissionBudget = null;
     }
 
     /**
@@ -340,14 +418,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                             i);
                 })
                 // ConcatMap ensures one readGroup/autoClaim at a time
-                .concatMap(i -> {
+                .concatMap(i -> sampleStreamLength().then(Mono.defer(() -> {
                     // Using our own counter to track real reads as ticks (i) might be dropped on backpressure
                     if (readCount.incrementAndGet() % config.getClaimIntervalRatio() == 0) {
                         return claimPendingMessages();
                     } else {
                         return readMessages();
                     }
-                })
+                })))
                 .flatMapIterable(Map::entrySet)
                 // Concurrency for processing messages
                 .flatMap(this::processMessage, config.getConsumerBatchSize())
@@ -459,7 +537,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         }
         var startMillis = System.currentTimeMillis();
         // Deferring as processEvent is out of our control, it might not return a cold Mono
-        return Mono.defer(() -> processEvent(message))
+        return withAdmissionControl(message, Mono.defer(() -> processEvent(message)))
                 .subscribeOn(workersScheduler)
                 .thenReturn(ProcessingResult.builder()
                         .messageId(messageId)
@@ -477,6 +555,67 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                             .ifPresent(messageMillis -> messageQueueDelay
                                     .record(System.currentTimeMillis() - messageMillis));
                 });
+    }
+
+    /**
+     * Wraps the processing work with the memory-aware admission gate. When the gate is off (base
+     * subscribers, or the toggle disabled) the work {@code Mono} is returned unchanged — zero
+     * overhead, byte-for-byte the prior behavior. When on, it acquires permits proportional to the
+     * estimated in-flight bytes (clamped to the whole budget so an oversized message runs alone
+     * rather than deadlocking), processes, then releases on any terminal signal. The acquire runs on
+     * the worker scheduler; a full budget parks that worker until capacity frees up, which
+     * propagates backpressure upstream so surplus messages stay unread in Redis instead of piling
+     * into heap. Acks/retries/auto-claim are unaffected: a message that waits here was already read,
+     * and one that can't even be read stays in the stream.
+     */
+    private Mono<Void> withAdmissionControl(M message, Mono<Void> work) {
+        var budget = admissionBudget;
+        if (budget == null) {
+            return work;
+        }
+        int permits = Math.min(maxInFlightPermits, toPermits(estimateInFlightBytes(message)));
+        long bytes = (long) permits * BYTES_PER_PERMIT;
+        return Mono.fromCallable(() -> {
+            if (!budget.tryAcquire(permits)) {
+                admissionWaits.add(1);
+                var waitStartMillis = System.currentTimeMillis();
+                budget.acquire(permits);
+                admissionWaitTime.record(System.currentTimeMillis() - waitStartMillis);
+            }
+            addInFlightBytes(bytes);
+            return permits;
+        })
+                .subscribeOn(workersScheduler)
+                .flatMap(acquired -> work.doFinally(signalType -> {
+                    budget.release(acquired);
+                    addInFlightBytes(-bytes);
+                }));
+    }
+
+    private int toPermits(long bytes) {
+        return (int) Math.max(1, Math.min(Integer.MAX_VALUE, bytes / BYTES_PER_PERMIT));
+    }
+
+    private void addInFlightBytes(long delta) {
+        inFlightBytesGauge.set(inFlightBytes.addAndGet(delta));
+    }
+
+    /**
+     * Best-effort sample of the Redis stream backlog for observability. Runs before each read tick;
+     * errors are swallowed so a failed sample never disrupts consumption.
+     */
+    private Mono<Void> sampleStreamLength() {
+        if (stream == null || !isStreamLengthSamplingEnabled()) {
+            return Mono.empty();
+        }
+        return stream.size()
+                .subscribeOn(consumerScheduler)
+                .doOnNext(size -> streamLength.set(Objects.requireNonNullElse(size, 0L).doubleValue()))
+                .onErrorResume(throwable -> {
+                    log.debug("Failed to sample stream length for stream '{}'", config.getStreamName(), throwable);
+                    return Mono.empty();
+                })
+                .then();
     }
 
     private Mono<List<ProcessingResult>> postProcessSuccessMessages(List<ProcessingResult> processingResults) {

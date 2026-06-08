@@ -22,6 +22,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -543,6 +544,38 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 return Mono.just(result);
             }
         };
+    }
+
+    @Nested
+    class AdmissionWeightTests {
+
+        @Test
+        void estimateInFlightBytesSumsTraceInputOutputAndMetadata() {
+            var input = JsonUtils.getJsonNodeFromString("{\"q\":\"hello\"}");
+            var output = JsonUtils.getJsonNodeFromString("{\"a\":\"world\"}");
+            var metadata = JsonUtils.getJsonNodeFromString("{\"m\":\"meta\"}");
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .name("t")
+                    .startTime(Instant.now())
+                    .input(input)
+                    .output(output)
+                    .metadata(metadata)
+                    .build();
+            var message = newMessageWithoutExperimentId(UUID.randomUUID()).toBuilder().trace(trace).build();
+
+            long expected = input.toString().length() + output.toString().length() + metadata.toString().length();
+            assertThat(scorer.estimateInFlightBytes(message)).isEqualTo(expected);
+        }
+
+        @Test
+        void admissionControlFollowsServiceToggle() {
+            assertThat(scorer.isAdmissionControlEnabled()).isFalse();
+
+            when(serviceTogglesConfig.isMemoryAwareScoringBoundEnabled()).thenReturn(true);
+            assertThat(scorer.isAdmissionControlEnabled()).isTrue();
+        }
     }
 
     private static TraceToScoreLlmAsJudge newMessage(UUID traceId) {

@@ -100,6 +100,19 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
 
+    @Override
+    protected boolean isAdmissionControlEnabled() {
+        return serviceTogglesConfig.isMemoryAwareScoringBoundEnabled();
+    }
+
+    @Override
+    protected long estimateInFlightBytes(TraceThreadToScoreLlmAsJudge message) {
+        // The message carries only thread IDs — the heavy context (traces + spans) is fetched while
+        // scoring, so it isn't measurable here. Weight by thread count × the configured per-thread
+        // estimate. Calibrate avgThreadBytes from the online_scoring_llm_*_chars metric.
+        return (long) message.threadIds().size() * onlineScoringConfig.getAvgThreadBytes();
+    }
+
     /**
      * Use AI Proxy to score the trace thread and store it as a feedback scores.
      * If the evaluator has multiple score definitions, it calls the LLM once per score definition.

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
 import org.redisson.api.RStreamReactive;
@@ -36,8 +37,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
@@ -435,6 +438,149 @@ class BaseRedisSubscriberTest {
             waitForMessagesAckedAndRemoved(newMessages.size());
             assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(processedCountBeforeStop);
             assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+    }
+
+    @Nested
+    class AdmissionControlTests {
+
+        // 2048 bytes / 1024 bytes-per-permit = 2 permits of budget.
+        private static final long TWO_PERMIT_BUDGET = 2048;
+        private static final long ONE_PERMIT_WEIGHT = 1024;
+
+        @Test
+        void shouldBoundConcurrencyByInFlightBytes() {
+            var current = new AtomicInteger();
+            var maxConcurrent = new AtomicInteger();
+            var release = new CountDownLatch(1);
+            var gatedConfig = config.toBuilder().maxInFlightBytes(TWO_PERMIT_BUDGET).build();
+            // 5 messages, each weighing 1 permit, against a 2-permit budget → at most 2 run at once.
+            var messages = List.of("m1", "m2", "m3", "m4", "m5");
+            var subscriber = trackSubscriber(TestRedisSubscriber.gatedSubscriber(gatedConfig, redissonClient,
+                    message -> Mono.fromRunnable(() -> {
+                        maxConcurrent.accumulateAndGet(current.incrementAndGet(), Math::max);
+                        awaitLatch(release);
+                        current.decrementAndGet();
+                    }),
+                    message -> ONE_PERMIT_WEIGHT));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // Two messages occupy the whole budget; the rest wait at the gate.
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(current.get()).isEqualTo(2));
+
+            release.countDown();
+            waitForMessagesProcessed(subscriber, messages.size());
+            waitForMessagesAckedAndRemoved();
+            // The gate never let more than the 2-permit budget run concurrently.
+            assertThat(maxConcurrent.get()).isEqualTo(2);
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+
+        @Test
+        void shouldProcessMessageLargerThanBudgetSolo() {
+            var current = new AtomicInteger();
+            var maxConcurrent = new AtomicInteger();
+            var release = new CountDownLatch(1);
+            var gatedConfig = config.toBuilder().maxInFlightBytes(TWO_PERMIT_BUDGET).build();
+            // Each message is far larger than the whole budget — clamped to the full budget, so each
+            // runs alone instead of deadlocking (liveness).
+            var messages = List.of("big1", "big2", "big3");
+            var subscriber = trackSubscriber(TestRedisSubscriber.gatedSubscriber(gatedConfig, redissonClient,
+                    message -> Mono.fromRunnable(() -> {
+                        maxConcurrent.accumulateAndGet(current.incrementAndGet(), Math::max);
+                        awaitLatch(release);
+                        current.decrementAndGet();
+                    }),
+                    message -> 1_000_000L));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(current.get()).isEqualTo(1));
+
+            release.countDown();
+            waitForMessagesProcessed(subscriber, messages.size());
+            waitForMessagesAckedAndRemoved();
+            // Each oversized message ran alone; all still completed.
+            assertThat(maxConcurrent.get()).isEqualTo(1);
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+
+        @Test
+        void shouldNotBoundConcurrencyWhenBudgetDisabled() {
+            var current = new AtomicInteger();
+            var maxConcurrent = new AtomicInteger();
+            var release = new CountDownLatch(1);
+            // maxInFlightBytes = 0 (default) → gate disabled even though the subscriber opts in and
+            // weighs messages; concurrency is the count-only behavior (up to consumerBatchSize).
+            var messages = List.of("m1", "m2", "m3", "m4", "m5");
+            var subscriber = trackSubscriber(TestRedisSubscriber.gatedSubscriber(config, redissonClient,
+                    message -> Mono.fromRunnable(() -> {
+                        maxConcurrent.accumulateAndGet(current.incrementAndGet(), Math::max);
+                        awaitLatch(release);
+                        current.decrementAndGet();
+                    }),
+                    message -> ONE_PERMIT_WEIGHT));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // All messages run concurrently (consumerBatchSize = 5) — no byte bound applied.
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(current.get()).isEqualTo(messages.size()));
+
+            release.countDown();
+            waitForMessagesProcessed(subscriber, messages.size());
+            waitForMessagesAckedAndRemoved();
+            assertThat(maxConcurrent.get()).isEqualTo(messages.size());
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+
+        // Bytes-awareness: with the budget fixed at 4 permits (4096 bytes), the number of evals that
+        // may run concurrently is budget / per-message-weight. Heavier messages each consume more of
+        // the budget, so fewer run at once — this is what distinguishes the gate from a plain count.
+        @ParameterizedTest(name = "weight={0} permits/msg @ 4-permit budget -> max concurrency {1}")
+        @CsvSource({"1, 4", "2, 2", "4, 1"})
+        void concurrencyScalesInverselyWithPerMessageWeight(int weightPermits, int expectedConcurrent) {
+            long budgetBytes = 4 * ONE_PERMIT_WEIGHT;
+            long weightBytes = weightPermits * ONE_PERMIT_WEIGHT;
+            var current = new AtomicInteger();
+            var maxConcurrent = new AtomicInteger();
+            var release = new CountDownLatch(1);
+            // consumerBatchSize 8 > budget, so the byte budget — not the count — is the binding limit.
+            var gatedConfig = config.toBuilder().consumerBatchSize(8).maxInFlightBytes(budgetBytes).build();
+            var messages = IntStream.range(0, 8).mapToObj(i -> "m" + i).toList();
+            var subscriber = trackSubscriber(TestRedisSubscriber.gatedSubscriber(gatedConfig, redissonClient,
+                    message -> Mono.fromRunnable(() -> {
+                        maxConcurrent.accumulateAndGet(current.incrementAndGet(), Math::max);
+                        awaitLatch(release);
+                        current.decrementAndGet();
+                    }),
+                    message -> weightBytes));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(current.get()).isEqualTo(expectedConcurrent));
+
+            release.countDown();
+            waitForMessagesProcessed(subscriber, messages.size());
+            waitForMessagesAckedAndRemoved();
+            assertThat(maxConcurrent.get()).isEqualTo(expectedConcurrent);
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+
+        private void awaitLatch(CountDownLatch latch) {
+            try {
+                latch.await(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

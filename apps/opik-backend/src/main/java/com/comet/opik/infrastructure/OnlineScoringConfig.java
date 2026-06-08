@@ -86,6 +86,28 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) private int agenticToolsCharsPerToken = 4;
 
+    /**
+     * Global default for the memory-aware admission gate: the maximum estimated in-flight payload,
+     * in bytes, a single consumer processes concurrently. {@code 0} (default) disables the gate, so
+     * the consumer keeps its count-only concurrency. Gated at runtime by the
+     * {@code memoryAwareScoringBoundEnabled} service toggle; this value is only consulted when that
+     * toggle is on. Can be overridden per stream.
+     *
+     * <p>Field initializer (not {@code @Builder.Default}) so the default applies during Dropwizard's
+     * YAML deserialization (no-args constructor), not only via the builder.
+     */
+    @JsonProperty
+    @Min(0) private long maxInFlightBytes = 0;
+
+    /**
+     * Estimated bytes a single thread contributes to the in-flight payload, used to weight
+     * {@code trace_thread_llm_as_judge} messages — their Redis payload carries only thread IDs, so
+     * the heavy context (traces + spans) is fetched while scoring and isn't measurable at admission.
+     * Calibrate from the per-eval sizes the {@code online_scoring_llm_*_chars} metric reports.
+     */
+    @JsonProperty
+    @Min(1) private long avgThreadBytes = 256_000;
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor
@@ -127,5 +149,8 @@ public class OnlineScoringConfig {
 
         @JsonProperty
         @Min(0) @Max(10_000) private Integer streamTrimLimit;
+
+        @JsonProperty
+        @Min(0) private Long maxInFlightBytes;
     }
 }

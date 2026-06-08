@@ -104,6 +104,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.serviceTogglesConfig = serviceTogglesConfig;
     }
 
+    @Override
+    protected boolean isAdmissionControlEnabled() {
+        return serviceTogglesConfig.isMemoryAwareScoringBoundEnabled();
+    }
+
+    @Override
+    protected long estimateInFlightBytes(TraceToScoreLlmAsJudge message) {
+        var trace = message.trace();
+        return jsonSize(trace.input(), trace.output(), trace.metadata());
+    }
+
     /**
      * Resolves the workspaceName for the post-scoring chain. Needed because
      * {@link com.comet.opik.domain.ExperimentService#finishExperiments(Set)} reads

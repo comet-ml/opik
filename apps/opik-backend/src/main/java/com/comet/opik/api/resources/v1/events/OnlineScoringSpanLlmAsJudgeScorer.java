@@ -59,6 +59,17 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     }
 
     @Override
+    protected boolean isAdmissionControlEnabled() {
+        return serviceTogglesConfig.isMemoryAwareScoringBoundEnabled();
+    }
+
+    @Override
+    protected long estimateInFlightBytes(SpanToScoreLlmAsJudge message) {
+        var span = message.span();
+        return jsonSize(span.input(), span.output(), span.metadata());
+    }
+
+    @Override
     public void start() {
         if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
             super.start();

@@ -672,6 +672,28 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 .build();
     }
 
+    @Nested
+    class AdmissionWeightTests {
+
+        @Test
+        void estimateInFlightBytesScalesWithThreadCount() {
+            var message = mock(TraceThreadToScoreLlmAsJudge.class);
+            when(message.threadIds()).thenReturn(List.of("t1", "t2", "t3"));
+            when(onlineScoringConfig.getAvgThreadBytes()).thenReturn(256_000L);
+
+            // The thread message carries only IDs, so weight is thread count × the configured estimate.
+            assertThat(scorer.estimateInFlightBytes(message)).isEqualTo(3L * 256_000L);
+        }
+
+        @Test
+        void admissionControlFollowsServiceToggle() {
+            assertThat(scorer.isAdmissionControlEnabled()).isFalse();
+
+            when(serviceTogglesConfig.isMemoryAwareScoringBoundEnabled()).thenReturn(true);
+            assertThat(scorer.isAdmissionControlEnabled()).isTrue();
+        }
+    }
+
     private FeedbackScoreBatchItemThread threadScore(String name, BigDecimal value, String reason, Project project) {
         return FeedbackScoreBatchItemThread.builder()
                 .id(threadModelId)

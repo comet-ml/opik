@@ -26,13 +26,26 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     private final AtomicInteger failedMessageCount = new AtomicInteger(0);
 
     private final Function<String, Mono<Void>> processor;
+    private final boolean admissionControlEnabled;
+    private final Function<String, Long> weigher;
 
     public TestRedisSubscriber(
             @NonNull StreamConfiguration config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull Function<String, Mono<Void>> processor) {
+        this(config, redisson, processor, false, message -> 0L);
+    }
+
+    public TestRedisSubscriber(
+            @NonNull StreamConfiguration config,
+            @NonNull RedissonReactiveClient redisson,
+            @NonNull Function<String, Mono<Void>> processor,
+            boolean admissionControlEnabled,
+            @NonNull Function<String, Long> weigher) {
         super(config, redisson, TestStreamConfiguration.PAYLOAD_FIELD, METRIC_NAMESPACE, METRICS_BASE_NAME);
         this.processor = processor;
+        this.admissionControlEnabled = admissionControlEnabled;
+        this.weigher = weigher;
     }
 
     @Override
@@ -40,6 +53,27 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
         return processor.apply(message)
                 .doOnSuccess(unused -> successMessageCount.incrementAndGet())
                 .doOnError(throwable -> failedMessageCount.incrementAndGet());
+    }
+
+    @Override
+    protected boolean isAdmissionControlEnabled() {
+        return admissionControlEnabled;
+    }
+
+    @Override
+    protected long estimateInFlightBytes(String message) {
+        return weigher.apply(message);
+    }
+
+    /**
+     * Factory for a subscriber with the memory-aware admission gate enabled and a per-message weight.
+     */
+    public static TestRedisSubscriber gatedSubscriber(
+            StreamConfiguration config,
+            RedissonReactiveClient redisson,
+            Function<String, Mono<Void>> processor,
+            Function<String, Long> weigher) {
+        return new TestRedisSubscriber(config, redisson, processor, true, weigher);
     }
 
     /**

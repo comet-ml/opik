@@ -110,4 +110,12 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
                 ? streamConfig.getStreamTrimLimit()
                 : onlineScoringConfig.getStreamTrimLimit();
     }
+
+    @Override
+    public long getMaxInFlightBytes() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getMaxInFlightBytes() != null
+                ? streamConfig.getMaxInFlightBytes()
+                : onlineScoringConfig.getMaxInFlightBytes();
+    }
 }

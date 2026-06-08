@@ -545,6 +545,17 @@ onlineScoring:
   #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
   #   pessimistic estimate so the agentic-tools path engages earlier.
   agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
+  # Default: 0 (disabled)
+  # Description: Memory-aware admission gate budget — the max estimated in-flight payload (bytes) a single
+  #   consumer processes concurrently. 0 disables the gate. Only consulted when the
+  #   memoryAwareScoringBoundEnabled service toggle is on. Can be overridden per stream. Size it from the
+  #   per-eval sizes the online_scoring_llm_*_chars metric reports in production.
+  maxInFlightBytes: ${REDIS_SCORING_MAX_IN_FLIGHT_BYTES:-0}
+  # Default: 256000
+  # Description: Estimated bytes one thread contributes to the in-flight payload, used to weight
+  #   trace_thread_llm_as_judge messages (their Redis payload carries only thread IDs, so the heavy context
+  #   is fetched while scoring and can't be measured at admission).
+  avgThreadBytes: ${REDIS_SCORING_AVG_THREAD_BYTES:-256000}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -1055,6 +1066,12 @@ serviceToggles:
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
   agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
+  # Default: false
+  # Description: Master switch for the memory-aware admission gate on online scoring. When false, the
+  #   consumer keeps its count-only concurrency (current behavior). When true, the consumer also bounds
+  #   concurrent in-flight evals by onlineScoring.maxInFlightBytes so overflow waits in Redis instead
+  #   of filling heap. Flip off to instantly revert in production.
+  memoryAwareScoringBoundEnabled: ${TOGGLE_MEMORY_AWARE_SCORING_BOUND_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).

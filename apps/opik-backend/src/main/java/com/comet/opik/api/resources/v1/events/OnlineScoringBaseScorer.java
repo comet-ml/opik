@@ -12,6 +12,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
 import org.redisson.api.RedissonReactiveClient;
@@ -83,6 +84,30 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
      * {@link #storeThreadScores}.
      */
     protected abstract Mono<Void> score(M message);
+
+    @Override
+    protected boolean isStreamLengthSamplingEnabled() {
+        // Online-scoring backlog is worth watching independently of the admission gate (e.g. to size
+        // the budget before enabling it), so sampling is always on for scoring streams.
+        return true;
+    }
+
+    /**
+     * Coarse byte estimate of one or more JSON payload fields, for the memory-aware admission gate.
+     * Uses {@code toString().length()} (chars ≈ bytes for the estimate) — the same size proxy
+     * {@code OnlineScoringEngine.estimateTokensFromJson} relies on. Allocates the string once per
+     * message at admission (then discarded); acceptable for a coarse weight that's calibrated from
+     * the {@code online_scoring_llm_*_chars} metric.
+     */
+    protected static long jsonSize(JsonNode... nodes) {
+        long total = 0;
+        for (var node : nodes) {
+            if (node != null) {
+                total += node.toString().length();
+            }
+        }
+        return total;
+    }
 
     protected Mono<Map<String, List<BigDecimal>>> storeScores(
             List<FeedbackScoreBatchItem> scores, Trace trace, String userName, String workspaceId) {
