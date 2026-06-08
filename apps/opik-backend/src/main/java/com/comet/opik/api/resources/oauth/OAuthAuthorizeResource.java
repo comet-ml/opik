@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.mcpoauth.CreateOAuthCodeCommand;
 import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -12,6 +13,9 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.UserWorkspace;
 import com.comet.opik.infrastructure.auth.WorkspaceInfo;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
@@ -30,16 +34,16 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CSRF_COOKIE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_TARGET;
@@ -52,9 +56,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OAuthAuthorizeResource {
 
-    private static final String CSRF_COOKIE = "mcp_oauth_csrf";
-    private static final SecureRandom RANDOM = new SecureRandom();
-
     private final @NonNull OAuthClientService clientService;
     private final @NonNull AuthService authService;
     private final @NonNull McpOAuthService mcpOAuthService;
@@ -63,8 +64,8 @@ public class OAuthAuthorizeResource {
     @GET
     @Path("/authorize")
     public Response authorize(
-            @QueryParam("client_id") String clientId,
-            @QueryParam("redirect_uri") String redirectUri,
+            @QueryParam("client_id") @NotBlank String clientId,
+            @QueryParam("redirect_uri") @NotBlank String redirectUri,
             @QueryParam("response_type") String responseType,
             @QueryParam("code_challenge") String codeChallenge,
             @QueryParam("code_challenge_method") String codeChallengeMethod,
@@ -80,7 +81,7 @@ public class OAuthAuthorizeResource {
         if (!RESPONSE_TYPE_CODE.equals(responseType)) {
             return errorRedirect(redirectUri, ERROR_UNSUPPORTED_RESPONSE_TYPE, state);
         }
-        if (codeChallenge == null || codeChallenge.isBlank()
+        if (StringUtils.isBlank(codeChallenge)
                 || !CODE_CHALLENGE_METHOD_S256.equals(codeChallengeMethod)) {
             return errorRedirect(redirectUri, ERROR_INVALID_REQUEST, state);
         }
@@ -92,7 +93,6 @@ public class OAuthAuthorizeResource {
         try {
             authService.listEligibleWorkspaces(session);
         } catch (ClientErrorException e) {
-            // Rebuild the public authorize URL; uriInfo is the nginx-rewritten internal path
             String rawQuery = uriInfo.getRequestUri().getRawQuery();
             String authorizeUrl = config.getBaseUrl() + "/oauth/authorize" + (rawQuery == null ? "" : "?" + rawQuery);
             return redirect(config.getBaseUrl() + "/login?returnTo=" + enc(authorizeUrl));
@@ -104,7 +104,7 @@ public class OAuthAuthorizeResource {
                 + "&code_challenge=" + enc(codeChallenge)
                 + "&code_challenge_method=" + enc(codeChallengeMethod)
                 + "&resource=" + enc(resource)
-                + (isBlank(state) ? "" : "&state=" + enc(state));
+                + (StringUtils.isBlank(state) ? "" : "&state=" + enc(state));
         return redirect(config.getBaseUrl() + "/oauth/consent?" + query);
     }
 
@@ -112,8 +112,8 @@ public class OAuthAuthorizeResource {
     @Path("/authorize/context")
     @Produces(MediaType.APPLICATION_JSON)
     public Response context(
-            @QueryParam("client_id") String clientId,
-            @QueryParam("redirect_uri") String redirectUri,
+            @QueryParam("client_id") @NotBlank String clientId,
+            @QueryParam("redirect_uri") @NotBlank String redirectUri,
             @Context HttpHeaders headers) {
 
         McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
@@ -121,7 +121,7 @@ public class OAuthAuthorizeResource {
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
         List<WorkspaceInfo> workspaces = authService.listEligibleWorkspaces(session);
 
-        String csrf = generateToken();
+        String csrf = McpOAuthTokens.randomToken();
         NewCookie csrfCookie = new NewCookie.Builder(CSRF_COOKIE)
                 .value(csrf)
                 .path("/")
@@ -129,7 +129,12 @@ public class OAuthAuthorizeResource {
                 .secure(isSecureDeployment(opikConfig.getMcpOAuth()))
                 .sameSite(NewCookie.SameSite.LAX)
                 .build();
-        return Response.ok(new AuthorizeContext(client.name(), client.logoUri(), workspaces, csrf))
+        return Response.ok(AuthorizeContext.builder()
+                .clientName(client.name())
+                .clientLogoUri(client.logoUri())
+                .workspaces(workspaces)
+                .csrfToken(csrf)
+                .build())
                 .cookie(csrfCookie)
                 .build();
     }
@@ -138,10 +143,10 @@ public class OAuthAuthorizeResource {
     @Path("/authorize")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public Response consent(@NonNull ConsentRequest request, @Context HttpHeaders headers) {
+    public Response consent(@NotNull @Valid ConsentRequest request, @Context HttpHeaders headers) {
 
         Cookie csrfCookie = headers.getCookies().get(CSRF_COOKIE);
-        if (csrfCookie == null || isBlank(csrfCookie.getValue()) || request.csrf() == null
+        if (csrfCookie == null || StringUtils.isBlank(csrfCookie.getValue()) || request.csrf() == null
                 || !MessageDigest.isEqual(csrfCookie.getValue().getBytes(UTF_8), request.csrf().getBytes(UTF_8))) {
             throw new ForbiddenException("invalid csrf token");
         }
@@ -151,7 +156,7 @@ public class OAuthAuthorizeResource {
         if (!config.getMcpResourceUri().equals(request.resource())) {
             throw new BadRequestException(ERROR_INVALID_TARGET);
         }
-        if (isBlank(request.codeChallenge())
+        if (StringUtils.isBlank(request.codeChallenge())
                 || !CODE_CHALLENGE_METHOD_S256.equals(request.codeChallengeMethod())) {
             throw new BadRequestException(ERROR_INVALID_REQUEST);
         }
@@ -169,8 +174,11 @@ public class OAuthAuthorizeResource {
                 .resource(request.resource())
                 .build());
 
-        String query = "code=" + enc(code) + (isBlank(request.state()) ? "" : "&state=" + enc(request.state()));
-        return Response.ok(new ConsentResponse(appendQuery(request.redirectUri(), query))).build();
+        String query = "code=" + enc(code)
+                + (StringUtils.isBlank(request.state()) ? "" : "&state=" + enc(request.state()));
+        return Response.ok(ConsentResponse.builder()
+                .redirectTo(appendQuery(request.redirectUri(), query))
+                .build()).build();
     }
 
     private McpOAuthClient requireClientWithRedirect(String clientId, String redirectUri) {
@@ -178,14 +186,17 @@ public class OAuthAuthorizeResource {
         if (client.isEmpty()) {
             throw new BadRequestException(ERROR_INVALID_CLIENT);
         }
-        if (redirectUri == null || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
+        // RFC 6749 §3.1.2: the redirection endpoint URI MUST NOT include a fragment, otherwise appended
+        // code/error/state query params would land inside the fragment and be unreadable by the client.
+        if (redirectUri == null || redirectUri.contains("#")
+                || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
             throw new BadRequestException("invalid redirect_uri");
         }
         return client.get();
     }
 
     private Response errorRedirect(String redirectUri, String error, String state) {
-        String query = "error=" + error + (isBlank(state) ? "" : "&state=" + enc(state));
+        String query = "error=" + error + (StringUtils.isBlank(state) ? "" : "&state=" + enc(state));
         return redirect(appendQuery(redirectUri, query));
     }
 
@@ -197,18 +208,8 @@ public class OAuthAuthorizeResource {
         return base + (base.contains("?") ? "&" : "?") + query;
     }
 
-    private static String generateToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
     private static String enc(String value) {
         return URLEncoder.encode(value, UTF_8);
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 
     private static boolean isSecureDeployment(McpOAuthConfig config) {

@@ -97,7 +97,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record WorkspaceForUserResponse(String workspaceId, String workspaceName) {
+    record WorkspaceIdNameResponse(String workspaceId, String workspaceName) {
     }
 
     @Builder(toBuilder = true)
@@ -192,17 +192,20 @@ class RemoteAuthService implements AuthService {
                 .queryParam("withoutExtendedData", true)
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
-                // avoid gzip double-decompression issue in case of huge workspaces list
+                // avoids gzip double-decompression issue in case of huge workspaces list
                 .acceptEncoding("identity")
                 .cookie(sessionToken)
                 .get()) {
             if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
                 throw toSessionAuthException(response);
             }
-            return response.readEntity(new GenericType<List<WorkspaceForUserResponse>>() {
+            return response.readEntity(new GenericType<List<WorkspaceIdNameResponse>>() {
             }).stream()
                     .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
-                    .map(workspace -> new WorkspaceInfo(workspace.workspaceId(), workspace.workspaceName()))
+                    .map(workspace -> WorkspaceInfo.builder()
+                            .id(workspace.workspaceId())
+                            .name(workspace.workspaceName())
+                            .build())
                     .toList();
         }
     }
@@ -223,8 +226,6 @@ class RemoteAuthService implements AuthService {
                         .build()))) {
             var authResponse = verifyResponse(response);
             var credentials = ValidatedAuthCredentials.from(authResponse);
-            // Token is the bearer; setCredentialIntoContext stores it under the existing apiKey slot so downstream
-            // request-scoped logging treats it like any other inbound credential.
             setCredentialIntoContext(credentials, token.workspaceName(), null);
         }
     }
@@ -243,7 +244,11 @@ class RemoteAuthService implements AuthService {
                 .cookie(sessionToken)
                 .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
             var authResponse = verifyResponse(response);
-            return new UserWorkspace(authResponse.user(), authResponse.workspaceId(), authResponse.workspaceName());
+            return UserWorkspace.builder()
+                    .userName(authResponse.user())
+                    .workspaceId(authResponse.workspaceId())
+                    .workspaceName(authResponse.workspaceName())
+                    .build();
         }
     }
 

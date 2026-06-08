@@ -21,15 +21,21 @@ public class McpOAuthTokens {
     private static final SecureRandom SECURE_RANDOM = getSecureRandom();
 
     public static String generateAccessToken() {
-        return ACCESS_PREFIX + randomSuffix();
+        return ACCESS_PREFIX + randomToken();
     }
 
     public static String generateRefreshToken() {
-        return REFRESH_PREFIX + randomSuffix();
+        return REFRESH_PREFIX + randomToken();
     }
 
     public static String generateCode() {
-        return randomSuffix();
+        return randomToken();
+    }
+
+    public static String randomToken() {
+        byte[] bytes = new byte[RANDOM_BYTES];
+        SECURE_RANDOM.nextBytes(bytes);
+        return ENCODER.encodeToString(bytes);
     }
 
     // Token prefixes are fixed lowercase literals minted by us — match case-sensitively.
@@ -55,12 +61,6 @@ public class McpOAuthTokens {
 
     public static String hash(String token) {
         return DigestUtils.sha256Hex(token);
-    }
-
-    private static String randomSuffix() {
-        byte[] bytes = new byte[RANDOM_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
-        return ENCODER.encodeToString(bytes);
     }
 
     private static SecureRandom getSecureRandom() {
