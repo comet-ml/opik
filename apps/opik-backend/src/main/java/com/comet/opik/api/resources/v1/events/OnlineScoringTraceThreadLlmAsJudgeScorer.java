@@ -29,6 +29,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
@@ -111,6 +112,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         // scoring, so it isn't measurable here. Weight by thread count × the configured per-thread
         // estimate. Calibrate avgThreadBytes from the online_scoring_llm_*_chars metric.
         return (long) message.threadIds().size() * onlineScoringConfig.getAvgThreadBytes();
+    }
+
+    @Override
+    protected Attributes admissionAttributes(TraceThreadToScoreLlmAsJudge message) {
+        return scoringAttributes(message.workspaceId(), message.ruleId());
     }
 
     /**

@@ -34,6 +34,7 @@ import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import io.opentelemetry.api.common.AttributeKey;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -575,6 +576,16 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
             when(serviceTogglesConfig.isMemoryAwareScoringBoundEnabled()).thenReturn(true);
             assertThat(scorer.isAdmissionControlEnabled()).isTrue();
+        }
+
+        @Test
+        void admissionAttributesTagWorkspaceAndRule() {
+            var message = newMessageWithoutExperimentId(UUID.randomUUID());
+
+            var attributes = scorer.admissionAttributes(message);
+
+            assertThat(attributes.get(AttributeKey.stringKey("workspace_id"))).isEqualTo(message.workspaceId());
+            assertThat(attributes.get(AttributeKey.stringKey("rule_id"))).isEqualTo(message.ruleId().toString());
         }
     }
 

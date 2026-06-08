@@ -28,6 +28,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -113,6 +114,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     protected long estimateInFlightBytes(TraceToScoreLlmAsJudge message) {
         var trace = message.trace();
         return jsonSize(trace.input(), trace.output(), trace.metadata());
+    }
+
+    @Override
+    protected Attributes admissionAttributes(TraceToScoreLlmAsJudge message) {
+        return scoringAttributes(message.workspaceId(), message.ruleId());
     }
 
     /**

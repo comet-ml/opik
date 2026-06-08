@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleGauge;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
@@ -263,6 +264,18 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      */
     protected boolean isAdmissionControlEnabled() {
         return false;
+    }
+
+    /**
+     * Attributes attached to the admission-contention metrics ({@code admission_waits} /
+     * {@code admission_wait_time}). Base returns {@link Attributes#empty()}; online-scoring scorers
+     * override it to tag waits with {@code workspace_id} + {@code rule_id} so it's visible in Grafana
+     * which tenants/rules are saturating the consumer's byte budget. Only the contention metrics
+     * carry these labels — they fire solely when the budget is full (a small set of offenders), so
+     * the per-tenant cardinality stays bounded; the per-pod gauges stay unlabelled.
+     */
+    protected Attributes admissionAttributes(M message) {
+        return Attributes.empty();
     }
 
     /**
@@ -577,10 +590,13 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         long bytes = (long) permits * BYTES_PER_PERMIT;
         return Mono.fromCallable(() -> {
             if (!budget.tryAcquire(permits)) {
-                admissionWaits.add(1);
+                // Build the metric attributes only on the contention path — the steady-state hot
+                // path (budget available) skips this allocation entirely.
+                var attributes = admissionAttributes(message);
+                admissionWaits.add(1, attributes);
                 var waitStartMillis = System.currentTimeMillis();
                 budget.acquire(permits);
-                admissionWaitTime.record(System.currentTimeMillis() - waitStartMillis);
+                admissionWaitTime.record(System.currentTimeMillis() - waitStartMillis, attributes);
             }
             addInFlightBytes(bytes);
             return permits;

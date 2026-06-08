@@ -13,6 +13,8 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
 import org.redisson.api.RedissonReactiveClient;
@@ -90,6 +92,18 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
         // Online-scoring backlog is worth watching independently of the admission gate (e.g. to size
         // the budget before enabling it), so sampling is always on for scoring streams.
         return true;
+    }
+
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> RULE_ID_KEY = AttributeKey.stringKey("rule_id");
+
+    /**
+     * Tags for the admission-contention metrics: which workspace + rule was waiting on the byte
+     * budget. Leaf scorers pass these via {@link #admissionAttributes} so Grafana can show, per
+     * customer and per rule, who is saturating the consumer.
+     */
+    protected static Attributes scoringAttributes(String workspaceId, UUID ruleId) {
+        return Attributes.of(WORKSPACE_ID_KEY, workspaceId, RULE_ID_KEY, ruleId.toString());
     }
 
     /**

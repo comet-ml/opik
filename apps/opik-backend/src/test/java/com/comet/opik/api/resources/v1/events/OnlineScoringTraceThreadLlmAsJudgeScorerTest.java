@@ -22,6 +22,7 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import io.opentelemetry.api.common.AttributeKey;
 import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -691,6 +692,19 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
             when(serviceTogglesConfig.isMemoryAwareScoringBoundEnabled()).thenReturn(true);
             assertThat(scorer.isAdmissionControlEnabled()).isTrue();
+        }
+
+        @Test
+        void admissionAttributesTagWorkspaceAndRule() {
+            var message = mock(TraceThreadToScoreLlmAsJudge.class);
+            var msgRuleId = UUID.randomUUID();
+            when(message.workspaceId()).thenReturn("ws-1");
+            when(message.ruleId()).thenReturn(msgRuleId);
+
+            var attributes = scorer.admissionAttributes(message);
+
+            assertThat(attributes.get(AttributeKey.stringKey("workspace_id"))).isEqualTo("ws-1");
+            assertThat(attributes.get(AttributeKey.stringKey("rule_id"))).isEqualTo(msgRuleId.toString());
         }
     }
 

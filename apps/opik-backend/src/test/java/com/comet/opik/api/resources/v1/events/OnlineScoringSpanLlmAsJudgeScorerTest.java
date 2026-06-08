@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
+import io.opentelemetry.api.common.AttributeKey;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +23,7 @@ import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -112,5 +114,18 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
         when(serviceTogglesConfig.isMemoryAwareScoringBoundEnabled()).thenReturn(true);
         assertThat(scorer.isAdmissionControlEnabled()).isTrue();
+    }
+
+    @Test
+    void admissionAttributesTagWorkspaceAndRule() {
+        var ruleId = UUID.randomUUID();
+        var message = mock(SpanToScoreLlmAsJudge.class);
+        when(message.workspaceId()).thenReturn("ws-1");
+        when(message.ruleId()).thenReturn(ruleId);
+
+        var attributes = scorer.admissionAttributes(message);
+
+        assertThat(attributes.get(AttributeKey.stringKey("workspace_id"))).isEqualTo("ws-1");
+        assertThat(attributes.get(AttributeKey.stringKey("rule_id"))).isEqualTo(ruleId.toString());
     }
 }

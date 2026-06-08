@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +68,11 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     protected long estimateInFlightBytes(SpanToScoreLlmAsJudge message) {
         var span = message.span();
         return jsonSize(span.input(), span.output(), span.metadata());
+    }
+
+    @Override
+    protected Attributes admissionAttributes(SpanToScoreLlmAsJudge message) {
+        return scoringAttributes(message.workspaceId(), message.ruleId());
     }
 
     @Override
