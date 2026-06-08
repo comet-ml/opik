@@ -252,7 +252,7 @@ const server = http.createServer((req, res) => {
 </Tabs>
 
 <Note>
-  `OpikSpanProcessor` only mutates spans whose parent already carries the Opik attributes (set by `attach_to_parent` / `attachToParent` on the boundary, or inherited from upstream W3C `baggage`). Spans outside an attached subtree are left untouched, so today's behaviour for unrelated OTel traces is unchanged.
+  On this cross-process path, `OpikSpanProcessor` mutates spans whose parent already carries the Opik attributes (set by `attach_to_parent` / `attachToParent` on the boundary, or inherited from upstream W3C `baggage`). Spans outside an attached subtree are left untouched, so behaviour for unrelated OTel traces is unchanged. The Python processor additionally links spans started inside an active `@track` function in the same process — see [Linking OpenTelemetry spans to an existing Opik trace](/integrations/opentelemetry-python-sdk#linking-opentelemetry-spans-to-an-existing-opik-trace).
 </Note>
 
 The remote service must be configured with an OTLP exporter pointing at the Opik backend (`/v1/private/otel/v1/traces`). See the [OpenTelemetry Python SDK](/integrations/opentelemetry-python-sdk) integration guide for a full exporter configuration example; the same endpoint is used by the OpenTelemetry JS/Node SDK.

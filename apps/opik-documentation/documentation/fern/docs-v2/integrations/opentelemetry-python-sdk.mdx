@@ -160,6 +160,32 @@ provider.add_span_processor(OpikSpanProcessor())
 trace.set_tracer_provider(provider)
 ```
 
-The processor only mutates spans whose parent already carries Opik attributes (set by `attach_to_parent` on the boundary, or inherited from upstream W3C `baggage`). Spans outside an attached subtree are left untouched.
+The processor stamps Opik IDs onto a span when any of the following holds, in order of precedence:
+
+1. the parent span already carries Opik attributes (set by `attach_to_parent` on the boundary, or by an earlier processor pass);
+2. they are inherited from upstream W3C `baggage` (cross-process);
+3. an `@track` span is active in the current process (see below).
+
+Spans that match none of these are left untouched, so OpenTelemetry-only traces are unaffected.
+
+### Same-process: OpenTelemetry spans inside an `@track` function
+
+When an OpenTelemetry-instrumented library (for example logfire / PydanticAI) emits spans from inside an `@track`-decorated function, there is no boundary span and no `baggage` to inherit from — `@track` keeps its own context, not an OpenTelemetry one. With `OpikSpanProcessor` registered, those spans are attached to the active `@track` span automatically, producing a single trace instead of a separate synthetic one. No `attach_to_parent` call or header propagation is needed:
+
+```python
+import opik
+from opentelemetry import trace
+
+tracer = trace.get_tracer("my-service")
+
+@opik.track
+def handler(question: str) -> str:
+    # Spans started here nest under the `handler` span automatically.
+    with tracer.start_as_current_span("retrieve"):
+        ...
+    return "answer"
+```
+
+This is an in-process bridge. The cross-process case (service A → service B) still requires header propagation via `attach_to_parent`, since there is no shared context to read from.
 
 For the full client/server pattern with Python and TypeScript examples, see [Distributed Traces with a Remote Service Using OpenTelemetry](/tracing/advanced/log_distributed_traces#distributed-traces-with-a-remote-service-using-opentelemetry).
