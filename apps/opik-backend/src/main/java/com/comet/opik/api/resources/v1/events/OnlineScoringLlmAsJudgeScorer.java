@@ -74,6 +74,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final OpikConfiguration opikConfiguration;
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -88,7 +89,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull ToolRegistry toolRegistry,
             @NonNull TraceCompressor traceCompressor,
             @NonNull WorkspaceNameService workspaceNameService,
-            @NonNull OpikConfiguration opikConfiguration) {
+            @NonNull OpikConfiguration opikConfiguration,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) {
         super(config, redisson, feedbackScoreService, traceService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -102,6 +104,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.opikConfiguration = opikConfiguration;
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.onlineScoringMetrics = onlineScoringMetrics;
     }
 
     /**
@@ -328,9 +331,13 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * pin the per-stream worker scheduler thread (OPIK-6308).
      */
     private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceToScoreLlmAsJudge message) {
-        return Mono.fromCallable(() -> aiProxyService.scoreTrace(
-                request, message.llmAsJudgeCode().model(), message.workspaceId()))
-                .subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> {
+            var response = aiProxyService.scoreTrace(
+                    request, message.llmAsJudgeCode().model(), message.workspaceId());
+            onlineScoringMetrics.recordPayloadSize(request, response, type,
+                    message.llmAsJudgeCode().model().name(), message.workspaceId(), message.ruleId());
+            return response;
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {

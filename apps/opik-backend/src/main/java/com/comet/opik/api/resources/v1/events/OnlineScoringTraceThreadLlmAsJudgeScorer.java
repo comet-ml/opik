@@ -72,6 +72,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final SpanService spanService;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringTraceThreadLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -85,7 +86,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull ToolRegistry toolRegistry,
-            @NonNull SpanService spanService) {
+            @NonNull SpanService spanService,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -97,6 +99,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.spanService = spanService;
+        this.onlineScoringMetrics = onlineScoringMetrics;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
 
@@ -400,9 +403,13 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * per-stream worker scheduler thread (OPIK-6308). Mirrors the trace scorer.
      */
     private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceThreadToScoreLlmAsJudge message) {
-        return Mono.fromCallable(() -> aiProxyService.scoreTrace(
-                request, message.code().model(), message.workspaceId()))
-                .subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> {
+            var response = aiProxyService.scoreTrace(
+                    request, message.code().model(), message.workspaceId());
+            onlineScoringMetrics.recordPayloadSize(request, response, type,
+                    message.code().model().name(), message.workspaceId(), message.ruleId());
+            return response;
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     // Package-private for unit tests.
