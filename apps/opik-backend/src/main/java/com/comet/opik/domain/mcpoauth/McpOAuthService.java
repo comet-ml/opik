@@ -228,15 +228,25 @@ public class McpOAuthService {
                 return Optional.empty();
             }
 
-            return Optional.of(new ValidatedToken(
-                    row.userName(), row.workspaceId(), row.workspaceName(), row.resource()));
+            return Optional.of(ValidatedToken.builder()
+                    .userName(row.userName())
+                    .workspaceId(row.workspaceId())
+                    .workspaceName(row.workspaceName())
+                    .resource(row.resource())
+                    .build());
         });
     }
 
     private TokenResponse buildTokenResponse(String accessToken, String refreshToken, String workspaceId,
             String workspaceName) {
-        return new TokenResponse(accessToken, refreshToken, TOKEN_TYPE_BEARER,
-                config().getAccessTokenTtl().toSeconds(), workspaceId, workspaceName);
+        return TokenResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType(TOKEN_TYPE_BEARER)
+                .expiresIn(config().getAccessTokenTtl().toSeconds())
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .build();
     }
 
     /**
