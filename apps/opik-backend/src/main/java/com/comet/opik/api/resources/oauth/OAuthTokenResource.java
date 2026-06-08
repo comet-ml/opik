@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_GRANT_TYPE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_CODE;
@@ -73,7 +74,8 @@ public class OAuthTokenResource {
             try {
                 return okToken(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId));
             } catch (BadRequestException e) {
-                return error(e.getMessage());
+                log.warn("MCP OAuth authorization_code exchange failed [client_id={}]", clientId, e);
+                return error(ERROR_INVALID_GRANT);
             }
         }
 
@@ -87,7 +89,8 @@ public class OAuthTokenResource {
             try {
                 return okToken(mcpOAuthService.refresh(refreshToken, clientId));
             } catch (BadRequestException e) {
-                return error(e.getMessage());
+                log.warn("MCP OAuth refresh failed [client_id={}]", clientId, e);
+                return error(ERROR_INVALID_GRANT);
             }
         }
 
