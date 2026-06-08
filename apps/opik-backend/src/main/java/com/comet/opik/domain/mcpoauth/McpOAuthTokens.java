@@ -1,14 +1,12 @@
 package com.comet.opik.domain.mcpoauth;
 
 import lombok.experimental.UtilityClass;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.Strings;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.HexFormat;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
 
@@ -56,13 +54,7 @@ public class McpOAuthTokens {
     }
 
     public static String hash(String token) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(token.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
+        return DigestUtils.sha256Hex(token);
     }
 
     private static String randomSuffix() {
