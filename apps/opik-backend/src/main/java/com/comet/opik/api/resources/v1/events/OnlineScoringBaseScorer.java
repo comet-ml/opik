@@ -103,6 +103,11 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
      * customer and per rule, who is saturating the consumer.
      */
     protected static Attributes scoringAttributes(String workspaceId, UUID ruleId) {
+        // Guard against legacy/replayed entries with missing identifiers: Attributes.of NPEs on a null
+        // value, which would fail the contention path before the metric is even emitted.
+        if (workspaceId == null || ruleId == null) {
+            return Attributes.empty();
+        }
         return Attributes.of(WORKSPACE_ID_KEY, workspaceId, RULE_ID_KEY, ruleId.toString());
     }
 

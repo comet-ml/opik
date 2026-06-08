@@ -583,12 +583,18 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      */
     private Mono<Void> withAdmissionControl(M message, Mono<Void> work) {
         var budget = admissionBudget;
-        if (budget == null) {
+        // budget == null: gate off. message == null: a malformed entry (e.g. a missing payload field)
+        // that nothing can be estimated from — bypass the gate so it flows through the work path
+        // exactly as when the gate is off (handled by processEvent), instead of NPEing in the estimator.
+        if (budget == null || message == null) {
             return work;
         }
-        int permits = Math.min(maxInFlightPermits, toPermits(estimateInFlightBytes(message)));
-        long bytes = (long) permits * BYTES_PER_PERMIT;
         return Mono.fromCallable(() -> {
+            // Estimate inside the callable (not eagerly) so any unexpected estimator failure surfaces as
+            // an onError on the worker scheduler and flows through the normal failure path
+            // (onErrorResume/postProcessFailureMessages) rather than throwing synchronously and bypassing
+            // it. No permit is acquired if the estimate throws.
+            int permits = Math.min(maxInFlightPermits, toPermits(estimateInFlightBytes(message)));
             if (!budget.tryAcquire(permits)) {
                 // Build the metric attributes only on the contention path — the steady-state hot
                 // path (budget available) skips this allocation entirely.
@@ -598,13 +604,13 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 budget.acquire(permits);
                 admissionWaitTime.record(System.currentTimeMillis() - waitStartMillis, attributes);
             }
-            addInFlightBytes(bytes);
+            addInFlightBytes((long) permits * BYTES_PER_PERMIT);
             return permits;
         })
                 .subscribeOn(workersScheduler)
                 .flatMap(acquired -> work.doFinally(signalType -> {
                     budget.release(acquired);
-                    addInFlightBytes(-bytes);
+                    addInFlightBytes(-((long) acquired * BYTES_PER_PERMIT));
                 }));
     }
 

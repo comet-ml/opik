@@ -575,6 +575,35 @@ class BaseRedisSubscriberTest {
             assertThat(subscriber.getFailedMessageCount().get()).isZero();
         }
 
+        @Test
+        void handlesNullPayloadWhenGatedWithoutLeakingBudget() {
+            var nullCount = new AtomicInteger();
+            var gatedConfig = config.toBuilder().maxInFlightBytes(TWO_PERMIT_BUDGET).build();
+            // Estimator dereferences the message: a null (missing-payload) message must bypass the gate
+            // rather than NPE eagerly and escape the reactive failure path. Valid messages still flow
+            // through the gate, so a leaked budget would stall them.
+            var subscriber = trackSubscriber(TestRedisSubscriber.gatedSubscriber(gatedConfig, redissonClient,
+                    message -> {
+                        if (message == null) {
+                            nullCount.incrementAndGet();
+                        }
+                        return Mono.empty();
+                    },
+                    message -> (long) message.length()));
+            subscriber.start();
+
+            var malformedMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var validMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            // Wrong field → null message; then a normal batch through the gate.
+            publishMessagesToStream("other-payload", malformedMessages);
+            publishMessagesToStream(validMessages);
+
+            waitForMessagesProcessed(subscriber, malformedMessages.size() + validMessages.size());
+            waitForMessagesAckedAndRemoved();
+            assertThat(nullCount.get()).isEqualTo(malformedMessages.size());
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+
         private void awaitLatch(CountDownLatch latch) {
             try {
                 latch.await(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
