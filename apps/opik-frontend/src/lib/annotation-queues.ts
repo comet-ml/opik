@@ -196,6 +196,33 @@ export const getItemState = (
   return ITEM_STATE.DEFAULT;
 };
 
+export const getLastAnnotationByUser = (
+  item: Trace | Thread,
+  userName: string | undefined,
+): string => {
+  if (!userName) return "";
+  let latest = "";
+
+  (item.feedback_scores || []).forEach((score) => {
+    if (hasValuesByAuthor(score)) {
+      const userEntry = score.value_by_author?.[userName];
+      if (userEntry?.last_updated_at && userEntry.last_updated_at > latest) {
+        latest = userEntry.last_updated_at;
+      }
+    } else if (score.last_updated_by === userName && score.last_updated_at) {
+      if (score.last_updated_at > latest) latest = score.last_updated_at;
+    }
+  });
+
+  (item.comments || []).forEach((comment) => {
+    if (comment.created_by === userName && comment.created_at > latest) {
+      latest = comment.created_at;
+    }
+  });
+
+  return latest;
+};
+
 export const formatThreadDateRange = (
   startTime?: string,
   endTime?: string,

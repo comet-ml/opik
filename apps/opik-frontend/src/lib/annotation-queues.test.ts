@@ -3,6 +3,7 @@ import {
   getItemState,
   getDistinctAnnotatorCount,
   isItemProcessedByUser,
+  getLastAnnotationByUser,
   hashCode,
   ITEM_STATE,
 } from "./annotation-queues";
@@ -256,5 +257,101 @@ describe("hashCode", () => {
 
   it("should handle empty string", () => {
     expect(hashCode("")).toBe(0);
+  });
+});
+
+describe("getLastAnnotationByUser", () => {
+  it("should return timestamp from value_by_author entry", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        makeScore("accuracy", "bob", {
+          alice: {
+            value: 1,
+            source: FEEDBACK_SCORE_TYPE.ui,
+            last_updated_at: "2026-06-01T10:00:00Z",
+          },
+        }),
+      ],
+    });
+    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T10:00:00Z");
+  });
+
+  it("should return timestamp from last_updated_by match", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        {
+          ...makeScore("accuracy", "alice"),
+          last_updated_at: "2026-06-01T12:00:00Z",
+        },
+      ],
+    });
+    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T12:00:00Z");
+  });
+
+  it("should return timestamp from comment", () => {
+    const item = makeTrace({
+      comments: [
+        {
+          id: "c1",
+          text: "good",
+          created_by: "alice",
+          created_at: "2026-06-01T14:00:00Z",
+        },
+      ],
+    } as Partial<Trace>);
+    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T14:00:00Z");
+  });
+
+  it("should return the most recent across scores and comments", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        {
+          ...makeScore("accuracy", "alice"),
+          last_updated_at: "2026-06-01T10:00:00Z",
+        },
+      ],
+      comments: [
+        {
+          id: "c1",
+          text: "good",
+          created_by: "alice",
+          created_at: "2026-06-01T14:00:00Z",
+        },
+      ],
+    } as Partial<Trace>);
+    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T14:00:00Z");
+  });
+
+  it("should return empty string when user has no annotations", () => {
+    const item = makeTrace({
+      feedback_scores: [makeScore("accuracy", "bob")],
+      comments: [
+        { id: "c1", text: "ok", created_by: "bob", created_at: "2026-06-01" },
+      ],
+    } as Partial<Trace>);
+    expect(getLastAnnotationByUser(item, "alice")).toBe("");
+  });
+
+  it("should return empty string when userName is undefined", () => {
+    const item = makeTrace({
+      feedback_scores: [makeScore("accuracy", "alice")],
+    });
+    expect(getLastAnnotationByUser(item, undefined)).toBe("");
+  });
+
+  it("should ignore other users scores and comments", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        {
+          ...makeScore("accuracy", "bob"),
+          last_updated_at: "2026-06-01T20:00:00Z",
+        },
+        {
+          ...makeScore("accuracy", "alice"),
+          last_updated_at: "2026-06-01T10:00:00Z",
+        },
+      ],
+    });
+    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T10:00:00Z");
   });
 });
