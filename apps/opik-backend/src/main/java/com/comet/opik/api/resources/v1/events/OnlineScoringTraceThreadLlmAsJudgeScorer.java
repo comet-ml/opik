@@ -131,6 +131,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         log.info("Message received with projectId: '{}', ruleId: '{}', threadIds: '{}' for workspace '{}'",
                 message.projectId(), message.ruleId(), message.threadIds(), message.workspaceId());
 
+        // Follow-up (heap bound): threads are scored with Flux's default concurrency (256), unbounded here.
+        // The admission gate (maxInFlightBytes) and consumerBatchSize cap concurrent *messages*, not threads
+        // within a single message — so one message carrying many threads can exceed the in-flight heap budget
+        // regardless of those limits. If heap pressure recurs with the gate enabled, bound this fan-out
+        // (flatMap(..., K)) and align estimateInFlightBytes to min(threadIds.size(), K) * avgThreadBytes.
         return Flux.fromIterable(message.threadIds())
                 .flatMap(threadId -> processThreadScores(message, threadId))
                 .then(Mono.defer(

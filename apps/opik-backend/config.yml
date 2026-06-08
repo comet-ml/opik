@@ -545,17 +545,19 @@ onlineScoring:
   #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
   #   pessimistic estimate so the agentic-tools path engages earlier.
   agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
-  # Default: 0 (disabled)
+  # Default: 6442450944 (6 GiB). Pre-sized for rollout but INERT until the memoryAwareScoringBoundEnabled
+  #   service toggle is turned on — flip that toggle to activate the gate with this budget already in place.
+  #   0 disables the gate regardless of the toggle.
   # Description: Memory-aware admission gate budget — the max estimated in-flight payload (bytes) a single
-  #   consumer processes concurrently. 0 disables the gate. Only consulted when the
-  #   memoryAwareScoringBoundEnabled service toggle is on. Can be overridden per stream. Size it from the
-  #   per-eval sizes the online_scoring_llm_*_chars metric reports in production.
-  maxInFlightBytes: ${REDIS_SCORING_MAX_IN_FLIGHT_BYTES:-0}
-  # Default: 256000
+  #   consumer processes concurrently. Sized for the ~8 GiB prod scoring heap (~6 concurrent thread-evals at
+  #   ~1 GiB each); lower it for smaller pods before enabling. Can be overridden per stream.
+  maxInFlightBytes: ${REDIS_SCORING_MAX_IN_FLIGHT_BYTES:-6442450944}
+  # Default: 1073741824 (1 GiB) — the measured real per-eval heap from the incident, not the raw payload size.
+  #   Only consulted when the byte gate is active (toggle on), so this stays inert until then.
   # Description: Estimated bytes one thread contributes to the in-flight payload, used to weight
   #   trace_thread_llm_as_judge messages (their Redis payload carries only thread IDs, so the heavy context
   #   is fetched while scoring and can't be measured at admission).
-  avgThreadBytes: ${REDIS_SCORING_AVG_THREAD_BYTES:-256000}
+  avgThreadBytes: ${REDIS_SCORING_AVG_THREAD_BYTES:-1073741824}
   # Per-workspace producer quota: caps how many scoring evals a single workspace may enqueue per window
   #   (fleet-wide, via the distributed rate limiter), so one workspace's rules can't flood the shared
   #   scoring streams and starve other tenants. Applied after the per-rule sampling rate; over-quota evals
@@ -564,8 +566,10 @@ onlineScoring:
   perWorkspaceQuota:
     # Default: false. Master switch — when false the quota is not applied (current behavior).
     enabled: ${ONLINE_SCORING_PER_WORKSPACE_QUOTA_ENABLED:-false}
-    # Default: 0. Max scoring evals a workspace may enqueue per durationInSeconds window (only used when enabled).
-    limit: ${ONLINE_SCORING_PER_WORKSPACE_QUOTA_LIMIT:-0}
+    # Default: 250. Max scoring evals a workspace may enqueue per durationInSeconds window. Pre-sized for
+    #   rollout (≈ drain capacity, generous headroom over the busiest legit workspace) but INERT until
+    #   enabled above — flip the enabled toggle to activate the quota with this limit already in place.
+    limit: ${ONLINE_SCORING_PER_WORKSPACE_QUOTA_LIMIT:-250}
     # Default: 60. Length of the quota window in seconds.
     durationInSeconds: ${ONLINE_SCORING_PER_WORKSPACE_QUOTA_DURATION_SECONDS:-60}
   ## scorer: options from AutomationRuleEvaluatorType
@@ -610,7 +614,10 @@ onlineScoring:
       # Optional per stream configuration (falls back to global if not specified)
       poolingInterval: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
       longPollingDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
-      consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
+      # Hard count cap on concurrent trace-thread messages (heap safety, ~6 GiB target). NOTE: NOT gated by
+      # the memory-aware toggle — this takes effect as soon as it ships (previously fell back to the global
+      # default of 10). Lower it for smaller pods.
+      consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-6}
       claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_MAX_RETRIES:-}
@@ -1081,8 +1088,9 @@ serviceToggles:
   # Default: false
   # Description: Master switch for the memory-aware admission gate on online scoring. When false, the
   #   consumer keeps its count-only concurrency (current behavior). When true, the consumer also bounds
-  #   concurrent in-flight evals by onlineScoring.maxInFlightBytes so overflow waits in Redis instead
-  #   of filling heap. Flip off to instantly revert in production.
+  #   concurrent in-flight evals by onlineScoring.maxInFlightBytes (pre-sized to 6 GiB) so overflow waits in
+  #   Redis instead of filling heap. The byte budget is already sized — flipping this to true is all that is
+  #   needed to activate B1. Flip off to instantly revert in production.
   memoryAwareScoringBoundEnabled: ${TOGGLE_MEMORY_AWARE_SCORING_BOUND_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
