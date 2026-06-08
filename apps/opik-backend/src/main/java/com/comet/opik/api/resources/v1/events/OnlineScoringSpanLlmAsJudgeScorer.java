@@ -42,6 +42,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringSpanLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -50,12 +51,14 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
-            @NonNull LlmProviderFactory llmProviderFactory) {
+            @NonNull LlmProviderFactory llmProviderFactory,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) {
         super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
+        this.onlineScoringMetrics = onlineScoringMetrics;
     }
 
     @Override
@@ -121,6 +124,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
 
             var score = aiProxyService.scoreTrace(
                     scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
+            onlineScoringMetrics.recordPayloadSize(scoreRequest, score, type,
+                    message.llmAsJudgeCode().model().name(), message.workspaceId(), message.ruleId());
             userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
 
             var parsed = OnlineScoringEngine.toFeedbackScores(score);
