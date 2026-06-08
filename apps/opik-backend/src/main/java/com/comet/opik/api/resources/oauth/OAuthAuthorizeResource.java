@@ -13,6 +13,9 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.UserWorkspace;
 import com.comet.opik.infrastructure.auth.WorkspaceInfo;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
@@ -61,8 +64,8 @@ public class OAuthAuthorizeResource {
     @GET
     @Path("/authorize")
     public Response authorize(
-            @QueryParam("client_id") String clientId,
-            @QueryParam("redirect_uri") String redirectUri,
+            @QueryParam("client_id") @NotBlank String clientId,
+            @QueryParam("redirect_uri") @NotBlank String redirectUri,
             @QueryParam("response_type") String responseType,
             @QueryParam("code_challenge") String codeChallenge,
             @QueryParam("code_challenge_method") String codeChallengeMethod,
@@ -109,8 +112,8 @@ public class OAuthAuthorizeResource {
     @Path("/authorize/context")
     @Produces(MediaType.APPLICATION_JSON)
     public Response context(
-            @QueryParam("client_id") String clientId,
-            @QueryParam("redirect_uri") String redirectUri,
+            @QueryParam("client_id") @NotBlank String clientId,
+            @QueryParam("redirect_uri") @NotBlank String redirectUri,
             @Context HttpHeaders headers) {
 
         McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
@@ -140,7 +143,7 @@ public class OAuthAuthorizeResource {
     @Path("/authorize")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public Response consent(@NonNull ConsentRequest request, @Context HttpHeaders headers) {
+    public Response consent(@NotNull @Valid ConsentRequest request, @Context HttpHeaders headers) {
 
         Cookie csrfCookie = headers.getCookies().get(CSRF_COOKIE);
         if (csrfCookie == null || StringUtils.isBlank(csrfCookie.getValue()) || request.csrf() == null
