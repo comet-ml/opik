@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.mcpoauth.CreateOAuthCodeCommand;
 import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -30,13 +31,11 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,8 +52,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Timed
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OAuthAuthorizeResource {
-
-    private static final SecureRandom RANDOM = getSecureRandom();
 
     private final @NonNull OAuthClientService clientService;
     private final @NonNull AuthService authService;
@@ -81,7 +78,7 @@ public class OAuthAuthorizeResource {
         if (!RESPONSE_TYPE_CODE.equals(responseType)) {
             return errorRedirect(redirectUri, ERROR_UNSUPPORTED_RESPONSE_TYPE, state);
         }
-        if (codeChallenge == null || codeChallenge.isBlank()
+        if (StringUtils.isBlank(codeChallenge)
                 || !CODE_CHALLENGE_METHOD_S256.equals(codeChallengeMethod)) {
             return errorRedirect(redirectUri, ERROR_INVALID_REQUEST, state);
         }
@@ -93,7 +90,6 @@ public class OAuthAuthorizeResource {
         try {
             authService.listEligibleWorkspaces(session);
         } catch (ClientErrorException e) {
-            // Rebuild the public authorize URL; uriInfo is the nginx-rewritten internal path
             String rawQuery = uriInfo.getRequestUri().getRawQuery();
             String authorizeUrl = config.getBaseUrl() + "/oauth/authorize" + (rawQuery == null ? "" : "?" + rawQuery);
             return redirect(config.getBaseUrl() + "/login?returnTo=" + enc(authorizeUrl));
@@ -105,7 +101,7 @@ public class OAuthAuthorizeResource {
                 + "&code_challenge=" + enc(codeChallenge)
                 + "&code_challenge_method=" + enc(codeChallengeMethod)
                 + "&resource=" + enc(resource)
-                + (isBlank(state) ? "" : "&state=" + enc(state));
+                + (StringUtils.isBlank(state) ? "" : "&state=" + enc(state));
         return redirect(config.getBaseUrl() + "/oauth/consent?" + query);
     }
 
@@ -122,7 +118,7 @@ public class OAuthAuthorizeResource {
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
         List<WorkspaceInfo> workspaces = authService.listEligibleWorkspaces(session);
 
-        String csrf = generateToken();
+        String csrf = McpOAuthTokens.randomToken();
         NewCookie csrfCookie = new NewCookie.Builder(CSRF_COOKIE)
                 .value(csrf)
                 .path("/")
@@ -147,7 +143,7 @@ public class OAuthAuthorizeResource {
     public Response consent(@NonNull ConsentRequest request, @Context HttpHeaders headers) {
 
         Cookie csrfCookie = headers.getCookies().get(CSRF_COOKIE);
-        if (csrfCookie == null || isBlank(csrfCookie.getValue()) || request.csrf() == null
+        if (csrfCookie == null || StringUtils.isBlank(csrfCookie.getValue()) || request.csrf() == null
                 || !MessageDigest.isEqual(csrfCookie.getValue().getBytes(UTF_8), request.csrf().getBytes(UTF_8))) {
             throw new ForbiddenException("invalid csrf token");
         }
@@ -157,7 +153,7 @@ public class OAuthAuthorizeResource {
         if (!config.getMcpResourceUri().equals(request.resource())) {
             throw new BadRequestException(ERROR_INVALID_TARGET);
         }
-        if (isBlank(request.codeChallenge())
+        if (StringUtils.isBlank(request.codeChallenge())
                 || !CODE_CHALLENGE_METHOD_S256.equals(request.codeChallengeMethod())) {
             throw new BadRequestException(ERROR_INVALID_REQUEST);
         }
@@ -175,7 +171,8 @@ public class OAuthAuthorizeResource {
                 .resource(request.resource())
                 .build());
 
-        String query = "code=" + enc(code) + (isBlank(request.state()) ? "" : "&state=" + enc(request.state()));
+        String query = "code=" + enc(code)
+                + (StringUtils.isBlank(request.state()) ? "" : "&state=" + enc(request.state()));
         return Response.ok(ConsentResponse.builder()
                 .redirectTo(appendQuery(request.redirectUri(), query))
                 .build()).build();
@@ -193,7 +190,7 @@ public class OAuthAuthorizeResource {
     }
 
     private Response errorRedirect(String redirectUri, String error, String state) {
-        String query = "error=" + error + (isBlank(state) ? "" : "&state=" + enc(state));
+        String query = "error=" + error + (StringUtils.isBlank(state) ? "" : "&state=" + enc(state));
         return redirect(appendQuery(redirectUri, query));
     }
 
@@ -205,26 +202,8 @@ public class OAuthAuthorizeResource {
         return base + (base.contains("?") ? "&" : "?") + query;
     }
 
-    private static String generateToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private static SecureRandom getSecureRandom() {
-        try {
-            return SecureRandom.getInstanceStrong();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("Strong SecureRandom not available", e);
-        }
-    }
-
     private static String enc(String value) {
         return URLEncoder.encode(value, UTF_8);
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 
     private static boolean isSecureDeployment(McpOAuthConfig config) {

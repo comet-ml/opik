@@ -20,15 +20,9 @@ public interface AuthService {
     void authenticate(HttpHeaders headers, Cookie sessionToken, ContextInfoHolder contextInfo);
     void authenticateSession(Cookie sessionToken);
 
-    // MCP OAuth Authorization Server: resolve the logged-in user's workspaces for the consent picker, and
-    // validate a chosen workspace against the session (returning the resolved user). Cloud delegates to
-    // comet-backend; OSS returns the hardcoded admin/default.
     List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken);
     UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName);
 
-    // OAuth bearer (opik_at_) was validated locally before this is called. Cloud forwards (userName, workspace,
-    // requiredPermissions) to comet-backend /opik/auth-by-username for the regular role-based authorization check;
-    // OSS populates RequestContext directly from the token (single-user installation).
     void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo);
 }
 
