@@ -40,7 +40,8 @@ class McpOAuthBundleTest {
         verify(environment).disableExtensions(
                 OAuthMetadataResource.class,
                 OAuthAuthorizeResource.class,
-                OAuthTokenResource.class);
+                OAuthTokenResource.class,
+                OAuthRegisterResource.class);
     }
 
     @Test
@@ -55,6 +56,7 @@ class McpOAuthBundleTest {
         verify(environment, never()).disableExtensions(
                 OAuthMetadataResource.class,
                 OAuthAuthorizeResource.class,
-                OAuthTokenResource.class);
+                OAuthTokenResource.class,
+                OAuthRegisterResource.class);
     }
 }
