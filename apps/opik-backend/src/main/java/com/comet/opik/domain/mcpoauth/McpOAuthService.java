@@ -307,7 +307,7 @@ public class McpOAuthService {
      * Verifies a PKCE S256 challenge per RFC 7636. The spec restricts the verifier to ASCII
      * unreserved characters, and Base64URL output is itself ASCII.
      */
-    private static boolean verifyPkce(String codeVerifier, String codeChallenge) {
+    private static boolean verifyPkce(@NonNull String codeVerifier, @NonNull String codeChallenge) {
         String computed;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -315,9 +315,6 @@ public class McpOAuthService {
             computed = URL_ENCODER.encodeToString(digest);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available", e);
-        }
-        if (codeChallenge == null) {
-            return false;
         }
         return MessageDigest.isEqual(
                 computed.getBytes(StandardCharsets.US_ASCII),
