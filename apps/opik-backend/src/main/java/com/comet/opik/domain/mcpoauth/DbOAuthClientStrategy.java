@@ -6,7 +6,6 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.net.URI;
@@ -39,12 +38,7 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
         validate(request);
 
         String clientId = UUID.randomUUID().toString();
-        var client = McpOAuthClient.builder()
-                .clientId(clientId)
-                .name(StringUtils.defaultIfBlank(request.clientName(), clientId))
-                .redirectUris(request.redirectUris())
-                .logoUri(request.logoUri())
-                .build();
+        var client = McpOAuthClientMapper.INSTANCE.toClient(request, clientId);
 
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(McpOAuthClientDAO.class);
