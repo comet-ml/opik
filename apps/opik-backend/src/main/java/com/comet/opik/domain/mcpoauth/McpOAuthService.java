@@ -84,8 +84,7 @@ public class McpOAuthService {
             return codeDao.findByHash(codeHash);
         });
 
-        if (!row.clientId().equals(clientId) || !row.redirectUri().equals(redirectUri)
-                || !verifyPkce(codeVerifier, row.codeChallenge())) {
+        if (!matchesGrantRequest(row, clientId, redirectUri, codeVerifier)) {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
@@ -131,15 +130,12 @@ public class McpOAuthService {
         McpOAuthToken row = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(McpOAuthTokenDAO.class).findByHash(tokenHash));
 
-        if (row == null || !TYPE_REFRESH.equals(row.type()) || !row.clientId().equals(clientId)
-                || !row.expiresAt().isAfter(now)) {
+        if (!isValidRefreshToken(row, clientId, now)) {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
         if (row.revokedAt() != null) {
-            boolean benignRetry = row.revokedReason() == RevokedReason.ROTATED
-                    && !now.isAfter(row.revokedAt().plus(config().getRefreshRotationGrace()));
-            if (!benignRetry) {
+            if (!isBenignRotationRetry(row, now)) {
                 // Reuse detected: kill the whole lineage. Must run in its own committed transaction —
                 // throwing invalid_grant from inside the same transaction would roll the revocation back.
                 template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
@@ -215,7 +211,7 @@ public class McpOAuthService {
     public ValidatedToken validateAccessTokenForWorkspace(@NonNull String token, String headerWorkspace) {
         ValidatedToken validated = validateAccessToken(token)
                 .orElseThrow(() -> new NotAuthorizedException(TOKEN_TYPE_BEARER));
-        if (StringUtils.isNotBlank(headerWorkspace) && !headerWorkspace.equals(validated.workspaceName())) {
+        if (!workspaceMatches(headerWorkspace, validated.workspaceName())) {
             throw new ClientErrorException("workspace does not match access token", Response.Status.FORBIDDEN);
         }
         return validated;
@@ -228,8 +224,7 @@ public class McpOAuthService {
         return template.inTransaction(READ_ONLY, handle -> {
             McpOAuthToken row = handle.attach(McpOAuthTokenDAO.class).findByHash(tokenHash);
 
-            if (row == null || !TYPE_ACCESS.equals(row.type()) || row.revokedAt() != null
-                    || !row.expiresAt().isAfter(now)) {
+            if (!isActiveAccessToken(row, now)) {
                 return Optional.empty();
             }
 
@@ -242,6 +237,60 @@ public class McpOAuthService {
             String workspaceName) {
         return new TokenResponse(accessToken, refreshToken, TOKEN_TYPE_BEARER,
                 config().getAccessTokenTtl().toSeconds(), workspaceId, workspaceName);
+    }
+
+    /**
+     * An authorization code is single-use and bound to the exact request that created it: the same
+     * {@code client_id} and {@code redirect_uri} must be presented, and the PKCE {@code code_verifier}
+     * must hash to the stored {@code code_challenge}. Any mismatch means the presenter is not the
+     * legitimate client, so the exchange is rejected as {@code invalid_grant}.
+     */
+    private static boolean matchesGrantRequest(McpOAuthCode code, String clientId, String redirectUri,
+            String codeVerifier) {
+        return code.clientId().equals(clientId)
+                && code.redirectUri().equals(redirectUri)
+                && verifyPkce(codeVerifier, code.codeChallenge());
+    }
+
+    /**
+     * A refresh token is usable only if it exists, is actually a refresh token (not an access token),
+     * was issued to the requesting client, and has not passed its absolute expiry.
+     */
+    private static boolean isValidRefreshToken(McpOAuthToken token, String clientId, Instant now) {
+        return token != null
+                && TYPE_REFRESH.equals(token.type())
+                && token.clientId().equals(clientId)
+                && token.expiresAt().isAfter(now);
+    }
+
+    /**
+     * Distinguishes a harmless client retry from token theft. After rotation the old refresh token is
+     * revoked; if the rotation response was lost in transit the client legitimately re-presents it. Such
+     * a re-presentation is benign only when the token was revoked specifically for rotation and arrives
+     * within the configured grace window. Anything else is treated as reuse of a compromised token.
+     */
+    private boolean isBenignRotationRetry(McpOAuthToken token, Instant now) {
+        return token.revokedReason() == RevokedReason.ROTATED
+                && !now.isAfter(token.revokedAt().plus(config().getRefreshRotationGrace()));
+    }
+
+    /**
+     * An access token grants access only while it exists, is actually an access token, has not been
+     * revoked, and has not expired.
+     */
+    private static boolean isActiveAccessToken(McpOAuthToken token, Instant now) {
+        return token != null
+                && TYPE_ACCESS.equals(token.type())
+                && token.revokedAt() == null
+                && token.expiresAt().isAfter(now);
+    }
+
+    /**
+     * When the caller pins a workspace via header it must match the workspace the access token was issued
+     * for; a blank header expresses no preference and always matches.
+     */
+    private static boolean workspaceMatches(String headerWorkspace, String tokenWorkspace) {
+        return StringUtils.isBlank(headerWorkspace) || headerWorkspace.equals(tokenWorkspace);
     }
 
     private static boolean verifyPkce(String codeVerifier, String codeChallenge) {
