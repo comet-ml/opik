@@ -198,24 +198,34 @@ describe("rule editor key-optional validation for input/output", () => {
 describe("resolveSelectedModelProvider", () => {
   const model = PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO;
 
-  it("should prefer the provider supplied by the model selector", () => {
+  it("should prefer the provider calculated from the selected model", () => {
     const resolvedProvider = resolveSelectedModelProvider(
       model,
       PROVIDER_TYPE.VERTEX_AI,
       () => PROVIDER_TYPE.GEMINI,
     );
 
+    expect(resolvedProvider).toBe(PROVIDER_TYPE.GEMINI);
+  });
+
+  it("should not let stale selector provider override a qualified model", () => {
+    const resolvedProvider = resolveSelectedModelProvider(
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      PROVIDER_TYPE.GEMINI,
+      () => PROVIDER_TYPE.VERTEX_AI,
+    );
+
     expect(resolvedProvider).toBe(PROVIDER_TYPE.VERTEX_AI);
   });
 
-  it("should fall back to model provider calculation when selector provider is empty", () => {
+  it("should fall back to selector provider when model provider calculation is empty", () => {
     const resolvedProvider = resolveSelectedModelProvider(
       model,
-      "",
-      () => PROVIDER_TYPE.GEMINI,
+      PROVIDER_TYPE.VERTEX_AI,
+      () => "",
     );
 
-    expect(resolvedProvider).toBe(PROVIDER_TYPE.GEMINI);
+    expect(resolvedProvider).toBe(PROVIDER_TYPE.VERTEX_AI);
   });
 });
 

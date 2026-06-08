@@ -97,7 +97,7 @@ export const resolveSelectedModelProvider = (
     model: PROVIDER_MODEL_TYPE,
   ) => COMPOSED_PROVIDER_TYPE | "",
 ): COMPOSED_PROVIDER_TYPE | "" => {
-  return selectedProvider || calculateModelProvider(model);
+  return calculateModelProvider(model) || selectedProvider || "";
 };
 
 export const resolveSelectedModel = (
