@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.ServiceTogglesConfig.FORCE_WORKSPACE_VERSION_DISABLED;
+import static com.comet.opik.api.OpikVersion.DISABLED;
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -44,9 +44,12 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * <ol>
  *   <li><b>V2 workspace allowlist</b> ({@code TOGGLE_V2_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
  *       that always receive {@code version_2}. Highest priority, all deployment modes.</li>
+ *   <li><b>V1 workspace allowlist</b> ({@code TOGGLE_V1_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
+ *       that always receive {@code version_1}. Overridden by the V2 allowlist; overrides the force flag and
+ *       all subsequent steps. Defensive rollback layer for customers pinned to legacy navigation.</li>
  *   <li><b>Feature flag override</b> ({@code TOGGLE_FORCE_WORKSPACE_VERSION}) — if set to a valid
  *       {@link OpikVersion} value ({@code "version_1"} or {@code "version_2"}), that version is returned
- *       unconditionally. Value {@code "disabled"} means no override.</li>
+ *       unconditionally. Value {@code "disabled"} means no override. Defaults to {@code "version_2"}.</li>
  *   <li><b>Auth one-way V2 gate</b> (authenticated mode only) — if auth metadata indicates the workspace
  *       was created post-launch ({@code version_2}), always return {@code version_2}.
  *       Prevents V2 to V1 demotion. Defensive: gracefully degrades when auth service doesn't
@@ -281,12 +284,13 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private Optional<OpikVersion> getForcedVersion() {
         var forced = serviceTogglesConfig.getForceWorkspaceVersion();
-        if (StringUtils.isBlank(forced) || FORCE_WORKSPACE_VERSION_DISABLED.equalsIgnoreCase(forced)) {
+        if (DISABLED.equalsIgnoreCase(forced)) {
             return Optional.empty();
         }
         var version = OpikVersion.findByValue(forced);
         if (version.isEmpty()) {
-            log.warn("Invalid forceWorkspaceVersion config value: '{}', ignoring", forced);
+            log.warn("Invalid forceWorkspaceVersion config value: '{}', defaulting to version_2", forced);
+            return Optional.of(OpikVersion.VERSION_2);
         }
         return version;
     }

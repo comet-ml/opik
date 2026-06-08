@@ -1,6 +1,7 @@
 export type { ApplyDatasetItemChangesRequest } from "./ApplyDatasetItemChangesRequest.js";
 export type { CompareDatasetVersionsRequest } from "./CompareDatasetVersionsRequest.js";
 export type { CreateDatasetItemsFromCsvRequest } from "./CreateDatasetItemsFromCsvRequest.js";
+export type { CreateDatasetItemsFromJsonRequest } from "./CreateDatasetItemsFromJsonRequest.js";
 export type { CreateDatasetItemsFromSpansRequest } from "./CreateDatasetItemsFromSpansRequest.js";
 export type { CreateDatasetItemsFromTracesRequest } from "./CreateDatasetItemsFromTracesRequest.js";
 export type { DatasetExpansionWrite } from "./DatasetExpansionWrite.js";
