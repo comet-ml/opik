@@ -96,6 +96,11 @@ export interface UserPermission {
   permissionValue: "true" | "false";
 }
 
+export enum WORKSPACE_KIND {
+  STANDARD = "standard",
+  AI_SPEND = "ai_spend",
+}
+
 export interface Workspace {
   workspaceId: string;
   workspaceName: string;
@@ -105,6 +110,7 @@ export interface Workspace {
   workspaceOwner?: string;
   workspaceCreator?: string;
   collaborationFeaturesDisabled?: boolean;
+  kind?: WORKSPACE_KIND;
 }
 
 export interface OrganizationMember {
