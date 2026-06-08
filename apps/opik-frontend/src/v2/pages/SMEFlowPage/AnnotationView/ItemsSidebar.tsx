@@ -73,6 +73,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
     itemStates,
     navigateToItem,
     shuffledItemIds,
+    annotationQueue,
   } = useSMEFlow();
   const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
@@ -87,6 +88,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
 
   // Recomputes only on item list poll or user change
   const entriesById = useMemo(() => {
+    const names = annotationQueue?.feedback_definition_names ?? [];
     const byId: Record<string, SidebarEntry> = {};
     queueItems.forEach((item, index) => {
       const itemId = getAnnotationQueueItemId(item);
@@ -94,11 +96,15 @@ const ItemsSidebar: React.FunctionComponent = () => {
         index,
         itemId,
         state: ITEM_STATE.DEFAULT,
-        lastAnnotatedByUser: getLastAnnotationByUser(item, currentUserName),
+        lastAnnotatedByUser: getLastAnnotationByUser(
+          item,
+          currentUserName,
+          names,
+        ),
       };
     });
     return byId;
-  }, [queueItems, currentUserName]);
+  }, [queueItems, currentUserName, annotationQueue?.feedback_definition_names]);
 
   // Recomputes on lock poll via itemStates, but no getLastAnnotationByUser calls
   const { toReviewItems, processedItems } = useMemo(() => {
