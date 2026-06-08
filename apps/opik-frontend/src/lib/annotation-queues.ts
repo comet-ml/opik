@@ -199,11 +199,13 @@ export const getItemState = (
 export const getLastAnnotationByUser = (
   item: Trace | Thread,
   userName: string | undefined,
+  feedbackDefinitionNames: string[] = [],
 ): string => {
   if (!userName) return "";
   let latest = "";
 
   (item.feedback_scores || []).forEach((score) => {
+    if (!feedbackDefinitionNames.includes(score.name)) return;
     if (hasValuesByAuthor(score)) {
       const userEntry = score.value_by_author?.[userName];
       if (userEntry?.last_updated_at && userEntry.last_updated_at > latest) {

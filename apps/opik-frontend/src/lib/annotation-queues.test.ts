@@ -273,7 +273,9 @@ describe("getLastAnnotationByUser", () => {
         }),
       ],
     });
-    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T10:00:00Z");
+    expect(getLastAnnotationByUser(item, "alice", ["accuracy"])).toBe(
+      "2026-06-01T10:00:00Z",
+    );
   });
 
   it("should return timestamp from last_updated_by match", () => {
@@ -285,7 +287,9 @@ describe("getLastAnnotationByUser", () => {
         },
       ],
     });
-    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T12:00:00Z");
+    expect(getLastAnnotationByUser(item, "alice", ["accuracy"])).toBe(
+      "2026-06-01T12:00:00Z",
+    );
   });
 
   it("should return timestamp from comment", () => {
@@ -352,6 +356,70 @@ describe("getLastAnnotationByUser", () => {
         },
       ],
     });
-    expect(getLastAnnotationByUser(item, "alice")).toBe("2026-06-01T10:00:00Z");
+    expect(getLastAnnotationByUser(item, "alice", ["accuracy"])).toBe(
+      "2026-06-01T10:00:00Z",
+    );
+  });
+
+  it("should only consider scores matching feedbackDefinitionNames", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        {
+          ...makeScore("accuracy", "alice"),
+          last_updated_at: "2026-06-01T10:00:00Z",
+        },
+        {
+          ...makeScore("latency", "alice"),
+          last_updated_at: "2026-06-01T20:00:00Z",
+        },
+      ],
+    });
+    expect(getLastAnnotationByUser(item, "alice", ["accuracy"])).toBe(
+      "2026-06-01T10:00:00Z",
+    );
+  });
+
+  it("should ignore scores when feedbackDefinitionNames is empty (comments-only queue)", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        {
+          ...makeScore("latency", "alice"),
+          last_updated_at: "2026-06-01T20:00:00Z",
+        },
+      ],
+      comments: [
+        {
+          id: "c1",
+          text: "good",
+          created_by: "alice",
+          created_at: "2026-06-01T10:00:00Z",
+        },
+      ],
+    } as Partial<Trace>);
+    expect(getLastAnnotationByUser(item, "alice", [])).toBe(
+      "2026-06-01T10:00:00Z",
+    );
+  });
+
+  it("should still count comments when score is filtered out", () => {
+    const item = makeTrace({
+      feedback_scores: [
+        {
+          ...makeScore("latency", "alice"),
+          last_updated_at: "2026-06-01T20:00:00Z",
+        },
+      ],
+      comments: [
+        {
+          id: "c1",
+          text: "good",
+          created_by: "alice",
+          created_at: "2026-06-01T14:00:00Z",
+        },
+      ],
+    } as Partial<Trace>);
+    expect(getLastAnnotationByUser(item, "alice", ["accuracy"])).toBe(
+      "2026-06-01T14:00:00Z",
+    );
   });
 });
