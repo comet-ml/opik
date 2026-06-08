@@ -202,7 +202,10 @@ class RemoteAuthService implements AuthService {
             return response.readEntity(new GenericType<List<WorkspaceForUserResponse>>() {
             }).stream()
                     .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
-                    .map(workspace -> new WorkspaceInfo(workspace.workspaceId(), workspace.workspaceName()))
+                    .map(workspace -> WorkspaceInfo.builder()
+                            .id(workspace.workspaceId())
+                            .name(workspace.workspaceName())
+                            .build())
                     .toList();
         }
     }
@@ -243,7 +246,11 @@ class RemoteAuthService implements AuthService {
                 .cookie(sessionToken)
                 .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
             var authResponse = verifyResponse(response);
-            return new UserWorkspace(authResponse.user(), authResponse.workspaceId(), authResponse.workspaceName());
+            return UserWorkspace.builder()
+                    .userName(authResponse.user())
+                    .workspaceId(authResponse.workspaceId())
+                    .workspaceName(authResponse.workspaceName())
+                    .build();
         }
     }
 

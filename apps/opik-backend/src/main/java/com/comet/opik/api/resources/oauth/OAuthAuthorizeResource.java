@@ -129,7 +129,12 @@ public class OAuthAuthorizeResource {
                 .secure(isSecureDeployment(opikConfig.getMcpOAuth()))
                 .sameSite(NewCookie.SameSite.LAX)
                 .build();
-        return Response.ok(new AuthorizeContext(client.name(), client.logoUri(), workspaces, csrf))
+        return Response.ok(AuthorizeContext.builder()
+                .clientName(client.name())
+                .clientLogoUri(client.logoUri())
+                .workspaces(workspaces)
+                .csrfToken(csrf)
+                .build())
                 .cookie(csrfCookie)
                 .build();
     }
@@ -170,7 +175,9 @@ public class OAuthAuthorizeResource {
                 .build());
 
         String query = "code=" + enc(code) + (isBlank(request.state()) ? "" : "&state=" + enc(request.state()));
-        return Response.ok(new ConsentResponse(appendQuery(request.redirectUri(), query))).build();
+        return Response.ok(ConsentResponse.builder()
+                .redirectTo(appendQuery(request.redirectUri(), query))
+                .build()).build();
     }
 
     private McpOAuthClient requireClientWithRedirect(String clientId, String redirectUri) {

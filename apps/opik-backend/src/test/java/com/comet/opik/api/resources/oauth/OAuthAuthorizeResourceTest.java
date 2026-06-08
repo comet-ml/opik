@@ -100,7 +100,8 @@ class OAuthAuthorizeResourceTest {
         mockClientResolution(true);
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
-        when(authService.listEligibleWorkspaces(any())).thenReturn(List.of(new WorkspaceInfo("ws-1", "default")));
+        when(authService.listEligibleWorkspaces(any()))
+                .thenReturn(List.of(WorkspaceInfo.builder().id("ws-1").name("default").build()));
 
         Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "code", CODE_CHALLENGE, "S256",
                 RESOURCE_URI, STATE, headers, uriInfo);
@@ -191,7 +192,8 @@ class OAuthAuthorizeResourceTest {
         mockClientResolution(true);
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
-        when(authService.listEligibleWorkspaces(any())).thenReturn(List.of(new WorkspaceInfo("ws-1", "default")));
+        when(authService.listEligibleWorkspaces(any()))
+                .thenReturn(List.of(WorkspaceInfo.builder().id("ws-1").name("default").build()));
 
         Response response = resource.context(CLIENT_ID, REDIRECT_URI, headers);
 
@@ -208,7 +210,8 @@ class OAuthAuthorizeResourceTest {
         mockClientResolution(true);
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
-        when(authService.listEligibleWorkspaces(any())).thenReturn(List.of(new WorkspaceInfo("ws-1", "default")));
+        when(authService.listEligibleWorkspaces(any()))
+                .thenReturn(List.of(WorkspaceInfo.builder().id("ws-1").name("default").build()));
 
         Response response = resource.context(CLIENT_ID, REDIRECT_URI, headers);
 
@@ -225,7 +228,8 @@ class OAuthAuthorizeResourceTest {
                 CSRF_COOKIE_NAME, new Cookie.Builder(CSRF_COOKIE_NAME).value(CSRF).build(),
                 SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
         when(authService.authorizeWorkspace(any(), any()))
-                .thenReturn(new UserWorkspace("admin", "ws-1", "default"));
+                .thenReturn(UserWorkspace.builder().userName("admin").workspaceId("ws-1").workspaceName("default")
+                        .build());
         when(mcpOAuthService.createAuthorizationCode(any(CreateOAuthCodeCommand.class))).thenReturn("auth-code-xyz");
 
         Response response = resource.consent(buildConsent(CODE_CHALLENGE), headers);
@@ -270,7 +274,8 @@ class OAuthAuthorizeResourceTest {
                 CSRF_COOKIE_NAME, new Cookie.Builder(CSRF_COOKIE_NAME).value(CSRF).build(),
                 SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
         when(authService.authorizeWorkspace(any(), any()))
-                .thenReturn(new UserWorkspace("alice", "ws-prod", "production"));
+                .thenReturn(UserWorkspace.builder().userName("alice").workspaceId("ws-prod").workspaceName("production")
+                        .build());
         when(mcpOAuthService.createAuthorizationCode(any(CreateOAuthCodeCommand.class))).thenReturn("code");
 
         resource.consent(buildConsent(CODE_CHALLENGE), headers);
@@ -285,7 +290,16 @@ class OAuthAuthorizeResourceTest {
     }
 
     private ConsentRequest buildConsent(String codeChallenge) {
-        return new ConsentRequest(CLIENT_ID, REDIRECT_URI, codeChallenge, "S256",
-                RESOURCE_URI, STATE, "ws-1", "default", CSRF);
+        return ConsentRequest.builder()
+                .clientId(CLIENT_ID)
+                .redirectUri(REDIRECT_URI)
+                .codeChallenge(codeChallenge)
+                .codeChallengeMethod("S256")
+                .resource(RESOURCE_URI)
+                .state(STATE)
+                .workspaceId("ws-1")
+                .workspaceName("default")
+                .csrf(CSRF)
+                .build();
     }
 }

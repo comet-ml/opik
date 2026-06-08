@@ -60,13 +60,19 @@ class AuthServiceImpl implements AuthService {
 
     @Override
     public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
-        return List.of(new WorkspaceInfo(ProjectService.DEFAULT_WORKSPACE_ID, ProjectService.DEFAULT_WORKSPACE_NAME));
+        return List.of(WorkspaceInfo.builder()
+                .id(ProjectService.DEFAULT_WORKSPACE_ID)
+                .name(ProjectService.DEFAULT_WORKSPACE_NAME)
+                .build());
     }
 
     @Override
     public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
-        return new UserWorkspace(ProjectService.DEFAULT_USER, ProjectService.DEFAULT_WORKSPACE_ID,
-                ProjectService.DEFAULT_WORKSPACE_NAME);
+        return UserWorkspace.builder()
+                .userName(ProjectService.DEFAULT_USER)
+                .workspaceId(ProjectService.DEFAULT_WORKSPACE_ID)
+                .workspaceName(ProjectService.DEFAULT_WORKSPACE_NAME)
+                .build();
     }
 
     @Override
