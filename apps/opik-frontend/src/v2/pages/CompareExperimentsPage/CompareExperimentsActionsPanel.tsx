@@ -1,17 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
 import first from "lodash/first";
 
 import CompareExperimentsButton from "@/v2/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
+import EvaluateExperimentTracesButton from "@/v2/pages/CompareExperimentsPage/EvaluateExperimentTracesButton/EvaluateExperimentTracesButton";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
-import EvaluateButton from "@/v2/pages-shared/automations/EvaluateButton/EvaluateButton";
-import RunEvaluationDialog from "@/v2/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
-import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
-import { getCompareExperimentsList } from "@/api/datasets/useCompareExperimentsList";
-import useAppStore from "@/store/AppStore";
-import { useToast } from "@/ui/use-toast";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
@@ -28,7 +23,6 @@ import {
   COLUMN_USAGE_ID,
 } from "@/types/shared";
 import {
-  COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   EXPERIMENT_ITEM_DATASET_PREFIX,
 } from "@/constants/experiments";
@@ -113,68 +107,8 @@ const CompareExperimentsActionsPanel: React.FC<
   const disabled = !selectedRows?.length;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { toast } = useToast();
-
   const singleExperiment =
     experiments?.length === 1 ? experiments[0] : undefined;
-  const evaluateProjectId = singleExperiment?.project_id ?? "";
-  const evaluateEnabled = Boolean(singleExperiment && evaluateProjectId);
-
-  const [evaluateOpen, setEvaluateOpen] = useState(false);
-  const [evaluateTraceIds, setEvaluateTraceIds] = useState<string[]>([]);
-  const [isFetchingTraces, setIsFetchingTraces] = useState(false);
-
-  const { rules, isLoading: isRulesLoading } = useFilteredRulesList({
-    projectId: evaluateProjectId,
-    entityType: "trace",
-    enabled: evaluateEnabled,
-  });
-
-  const handleEvaluateClick = useCallback(async () => {
-    if (!singleExperiment?.dataset_id) return;
-    setIsFetchingTraces(true);
-    try {
-      const data: { content?: ExperimentsCompare[] } =
-        await getCompareExperimentsList(
-          {},
-          {
-            workspaceName,
-            datasetId: singleExperiment.dataset_id,
-            experimentsIds: [singleExperiment.id],
-            truncate: true,
-            page: 1,
-            size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
-          },
-        );
-      const traceIds = uniq(
-        (data?.content ?? [])
-          .flatMap((row) => row.experiment_items ?? [])
-          .map((item) => item.trace_id)
-          .filter((id): id is string => Boolean(id)),
-      );
-
-      if (!traceIds.length) {
-        toast({
-          title: "Nothing to evaluate",
-          description: "No traces are associated with this experiment.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setEvaluateTraceIds(traceIds);
-      setEvaluateOpen(true);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load experiment traces for evaluation.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsFetchingTraces(false);
-    }
-  }, [singleExperiment, workspaceName, toast]);
 
   const mapRowData = useCallback(async () => {
     if (!columnsToExport || !getDataForExport) return [];
@@ -261,25 +195,7 @@ const CompareExperimentsActionsPanel: React.FC<
   return (
     <div className="flex items-center gap-2">
       <CompareExperimentsButton />
-      {evaluateEnabled && (
-        <>
-          <RunEvaluationDialog
-            open={evaluateOpen}
-            setOpen={setEvaluateOpen}
-            projectId={evaluateProjectId}
-            entityIds={evaluateTraceIds}
-            entityType="trace"
-            rules={rules}
-            isLoading={isRulesLoading}
-          />
-          <EvaluateButton
-            isNoRules={!rules?.length}
-            disabled={isFetchingTraces}
-            label="Evaluate"
-            onClick={handleEvaluateClick}
-          />
-        </>
-      )}
+      <EvaluateExperimentTracesButton experiment={singleExperiment} />
       {columnsToExport && (
         <>
           <Separator orientation="vertical" className="mx-2 h-4" />
