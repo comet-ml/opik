@@ -2,10 +2,8 @@ package com.comet.opik.domain.mcpoauth;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.collections4.CollectionUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.net.URI;
@@ -35,8 +33,6 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
 
     @Override
     public McpOAuthClient register(@NonNull ClientRegistrationRequest request) {
-        validate(request);
-
         String clientId = UUID.randomUUID().toString();
         var client = McpOAuthClientMapper.INSTANCE.toClient(request, clientId);
 
@@ -45,39 +41,6 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
             dao.save(client);
             return dao.findActiveById(clientId);
         });
-    }
-
-    // Field caps mirror the mcp_oauth_clients column sizes so oversized DCR metadata fails as a
-    // proper invalid_client_metadata 400 instead of a raw SQL error.
-    private static final int MAX_REDIRECT_URIS = 10;
-    private static final int MAX_NAME_LENGTH = 255;
-    private static final int MAX_URI_LENGTH = 2048;
-
-    private void validate(ClientRegistrationRequest request) {
-        if (CollectionUtils.isEmpty(request.redirectUris())) {
-            throw new BadRequestException("redirect_uris is required");
-        }
-        if (request.redirectUris().size() > MAX_REDIRECT_URIS) {
-            throw new BadRequestException("too many redirect_uris (max %d)".formatted(MAX_REDIRECT_URIS));
-        }
-        if (request.clientName() != null && request.clientName().length() > MAX_NAME_LENGTH) {
-            throw new BadRequestException("client_name too long (max %d)".formatted(MAX_NAME_LENGTH));
-        }
-        if (request.logoUri() != null && request.logoUri().length() > MAX_URI_LENGTH) {
-            throw new BadRequestException("logo_uri too long (max %d)".formatted(MAX_URI_LENGTH));
-        }
-        for (String redirectUri : request.redirectUris()) {
-            if (redirectUri.length() > MAX_URI_LENGTH) {
-                throw new BadRequestException("redirect_uri too long (max %d)".formatted(MAX_URI_LENGTH));
-            }
-            try {
-                if (!new URI(redirectUri).isAbsolute()) {
-                    throw new BadRequestException("redirect_uri must be absolute: " + redirectUri);
-                }
-            } catch (URISyntaxException e) {
-                throw new BadRequestException("invalid redirect_uri: " + redirectUri);
-            }
-        }
     }
 
     // Opaque = no URI scheme (UUIDs, DCR-minted ids, ...). Anything with a scheme is a URL-form id that a
