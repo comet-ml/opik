@@ -22,6 +22,9 @@ public class OAuthConstants {
     // Header used by opik-backend → comet-backend /opik/auth-by-username to carry the OAuth-resolved userName.
     public static final String OAUTH_USERNAME_HEADER = "X-Opik-OAuth-Username";
 
+    // Cookie carrying the consent CSRF token between GET /authorize/context and POST /authorize.
+    public static final String CSRF_COOKIE = "mcp_oauth_csrf";
+
     // RFC 8414 — token endpoint auth methods
     public static final String AUTH_METHOD_NONE = "none";
 

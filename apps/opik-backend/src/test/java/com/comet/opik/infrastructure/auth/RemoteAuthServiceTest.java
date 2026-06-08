@@ -4,6 +4,7 @@ import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -40,12 +41,15 @@ import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
 import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_PARAM;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -60,6 +64,7 @@ class RemoteAuthServiceTest {
 
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String NOT_LOGGED_USER = "Please login first";
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -331,6 +336,116 @@ class RemoteAuthServiceTest {
                         .build()))
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+    }
+
+    @Test
+    void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        var responseJson = OBJECT_MAPPER.writeValueAsString(Arrays.asList(
+                Map.of("workspaceId", "ws-1", "workspaceName", "production"),
+                Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME),
+                Map.of("workspaceId", "ws-2", "workspaceName", "staging")));
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
+                .withQueryParam("withoutExtendedData", equalTo("true"))
+                .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
+                .willReturn(okJson(responseJson)));
+
+        var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
+
+        assertThat(result).containsExactly(
+                WorkspaceInfo.builder().id("ws-1").name("production").build(),
+                WorkspaceInfo.builder().id("ws-2").name("staging").build());
+    }
+
+    @Test
+    void testListEligibleWorkspaces__whenNoSession__thenForbidden() {
+        assertThatThrownBy(() -> remoteAuthService.listEligibleWorkspaces(null))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(NOT_LOGGED_USER);
+    }
+
+    static Stream<Arguments> listEligibleWorkspacesErrorArgs() {
+        return Stream.of(
+                arguments(HttpStatus.SC_UNAUTHORIZED, ClientErrorException.class, NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_FORBIDDEN, ClientErrorException.class, NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class,
+                        "HTTP 500 Internal Server Error"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("listEligibleWorkspacesErrorArgs")
+    void testListEligibleWorkspaces__whenRemoteFails__thenThrows(
+            int remoteStatusCode, Class<? extends Exception> expectedExceptionClass, String expectedMessage) {
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
+                .willReturn(aResponse().withStatus(remoteStatusCode)));
+
+        assertThatThrownBy(() -> remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue)))
+                .isExactlyInstanceOf(expectedExceptionClass)
+                .hasMessage(expectedMessage);
+    }
+
+    @Test
+    void testAuthorizeWorkspace__returnsResolvedUserWorkspace() throws JsonProcessingException {
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        var workspaceName = "workspace-" + UUID.randomUUID();
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
+                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
+
+        var result = remoteAuthService.authorizeWorkspace(sessionCookie(sessionTokenValue), workspaceName);
+
+        assertThat(result).isEqualTo(UserWorkspace.builder()
+                .userName(authResponse.user())
+                .workspaceId(authResponse.workspaceId())
+                .workspaceName(authResponse.workspaceName())
+                .build());
+    }
+
+    @Test
+    void testAuthorizeWorkspace__whenNoSession__thenForbidden() {
+        assertThatThrownBy(
+                () -> remoteAuthService.authorizeWorkspace(null, "workspace-" + UUID.randomUUID()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(NOT_LOGGED_USER);
+    }
+
+    @Test
+    void testAuthorizeWorkspace__whenDefaultWorkspace__thenForbidden() {
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+
+        assertThatThrownBy(() -> remoteAuthService.authorizeWorkspace(
+                sessionCookie(sessionTokenValue), DEFAULT_WORKSPACE_NAME))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
+    }
+
+    @Test
+    void testAuthorizeOAuth__setsCredentialsIntoContext() throws JsonProcessingException {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        var token = ValidatedToken.builder()
+                .userName("oauth-user-" + UUID.randomUUID())
+                .workspaceName("workspace-" + UUID.randomUUID())
+                .build();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-by-username")
+                .withHeader(OAUTH_USERNAME_HEADER, equalTo(token.userName()))
+                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
+
+        remoteAuthService.authorizeOAuth(token, ContextInfoHolder.builder()
+                .uriInfo(createMockUriInfo("/priv/something"))
+                .method("GET")
+                .build());
+
+        // bearer token is mapped to the apiKey slot as null for OAuth
+        var expectedRequestContext = RequestContext.builder()
+                .userName(authResponse.user())
+                .workspaceId(authResponse.workspaceId())
+                .workspaceName(authResponse.workspaceName())
+                .opikVersion(authResponse.opikVersion())
+                .quotas(authResponse.quotas())
+                .build();
+        assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
 
     private static Cookie sessionCookie(String value) {
