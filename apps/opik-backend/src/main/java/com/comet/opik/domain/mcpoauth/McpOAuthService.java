@@ -43,12 +43,12 @@ public class McpOAuthService {
     }
 
     public String createAuthorizationCode(@NonNull CreateOAuthCodeCommand cmd) {
-        String rawCode = McpOAuthTokens.generateCode();
+        String rawCode = McpOAuthTokenUtils.generateCode();
         Instant now = Instant.now();
 
         var code = McpOAuthCode.builder()
                 .id(UUID.randomUUID().toString())
-                .codeHash(McpOAuthTokens.hash(rawCode))
+                .codeHash(McpOAuthTokenUtils.hash(rawCode))
                 .clientId(cmd.clientId())
                 .userName(cmd.userName())
                 .workspaceName(cmd.workspaceName())
@@ -70,7 +70,7 @@ public class McpOAuthService {
 
     public TokenResponse exchangeCode(@NonNull String code, @NonNull String codeVerifier,
             @NonNull String redirectUri, @NonNull String clientId) {
-        String codeHash = McpOAuthTokens.hash(code);
+        String codeHash = McpOAuthTokenUtils.hash(code);
         Instant now = Instant.now();
 
         // Burn the code in its own committed transaction: a thrown exception rolls the enclosing
@@ -89,14 +89,14 @@ public class McpOAuthService {
         }
 
         String familyId = UUID.randomUUID().toString();
-        String accessToken = McpOAuthTokens.generateAccessToken();
-        String refreshToken = McpOAuthTokens.generateRefreshToken();
+        String accessToken = McpOAuthTokenUtils.generateAccessToken();
+        String refreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
             tokenDao.save(McpOAuthToken.builder()
                     .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(accessToken))
+                    .tokenHash(McpOAuthTokenUtils.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -108,7 +108,7 @@ public class McpOAuthService {
                     .build());
             tokenDao.save(McpOAuthToken.builder()
                     .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(refreshToken))
+                    .tokenHash(McpOAuthTokenUtils.hash(refreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -124,7 +124,7 @@ public class McpOAuthService {
     }
 
     public TokenResponse refresh(@NonNull String refreshToken, @NonNull String clientId) {
-        String tokenHash = McpOAuthTokens.hash(refreshToken);
+        String tokenHash = McpOAuthTokenUtils.hash(refreshToken);
         Instant now = Instant.now();
 
         McpOAuthToken row = template.inTransaction(READ_ONLY,
@@ -144,8 +144,8 @@ public class McpOAuthService {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
-        String accessToken = McpOAuthTokens.generateAccessToken();
-        String newRefreshToken = McpOAuthTokens.generateRefreshToken();
+        String accessToken = McpOAuthTokenUtils.generateAccessToken();
+        String newRefreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
@@ -158,7 +158,7 @@ public class McpOAuthService {
 
             tokenDao.save(McpOAuthToken.builder()
                     .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(accessToken))
+                    .tokenHash(McpOAuthTokenUtils.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -171,7 +171,7 @@ public class McpOAuthService {
                     .build());
             tokenDao.save(McpOAuthToken.builder()
                     .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(newRefreshToken))
+                    .tokenHash(McpOAuthTokenUtils.hash(newRefreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -188,7 +188,7 @@ public class McpOAuthService {
     }
 
     public void revoke(@NonNull String token) {
-        String tokenHash = McpOAuthTokens.hash(token);
+        String tokenHash = McpOAuthTokenUtils.hash(token);
 
         template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
@@ -218,7 +218,7 @@ public class McpOAuthService {
     }
 
     public Optional<ValidatedToken> validateAccessToken(@NonNull String token) {
-        String tokenHash = McpOAuthTokens.hash(token);
+        String tokenHash = McpOAuthTokenUtils.hash(token);
         Instant now = Instant.now();
 
         return template.inTransaction(READ_ONLY, handle -> {

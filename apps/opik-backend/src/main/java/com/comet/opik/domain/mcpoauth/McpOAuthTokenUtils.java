@@ -2,6 +2,7 @@ package com.comet.opik.domain.mcpoauth;
 
 import lombok.experimental.UtilityClass;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 
 import java.security.NoSuchAlgorithmException;
@@ -11,7 +12,7 @@ import java.util.Base64;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
 
 @UtilityClass
-public class McpOAuthTokens {
+public class McpOAuthTokenUtils {
 
     public static final String ACCESS_PREFIX = "opik_mcp_at_";
     public static final String REFRESH_PREFIX = "opik_mcp_rt_";
@@ -61,6 +62,19 @@ public class McpOAuthTokens {
 
     public static String hash(String token) {
         return DigestUtils.sha256Hex(token);
+    }
+
+    public static String maskToken(String token) {
+        if (StringUtils.isEmpty(token)) {
+            return "";
+        }
+        //expected Opik token size
+        if (token.length() > RANDOM_BYTES) {
+            return token.substring(0, 12) + "..." + token.substring(token.length() - 4);
+        } else {
+            //return full string as confirmed not to be expected token shape
+            return token;
+        }
     }
 
     private static SecureRandom getSecureRandom() {

@@ -4,7 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.mcpoauth.CreateOAuthCodeCommand;
 import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
-import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -121,7 +121,7 @@ public class OAuthAuthorizeResource {
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
         List<WorkspaceInfo> workspaces = authService.listEligibleWorkspaces(session);
 
-        String csrf = McpOAuthTokens.randomToken();
+        String csrf = McpOAuthTokenUtils.randomToken();
         NewCookie csrfCookie = new NewCookie.Builder(CSRF_COOKIE)
                 .value(csrf)
                 .path("/")
