@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -13,6 +14,20 @@ import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+
+/**
+ * Resolves OAuth client identity, keyed on the form of the {@code client_id}.
+ * The DB strategy handles opaque ids (DCR-registered + seeded).
+ */
+@ImplementedBy(DbOAuthClientStrategy.class)
+interface OAuthClientStrategy {
+
+    boolean supports(String clientId);
+
+    Optional<McpOAuthClient> resolve(String clientId);
+
+    McpOAuthClient register(ClientRegistrationRequest request);
+}
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
