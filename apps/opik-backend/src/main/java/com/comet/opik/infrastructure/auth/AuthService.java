@@ -20,21 +20,24 @@ public interface AuthService {
     void authenticate(HttpHeaders headers, Cookie sessionToken, ContextInfoHolder contextInfo);
     void authenticateSession(Cookie sessionToken);
 
-    // MCP OAuth Authorization Server: resolve the logged-in user's workspaces for the consent picker, and
-    // validate a chosen workspace against the session (returning the resolved user). Cloud delegates to
-    // comet-backend; OSS returns the hardcoded admin/default.
     List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken);
     UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName);
 
-    // OAuth bearer (opik_at_) was validated locally before this is called. Cloud forwards (userName, workspace,
-    // requiredPermissions) to comet-backend /opik/auth-by-username for the regular role-based authorization check;
-    // OSS populates RequestContext directly from the token (single-user installation).
     void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo);
 }
 
 @RequiredArgsConstructor
 class AuthServiceImpl implements AuthService {
 
+    private static final List<WorkspaceInfo> eligibleWorkspaces = List.of(WorkspaceInfo.builder()
+            .id(ProjectService.DEFAULT_WORKSPACE_ID)
+            .name(ProjectService.DEFAULT_WORKSPACE_NAME)
+            .build());
+    private static final UserWorkspace authorizedWorkspace = UserWorkspace.builder()
+            .userName(ProjectService.DEFAULT_USER)
+            .workspaceId(ProjectService.DEFAULT_WORKSPACE_ID)
+            .workspaceName(ProjectService.DEFAULT_WORKSPACE_NAME)
+            .build();
     private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
@@ -60,13 +63,12 @@ class AuthServiceImpl implements AuthService {
 
     @Override
     public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
-        return List.of(new WorkspaceInfo(ProjectService.DEFAULT_WORKSPACE_ID, ProjectService.DEFAULT_WORKSPACE_NAME));
+        return eligibleWorkspaces;
     }
 
     @Override
     public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
-        return new UserWorkspace(ProjectService.DEFAULT_USER, ProjectService.DEFAULT_WORKSPACE_ID,
-                ProjectService.DEFAULT_WORKSPACE_NAME);
+        return authorizedWorkspace;
     }
 
     @Override
