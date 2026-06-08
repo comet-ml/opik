@@ -306,6 +306,8 @@ public class McpOAuthService {
     private static boolean verifyPkce(String codeVerifier, String codeChallenge) {
         String computed;
         try {
+            // RFC 7636 §4.6 defines the S256 challenge as BASE64URL-ENCODE(SHA256(ASCII(code_verifier))),
+            // and §4.1 restricts the verifier to ASCII unreserved characters — hence US_ASCII, not UTF_8.
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(codeVerifier.getBytes(StandardCharsets.US_ASCII));
             computed = URL_ENCODER.encodeToString(digest);
