@@ -1516,6 +1516,16 @@ def evaluate_resume(
         dataset_=context.dataset,
     )
 
+    # ``experiment_scoring_functions`` is intentionally NOT forwarded to
+    # ``_evaluate_task`` here. If it were, ``_evaluate_task`` would compute
+    # the experiment-level aggregate from the **slice only** (the
+    # freshly-replayed items) and immediately ``log_experiment_scores``
+    # to the backend — advertising a slice-only mean as the
+    # whole-experiment aggregate. ``merge_resume_results`` then writes
+    # the correct merged aggregate, but anyone reading between the two
+    # writes (or a crash / 429 in between) would see the slice-only one.
+    # Skipping the inner computation entirely makes the merge-time write
+    # the only one.
     new_result = _evaluate_task(
         client=client,
         experiment=context.experiment,
@@ -1529,7 +1539,7 @@ def evaluate_resume(
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
         trial_count=context.default_runs_per_item,
-        experiment_scoring_functions=experiment_scoring_functions,
+        experiment_scoring_functions=[],
         source="experiment",
     )
 

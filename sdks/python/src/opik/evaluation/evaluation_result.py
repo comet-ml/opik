@@ -56,10 +56,13 @@ def merge_resume_results(
     the resume call runs new trials — otherwise the resume's own freshly
     written experiment items would be reconstructed back into the merge
     and double-counted.
-    """
-    if not previous_test_results:
-        return new_result
 
+    Also responsible for the **only** ``log_experiment_scores`` write on
+    the resume path: ``evaluate_resume`` deliberately passes
+    ``experiment_scoring_functions=[]`` into ``_evaluate_task`` so its
+    inner slice-only write is suppressed, and the merge-time write here
+    is what actually persists the whole-experiment aggregate.
+    """
     merged_test_results = previous_test_results + list(new_result.test_results)
 
     merged_experiment_scores = compute_experiment_scores(
