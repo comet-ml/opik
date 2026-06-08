@@ -16,6 +16,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.ACCESS_PREFIX;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.REFRESH_PREFIX;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -30,7 +32,7 @@ class OAuthTokenResourceTest {
     private static final String REDIRECT_URI = "http://localhost:1234/cb";
     private static final String CODE = "auth-code-xyz";
     private static final String CODE_VERIFIER = "verifier";
-    private static final String REFRESH_TOKEN = "opik_rt_abc";
+    private static final String REFRESH_TOKEN = REFRESH_PREFIX + "abc";
 
     @Mock
     private OAuthClientService clientService;
@@ -45,7 +47,7 @@ class OAuthTokenResourceTest {
     }
 
     private TokenResponse minted() {
-        return new TokenResponse("opik_at_xxx", "opik_rt_yyy", "Bearer", 3600L, "ws-1", "default");
+        return new TokenResponse(ACCESS_PREFIX + "xxx", REFRESH_PREFIX + "yyy", "Bearer", 3600L, "ws-1", "default");
     }
 
     @Test
@@ -59,8 +61,8 @@ class OAuthTokenResourceTest {
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
         TokenResponse body = (TokenResponse) response.getEntity();
-        assertThat(body.accessToken()).startsWith("opik_at_");
-        assertThat(body.refreshToken()).startsWith("opik_rt_");
+        assertThat(body.accessToken()).startsWith(ACCESS_PREFIX);
+        assertThat(body.refreshToken()).startsWith(REFRESH_PREFIX);
         assertThat(body.tokenType()).isEqualTo("Bearer");
     }
 
@@ -109,7 +111,7 @@ class OAuthTokenResourceTest {
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
         TokenResponse body = (TokenResponse) response.getEntity();
-        assertThat(body.refreshToken()).isEqualTo("opik_rt_yyy");
+        assertThat(body.refreshToken()).isEqualTo(REFRESH_PREFIX + "yyy");
     }
 
     @Test
@@ -123,10 +125,10 @@ class OAuthTokenResourceTest {
     @Test
     @DisplayName("POST /revoke: valid token returns 200 OK and revokes")
     void revoke_validToken_returnsOk() {
-        Response response = resource.revoke("opik_at_xxx", "access_token", CLIENT_ID);
+        Response response = resource.revoke(ACCESS_PREFIX + "xxx", "access_token", CLIENT_ID);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-        verify(mcpOAuthService).revoke("opik_at_xxx");
+        verify(mcpOAuthService).revoke(ACCESS_PREFIX + "xxx");
     }
 
     @Test
@@ -134,7 +136,7 @@ class OAuthTokenResourceTest {
     void revoke_serviceThrows_stillReturnsOk() {
         org.mockito.Mockito.doThrow(new RuntimeException("db down")).when(mcpOAuthService).revoke(any());
 
-        Response response = resource.revoke("opik_at_zzz", null, CLIENT_ID);
+        Response response = resource.revoke(ACCESS_PREFIX + "zzz", null, CLIENT_ID);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
     }

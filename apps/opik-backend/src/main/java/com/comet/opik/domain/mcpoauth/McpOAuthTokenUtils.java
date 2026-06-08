@@ -2,6 +2,7 @@ package com.comet.opik.domain.mcpoauth;
 
 import lombok.experimental.UtilityClass;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 
 import java.security.NoSuchAlgorithmException;
@@ -11,7 +12,7 @@ import java.util.Base64;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
 
 @UtilityClass
-public class McpOAuthTokens {
+public class McpOAuthTokenUtils {
 
     public static final String ACCESS_PREFIX = "opik_mcp_at_";
     public static final String REFRESH_PREFIX = "opik_mcp_rt_";
@@ -21,15 +22,21 @@ public class McpOAuthTokens {
     private static final SecureRandom SECURE_RANDOM = getSecureRandom();
 
     public static String generateAccessToken() {
-        return ACCESS_PREFIX + randomSuffix();
+        return ACCESS_PREFIX + randomToken();
     }
 
     public static String generateRefreshToken() {
-        return REFRESH_PREFIX + randomSuffix();
+        return REFRESH_PREFIX + randomToken();
     }
 
     public static String generateCode() {
-        return randomSuffix();
+        return randomToken();
+    }
+
+    public static String randomToken() {
+        byte[] bytes = new byte[RANDOM_BYTES];
+        SECURE_RANDOM.nextBytes(bytes);
+        return ENCODER.encodeToString(bytes);
     }
 
     // Token prefixes are fixed lowercase literals minted by us — match case-sensitively.
@@ -57,10 +64,17 @@ public class McpOAuthTokens {
         return DigestUtils.sha256Hex(token);
     }
 
-    private static String randomSuffix() {
-        byte[] bytes = new byte[RANDOM_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
-        return ENCODER.encodeToString(bytes);
+    public static String maskToken(String token) {
+        if (StringUtils.isEmpty(token)) {
+            return "";
+        }
+        //expected Opik token size
+        if (token.length() > RANDOM_BYTES) {
+            return token.substring(0, 12) + "..." + token.substring(token.length() - 4);
+        } else {
+            //return full string as confirmed not to be expected token shape
+            return token;
+        }
     }
 
     private static SecureRandom getSecureRandom() {
