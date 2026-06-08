@@ -29,6 +29,15 @@ public interface AuthService {
 @RequiredArgsConstructor
 class AuthServiceImpl implements AuthService {
 
+    private static final List<WorkspaceInfo> eligibleWorkspaces = List.of(WorkspaceInfo.builder()
+            .id(ProjectService.DEFAULT_WORKSPACE_ID)
+            .name(ProjectService.DEFAULT_WORKSPACE_NAME)
+            .build());
+    private static final UserWorkspace authorizedWorkspace = UserWorkspace.builder()
+            .userName(ProjectService.DEFAULT_USER)
+            .workspaceId(ProjectService.DEFAULT_WORKSPACE_ID)
+            .workspaceName(ProjectService.DEFAULT_WORKSPACE_NAME)
+            .build();
     private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
@@ -54,19 +63,12 @@ class AuthServiceImpl implements AuthService {
 
     @Override
     public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
-        return List.of(WorkspaceInfo.builder()
-                .id(ProjectService.DEFAULT_WORKSPACE_ID)
-                .name(ProjectService.DEFAULT_WORKSPACE_NAME)
-                .build());
+        return eligibleWorkspaces;
     }
 
     @Override
     public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
-        return UserWorkspace.builder()
-                .userName(ProjectService.DEFAULT_USER)
-                .workspaceId(ProjectService.DEFAULT_WORKSPACE_ID)
-                .workspaceName(ProjectService.DEFAULT_WORKSPACE_NAME)
-                .build();
+        return authorizedWorkspace;
     }
 
     @Override

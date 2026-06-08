@@ -16,6 +16,7 @@ import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CSRF_COOKIE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_TARGET;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_RESPONSE_TYPE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.RESPONSE_TYPE_CODE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,7 +55,6 @@ class OAuthAuthorizeResourceTest {
     private static final String CODE_CHALLENGE = "abc123challenge";
     private static final String STATE = "state-xyz";
     private static final String CSRF = "csrf-token-abc";
-    private static final String CSRF_COOKIE_NAME = "mcp_oauth_csrf";
     private static final String SESSION_COOKIE_NAME = "sessionToken";
 
     @Mock
@@ -62,7 +68,7 @@ class OAuthAuthorizeResourceTest {
     @Mock
     private HttpHeaders headers;
     @Mock
-    private jakarta.ws.rs.core.UriInfo uriInfo;
+    private UriInfo uriInfo;
 
     private OAuthAuthorizeResource resource;
     private McpOAuthConfig mcpConfig;
@@ -103,7 +109,8 @@ class OAuthAuthorizeResourceTest {
         when(authService.listEligibleWorkspaces(any()))
                 .thenReturn(List.of(WorkspaceInfo.builder().id("ws-1").name("default").build()));
 
-        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "code", CODE_CHALLENGE, "S256",
+        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, CODE_CHALLENGE,
+                CODE_CHALLENGE_METHOD_S256,
                 RESOURCE_URI, STATE, headers, uriInfo);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.FOUND.getStatusCode());
@@ -112,7 +119,7 @@ class OAuthAuthorizeResourceTest {
                 .startsWith("https://www.comet.com/opik/oauth/consent?")
                 .contains("client_id=" + CLIENT_ID)
                 .contains("code_challenge=" + CODE_CHALLENGE)
-                .contains("code_challenge_method=S256")
+                .contains("code_challenge_method=" + CODE_CHALLENGE_METHOD_S256)
                 .contains("state=" + STATE);
     }
 
@@ -121,13 +128,14 @@ class OAuthAuthorizeResourceTest {
     void authorize_invalidResponseType_redirectsWithError() {
         mockClientResolution(true);
 
-        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "token", CODE_CHALLENGE, "S256",
+        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "token", CODE_CHALLENGE,
+                CODE_CHALLENGE_METHOD_S256,
                 RESOURCE_URI, STATE, headers, uriInfo);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.FOUND.getStatusCode());
         assertThat(response.getLocation().toString())
                 .startsWith(REDIRECT_URI)
-                .contains("error=unsupported_response_type");
+                .contains("error=" + ERROR_UNSUPPORTED_RESPONSE_TYPE);
     }
 
     @Test
@@ -135,10 +143,11 @@ class OAuthAuthorizeResourceTest {
     void authorize_blankCodeChallenge_redirectsWithError() {
         mockClientResolution(true);
 
-        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "code", "  ", "S256",
+        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, "  ",
+                CODE_CHALLENGE_METHOD_S256,
                 RESOURCE_URI, STATE, headers, uriInfo);
 
-        assertThat(response.getLocation().toString()).contains("error=invalid_request");
+        assertThat(response.getLocation().toString()).contains("error=" + ERROR_INVALID_REQUEST);
     }
 
     @Test
@@ -147,10 +156,11 @@ class OAuthAuthorizeResourceTest {
         mockClientResolution(true);
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
 
-        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "code", CODE_CHALLENGE, "S256",
+        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, CODE_CHALLENGE,
+                CODE_CHALLENGE_METHOD_S256,
                 "https://attacker.example.com/api/v1/mcp", STATE, headers, uriInfo);
 
-        assertThat(response.getLocation().toString()).contains("error=invalid_target");
+        assertThat(response.getLocation().toString()).contains("error=" + ERROR_INVALID_TARGET);
     }
 
     @Test
@@ -158,7 +168,8 @@ class OAuthAuthorizeResourceTest {
     void authorize_unknownClient_throwsBadRequest() {
         when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> resource.authorize(CLIENT_ID, REDIRECT_URI, "code", CODE_CHALLENGE, "S256",
+        assertThatThrownBy(() -> resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, CODE_CHALLENGE,
+                CODE_CHALLENGE_METHOD_S256,
                 RESOURCE_URI, STATE, headers, uriInfo))
                 .isInstanceOf(BadRequestException.class);
     }
@@ -173,7 +184,8 @@ class OAuthAuthorizeResourceTest {
         URI requestUri = URI.create("https://www.comet.com/opik/oauth/authorize?client_id=" + CLIENT_ID);
         when(uriInfo.getRequestUri()).thenReturn(requestUri);
 
-        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "code", CODE_CHALLENGE, "S256",
+        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, CODE_CHALLENGE,
+                CODE_CHALLENGE_METHOD_S256,
                 RESOURCE_URI, STATE, headers, uriInfo);
 
         String location = response.getLocation().toString();
@@ -197,7 +209,7 @@ class OAuthAuthorizeResourceTest {
 
         Response response = resource.context(CLIENT_ID, REDIRECT_URI, headers);
 
-        NewCookie csrfCookie = response.getCookies().get(CSRF_COOKIE_NAME);
+        NewCookie csrfCookie = response.getCookies().get(CSRF_COOKIE);
         assertThat(csrfCookie).isNotNull();
         assertThat(csrfCookie.isSecure()).isTrue();
         assertThat(csrfCookie.isHttpOnly()).isTrue();
@@ -215,7 +227,7 @@ class OAuthAuthorizeResourceTest {
 
         Response response = resource.context(CLIENT_ID, REDIRECT_URI, headers);
 
-        NewCookie csrfCookie = response.getCookies().get(CSRF_COOKIE_NAME);
+        NewCookie csrfCookie = response.getCookies().get(CSRF_COOKIE);
         assertThat(csrfCookie.isSecure()).isFalse();
     }
 
@@ -225,7 +237,7 @@ class OAuthAuthorizeResourceTest {
         mockClientResolution(true);
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(
-                CSRF_COOKIE_NAME, new Cookie.Builder(CSRF_COOKIE_NAME).value(CSRF).build(),
+                CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build(),
                 SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
         when(authService.authorizeWorkspace(any(), any()))
                 .thenReturn(UserWorkspace.builder().userName("admin").workspaceId("ws-1").workspaceName("default")
@@ -257,11 +269,11 @@ class OAuthAuthorizeResourceTest {
     void consent_blankCodeChallenge_throwsBadRequest() {
         mockClientResolution(true);
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
-        mockCookies(Map.of(CSRF_COOKIE_NAME, new Cookie.Builder(CSRF_COOKIE_NAME).value(CSRF).build()));
+        mockCookies(Map.of(CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build()));
 
         assertThatThrownBy(() -> resource.consent(buildConsent("  "), headers))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessage("invalid_request");
+                .hasMessage(ERROR_INVALID_REQUEST);
         verify(mcpOAuthService, never()).createAuthorizationCode(any(CreateOAuthCodeCommand.class));
     }
 
@@ -271,7 +283,7 @@ class OAuthAuthorizeResourceTest {
         mockClientResolution(true);
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(
-                CSRF_COOKIE_NAME, new Cookie.Builder(CSRF_COOKIE_NAME).value(CSRF).build(),
+                CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build(),
                 SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
         when(authService.authorizeWorkspace(any(), any()))
                 .thenReturn(UserWorkspace.builder().userName("alice").workspaceId("ws-prod").workspaceName("production")
@@ -294,7 +306,7 @@ class OAuthAuthorizeResourceTest {
                 .clientId(CLIENT_ID)
                 .redirectUri(REDIRECT_URI)
                 .codeChallenge(codeChallenge)
-                .codeChallengeMethod("S256")
+                .codeChallengeMethod(CODE_CHALLENGE_METHOD_S256)
                 .resource(RESOURCE_URI)
                 .state(STATE)
                 .workspaceId("ws-1")
