@@ -28,6 +28,7 @@ import {
   COLUMN_USAGE_ID,
 } from "@/types/shared";
 import {
+  COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   EXPERIMENT_ITEM_DATASET_PREFIX,
 } from "@/constants/experiments";
@@ -106,8 +107,6 @@ type CompareExperimentsActionsPanelProps = {
   experiments?: Experiment[];
 };
 
-const EVALUATE_FETCH_PAGE_SIZE = 10000;
-
 const CompareExperimentsActionsPanel: React.FC<
   CompareExperimentsActionsPanelProps
 > = ({ getDataForExport, selectedRows = [], columnsToExport, experiments }) => {
@@ -145,7 +144,7 @@ const CompareExperimentsActionsPanel: React.FC<
             experimentsIds: [singleExperiment.id],
             truncate: true,
             page: 1,
-            size: EVALUATE_FETCH_PAGE_SIZE,
+            size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
           },
         );
       const traceIds = uniq(
