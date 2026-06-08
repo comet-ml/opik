@@ -34,12 +34,14 @@ import lombok.RequiredArgsConstructor;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CSRF_COOKIE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_TARGET;
@@ -52,8 +54,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OAuthAuthorizeResource {
 
-    private static final String CSRF_COOKIE = "mcp_oauth_csrf";
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final SecureRandom RANDOM = getSecureRandom();
 
     private final @NonNull OAuthClientService clientService;
     private final @NonNull AuthService authService;
@@ -208,6 +209,14 @@ public class OAuthAuthorizeResource {
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static SecureRandom getSecureRandom() {
+        try {
+            return SecureRandom.getInstanceStrong();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("Strong SecureRandom not available", e);
+        }
     }
 
     private static String enc(String value) {
