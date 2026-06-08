@@ -1,0 +1,49 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog/2026-06-09
+---
+
+## JSON, JSONL, and NDJSON File Upload for Datasets
+
+Datasets now accept JSON-based file uploads alongside CSV. You can drag-and-drop or select a `.json`, `.jsonl`, or `.ndjson` file in the dataset upload dialog and the items will be processed in the background — no need to convert to CSV first.
+
+**Supported formats:**
+
+- **`.csv`** — existing format
+- **`.json`** — array of objects
+- **`.jsonl` / `.ndjson`** — one JSON object per line
+
+## MCP Server Setup from `opik configure`
+
+Running `opik configure` now offers to install and wire up the Opik MCP server into your AI coding host (Claude Code, Cursor, or VS Code Copilot). The installer detects which hosts are present, writes the correct configuration for each one, and prefetches the server package via `uv tool install opik-mcp` — all in one step. You can also run `opik mcp configure` directly to reach the same flow without going through the full configuration wizard.
+
+```bash
+# Interactive setup — includes an MCP installation prompt
+opik configure
+
+# MCP setup only
+opik mcp configure
+```
+
+Workspace, API key, and server URL are set automatically based on your deployment (cloud, self-hosted, or local).
+
+## Bug Fixes & Improvements
+
+- **Opik 2.0 is now the default UI for open-source deployments** — new and existing open-source deployments now open the Opik 2.0 interface by default. If you haven't run the migration jobs yet, 1.x entities that haven't been assigned to a project will not appear in the 2.0 UI until you do.
+- **Thread view: redesigned sidebar** — the thread sidebar now shows skeleton loaders while content is fetching, a cleaner stats row (date, message count, duration, cost, scores), and a conversation layout without dividers for easier reading.
+- **Logs page: filter operators restored on string and ID fields** — the filter chips for Input, Output, Name, Trace ID, Span ID, and Thread ID now expose the full operator set: contains, does not contain, starts with, ends with, equals, and not equals. The annotation queue ID chip additionally supports is empty / is not empty.
+- **Trace filters: `created_at` and `last_updated_at` now filterable** — these date fields can now be used as filter conditions on trace queries; previously they were accepted by the API but silently ignored.
+- **`opik migrate prompt`: environment assignments preserved** — each source prompt version's environment tags (e.g. `production`, `staging`) are now carried through when replaying versions during a prompt migration.
+- **Experiment comparison: "Go to logs" shows traces for all compared experiments** — the Traces link from the comparison view previously only surfaced traces for the reference experiment; it now includes all compared experiments.
+- **Experiment comparison API: trace metadata included in response** — the experiment item compare endpoint now returns the full `traceMetadata` field for each item, enabling tools like `opik.evaluate_resume` to check run-completion markers without fetching individual traces.
+- **OpenAI Responses API: cached token costs corrected** — cached input tokens are now correctly discounted when calculating cost for traces that use the OpenAI Responses API.
+- **Experiment feedback score: empty state copy corrected** — the empty state message on the feedback scores tab now matches the intended text.
+
+## Performance Improvements
+
+- **Experiment dataset version lookups optimized** — the query that resolves the latest dataset version for each experiment has been rewritten to remove an O(n) `ROW_NUMBER` CTE, reducing query time when a dataset has many associated experiments.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.52...2.0.57)
+
+_Releases_: `2.0.53`, `2.0.54`, `2.0.55`, `2.0.56`, `2.0.57`
