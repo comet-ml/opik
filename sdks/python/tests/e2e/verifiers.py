@@ -380,22 +380,32 @@ def verify_experiment_items_completed(
     """
     from opik.evaluation.resume import context as resume_context
 
-    experiment = opik_client.get_experiment_by_id(experiment_id)
-
-    def _completed_ids() -> Set[str]:
+    # The experiment record is eventually consistent: looking it up right
+    # after ``evaluate()`` returns can hit a 404, or a transient API/network
+    # error. Fetch the handle inside the poll (matching ``verify_experiment``
+    # / ``verify_test_suite_result``), so a fresh handle is also taken on
+    # each iteration rather than a stale one being cached across the poll.
+    def _completed_ids_or_none() -> Optional[Set[str]]:
+        experiment = opik_client.get_experiment_by_id(experiment_id)
         return {
             item.dataset_item_id
             for item in experiment.get_items()
             if resume_context.is_trial_fully_completed(item)
         }
 
+    last_observed: Set[str] = set()
+
+    def _converged() -> bool:
+        nonlocal last_observed
+        last_observed = _completed_ids_or_none() or set()
+        return last_observed == expected_completed_dataset_item_ids
+
     assert synchronization.until(
-        lambda: _completed_ids() == expected_completed_dataset_item_ids,
-        max_try_seconds=timeout,
+        _converged, max_try_seconds=timeout, allow_errors=True
     ), (
         f"Expected completed dataset item ids "
         f"{sorted(expected_completed_dataset_item_ids)}; got "
-        f"{sorted(_completed_ids())} after {timeout}s"
+        f"{sorted(last_observed)} after {timeout}s"
     )
 
 

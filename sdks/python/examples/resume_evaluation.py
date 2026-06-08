@@ -21,6 +21,7 @@ with a small sleep so the run feels like real work.
 """
 
 import time
+import uuid
 from typing import Dict
 
 import opik
@@ -28,7 +29,12 @@ from opik.evaluation import metrics
 
 
 DATASET_NAME = "resume-demo-dataset"
-EXPERIMENT_NAME = "resume-demo-experiment"
+# ``get_experiments_by_name`` is a case-insensitive substring search, so a
+# fixed name would also match experiments from prior demo runs (or any
+# experiment whose name happens to contain "resume-demo-experiment"). Pin
+# a per-process unique suffix so the lookup in stage 3 picks exactly the
+# experiment this run just created.
+EXPERIMENT_NAME = f"resume-demo-experiment-{uuid.uuid4().hex[:8]}"
 
 # (review text, expected sentiment) pairs — drive both the dataset and the
 # fake classifier. Twenty items so a partial run leaves a meaningful chunk
@@ -150,9 +156,19 @@ def main() -> None:
         print(f"Evaluation interrupted (as expected): {exc}")
 
     # ----- 3. Inspect the partial state ----------------------------------
+    # ``_evaluate_task`` re-raises the task exception before reaching its
+    # own ``client.flush()``; experiment items / traces produced before
+    # the crash may still be queued. Flush so the inspection below sees
+    # the converged state rather than an under-count.
+    opik_client.flush()
+
     experiments = opik_client.get_experiments_by_name(EXPERIMENT_NAME)
-    assert experiments, "Expected exactly one experiment to have been created"
-    experiment_id = experiments[-1].id
+    assert len(experiments) == 1, (
+        f"Expected exactly one experiment named {EXPERIMENT_NAME!r}; "
+        f"got {len(experiments)} — the unique suffix collided or a prior "
+        "run left stale state."
+    )
+    experiment_id = experiments[0].id
     experiment = opik_client.get_experiment_by_id(experiment_id)
 
     print()

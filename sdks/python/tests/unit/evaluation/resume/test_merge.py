@@ -135,6 +135,10 @@ class TestReconstructPreviousTestResults:
             "input": {"q": "hello"},
             "expected_output": "stored",
         }
+        # ``reconstruct_previous_test_results`` hard-codes ``trial_id=0``
+        # because the REST payload doesn't carry the original trial index.
+        # Pin the value so a future change to that hard-code is caught.
+        assert results[0].trial_id == 0
 
     def test_score_results_built_from_stored_feedback_scores(self):
         experiment = _experiment_with(

@@ -1518,6 +1518,16 @@ def test_evaluate_prompt_happyflow(
         project_name=None,
     )
 
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
+
     mock_experiment.insert.assert_has_calls(
         [
             mock.call(experiment_items_references=mock.ANY),
@@ -2123,6 +2133,16 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
         project_name=None,
     )
 
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
+
     mock_experiment.insert.assert_has_calls(
         [
             mock.call(experiment_items_references=mock.ANY),
@@ -2406,6 +2426,16 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == "some-model-name"
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
     mock_experiment.insert.assert_has_calls(
