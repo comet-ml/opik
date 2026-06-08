@@ -258,75 +258,80 @@ export const useJsonPopover = ({
     }
   }, []);
 
-  // Track text changes and cursor moves while popover is open to update search query
-  // Also detect when {{ was pasted and set braceStartPos accordingly
+  const openPopoverAtCursor = useCallback(
+    (view: EditorView, cursorPos: number) => {
+      setBraceStartPos(cursorPos);
+      setJsonSearchQuery("");
+      view.requestMeasure({
+        read: () => ({
+          coords: view.coordsAtPos(cursorPos),
+          editorRect: view.dom.getBoundingClientRect(),
+        }),
+        write: ({ coords, editorRect }) => {
+          if (coords && editorRect) {
+            setPopoverPosition({
+              top: coords.bottom - editorRect.top,
+              left: coords.left - editorRect.left,
+            });
+          }
+          setIsJsonPopoverOpen(true);
+        },
+      });
+    },
+    [],
+  );
+
   const handleEditorUpdate = useCallback(
     (update: ViewUpdate) => {
+      if (!hasJsonData) return;
+      if (!update.docChanged && !update.selectionSet) return;
+
       const doc = update.state.doc;
       const cursorPos = update.state.selection.main.head;
+      const textBeforeCursor = doc.sliceString(0, cursorPos);
 
-      // Detect pasted {{ when popover is open but braceStartPos is null
-      if (
-        isJsonPopoverOpen &&
-        braceStartPos === null &&
-        update.docChanged &&
-        hasJsonData
-      ) {
-        const textBeforeCursor =
-          cursorPos >= MUSTACHE_OPEN_LEN
-            ? doc.sliceString(cursorPos - MUSTACHE_OPEN_LEN, cursorPos)
-            : "";
+      const lastOpen = textBeforeCursor.lastIndexOf(MUSTACHE_OPEN);
 
-        if (textBeforeCursor === MUSTACHE_OPEN) {
-          // {{ was pasted, set braceStartPos to position after {{
-          setBraceStartPos(cursorPos);
-          return;
+      if (lastOpen === -1) {
+        if (isJsonPopoverOpen) {
+          setIsJsonPopoverOpen(false);
+          setJsonSearchQuery("");
+          setBraceStartPos(null);
         }
+        return;
       }
 
-      if (
-        isJsonPopoverOpen &&
-        braceStartPos !== null &&
-        (update.docChanged || update.selectionSet)
-      ) {
-        // Check if MUSTACHE_OPEN is still present before braceStartPos
-        const openingBraces =
-          braceStartPos >= MUSTACHE_OPEN_LEN
-            ? doc.sliceString(braceStartPos - MUSTACHE_OPEN_LEN, braceStartPos)
-            : "";
+      const afterOpen = lastOpen + MUSTACHE_OPEN_LEN;
+      const between = textBeforeCursor.slice(afterOpen);
 
-        // If MUSTACHE_OPEN was deleted, close the popover
-        if (openingBraces !== MUSTACHE_OPEN) {
+      const isClosed =
+        between.includes(MUSTACHE_CLOSE) || between.includes(BRACE_OPEN);
+
+      if (isClosed) {
+        if (isJsonPopoverOpen) {
           setIsJsonPopoverOpen(false);
           setJsonSearchQuery("");
           setBraceStartPos(null);
-          return;
         }
+        return;
+      }
 
-        // Extract text between MUSTACHE_OPEN and cursor
-        if (cursorPos >= braceStartPos) {
-          const textAfterBraces = doc.sliceString(braceStartPos, cursorPos);
-          // Only update if it looks like a search query (no special chars that would close the variable)
-          if (
-            !textAfterBraces.includes(BRACE_CLOSE) &&
-            !textAfterBraces.includes(BRACE_OPEN)
-          ) {
-            setJsonSearchQuery(textAfterBraces);
-          } else {
-            // If user typed } or {, close the popover
-            setIsJsonPopoverOpen(false);
-            setJsonSearchQuery("");
-            setBraceStartPos(null);
-          }
-        } else {
-          // Cursor moved before braceStartPos, close popover
-          setIsJsonPopoverOpen(false);
-          setJsonSearchQuery("");
-          setBraceStartPos(null);
+      // We have an unclosed {{ before the cursor — popover should be open
+      const searchText = between.replace(/\}+$/, "");
+
+      if (isJsonPopoverOpen) {
+        setJsonSearchQuery(searchText);
+        if (braceStartPos !== afterOpen) {
+          setBraceStartPos(afterOpen);
+        }
+      } else if (update.docChanged) {
+        openPopoverAtCursor(update.view, afterOpen);
+        if (searchText) {
+          setJsonSearchQuery(searchText);
         }
       }
     },
-    [isJsonPopoverOpen, braceStartPos, hasJsonData],
+    [isJsonPopoverOpen, braceStartPos, hasJsonData, openPopoverAtCursor],
   );
 
   const triggerVariableSearch = useCallback(() => {
