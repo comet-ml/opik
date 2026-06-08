@@ -175,6 +175,17 @@ class OAuthAuthorizeResourceTest {
     }
 
     @Test
+    @DisplayName("GET /authorize: redirect_uri with fragment throws 400 (RFC 6749 §3.1.2)")
+    void authorize_redirectUriWithFragment_throwsBadRequest() {
+        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.of(validClient()));
+
+        assertThatThrownBy(() -> resource.authorize(CLIENT_ID, REDIRECT_URI + "#app", RESPONSE_TYPE_CODE,
+                CODE_CHALLENGE, CODE_CHALLENGE_METHOD_S256, RESOURCE_URI, STATE, headers, uriInfo))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("invalid redirect_uri");
+    }
+
+    @Test
     @DisplayName("GET /authorize: session check failure redirects to login with return_to")
     void authorize_noSession_redirectsToLogin() {
         mockClientResolution(true);

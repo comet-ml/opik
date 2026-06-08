@@ -183,7 +183,10 @@ public class OAuthAuthorizeResource {
         if (client.isEmpty()) {
             throw new BadRequestException(ERROR_INVALID_CLIENT);
         }
-        if (redirectUri == null || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
+        // RFC 6749 §3.1.2: the redirection endpoint URI MUST NOT include a fragment, otherwise appended
+        // code/error/state query params would land inside the fragment and be unreadable by the client.
+        if (redirectUri == null || redirectUri.contains("#")
+                || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
             throw new BadRequestException("invalid redirect_uri");
         }
         return client.get();
