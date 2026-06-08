@@ -2,14 +2,17 @@ import React, { useEffect, useRef, useMemo, useState } from "react";
 import { CornerDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tag } from "@/ui/tag";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import { useSMEFlow, ITEM_STATE } from "../SMEFlowContext";
 import {
   getAnnotationQueueItemId,
+  getLastAnnotationByUser,
   formatThreadDateRange,
 } from "@/lib/annotation-queues";
 import { Trace, Thread } from "@/types/traces";
 import { isObjectThread } from "@/lib/traces";
 import { prettifyMessage } from "@/lib/traces";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 const getPreviewText = (
   obj: object | undefined,
@@ -60,7 +63,7 @@ type SidebarEntry = {
   index: number;
   itemId: string;
   state: ITEM_STATE;
-  lastUpdatedAt: string;
+  lastAnnotatedByUser: string;
 };
 
 const ItemsSidebar: React.FunctionComponent = () => {
@@ -71,6 +74,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
     navigateToItem,
     shuffledItemIds,
   } = useSMEFlow();
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
   const [filter, setFilter] = useState<SidebarFilter>("to_review");
   const activeRef = useRef<HTMLButtonElement>(null);
@@ -81,20 +85,27 @@ const ItemsSidebar: React.FunctionComponent = () => {
 
   const previews = useMemo(() => queueItems.map(getItemPreviews), [queueItems]);
 
-  const { toReviewItems, processedItems } = useMemo(() => {
+  // Recomputes only on item list poll or user change
+  const entriesById = useMemo(() => {
     const byId: Record<string, SidebarEntry> = {};
     queueItems.forEach((item, index) => {
       const itemId = getAnnotationQueueItemId(item);
-      const state = itemStates[itemId] ?? ITEM_STATE.DEFAULT;
       byId[itemId] = {
         index,
         itemId,
-        state,
-        lastUpdatedAt: item.last_updated_at ?? "",
+        state: ITEM_STATE.DEFAULT,
+        lastAnnotatedByUser: getLastAnnotationByUser(item, currentUserName),
       };
     });
+    return byId;
+  }, [queueItems, currentUserName]);
 
-    const entries = shuffledItemIds.map((id) => byId[id]);
+  // Recomputes on lock poll via itemStates, but no getLastAnnotationByUser calls
+  const { toReviewItems, processedItems } = useMemo(() => {
+    const entries = shuffledItemIds.map((id) => ({
+      ...entriesById[id],
+      state: itemStates[id] ?? ITEM_STATE.DEFAULT,
+    }));
 
     const toReview = entries.filter(
       (e) => e.state === ITEM_STATE.DEFAULT || e.index === currentIndex,
@@ -102,10 +113,12 @@ const ItemsSidebar: React.FunctionComponent = () => {
 
     const processed = entries
       .filter((e) => e.state !== ITEM_STATE.DEFAULT)
-      .sort((a, b) => b.lastUpdatedAt.localeCompare(a.lastUpdatedAt));
+      .sort((a, b) =>
+        b.lastAnnotatedByUser.localeCompare(a.lastAnnotatedByUser),
+      );
 
     return { toReviewItems: toReview, processedItems: processed };
-  }, [queueItems, itemStates, shuffledItemIds, currentIndex]);
+  }, [entriesById, itemStates, shuffledItemIds, currentIndex]);
 
   const filteredItems = filter === "to_review" ? toReviewItems : processedItems;
 
@@ -132,29 +145,28 @@ const ItemsSidebar: React.FunctionComponent = () => {
           {allDone ? "All scored" : `${defaultCount} remaining`}
         </span>
       </div>
-      <div className="flex shrink-0 gap-1 border-b border-border px-3 py-1.5">
-        <button
-          onClick={() => setFilter("to_review")}
-          className={cn(
-            "comet-body-xs rounded-md px-2 py-0.5 transition-colors",
-            filter === "to_review"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-slate hover:bg-primary-foreground",
-          )}
+      <div className="shrink-0 px-3 py-1.5">
+        <Tabs
+          value={filter}
+          onValueChange={(v) => setFilter(v as SidebarFilter)}
         >
-          To review
-        </button>
-        <button
-          onClick={() => setFilter("processed")}
-          className={cn(
-            "comet-body-xs rounded-md px-2 py-0.5 transition-colors",
-            filter === "processed"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-slate hover:bg-primary-foreground",
-          )}
-        >
-          Processed
-        </button>
+          <TabsList variant="segmented-primary">
+            <TabsTrigger
+              variant="segmented-primary"
+              size="sm"
+              value="to_review"
+            >
+              To review
+            </TabsTrigger>
+            <TabsTrigger
+              variant="segmented-primary"
+              size="sm"
+              value="processed"
+            >
+              Processed
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
       <div className="flex-1 overflow-y-auto">
         {filteredItems.map(({ index, itemId, state }) => {
@@ -175,14 +187,18 @@ const ItemsSidebar: React.FunctionComponent = () => {
               <div
                 className={cn(
                   "flex flex-col gap-0.5",
-                  state !== ITEM_STATE.DEFAULT && "opacity-60",
+                  filter === "to_review" &&
+                    state !== ITEM_STATE.DEFAULT &&
+                    "opacity-60",
                 )}
               >
                 <div className="flex items-center gap-1">
-                  <Tag className="flex shrink-0 items-center gap-1 border-border bg-primary-foreground px-1 text-foreground">
-                    <span className={cn("size-1.5 rounded-full", dotClass)} />
-                    {label}
-                  </Tag>
+                  {state !== ITEM_STATE.DEFAULT && (
+                    <Tag className="flex shrink-0 items-center gap-1 border-border bg-primary-foreground px-1 text-foreground">
+                      <span className={cn("size-1.5 rounded-full", dotClass)} />
+                      {label}
+                    </Tag>
+                  )}
                   <span className="comet-body-xs truncate text-muted-slate">
                     {name}
                   </span>
