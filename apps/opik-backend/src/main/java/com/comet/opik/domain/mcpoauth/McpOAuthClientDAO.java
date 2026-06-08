@@ -16,9 +16,10 @@ import java.util.Optional;
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 interface McpOAuthClientDAO {
 
-    @SqlUpdate("INSERT INTO mcp_oauth_clients (client_id, name, redirect_uris, logo_uri, owner_user_name) "
-            +
-            "VALUES (:bean.clientId, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.ownerUserName)")
+    @SqlUpdate("""
+            INSERT INTO mcp_oauth_clients (client_id, name, redirect_uris, logo_uri, owner_user_name)
+            VALUES (:bean.clientId, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.ownerUserName)
+            """)
     void save(@BindMethods("bean") McpOAuthClient client);
 
     @SqlQuery("SELECT * FROM mcp_oauth_clients WHERE client_id = :clientId")
