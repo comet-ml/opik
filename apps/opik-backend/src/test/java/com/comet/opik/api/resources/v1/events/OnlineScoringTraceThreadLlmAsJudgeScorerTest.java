@@ -145,7 +145,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 projectService,
                 automationRuleEvaluatorService,
                 toolRegistry,
-                spanService);
+                spanService,
+                new OnlineScoringMetrics());
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();

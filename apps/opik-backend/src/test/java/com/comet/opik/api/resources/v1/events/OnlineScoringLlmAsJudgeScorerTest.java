@@ -138,7 +138,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 toolRegistry,
                 traceCompressor,
                 workspaceNameService,
-                opikConfiguration);
+                opikConfiguration,
+                new OnlineScoringMetrics());
     }
 
     @AfterEach
