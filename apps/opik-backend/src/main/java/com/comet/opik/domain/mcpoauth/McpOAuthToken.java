@@ -19,7 +19,7 @@ public record McpOAuthToken(
         Instant issuedAt,
         Instant expiresAt,
         Instant revokedAt,
-        String revokedReason) {
+        RevokedReason revokedReason) {
 
     public static final String TYPE_ACCESS = "access";
     public static final String TYPE_REFRESH = "refresh";

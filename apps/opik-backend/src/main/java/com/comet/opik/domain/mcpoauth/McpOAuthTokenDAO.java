@@ -27,14 +27,14 @@ interface McpOAuthTokenDAO {
             UPDATE mcp_oauth_tokens SET revoked_at = NOW(6), revoked_reason = :reason
             WHERE token_hash = :tokenHash AND revoked_at IS NULL
             """)
-    int revoke(@Bind("tokenHash") String tokenHash, @Bind("reason") String reason);
+    int revoke(@Bind("tokenHash") String tokenHash, @Bind("reason") RevokedReason reason);
 
     // Reuse detection: revoke the entire refresh-token lineage in one indexed write.
     @SqlUpdate("""
             UPDATE mcp_oauth_tokens SET revoked_at = NOW(6), revoked_reason = :reason
             WHERE family_id = :familyId AND revoked_at IS NULL
             """)
-    int revokeFamily(@Bind("familyId") String familyId, @Bind("reason") String reason);
+    int revokeFamily(@Bind("familyId") String familyId, @Bind("reason") RevokedReason reason);
 
     @SqlUpdate("""
             DELETE FROM mcp_oauth_tokens

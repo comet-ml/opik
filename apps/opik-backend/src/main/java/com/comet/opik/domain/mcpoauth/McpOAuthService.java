@@ -33,10 +33,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class McpOAuthService {
 
-    private static final String REASON_ROTATED = "rotated";
-    private static final String REASON_REUSE = "reuse";
-    private static final String REASON_CLIENT_REQUEST = "client_request";
-
     private static final Base64.Encoder URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
 
     private final @NonNull TransactionTemplate template;
@@ -141,13 +137,13 @@ public class McpOAuthService {
         }
 
         if (row.revokedAt() != null) {
-            boolean benignRetry = REASON_ROTATED.equals(row.revokedReason())
+            boolean benignRetry = row.revokedReason() == RevokedReason.ROTATED
                     && !now.isAfter(row.revokedAt().plus(config().getRefreshRotationGrace()));
             if (!benignRetry) {
                 // Reuse detected: kill the whole lineage. Must run in its own committed transaction —
                 // throwing invalid_grant from inside the same transaction would roll the revocation back.
                 template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
-                        .revokeFamily(row.familyId(), REASON_REUSE));
+                        .revokeFamily(row.familyId(), RevokedReason.REUSE));
             }
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
@@ -160,7 +156,7 @@ public class McpOAuthService {
 
             // Atomic rotation guard: only the request that flips revoked_at mints the next pair; a
             // concurrent duplicate sees 0 rows and gets invalid_grant (same outcome as the grace path).
-            if (tokenDao.revoke(row.tokenHash(), REASON_ROTATED) != 1) {
+            if (tokenDao.revoke(row.tokenHash(), RevokedReason.ROTATED) != 1) {
                 throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
@@ -207,9 +203,9 @@ public class McpOAuthService {
             }
 
             if (TYPE_REFRESH.equals(row.type())) {
-                tokenDao.revokeFamily(row.familyId(), REASON_CLIENT_REQUEST);
+                tokenDao.revokeFamily(row.familyId(), RevokedReason.CLIENT_REQUEST);
             } else {
-                tokenDao.revoke(row.tokenHash(), REASON_CLIENT_REQUEST);
+                tokenDao.revoke(row.tokenHash(), RevokedReason.CLIENT_REQUEST);
             }
 
             return null;
