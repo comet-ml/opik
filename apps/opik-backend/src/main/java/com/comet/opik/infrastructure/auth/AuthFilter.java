@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
-import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
@@ -47,9 +47,7 @@ public class AuthFilter implements ContainerRequestFilter {
                     .requiredPermissions(getRequiredPermissions(context))
                     .build();
             String authHeader = context.getHeaderString(HttpHeaders.AUTHORIZATION);
-            // Gated on the config flag so disabling MCP OAuth is a real kill switch: previously
-            // minted opik_at_ bearer tokens stop authenticating the moment the AS is turned off.
-            if (opikConfig.getMcpOAuth().isEnabled() && McpOAuthTokens.isMcpOAuthToken(authHeader)) {
+            if (opikConfig.getMcpOAuth().isEnabled() && McpOAuthTokenUtils.isMcpOAuthToken(authHeader)) {
                 String token = authHeader.substring(BEARER_PREFIX.length()).trim();
                 ValidatedToken validatedToken = mcpOAuthService.validateAccessTokenForWorkspace(
                         token, context.getHeaderString(RequestContext.WORKSPACE_HEADER));

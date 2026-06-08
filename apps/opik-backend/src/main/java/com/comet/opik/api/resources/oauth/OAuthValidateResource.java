@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.oauth;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
-import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.HeaderParam;
@@ -34,7 +34,7 @@ public class OAuthValidateResource {
             throw new NotAuthorizedException(TOKEN_TYPE_BEARER);
         }
         String token = authHeader.substring(BEARER_PREFIX.length()).trim();
-        if (!McpOAuthTokens.isAccessToken(token)) {
+        if (!McpOAuthTokenUtils.isAccessToken(token)) {
             throw new NotAuthorizedException(TOKEN_TYPE_BEARER);
         }
         ValidatedToken validated = mcpOAuthService.validateAccessToken(token)

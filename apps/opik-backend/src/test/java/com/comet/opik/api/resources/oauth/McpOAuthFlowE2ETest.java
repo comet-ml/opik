@@ -92,9 +92,7 @@ class McpOAuthFlowE2ETest {
                         .customConfigs(List.of(
                                 new CustomConfig("mcpOAuth.enabled", "true"),
                                 new CustomConfig("mcpOAuth.baseUrl", BASE_URL),
-                                new CustomConfig("mcpOAuth.refreshRotationGrace", "PT2S"),
-                                // resolve the @On placeholder; midnight so the job never fires mid-test
-                                new CustomConfig("jobs.mcpOAuthScrubCron", "0 0 0 * * ?")))
+                                new CustomConfig("mcpOAuth.refreshRotationGrace", "PT2S")))
                         .build());
     }
 
