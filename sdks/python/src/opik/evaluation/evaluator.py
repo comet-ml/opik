@@ -1516,16 +1516,6 @@ def evaluate_resume(
         dataset_=context.dataset,
     )
 
-    # ``experiment_scoring_functions`` is intentionally NOT forwarded to
-    # ``_evaluate_task`` here. If it were, ``_evaluate_task`` would compute
-    # the experiment-level aggregate from the **slice only** (the
-    # freshly-replayed items) and immediately ``log_experiment_scores``
-    # to the backend — advertising a slice-only mean as the
-    # whole-experiment aggregate. ``merge_resume_results`` then writes
-    # the correct merged aggregate, but anyone reading between the two
-    # writes (or a crash / 429 in between) would see the slice-only one.
-    # Skipping the inner computation entirely makes the merge-time write
-    # the only one.
     new_result = _evaluate_task(
         client=client,
         experiment=context.experiment,
@@ -1539,16 +1529,30 @@ def evaluate_resume(
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
         trial_count=context.default_runs_per_item,
-        experiment_scoring_functions=[],
+        experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
     )
 
-    return evaluation_result.merge_resume_results(
+    merged = evaluation_result.merge_resume_results(
         new_result=new_result,
-        context=context,
         previous_test_results=previous_test_results,
-        experiment_scoring_functions=experiment_scoring_functions,
     )
+
+    # ``_evaluate_task`` already logged ``experiment_scoring_functions``
+    # over the freshly-replayed slice. Recompute over the merged set and
+    # overwrite — the final write reflects the whole experiment, which
+    # is what the user (and downstream readers) actually want. We're OK
+    # with a brief slice-only window on the backend between the two
+    # writes; rate-limit / concurrent-read risk is negligible here.
+    merged_scores = evaluation_result.compute_experiment_scores(
+        experiment_scoring_functions=experiment_scoring_functions,
+        test_results=merged.test_results,
+    )
+    if merged_scores:
+        context.experiment.log_experiment_scores(score_results=merged_scores)
+    merged.experiment_scores = merged_scores
+
+    return merged
 
 
 def _resolve_resume_items(
