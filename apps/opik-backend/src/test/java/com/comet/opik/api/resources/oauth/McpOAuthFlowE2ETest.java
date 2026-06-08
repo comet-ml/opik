@@ -44,6 +44,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.ACCESS_PREFIX;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.REFRESH_PREFIX;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -262,8 +264,8 @@ class McpOAuthFlowE2ETest {
         Map<String, Object> tokens = mintTokens(clientId);
 
         String accessToken = (String) tokens.get("access_token");
-        assertThat(accessToken).startsWith("opik_at_");
-        assertThat((String) tokens.get("refresh_token")).startsWith("opik_rt_");
+        assertThat(accessToken).startsWith(ACCESS_PREFIX);
+        assertThat((String) tokens.get("refresh_token")).startsWith(REFRESH_PREFIX);
         assertThat(tokens.get("token_type")).isEqualTo("Bearer");
         assertThat(tokens.get("workspace_name")).isEqualTo(DEFAULT_WORKSPACE_NAME);
 
@@ -415,16 +417,16 @@ class McpOAuthFlowE2ETest {
 
         try (var response = client.target(baseURI + "/opik/auth-oauth")
                 .request()
-                .header(HttpHeaders.AUTHORIZATION, "Bearer opik_at_garbage")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + ACCESS_PREFIX + "garbage")
                 .post(Entity.json(""))) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
         }
     }
 
     @Test
-    @DisplayName("data API rejects an unknown opik_at_ bearer token when OAuth is enabled")
+    @DisplayName("data API rejects an unknown opik_mcp_at_ bearer token when OAuth is enabled")
     void dataApiRejectsUnknownBearer() {
-        try (var response = callDataApi("opik_at_definitely-not-a-real-token")) {
+        try (var response = callDataApi(ACCESS_PREFIX + "definitely-not-a-real-token")) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
         }
     }

@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.oauth;
 
+import com.comet.opik.domain.mcpoauth.McpOAuthScrubJob;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +42,9 @@ class McpOAuthBundleTest {
                 OAuthMetadataResource.class,
                 OAuthAuthorizeResource.class,
                 OAuthTokenResource.class,
-                OAuthRegisterResource.class);
+                OAuthRegisterResource.class,
+                OAuthValidateResource.class,
+                McpOAuthScrubJob.class);
     }
 
     @Test
@@ -57,6 +60,8 @@ class McpOAuthBundleTest {
                 OAuthMetadataResource.class,
                 OAuthAuthorizeResource.class,
                 OAuthTokenResource.class,
-                OAuthRegisterResource.class);
+                OAuthRegisterResource.class,
+                OAuthValidateResource.class,
+                McpOAuthScrubJob.class);
     }
 }
