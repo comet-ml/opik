@@ -281,6 +281,12 @@ onlineScoring:
   # Default: 4
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
+  # Default: 0 (gate disabled). Memory-aware admission gate budget in bytes. Kept at 0 so tests run
+  #   count-only by default; admission-control tests set their own budget via the config builder.
+  maxInFlightBytes: 0
+  # Default: 256000. Estimated bytes per thread for weighting trace_thread evals; only consulted when the
+  #   gate is enabled. Must be >= 1 (@Min(1)), so set it explicitly rather than relying on the POJO default.
+  avgThreadBytes: 256000
   # Per-workspace producer quota for online scoring (disabled by default).
   perWorkspaceQuota:
     enabled: false
