@@ -37,7 +37,7 @@ class McpOAuthBundleTest {
 
         bundle.run(environment);
 
-        verify(environment).disableExtensions(OAuthMetadataResource.class);
+        verify(environment).disableExtensions(OAuthMetadataResource.class, OAuthAuthorizeResource.class);
     }
 
     @Test
