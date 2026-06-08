@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.oauth;
 import com.comet.opik.domain.mcpoauth.ClientRegistrationRequest;
 import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
+import com.comet.opik.domain.mcpoauth.OAuthConstants;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
@@ -12,11 +13,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,15 +43,22 @@ class OAuthRegisterResourceTest {
     @Mock
     private HttpServletRequest httpRequest;
 
-    @InjectMocks
     private OAuthRegisterResource resource;
 
     @BeforeEach
     void setUp() {
-        lenient().when(opikConfig.getMcpOAuth()).thenReturn(new McpOAuthConfig());
+        McpOAuthConfig mcpOAuthConfig = new McpOAuthConfig();
+        mcpOAuthConfig.setRegistrationRateLimit(10);
+        mcpOAuthConfig.setRegistrationRateLimitDuration(Duration.ofMinutes(1));
+        when(opikConfig.getMcpOAuth()).thenReturn(mcpOAuthConfig);
+
+        resource = new OAuthRegisterResource(clientService, rateLimitService, opikConfig);
+
         lenient().when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.1");
         lenient().when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
                 .thenReturn(Mono.just(false));
+        lenient().when(rateLimitService.getRemainingTTL(anyString(), any()))
+                .thenReturn(Mono.just(60_000L));
     }
 
     @Test
@@ -71,14 +79,22 @@ class OAuthRegisterResourceTest {
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
         assertThat(response.getLocation().getPath()).isEqualTo("/admin/mcp-oauth-clients/" + clientId);
+
         ClientRegistrationResponse body = (ClientRegistrationResponse) response.getEntity();
-        assertThat(body.clientId()).isEqualTo(clientId);
-        assertThat(body.clientName()).isEqualTo("Test Client");
+        ClientRegistrationResponse expected = ClientRegistrationResponse.builder()
+                .clientId(clientId)
+                .clientName("Test Client")
+                .redirectUris(Set.of("http://example.com/cb"))
+                .tokenEndpointAuthMethod(OAuthConstants.AUTH_METHOD_NONE)
+                .grantTypes(OAuthConstants.DEFAULT_GRANT_TYPES)
+                .responseTypes(OAuthConstants.DEFAULT_RESPONSE_TYPES)
+                .build();
+        assertThat(body).usingRecursiveComparison().isEqualTo(expected);
     }
 
     @Test
-    @DisplayName("register: response body omits clientIdIssuedAt (not surfaced by the client model)")
-    void register_omitsIssuedAtWhenCreatedAtNull() {
+    @DisplayName("register: response body always omits clientIdIssuedAt (not surfaced by the client model)")
+    void register_clientIdIssuedAtAlwaysOmitted() {
         McpOAuthClient minted = McpOAuthClient.builder()
                 .clientId("client-456")
                 .name("No-Timestamp Client")
@@ -107,13 +123,17 @@ class OAuthRegisterResourceTest {
                 .build(), httpRequest);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+        assertThat(response.getHeaderString("Retry-After")).isEqualTo("60");
+        OAuthError error = (OAuthError) response.getEntity();
+        assertThat(error.error()).isEqualTo("too_many_requests");
+        assertThat(error.errorDescription()).isEqualTo("registration rate limit exceeded");
         verify(clientService, never()).register(any());
     }
 
     @Test
-    @DisplayName("register: rate limit bucket keys on first X-Forwarded-For hop when present")
-    void register_usesForwardedForAsRateLimitKey() {
-        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn("203.0.113.7, 10.0.0.1");
+    @DisplayName("register: rate limit bucket keys on last (nginx-appended) X-Forwarded-For hop, not the spoofable first")
+    void register_usesLastForwardedForHopAsRateLimitKey() {
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn("1.2.3.4, 203.0.113.7");
         when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
                 .thenReturn(Mono.just(true));
 

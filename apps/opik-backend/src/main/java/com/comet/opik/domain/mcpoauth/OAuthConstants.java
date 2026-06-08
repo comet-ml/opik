@@ -40,5 +40,6 @@ public class OAuthConstants {
     public static final String ERROR_UNSUPPORTED_GRANT_TYPE = "unsupported_grant_type";
     public static final String ERROR_UNSUPPORTED_RESPONSE_TYPE = "unsupported_response_type";
 
-    public static final String RATE_LIMIT_BUCKET = "mcp_oauth_register:%s";
+    public static final String RATE_LIMIT_BUCKET_PREFIX = "mcp_oauth_register";
+    public static final String RATE_LIMIT_BUCKET = RATE_LIMIT_BUCKET_PREFIX + ":%s";
 }

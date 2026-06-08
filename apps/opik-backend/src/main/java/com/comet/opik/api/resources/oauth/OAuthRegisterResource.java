@@ -16,14 +16,17 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
+import java.time.Duration;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.RATE_LIMIT_BUCKET;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.RATE_LIMIT_BUCKET_PREFIX;
 
 @Path("/oauth/register")
 @Timed
@@ -40,7 +43,7 @@ public class OAuthRegisterResource {
         this.clientService = clientService;
         this.rateLimitService = rateLimitService;
         McpOAuthConfig config = opikConfig.getMcpOAuth();
-        this.limitConfig = new LimitConfig("McpOAuthRegister", "mcp_oauth_register",
+        this.limitConfig = new LimitConfig("McpOAuthRegister", RATE_LIMIT_BUCKET_PREFIX,
                 config.getRegistrationRateLimit(), config.getRegistrationRateLimitDuration().toSeconds(), null);
     }
 
@@ -55,12 +58,19 @@ public class OAuthRegisterResource {
     public Response register(@NonNull @Valid ClientRegistrationRequest request,
             @Context HttpServletRequest httpRequest) {
 
+        // Throttle directly via RateLimitService rather than @RateLimited: this protection is
+        // intentionally independent of the global rateLimit.enabled flag, since DCR is unauthenticated
+        // and the per-IP cap is its only abuse control.
+        String bucket = RATE_LIMIT_BUCKET.formatted(clientIp(httpRequest));
         boolean exceeded = Boolean.TRUE.equals(rateLimitService
-                .isLimitExceeded(1, RATE_LIMIT_BUCKET.formatted(clientIp(httpRequest)), limitConfig)
+                .isLimitExceeded(1, bucket, limitConfig)
                 .block());
         if (exceeded) {
+            long retryAfterSeconds = Math.max(
+                    Duration.ofMillis(rateLimitService.getRemainingTTL(bucket, limitConfig).block()).toSeconds(), 1);
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
                     .type(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.RETRY_AFTER, retryAfterSeconds)
                     .entity(OAuthError.builder()
                             .error("too_many_requests")
                             .errorDescription("registration rate limit exceeded")
@@ -76,12 +86,16 @@ public class OAuthRegisterResource {
     }
 
     /**
-     * First X-Forwarded-For hop set by the fronting nginx; direct remote address otherwise.
+     * Real client IP for per-IP throttling. The fronting nginx appends to X-Forwarded-For
+     * ($proxy_add_x_forwarded_for), so the right-most hop is the address nginx actually observed and
+     * is not client-spoofable; the left-most hops are attacker-controlled and must not key the bucket.
+     * Falls back to the direct remote address when the header is absent.
      */
     private static String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (StringUtils.isNotBlank(forwarded)) {
-            return forwarded.split(",")[0].trim();
+            String[] hops = forwarded.split(",");
+            return hops[hops.length - 1].trim();
         }
         return request.getRemoteAddr();
     }
