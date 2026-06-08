@@ -88,6 +88,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private WorkspaceNameService workspaceNameService;
     @Mock
     private OpikConfiguration opikConfiguration;
+    @Mock
+    private OnlineScoringMetrics onlineScoringMetrics;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringLlmAsJudgeScorer scorer;
@@ -137,7 +139,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 traceCompressor,
                 workspaceNameService,
                 opikConfiguration,
-                new OnlineScoringMetrics());
+                onlineScoringMetrics);
     }
 
     @AfterEach

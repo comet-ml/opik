@@ -92,6 +92,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private com.comet.opik.api.resources.v1.events.tools.ToolRegistry toolRegistry;
     @Mock
     private com.comet.opik.domain.SpanService spanService;
+    @Mock
+    private OnlineScoringMetrics onlineScoringMetrics;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -145,7 +147,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 automationRuleEvaluatorService,
                 toolRegistry,
                 spanService,
-                new OnlineScoringMetrics());
+                onlineScoringMetrics);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
