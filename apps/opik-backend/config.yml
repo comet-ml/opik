@@ -556,6 +556,18 @@ onlineScoring:
   #   trace_thread_llm_as_judge messages (their Redis payload carries only thread IDs, so the heavy context
   #   is fetched while scoring and can't be measured at admission).
   avgThreadBytes: ${REDIS_SCORING_AVG_THREAD_BYTES:-256000}
+  # Per-workspace producer quota: caps how many scoring evals a single workspace may enqueue per window
+  #   (fleet-wide, via the distributed rate limiter), so one workspace's rules can't flood the shared
+  #   scoring streams and starve other tenants. Applied after the per-rule sampling rate; over-quota evals
+  #   are dropped at the producer (never deferred). Drops are visible via the online_scoring_quota_dropped
+  #   metric (tagged evaluator_type + workspace_id + rule_id).
+  perWorkspaceQuota:
+    # Default: false. Master switch — when false the quota is not applied (current behavior).
+    enabled: ${ONLINE_SCORING_PER_WORKSPACE_QUOTA_ENABLED:-false}
+    # Default: 0. Max scoring evals a workspace may enqueue per durationInSeconds window (only used when enabled).
+    limit: ${ONLINE_SCORING_PER_WORKSPACE_QUOTA_LIMIT:-0}
+    # Default: 60. Length of the quota window in seconds.
+    durationInSeconds: ${ONLINE_SCORING_PER_WORKSPACE_QUOTA_DURATION_SECONDS:-60}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

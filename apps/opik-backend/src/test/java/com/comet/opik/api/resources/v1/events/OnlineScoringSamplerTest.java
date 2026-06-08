@@ -53,6 +53,7 @@ import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtil
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
@@ -80,6 +81,9 @@ class OnlineScoringSamplerTest {
     @Mock
     private ProjectService projectService;
 
+    @Mock
+    private OnlineScoringQuotaService quotaService;
+
     private OnlineScoringSampler onlineScoringSampler;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
 
@@ -93,13 +97,18 @@ class OnlineScoringSamplerTest {
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
                 .thenReturn(mock(Logger.class));
 
+        // Quota disabled in these tests: admit() passes every message through unchanged.
+        lenient().when(quotaService.admit(any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(3));
+
         onlineScoringSampler = new OnlineScoringSampler(
                 serviceTogglesConfig,
                 ruleEvaluatorService,
                 new TraceFilterEvaluationService(),
                 onlineScorePublisher,
                 traceService,
-                projectService);
+                projectService,
+                quotaService);
 
         projectId = UUID.randomUUID();
         workspaceId = UUID.randomUUID().toString();
@@ -603,6 +612,40 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verifyNoInteractions(projectService);
+        }
+    }
+
+    @Nested
+    class QuotaTests {
+
+        @Test
+        void doesNotEnqueueWhenQuotaDropsAll() {
+            var trace = createTrace(Source.SDK);
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+            when(quotaService.admit(any(), any(), any(), any())).thenReturn(List.of());
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verifyNoInteractions(onlineScorePublisher);
+        }
+
+        @Test
+        void enqueuesOnlyTheQuotaAdmittedSubset() {
+            var traceA = createTrace(Source.SDK);
+            var traceB = createTrace(Source.SDK);
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+            // Quota admits only the first message of the batch; the rest is dropped at the producer.
+            when(quotaService.admit(any(), any(), any(), any()))
+                    .thenAnswer(invocation -> ((List<?>) invocation.getArgument(3)).subList(0, 1));
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(traceA, traceB), workspaceId, userName));
+
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            assertThat(captor.getValue()).hasSize(1);
         }
     }
 

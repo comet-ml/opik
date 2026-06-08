@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.resources.v1.events.OnlineScoringQuotaService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.Inject;
@@ -22,7 +23,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceThreadOnlineScorerPublisher {
 
+    private static final String THREAD_EVALUATOR_TYPE = "trace_thread";
+
     private final @NonNull OnlineScorePublisher onlineScorePublisher;
+    private final @NonNull OnlineScoringQuotaService quotaService;
 
     public Mono<Void> publish(@NonNull UUID projectId, @NonNull List<TraceThreadModel> closeThreads) {
         return Mono.deferContextual(ctx -> {
@@ -50,12 +54,18 @@ class TraceThreadOnlineScorerPublisher {
                         UUID ruleId = ruleIdToThreadIds.getKey();
                         Set<String> threadIds = ruleIdToThreadIds.getValue();
 
+                        var admittedThreadIds = quotaService.admit(workspaceId, ruleId, THREAD_EVALUATOR_TYPE,
+                                List.copyOf(threadIds));
+                        if (admittedThreadIds.isEmpty()) {
+                            return ruleId;
+                        }
+
                         log.info(
                                 "Enqueuing threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                threadIds, ruleId, projectId, workspaceId);
+                                admittedThreadIds, ruleId, projectId, workspaceId);
 
                         onlineScorePublisher.enqueueThreadMessage(
-                                List.copyOf(threadIds),
+                                admittedThreadIds,
                                 ruleId,
                                 projectId,
                                 workspaceId,
@@ -63,7 +73,7 @@ class TraceThreadOnlineScorerPublisher {
 
                         log.info(
                                 "Enqueued threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                threadIds, ruleId, projectId, workspaceId);
+                                admittedThreadIds, ruleId, projectId, workspaceId);
 
                         return ruleId;
                     }).subscribeOn(Schedulers.boundedElastic()))

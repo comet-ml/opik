@@ -75,6 +75,9 @@ class OnlineScoringSpanSamplerTest {
     @Mock
     private ServiceTogglesConfig serviceTogglesConfig;
 
+    @Mock
+    private OnlineScoringQuotaService quotaService;
+
     private OnlineScoringSpanSampler sampler;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
 
@@ -89,11 +92,16 @@ class OnlineScoringSpanSamplerTest {
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
                 .thenReturn(mock(org.slf4j.Logger.class));
 
+        // Quota disabled in these tests: admit() passes every message through unchanged.
+        lenient().when(quotaService.admit(any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(3));
+
         sampler = new OnlineScoringSpanSampler(
                 serviceTogglesConfig,
                 ruleEvaluatorService,
                 filterEvaluationService,
-                onlineScorePublisher);
+                onlineScorePublisher,
+                quotaService);
 
         projectId = UUID.randomUUID();
         workspaceId = "workspace-123";
@@ -198,6 +206,51 @@ class OnlineScoringSpanSamplerTest {
             assertThat(messages).hasSize(1);
             assertThat(messages.getFirst().span()).isEqualTo(span);
             assertThat(messages.getFirst().ruleId()).isEqualTo(evaluator.getId());
+        }
+    }
+
+    @Nested
+    @DisplayName("Per-workspace quota integration")
+    class QuotaTests {
+
+        @Test
+        void doesNotEnqueueWhenQuotaDropsAll() {
+            when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(true);
+            when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
+            Span span = createTestSpan(projectId, Source.SDK);
+            AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE))
+                    .thenReturn(List.of(evaluator));
+            lenient().when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
+            when(quotaService.admit(any(), any(), any(), any())).thenReturn(List.of());
+
+            sampler.onSpansCreated(new SpansCreated(List.of(span), workspaceId, userName));
+
+            verify(onlineScorePublisher, never())
+                    .enqueueMessage(any(), eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+        }
+
+        @Test
+        void enqueuesOnlyTheQuotaAdmittedSubset() {
+            when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(true);
+            when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
+            Span spanA = createTestSpan(projectId, Source.SDK);
+            Span spanB = createTestSpan(projectId, Source.SDK);
+            AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE))
+                    .thenReturn(List.of(evaluator));
+            lenient().when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
+            when(quotaService.admit(any(), any(), any(), any()))
+                    .thenAnswer(invocation -> ((List<?>) invocation.getArgument(3)).subList(0, 1));
+
+            sampler.onSpansCreated(new SpansCreated(List.of(spanA, spanB), workspaceId, userName));
+
+            ArgumentCaptor<List<SpanToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+            assertThat(captor.getValue()).hasSize(1);
         }
     }
 

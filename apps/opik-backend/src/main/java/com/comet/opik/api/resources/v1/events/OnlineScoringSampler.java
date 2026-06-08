@@ -64,6 +64,7 @@ public class OnlineScoringSampler {
     private final Logger userFacingLogger;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineScorePublisher onlineScorePublisher;
+    private final OnlineScoringQuotaService quotaService;
 
     @Inject
     public OnlineScoringSampler(@NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
@@ -71,13 +72,15 @@ public class OnlineScoringSampler {
             @NonNull TraceFilterEvaluationService filterEvaluationService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull TraceService traceService,
-            @NonNull ProjectService projectService) throws NoSuchAlgorithmException {
+            @NonNull ProjectService projectService,
+            @NonNull OnlineScoringQuotaService quotaService) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceService = traceService;
         this.projectService = projectService;
+        this.quotaService = quotaService;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
     }
@@ -203,8 +206,10 @@ public class OnlineScoringSampler {
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
-                        if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                        var admitted = quotaService.admit(workspaceId, evaluator.getId(),
+                                evaluator.getType().getType(), messages);
+                        if (!admitted.isEmpty()) {
+                            onlineScorePublisher.enqueueMessage(admitted, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                         }
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
@@ -214,8 +219,10 @@ public class OnlineScoringSampler {
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
                             logSampledTrace(evaluator, messages, scorableTraces.size());
-                            if (!messages.isEmpty()) {
-                                onlineScorePublisher.enqueueMessage(messages,
+                            var admitted = quotaService.admit(workspaceId, evaluator.getId(),
+                                    evaluator.getType().getType(), messages);
+                            if (!admitted.isEmpty()) {
+                                onlineScorePublisher.enqueueMessage(admitted,
                                         AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
                             }
                         } else {

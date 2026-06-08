@@ -108,6 +108,45 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) private long avgThreadBytes = 256_000;
 
+    /**
+     * Per-workspace producer quota for online scoring. Caps how many scoring evals a single
+     * workspace may enqueue per time window (fleet-wide, via the distributed rate limiter), so one
+     * workspace's automation rules can't flood the shared Redis streams and starve other tenants.
+     * Over-quota evals are shed at the producer (down-sampled / dropped — never deferred), after the
+     * per-rule sampling rate has already been applied. Disabled by default.
+     *
+     * <p>Field initializer (not {@code @Builder.Default}) so the default instance applies during
+     * Dropwizard's YAML deserialization (no-args constructor), not only via the builder.
+     */
+    @Valid @JsonProperty
+    @NotNull private PerWorkspaceQuota perWorkspaceQuota = new PerWorkspaceQuota();
+
+    @Data
+    @Builder(toBuilder = true)
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PerWorkspaceQuota {
+
+        @JsonProperty
+        @Builder.Default
+        private boolean enabled = false;
+
+        /**
+         * Max scoring evals a workspace may enqueue per {@link #durationInSeconds} window. Only
+         * consulted when {@link #enabled}. {@code 0} (the default) leaves the quota a no-op even
+         * when enabled — sizing the limit is required to actually cap; the quota fails open rather
+         * than dropping everything on a half-configured rule. Size it from the volumes the
+         * online-scoring metrics report.
+         */
+        @JsonProperty
+        @Builder.Default
+        @Min(0) private long limit = 0;
+
+        @JsonProperty
+        @Builder.Default
+        @Min(1) private long durationInSeconds = 60;
+    }
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor

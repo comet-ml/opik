@@ -281,6 +281,11 @@ onlineScoring:
   # Default: 4
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
+  # Per-workspace producer quota for online scoring (disabled by default).
+  perWorkspaceQuota:
+    enabled: false
+    limit: 0
+    durationInSeconds: 60
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
