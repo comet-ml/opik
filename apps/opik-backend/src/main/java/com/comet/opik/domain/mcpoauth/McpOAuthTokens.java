@@ -15,8 +15,8 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
 @UtilityClass
 public class McpOAuthTokens {
 
-    public static final String ACCESS_PREFIX = "opik_at_";
-    public static final String REFRESH_PREFIX = "opik_rt_";
+    public static final String ACCESS_PREFIX = "opik_mcp_at_";
+    public static final String REFRESH_PREFIX = "opik_mcp_rt_";
     public static final int RANDOM_BYTES = 32;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
