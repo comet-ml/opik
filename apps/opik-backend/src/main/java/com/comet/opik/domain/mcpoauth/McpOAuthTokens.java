@@ -19,8 +19,8 @@ public class McpOAuthTokens {
     public static final String REFRESH_PREFIX = "opik_mcp_rt_";
     public static final int RANDOM_BYTES = 32;
 
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
+    private static final SecureRandom SECURE_RANDOM = getSecureRandom();
 
     public static String generateAccessToken() {
         return ACCESS_PREFIX + randomSuffix();
@@ -70,4 +70,13 @@ public class McpOAuthTokens {
         SECURE_RANDOM.nextBytes(bytes);
         return ENCODER.encodeToString(bytes);
     }
+
+    private static SecureRandom getSecureRandom() {
+        try {
+            return SecureRandom.getInstanceStrong();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("Strong SecureRandom not available", e);
+        }
+    }
+
 }
