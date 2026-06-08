@@ -6,7 +6,7 @@ import lombok.Builder;
 
 import java.util.List;
 
-@Builder
+@Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AuthorizationServerMetadata(
         String issuer,
