@@ -176,7 +176,9 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       if (config && isObject(config)) {
         const configObj = config as ConfigurationType;
         const hasRichContent =
-          "prompt_messages" in configObj || "model" in configObj;
+          "prompt_messages" in configObj ||
+          "model" in configObj ||
+          "prompt" in configObj;
         if (hasRichContent || !studioConfig) {
           return configObj;
         }
