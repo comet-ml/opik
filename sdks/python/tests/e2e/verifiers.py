@@ -360,6 +360,55 @@ def verify_experiment(
         )
 
 
+def verify_experiment_items_completed(
+    opik_client: opik.Opik,
+    experiment_id: str,
+    *,
+    expected_completed_dataset_item_ids: Set[str],
+    timeout: float = 15,
+) -> None:
+    """
+    Assert that the set of dataset item ids with at least one fully-
+    completed experiment item matches ``expected_completed_dataset_item_ids``
+    exactly.
+
+    Goes through the same predicate ``opik.evaluate_resume`` uses
+    (``trace.output`` is set only when the engine's happy-path-only line
+    runs), so this check correctly excludes both task-side failures
+    (task raised before producing output) and scoring-side failures
+    (output stripped by the engine when scoring did not finish).
+    """
+    from opik.evaluation.resume import context as resume_context
+
+    # The experiment record is eventually consistent: looking it up right
+    # after ``evaluate()`` returns can hit a 404, or a transient API/network
+    # error. Fetch the handle inside the poll (matching ``verify_experiment``
+    # / ``verify_test_suite_result``), so a fresh handle is also taken on
+    # each iteration rather than a stale one being cached across the poll.
+    def _completed_ids_or_none() -> Optional[Set[str]]:
+        experiment = opik_client.get_experiment_by_id(experiment_id)
+        return {
+            item.dataset_item_id
+            for item in experiment.get_items()
+            if resume_context.is_trial_fully_completed(item)
+        }
+
+    last_observed: Set[str] = set()
+
+    def _converged() -> bool:
+        nonlocal last_observed
+        last_observed = _completed_ids_or_none() or set()
+        return last_observed == expected_completed_dataset_item_ids
+
+    assert synchronization.until(
+        _converged, max_try_seconds=timeout, allow_errors=True
+    ), (
+        f"Expected completed dataset item ids "
+        f"{sorted(expected_completed_dataset_item_ids)}; got "
+        f"{sorted(last_observed)} after {timeout}s"
+    )
+
+
 def verify_attachments(
     opik_client: opik.Opik,
     entity_type: Literal["trace", "span"],
@@ -508,8 +557,16 @@ def _verify_experiment_metadata(
     experiment_metadata = experiment_content.metadata
     if experiment_content.metadata is not None:
         experiment_metadata = {**experiment_content.metadata}
+        # SDK-managed keys that ``evaluate()`` writes into the
+        # experiment config; tests assert on user-supplied keys only.
         experiment_metadata.pop("prompt", None)
         experiment_metadata.pop("prompts", None)
+        experiment_metadata.pop("_opik_resume", None)
+        # Tests that supplied no ``experiment_config`` expect
+        # ``metadata=None``; after stripping SDK keys we may be left
+        # with an empty dict for the same case.
+        if not experiment_metadata:
+            experiment_metadata = None
 
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
 

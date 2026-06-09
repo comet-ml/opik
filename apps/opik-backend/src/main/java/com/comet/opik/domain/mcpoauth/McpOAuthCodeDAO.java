@@ -23,8 +23,6 @@ interface McpOAuthCodeDAO {
     @SqlQuery("SELECT * FROM mcp_oauth_codes WHERE code_hash = :codeHash")
     McpOAuthCode findByHash(@Bind("codeHash") String codeHash);
 
-    // Atomic single-use consume: succeeds (returns 1) only if the code is unused and unexpired. Guards
-    // against double-spend on concurrent /oauth/token calls.
     @SqlUpdate("""
             UPDATE mcp_oauth_codes SET used_at = NOW(6)
             WHERE code_hash = :codeHash AND used_at IS NULL AND expires_at > NOW(6)

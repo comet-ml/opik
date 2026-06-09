@@ -1187,6 +1187,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO_FREE,
+      label: "nex-agi/nex-n2-pro:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
       label: "nousresearch/deephermes-3-mistral-24b-preview",
     },
