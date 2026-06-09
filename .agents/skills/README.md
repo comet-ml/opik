@@ -11,7 +11,9 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 | opik-backend | `opik-backend/` | Java backend patterns for Opik. Use when working in `apps/opik-backend`, designing APIs, database operations, or services. |
 | opik-frontend | `opik-frontend/` | React frontend patterns for Opik. Use when working in `apps/opik-frontend`, on components, state, or data fetching. |
 | playwright-e2e | `playwright-e2e/` | Playwright E2E test generation workflow. Use when generating, fixing, or planning automated tests in `tests_end_to_end/`. |
+| playwright-pom-discovery | `playwright-pom-discovery/` | Choose stable selectors against the live UI when building a Page Object Model for the E2E suite (`tests_end_to_end/e2e/pom/`). Used as the discovery sub-step by `writing-e2e-tests`. |
 | python-sdk | `python-sdk/` | Python SDK patterns for Opik. Use when working in `sdks/python`, on SDK APIs, integrations, or message processing. |
 | typescript-sdk | `typescript-sdk/` | TypeScript SDK patterns for Opik. Use when working in `sdks/typescript`. |
+| writing-e2e-tests | `writing-e2e-tests/` | Add an end-to-end test for an Opik feature in `tests_end_to_end/e2e/`. Use when a developer wants to write a test for a feature, page, or branch — runs the full loop: analyze, explore the live UI, write the POM + spec, and run it locally until green. |
 
 Each skill directory contains a `SKILL.md` entry point plus supporting documents (testing, code quality, patterns, etc.).
