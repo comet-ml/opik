@@ -44,21 +44,12 @@ public class McpOAuthService {
 
     public String createAuthorizationCode(@NonNull CreateOAuthCodeCommand cmd) {
         String rawCode = McpOAuthTokens.generateCode();
-        Instant now = Instant.now();
 
-        var code = McpOAuthCode.builder()
-                .id(UUID.randomUUID().toString())
-                .codeHash(McpOAuthTokens.hash(rawCode))
-                .clientId(cmd.clientId())
-                .userName(cmd.userName())
-                .workspaceName(cmd.workspaceName())
-                .workspaceId(cmd.workspaceId())
-                .codeChallenge(cmd.codeChallenge())
-                .codeChallengeMethod(CODE_CHALLENGE_METHOD_S256)
-                .redirectUri(cmd.redirectUri())
-                .resource(cmd.resource())
-                .expiresAt(now.plus(config().getCodeTtl()))
-                .build();
+        var code = McpOAuthMapper.INSTANCE.toCode(cmd,
+                UUID.randomUUID().toString(),
+                McpOAuthTokens.hash(rawCode),
+                CODE_CHALLENGE_METHOD_S256,
+                Instant.now().plus(config().getCodeTtl()));
 
         template.inTransaction(WRITE, handle -> {
             handle.attach(McpOAuthCodeDAO.class).save(code);
@@ -95,30 +86,12 @@ public class McpOAuthService {
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(accessToken))
-                    .type(TYPE_ACCESS)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(familyId)
-                    .expiresAt(now.plus(config().getAccessTokenTtl()))
-                    .build());
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(refreshToken))
-                    .type(TYPE_REFRESH)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(familyId)
-                    .expiresAt(now.plus(config().getRefreshTokenTtl()))
-                    .build());
+            tokenDao.save(McpOAuthMapper.INSTANCE.toToken(row, TYPE_ACCESS,
+                    UUID.randomUUID().toString(), McpOAuthTokens.hash(accessToken),
+                    familyId, now.plus(config().getAccessTokenTtl())));
+            tokenDao.save(McpOAuthMapper.INSTANCE.toToken(row, TYPE_REFRESH,
+                    UUID.randomUUID().toString(), McpOAuthTokens.hash(refreshToken),
+                    familyId, now.plus(config().getRefreshTokenTtl())));
 
             return buildTokenResponse(accessToken, refreshToken, row.workspaceId(), row.workspaceName());
         });
@@ -153,32 +126,12 @@ public class McpOAuthService {
                 throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(accessToken))
-                    .type(TYPE_ACCESS)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(row.familyId())
-                    .rotatedFromId(row.id())
-                    .expiresAt(now.plus(config().getAccessTokenTtl()))
-                    .build());
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokens.hash(newRefreshToken))
-                    .type(TYPE_REFRESH)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(row.familyId())
-                    .rotatedFromId(row.id())
-                    .expiresAt(row.expiresAt())
-                    .build());
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(row, TYPE_ACCESS,
+                    UUID.randomUUID().toString(), McpOAuthTokens.hash(accessToken),
+                    now.plus(config().getAccessTokenTtl())));
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(row, TYPE_REFRESH,
+                    UUID.randomUUID().toString(), McpOAuthTokens.hash(newRefreshToken),
+                    row.expiresAt()));
 
             return buildTokenResponse(accessToken, newRefreshToken, row.workspaceId(), row.workspaceName());
         });
