@@ -4,7 +4,6 @@ import get from "lodash/get";
 import isObject from "lodash/isObject";
 import { GitCompareArrows } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";

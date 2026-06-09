@@ -140,7 +140,9 @@ const MetricEntry: React.FC<{
           onClick={() => setIsOpen((prev) => !prev)}
           className="flex items-center gap-1"
         >
-          <span className="comet-body-s-accented">{formatPrimitive(value)}</span>
+          <span className="comet-body-s-accented">
+            {formatPrimitive(value)}
+          </span>
           <ChevronRight
             className={cn(
               "size-3.5 shrink-0 text-muted-slate transition-transform duration-200",
@@ -388,36 +390,42 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
           {entries
             .filter(({ key }) => !metricParamKeys.includes(key))
             .map(({ key, value, type }) => {
-            if (key === "Metric" && metricParamKeys.length > 0) {
-              const params = entries.filter((e) =>
-                metricParamKeys.includes(e.key),
-              );
+              if (key === "Metric" && metricParamKeys.length > 0) {
+                const params = entries.filter((e) =>
+                  metricParamKeys.includes(e.key),
+                );
+                return (
+                  <MetricEntry
+                    key={key}
+                    label={key}
+                    value={value}
+                    params={params}
+                  />
+                );
+              }
+              if (
+                type === "number" ||
+                type === "string" ||
+                type === "boolean"
+              ) {
+                return (
+                  <div key={key} className="flex items-baseline gap-1.5">
+                    <span className="comet-body-s text-muted-slate">
+                      {key}:
+                    </span>
+                    <span className="comet-body-s-accented">
+                      {formatPrimitive(value)}
+                    </span>
+                  </div>
+                );
+              }
+
               return (
-                <MetricEntry
-                  key={key}
-                  label={key}
-                  value={value}
-                  params={params}
-                />
-              );
-            }
-            if (type === "number" || type === "string" || type === "boolean") {
-              return (
-                <div key={key} className="flex items-baseline gap-1.5">
-                  <span className="comet-body-s text-muted-slate">{key}:</span>
-                  <span className="comet-body-s-accented">
-                    {formatPrimitive(value)}
-                  </span>
+                <div key={key}>
+                  <ConfigEntry label={key} value={value} />
                 </div>
               );
-            }
-
-            return (
-              <div key={key}>
-                <ConfigEntry label={key} value={value} />
-              </div>
-            );
-          })}
+            })}
         </div>
       )}
     </div>
