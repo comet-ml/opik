@@ -1,14 +1,14 @@
 package com.comet.opik.domain.mcpoauth;
 
+import com.comet.opik.utils.ValidationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,7 +37,7 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
 
     @Override
     public boolean supports(@NonNull String clientId) {
-        return isOpaque(clientId);
+        return !ValidationUtils.isAbsoluteUri(clientId);
     }
 
     @Override
@@ -55,19 +55,8 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
             var dao = handle.attach(McpOAuthClientDAO.class);
             dao.save(client);
             return dao.findActiveById(clientId)
-                    .orElseThrow(() -> new IllegalStateException("client not found after registration: " + clientId));
+                    .orElseThrow(() -> new NotFoundException("client not found after registration: " + clientId));
         });
     }
 
-    /**
-     * Opaque = no URI scheme (UUIDs, DCR-minted ids, ...). Anything with a scheme is a URL-form id that a
-     * CIMD strategy should own.
-     */
-    private static boolean isOpaque(String clientId) {
-        try {
-            return !new URI(clientId).isAbsolute();
-        } catch (URISyntaxException e) {
-            return true;
-        }
-    }
 }

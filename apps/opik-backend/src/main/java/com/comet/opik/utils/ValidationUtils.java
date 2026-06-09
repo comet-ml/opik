@@ -3,6 +3,8 @@ package com.comet.opik.utils;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -73,6 +75,22 @@ public class ValidationUtils {
 
         if (!url.trim().startsWith("http://") && !url.trim().startsWith("https://")) {
             throw new IllegalArgumentException(urlType + " must start with http:// or https://");
+        }
+    }
+
+    /**
+     * Checks whether a string is a syntactically valid, absolute URI.
+     * @return {@code true} if non-null and parses to an absolute URI, {@code false} otherwise
+     */
+    public static boolean isAbsoluteUri(String value) {
+        if (value == null) {
+            return false;
+        }
+
+        try {
+            return new URI(value).isAbsolute();
+        } catch (URISyntaxException e) {
+            return false;
         }
     }
 

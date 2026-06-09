@@ -17,11 +17,11 @@ import java.util.Optional;
 interface McpOAuthClientDAO {
 
     @SqlUpdate("""
-            INSERT INTO mcp_oauth_clients (client_id, name, redirect_uris, logo_uri, owner_user_name)
-            VALUES (:bean.clientId, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.ownerUserName)
+            INSERT INTO mcp_oauth_clients (id, name, redirect_uris, logo_uri, owner_user_name)
+            VALUES (:bean.id, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.ownerUserName)
             """)
     void save(@BindMethods("bean") McpOAuthClient client);
 
-    @SqlQuery("SELECT * FROM mcp_oauth_clients WHERE client_id = :clientId")
+    @SqlQuery("SELECT * FROM mcp_oauth_clients WHERE id = :clientId")
     Optional<McpOAuthClient> findActiveById(@Bind("clientId") String clientId);
 }

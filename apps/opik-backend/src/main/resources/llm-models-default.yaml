@@ -581,6 +581,7 @@ openrouter:
     label: "inception/mercury"
   - id: "inception/mercury-2"
     label: "inception/mercury-2"
+    structuredOutput: true
   - id: "inception/mercury-coder"
     label: "inception/mercury-coder"
   - id: "inclusionai/ling-2.6-1t"
@@ -842,6 +843,8 @@ openrouter:
     label: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
     label: "nex-agi/deepseek-v3.1-nex-n1"
+  - id: "nex-agi/nex-n2-pro:free"
+    label: "nex-agi/nex-n2-pro:free"
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
     label: "nousresearch/deephermes-3-mistral-24b-preview"
   - id: "nousresearch/hermes-2-pro-llama-3-8b"

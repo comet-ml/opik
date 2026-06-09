@@ -8,9 +8,72 @@ from . import score_statistics, test_result
 from .metrics import score_result
 
 if TYPE_CHECKING:
-    pass
+    from .types import ExperimentScoreFunction
 
 LOGGER = logging.getLogger(__name__)
+
+
+def compute_experiment_scores(
+    experiment_scoring_functions: List["ExperimentScoreFunction"],
+    test_results: List[test_result.TestResult],
+) -> List[score_result.ScoreResult]:
+    """Run experiment-level scoring functions over a list of test results."""
+    if not experiment_scoring_functions or not test_results:
+        return []
+
+    all_scores: List[score_result.ScoreResult] = []
+    for score_function in experiment_scoring_functions:
+        try:
+            scores = score_function(test_results)
+            # Handle Union[ScoreResult, List[ScoreResult]]
+            if isinstance(scores, list):
+                all_scores.extend(scores)
+            else:
+                all_scores.append(scores)
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to compute experiment score: %s",
+                e,
+                exc_info=True,
+            )
+
+    return all_scores
+
+
+def merge_resume_results(
+    *,
+    new_result: "EvaluationResult",
+    previous_test_results: List[test_result.TestResult],
+) -> "EvaluationResult":
+    """
+    Fold previously-completed runs into ``new_result`` so the returned
+    ``EvaluationResult`` reflects the whole experiment.
+
+    Pure: this function only merges the ``test_results`` lists and copies
+    forward the identity fields (``experiment_id``, ``experiment_url``,
+    etc.). It does not touch the backend and does not (re)compute
+    experiment-level scores — ``experiment_scores`` on the returned
+    object is left empty for the caller to fill in. Recomputing the
+    whole-experiment aggregate over the merged set + logging it is the
+    caller's responsibility because only the caller knows the user's
+    ``experiment_scoring_functions``.
+
+    ``previous_test_results`` must be snapshotted by the caller **before**
+    the resume call runs new trials — otherwise the resume's own freshly
+    written experiment items would be reconstructed back into the merge
+    and double-counted.
+    """
+    merged_test_results = previous_test_results + list(new_result.test_results)
+
+    return EvaluationResult(
+        dataset_id=new_result.dataset_id,
+        experiment_id=new_result.experiment_id,
+        experiment_name=new_result.experiment_name,
+        test_results=merged_test_results,
+        experiment_url=new_result.experiment_url,
+        trial_count=new_result.trial_count,
+        experiment_scores=[],
+    )
 
 
 @dataclasses.dataclass
