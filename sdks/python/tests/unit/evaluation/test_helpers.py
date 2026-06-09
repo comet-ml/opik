@@ -62,74 +62,24 @@ class TestResolveProjectName:
         assert "caller-project" in message
 
 
-class TestCalculateTotalItems:
-    def test_dataset_item_ids_provided__returns_len_of_ids(self):
-        dataset_ = SimpleNamespace(dataset_items_count=100)
-
-        assert (
-            helpers._calculate_total_items(
-                dataset_=dataset_,
-                nb_samples=None,
-                dataset_item_ids=["a", "b", "c"],
-            )
-            == 3
-        )
-
-    def test_nb_samples_only__capped_by_dataset_count(self):
-        dataset_ = SimpleNamespace(dataset_items_count=5)
-
-        assert (
-            helpers._calculate_total_items(
-                dataset_=dataset_, nb_samples=10, dataset_item_ids=None
-            )
-            == 5
-        )
-
-    def test_nb_samples_only__below_dataset_count(self):
-        dataset_ = SimpleNamespace(dataset_items_count=100)
-
-        assert (
-            helpers._calculate_total_items(
-                dataset_=dataset_, nb_samples=10, dataset_item_ids=None
-            )
-            == 10
-        )
-
-    def test_nb_samples_only__dataset_count_none__returns_nb_samples(self):
-        dataset_ = SimpleNamespace(dataset_items_count=None)
-
-        assert (
-            helpers._calculate_total_items(
-                dataset_=dataset_, nb_samples=7, dataset_item_ids=None
-            )
-            == 7
-        )
-
-    def test_neither_provided__returns_dataset_count(self):
-        dataset_ = SimpleNamespace(dataset_items_count=42)
-
-        assert (
-            helpers._calculate_total_items(
-                dataset_=dataset_, nb_samples=None, dataset_item_ids=None
-            )
-            == 42
-        )
-
-
-class TestResolveDatasetItemsGenerator:
+class TestResolveDatasetItems:
     @staticmethod
-    def _make_dataset(items, items_count=None):
-        dataset_ = SimpleNamespace(dataset_items_count=items_count)
+    def _make_dataset(items, dataset_items_count=None):
+        dataset_ = SimpleNamespace()
+        dataset_.dataset_items_count = (
+            dataset_items_count if dataset_items_count is not None else len(items)
+        )
         dataset_.__internal_api__stream_items_as_dataclasses__ = mock.MagicMock(
             return_value=iter(items)
         )
         return dataset_
 
-    def test_no_sampler__returns_streamed_iterator_and_total(self):
+    def test_no_sampler__returns_lazy_iterator_and_total(self):
+        """No sampler → lazy stream, total computed from dataset metadata."""
         items = [dataset_item.DatasetItem(id=f"i-{i}") for i in range(3)]
-        dataset_ = self._make_dataset(items, items_count=10)
+        dataset_ = self._make_dataset(items)
 
-        items_iter, total = helpers.resolve_dataset_items_generator(
+        items_iter, total = helpers.resolve_dataset_items(
             dataset_=dataset_,
             nb_samples=None,
             dataset_item_ids=None,
@@ -137,8 +87,9 @@ class TestResolveDatasetItemsGenerator:
             dataset_filter_string=None,
         )
 
+        # iterator returned as-is (lazy) — consuming it yields the originals
         assert list(items_iter) == items
-        assert total == 10
+        assert total == 3
         dataset_.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
             nb_samples=None,
             dataset_item_ids=None,
@@ -146,11 +97,39 @@ class TestResolveDatasetItemsGenerator:
             filter_string=None,
         )
 
-    def test_no_sampler__nb_samples_and_filter_forwarded(self):
+    def test_explicit_ids__total_is_len_of_ids(self):
         items = [dataset_item.DatasetItem(id="i-0")]
-        dataset_ = self._make_dataset(items, items_count=100)
+        dataset_ = self._make_dataset(items)
 
-        _, total = helpers.resolve_dataset_items_generator(
+        _, total = helpers.resolve_dataset_items(
+            dataset_=dataset_,
+            nb_samples=None,
+            dataset_item_ids=["a", "b", "c"],
+            dataset_sampler=None,
+            dataset_filter_string=None,
+        )
+
+        assert total == 3
+
+    def test_nb_samples_capped_by_dataset_count(self):
+        items = [dataset_item.DatasetItem(id=f"i-{i}") for i in range(5)]
+        dataset_ = self._make_dataset(items, dataset_items_count=5)
+
+        _, total = helpers.resolve_dataset_items(
+            dataset_=dataset_,
+            nb_samples=10,
+            dataset_item_ids=None,
+            dataset_sampler=None,
+            dataset_filter_string=None,
+        )
+
+        assert total == 5
+
+    def test_nb_samples_and_filter_forwarded_to_stream(self):
+        items = [dataset_item.DatasetItem(id="i-0")]
+        dataset_ = self._make_dataset(items)
+
+        helpers.resolve_dataset_items(
             dataset_=dataset_,
             nb_samples=2,
             dataset_item_ids=None,
@@ -158,7 +137,6 @@ class TestResolveDatasetItemsGenerator:
             dataset_filter_string='tags contains "x"',
         )
 
-        assert total == 2
         dataset_.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
             nb_samples=2,
             dataset_item_ids=None,
@@ -166,13 +144,13 @@ class TestResolveDatasetItemsGenerator:
             filter_string='tags contains "x"',
         )
 
-    def test_with_sampler__materialises_list_and_returns_sampled_count(self):
+    def test_with_sampler__materializes_and_returns_iter_plus_length(self):
         items = [dataset_item.DatasetItem(id=f"i-{i}") for i in range(4)]
         dataset_ = self._make_dataset(items)
         sampled = items[:2]
         sampler = SimpleNamespace(sample=lambda xs: sampled)
 
-        items_iter, total = helpers.resolve_dataset_items_generator(
+        items_iter, total = helpers.resolve_dataset_items(
             dataset_=dataset_,
             nb_samples=None,
             dataset_item_ids=None,
@@ -181,7 +159,25 @@ class TestResolveDatasetItemsGenerator:
         )
 
         assert list(items_iter) == sampled
-        assert total == len(sampled)
+        assert total == 2
+
+    def test_with_sampler__non_list_return__raises_type_error(self):
+        items = [dataset_item.DatasetItem(id="i-0")]
+        dataset_ = self._make_dataset(items)
+        sampler = SimpleNamespace(sample=lambda xs: iter(xs))
+
+        try:
+            helpers.resolve_dataset_items(
+                dataset_=dataset_,
+                nb_samples=None,
+                dataset_item_ids=None,
+                dataset_sampler=sampler,
+                dataset_filter_string=None,
+            )
+        except TypeError as exc:
+            assert "must return a list" in str(exc)
+        else:
+            raise AssertionError("expected TypeError")
 
 
 class TestMergeBlueprintIntoConfig:
