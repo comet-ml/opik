@@ -32,7 +32,10 @@ const DiffSection: React.FunctionComponent<DiffSectionProps> = ({
     return (
       <div>
         <h4 className="comet-body-s-accented mb-1">{label}</h4>
-        <PromptDiff baseline={baselineValue} current={currentValue} />
+        <PromptDiff
+          baseline={baselineValue ?? null}
+          current={currentValue ?? null}
+        />
       </div>
     );
   }

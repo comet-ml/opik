@@ -110,9 +110,34 @@ const NamedPromptsDiff: React.FC<{
   baseline: NamedPrompts;
   current: NamedPrompts;
 }> = ({ baseline, current }) => {
-  const flatBase = useMemo(() => Object.values(baseline).flat(), [baseline]);
-  const flatCurr = useMemo(() => Object.values(current).flat(), [current]);
-  return <MessagesDiff baseline={flatBase} current={flatCurr} />;
+  const names = useMemo(() => {
+    const s = new Set([...Object.keys(baseline), ...Object.keys(current)]);
+    return Array.from(s).sort();
+  }, [baseline, current]);
+
+  if (names.length === 1) {
+    const name = names[0];
+    return (
+      <MessagesDiff
+        baseline={baseline[name] ?? []}
+        current={current[name] ?? []}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {names.map((name) => (
+        <div key={name}>
+          <p className="comet-body-xs mb-1 text-muted-slate">{name}</p>
+          <MessagesDiff
+            baseline={baseline[name] ?? []}
+            current={current[name] ?? []}
+          />
+        </div>
+      ))}
+    </div>
+  );
 };
 
 const PromptDiff: React.FunctionComponent<PromptDiffProps> = ({
