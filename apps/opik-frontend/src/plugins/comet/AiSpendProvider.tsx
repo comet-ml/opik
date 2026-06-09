@@ -1,5 +1,6 @@
 import React, { ReactNode, useMemo } from "react";
 import { AiSpendProvider as BaseAiSpendProvider } from "@/contexts/AiSpendContext";
+import { AI_SPEND_PROJECT_NAME } from "@/lib/aiSpend";
 import useAiSpendManager from "./useAiSpendManager";
 
 const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -12,6 +13,7 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       hasAccess,
       spendWorkspaceName,
       organizationName: organization?.name,
+      projectName: AI_SPEND_PROJECT_NAME,
     }),
     [isPending, hasAccess, spendWorkspaceName, organization?.name],
   );
