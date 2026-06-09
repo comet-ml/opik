@@ -3,6 +3,9 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -15,20 +18,19 @@ import java.util.function.Consumer;
 
 /**
  * Proxy-path LlmProviderService backed by OpenAI's Responses API via
- * {@link dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatModel}.
+ * {@link dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatModel} (blocking) and
+ * {@link dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesStreamingChatModel} (streaming).
  * <br/>
  * The inbound/outbound contract is OpenAI Chat-Completions wire format (same as
  * {@link LlmProviderOpenAi}); translation to/from langchain4j's provider-agnostic
  * ChatRequest/ChatResponse is delegated to {@link LlmProviderOpenAiResponsesMapper}.
- * <br/>
- * Streaming is not yet implemented and throws UnsupportedOperationException — to be added in a
- * follow-up using {@link dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesStreamingChatModel}.
  */
 @RequiredArgsConstructor
 @Slf4j
 public class LlmProviderOpenAiResponses implements LlmProviderService {
 
     private final @NonNull ChatModel chatModel;
+    private final @NonNull StreamingChatModel streamingChatModel;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
@@ -44,9 +46,24 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        throw new UnsupportedOperationException(
-                "Streaming via OpenAI Responses API is not yet implemented; "
-                        + "use pipeline_mode=CHAT_COMPLETIONS_API for streaming or wait for the streaming follow-up.");
+        var chatRequest = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+        streamingChatModel.chat(chatRequest, new StreamingChatResponseHandler() {
+            @Override
+            public void onPartialResponse(String partial) {
+                handleMessage.accept(LlmProviderOpenAiResponsesMapper.toPartialChunk(partial, request));
+            }
+
+            @Override
+            public void onCompleteResponse(ChatResponse response) {
+                handleMessage.accept(LlmProviderOpenAiResponsesMapper.toFinalChunk(response, request));
+                handleClose.run();
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                handleError.accept(error);
+            }
+        });
     }
 
     @Override

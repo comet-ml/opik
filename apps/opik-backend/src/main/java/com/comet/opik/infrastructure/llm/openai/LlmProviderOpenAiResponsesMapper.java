@@ -11,6 +11,7 @@ import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
+import dev.langchain4j.model.openai.internal.chat.Delta;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.output.FinishReason;
@@ -33,6 +34,10 @@ import java.util.Optional;
  */
 @lombok.experimental.UtilityClass
 class LlmProviderOpenAiResponsesMapper {
+
+    // OpenAI Chat-Completions wire-format role token for assistant messages. langchain4j's Role enum
+    // toString() yields the uppercase Java name; clients expect a lowercase per the OpenAI API spec.
+    private static final String ASSISTANT_ROLE_WIRE_VALUE = "assistant";
 
     ChatRequest toChatRequest(@NonNull ChatCompletionRequest request) {
         var builder = ChatRequest.builder()
@@ -59,6 +64,46 @@ class LlmProviderOpenAiResponsesMapper {
                 .id(metadata.id())
                 .model(metadata.modelName() != null ? metadata.modelName() : originalRequest.model())
                 .choices(List.of(toChoice(response)))
+                .usage(toUsage(response.tokenUsage()))
+                .build();
+    }
+
+    /**
+     * Streaming chunk carrying a text delta. Mirrors OpenAI's intermediate SSE chunk shape:
+     * {@code {choices:[{index:0, delta:{role:"assistant", content:"<partial>"}}]}}.
+     * Role is included on every chunk for simplicity — OpenAI clients tolerate it on non-initial
+     * chunks, and tracking "is this the first chunk?" state isn't worth the bookkeeping.
+     */
+    ChatCompletionResponse toPartialChunk(@NonNull String partial, @NonNull ChatCompletionRequest originalRequest) {
+        return ChatCompletionResponse.builder()
+                .model(originalRequest.model())
+                .choices(List.of(ChatCompletionChoice.builder()
+                        .index(0)
+                        .delta(Delta.builder()
+                                .role(ASSISTANT_ROLE_WIRE_VALUE)
+                                .content(partial)
+                                .build())
+                        .build()))
+                .build();
+    }
+
+    /**
+     * Final streaming chunk: empty delta, populated {@code finish_reason}, and token usage when
+     * provided by the upstream response. Mirrors OpenAI's terminating chunk shape; sending usage
+     * here (rather than on a dedicated post-final chunk) is a deliberate simplification — clients
+     * relying on {@code stream_options.include_usage} still see the data, just inlined.
+     */
+    ChatCompletionResponse toFinalChunk(@NonNull ChatResponse response,
+            @NonNull ChatCompletionRequest originalRequest) {
+        var metadata = response.metadata();
+        return ChatCompletionResponse.builder()
+                .id(metadata.id())
+                .model(metadata.modelName() != null ? metadata.modelName() : originalRequest.model())
+                .choices(List.of(ChatCompletionChoice.builder()
+                        .index(0)
+                        .delta(Delta.builder().build())
+                        .finishReason(toFinishReasonString(response.finishReason()))
+                        .build()))
                 .usage(toUsage(response.tokenUsage()))
                 .build();
     }

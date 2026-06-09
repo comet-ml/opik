@@ -218,6 +218,77 @@ class LlmProviderOpenAiResponsesMapperTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class StreamingChunks {
+
+        @Test
+        void partialChunkCarriesAssistantRoleAndContent() {
+            var originalRequest = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .build();
+
+            var chunk = LlmProviderOpenAiResponsesMapper.toPartialChunk("hello", originalRequest);
+
+            assertThat(chunk.choices()).hasSize(1);
+            var choice = chunk.choices().getFirst();
+            assertThat(choice.index()).isZero();
+            assertThat(choice.delta().role()).isEqualTo("assistant");
+            assertThat(choice.delta().content()).isEqualTo("hello");
+            assertThat(choice.finishReason()).isNull();
+            assertThat(chunk.model()).isEqualTo("gpt-4o-mini");
+        }
+
+        @Test
+        void finalChunkSetsFinishReasonWithEmptyDelta() {
+            var originalRequest = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .build();
+            var chatResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from("done"))
+                    .metadata(ChatResponseMetadata.builder()
+                            .id("resp_x")
+                            .modelName("gpt-4o-mini-2024-07-18")
+                            .tokenUsage(new TokenUsage(7, 5, 12))
+                            .finishReason(FinishReason.STOP)
+                            .build())
+                    .build();
+
+            var chunk = LlmProviderOpenAiResponsesMapper.toFinalChunk(chatResponse, originalRequest);
+
+            var choice = chunk.choices().getFirst();
+            assertThat(choice.finishReason()).isEqualTo("stop");
+            assertThat(choice.delta().content()).isNull();
+            assertThat(choice.delta().role()).isNull();
+            assertThat(chunk.usage().promptTokens()).isEqualTo(7);
+            assertThat(chunk.usage().completionTokens()).isEqualTo(5);
+            assertThat(chunk.usage().totalTokens()).isEqualTo(12);
+            assertThat(chunk.id()).isEqualTo("resp_x");
+            assertThat(chunk.model()).isEqualTo("gpt-4o-mini-2024-07-18");
+        }
+
+        @Test
+        void finalChunkFallsBackToRequestModelWhenMetadataModelMissing() {
+            var originalRequest = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .build();
+            var chatResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from("done"))
+                    .metadata(ChatResponseMetadata.builder()
+                            .id("resp_x")
+                            .finishReason(FinishReason.STOP)
+                            .build())
+                    .build();
+
+            var chunk = LlmProviderOpenAiResponsesMapper.toFinalChunk(chatResponse, originalRequest);
+
+            assertThat(chunk.model()).isEqualTo("gpt-4o-mini");
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class UnsupportedRoles {
 
         @Test

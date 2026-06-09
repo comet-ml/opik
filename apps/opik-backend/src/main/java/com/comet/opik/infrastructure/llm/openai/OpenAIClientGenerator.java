@@ -5,9 +5,11 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatModel;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesStreamingChatModel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +26,7 @@ import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_U
 @Slf4j
 public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
-    private static final String CONFIG_KEY_PIPELINE_MODE = "pipeline_mode";
+    private static final String CONFIG_KEY_PIPELINE_MODE = "openai_pipeline_mode";
 
     // langchain4j's OpenAiOfficialResponsesChatModel constructor requires a non-null modelName at
     // build time. On the proxy path the real model is supplied per request via
@@ -166,6 +168,36 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(builder::customHeaders);
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+
+        return builder.build();
+    }
+
+    /**
+     * Proxy-path streaming counterpart to {@link #newResponsesApiChatModel(LlmProviderClientApiConfig)}.
+     * Like the non-streaming variant, the real model name is supplied per request via
+     * {@code ChatRequest.parameters().modelName(...)}; a placeholder is used at build time only to
+     * satisfy langchain4j's required-field validation.
+     */
+    StreamingChatModel newResponsesApiStreamingChatModel(@NonNull LlmProviderClientApiConfig config) {
+        var builder = OpenAiOfficialResponsesStreamingChatModel.builder()
+                .modelName(PROXY_MODEL_NAME_PLACEHOLDER)
+                .apiKey(config.apiKey());
+
+        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
+                .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
+
+        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
+                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .filter(StringUtils::isNotBlank)
+                .ifPresent(builder::baseUrl);
+
+        if (StringUtils.isNotEmpty(config.baseUrl())) {
+            builder.baseUrl(config.baseUrl());
+        }
+
+        Optional.ofNullable(config.headers())
+                .filter(MapUtils::isNotEmpty)
+                .ifPresent(builder::customHeaders);
 
         return builder.build();
     }

@@ -25,7 +25,9 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig apiKey) {
         return switch (clientGenerator.extractApiPipelineMode(apiKey)) {
             case CHAT_COMPLETIONS_API -> new LlmProviderOpenAi(clientGenerator.newOpenAiClient(apiKey));
-            case RESPONSES_API -> new LlmProviderOpenAiResponses(clientGenerator.newResponsesApiChatModel(apiKey));
+            case RESPONSES_API -> new LlmProviderOpenAiResponses(
+                    clientGenerator.newResponsesApiChatModel(apiKey),
+                    clientGenerator.newResponsesApiStreamingChatModel(apiKey));
         };
     }
 
