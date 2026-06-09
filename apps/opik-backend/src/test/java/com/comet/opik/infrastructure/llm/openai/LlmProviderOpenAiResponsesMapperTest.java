@@ -1,26 +1,35 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.ChatResponseMetadata;
+import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.Function;
+import dev.langchain4j.model.openai.internal.chat.FunctionCall;
+import dev.langchain4j.model.openai.internal.chat.Tool;
+import dev.langchain4j.model.openai.internal.chat.ToolCall;
+import dev.langchain4j.model.openai.internal.chat.ToolType;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
-import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LlmProviderOpenAiResponsesMapperTest {
 
@@ -289,19 +298,141 @@ class LlmProviderOpenAiResponsesMapperTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class UnsupportedRoles {
+    class ToolCalling {
+
+        // ─── request side ───────────────────────────────────────────────────────────
 
         @Test
-        void rejectsToolMessages() {
+        void propagatesToolSpecificationsWithJsonSchemaParameters() {
+            var weatherFn = Function.builder()
+                    .name("get_weather")
+                    .description("Look up current weather")
+                    .parameters(Map.of(
+                            "type", "object",
+                            "properties", Map.of(
+                                    "city", Map.of("type", "string", "description", "City name"),
+                                    "units", Map.of("type", "string")),
+                            "required", List.of("city")))
+                    .build();
             var request = ChatCompletionRequest.builder()
                     .model("gpt-4o-mini")
                     .addUserMessage("hi")
-                    .addToolMessage("call_1", "{\"result\": 42}")
+                    .tools(Tool.from(weatherFn))
                     .build();
 
-            assertThatThrownBy(() -> LlmProviderOpenAiResponsesMapper.toChatRequest(request))
-                    .isInstanceOf(BadRequestException.class)
-                    .hasMessageContaining("Unsupported message role");
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.toolSpecifications()).hasSize(1);
+            var spec = actual.toolSpecifications().getFirst();
+            assertThat(spec.name()).isEqualTo("get_weather");
+            assertThat(spec.description()).isEqualTo("Look up current weather");
+            assertThat(spec.parameters()).isNotNull();
+            assertThat(spec.parameters().properties()).containsKeys("city", "units");
+            assertThat(spec.parameters().required()).containsExactly("city");
+        }
+
+        @ParameterizedTest
+        @CsvSource({"auto,AUTO", "required,REQUIRED", "none,NONE"})
+        void mapsStringToolChoiceToEnum(String openAiValue, ToolChoice expected) {
+            // ChatCompletionRequest.Builder.toolChoice(String) wraps the value into a named-function
+            // ToolChoice — useful for the named-function variant but wrong for the plain string
+            // forms. Real wire-format JSON deserializes the string into a raw String inside the
+            // Object field, which is what the mapper handles. Force-cast to Object to mirror that.
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .toolChoice((Object) openAiValue)
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.toolChoice()).isEqualTo(expected);
+        }
+
+        @Test
+        void translatesToolResultMessageForResume() {
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("what's the weather?")
+                    .addToolMessage("call_42", "{\"temp_c\": 21}")
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.messages()).hasSize(2);
+            var resume = (ToolExecutionResultMessage) actual.messages().get(1);
+            assertThat(resume.id()).isEqualTo("call_42");
+            assertThat(resume.text()).isEqualTo("{\"temp_c\": 21}");
+        }
+
+        @Test
+        void translatesAssistantMessageWithToolCallsForResume() {
+            // Client typically replays the prior assistant turn (with tool_calls) when resuming the loop.
+            var assistantWithCall = AssistantMessage.builder()
+                    .toolCalls(List.of(ToolCall.builder()
+                            .id("call_42")
+                            .type(ToolType.FUNCTION)
+                            .function(FunctionCall.builder()
+                                    .name("get_weather")
+                                    .arguments("{\"city\":\"Lisbon\"}")
+                                    .build())
+                            .build()))
+                    .build();
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .messages(List.of(
+                            dev.langchain4j.model.openai.internal.chat.UserMessage.from("hi"),
+                            assistantWithCall,
+                            dev.langchain4j.model.openai.internal.chat.ToolMessage.builder()
+                                    .toolCallId("call_42")
+                                    .content("ok")
+                                    .build()))
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            var assistant = (AiMessage) actual.messages().get(1);
+            assertThat(assistant.toolExecutionRequests()).hasSize(1);
+            var req = assistant.toolExecutionRequests().getFirst();
+            assertThat(req.id()).isEqualTo("call_42");
+            assertThat(req.name()).isEqualTo("get_weather");
+            assertThat(req.arguments()).isEqualTo("{\"city\":\"Lisbon\"}");
+        }
+
+        // ─── response side ──────────────────────────────────────────────────────────
+
+        @Test
+        void emitsAssistantToolCallsWhenAiMessageReturnsToolExecutionRequests() {
+            var originalRequest = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("what's the weather?")
+                    .build();
+            var aiMessage = AiMessage.builder()
+                    .toolExecutionRequests(List.of(ToolExecutionRequest.builder()
+                            .id("call_42")
+                            .name("get_weather")
+                            .arguments("{\"city\":\"Lisbon\"}")
+                            .build()))
+                    .build();
+            var chatResponse = ChatResponse.builder()
+                    .aiMessage(aiMessage)
+                    .metadata(ChatResponseMetadata.builder()
+                            .id("resp_x")
+                            .modelName("gpt-4o-mini")
+                            .finishReason(FinishReason.TOOL_EXECUTION)
+                            .build())
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatCompletionResponse(chatResponse, originalRequest);
+
+            var choice = actual.choices().getFirst();
+            assertThat(choice.finishReason()).isEqualTo("tool_calls");
+            assertThat(choice.message().toolCalls()).hasSize(1);
+            var call = choice.message().toolCalls().getFirst();
+            assertThat(call.id()).isEqualTo("call_42");
+            assertThat(call.type()).isEqualTo(ToolType.FUNCTION);
+            assertThat(call.function().name()).isEqualTo("get_weather");
+            assertThat(call.function().arguments()).isEqualTo("{\"city\":\"Lisbon\"}");
         }
     }
 }
