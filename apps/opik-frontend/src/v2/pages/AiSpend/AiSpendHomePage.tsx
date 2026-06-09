@@ -1,10 +1,20 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import HomeSummaryCards from "./HomeSummaryCards";
 import SpendPeriodSelect from "./SpendPeriodSelect";
-import { SpendWindow } from "@/lib/aiSpend";
+import AiUsageBreakdown from "@/v2/pages-shared/AiUsageBreakdown/AiUsageBreakdown";
+import {
+  AI_SPEND_PROJECT_NAME,
+  getSpendInterval,
+  SpendWindow,
+} from "@/lib/aiSpend";
 
 const AiSpendHomePage: React.FC = () => {
   const [windowDays, setWindowDays] = useState<SpendWindow>(30);
+
+  const { intervalStart, intervalEnd } = useMemo(
+    () => getSpendInterval(windowDays),
+    [windowDays],
+  );
 
   return (
     <div className="pt-6">
@@ -16,6 +26,13 @@ const AiSpendHomePage: React.FC = () => {
       </div>
 
       <HomeSummaryCards windowDays={windowDays} />
+
+      <AiUsageBreakdown
+        projectName={AI_SPEND_PROJECT_NAME}
+        intervalStart={intervalStart}
+        intervalEnd={intervalEnd}
+        className="mt-4"
+      />
     </div>
   );
 };
