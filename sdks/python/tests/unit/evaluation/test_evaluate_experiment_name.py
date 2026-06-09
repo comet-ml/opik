@@ -148,7 +148,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="explicit-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -282,7 +282,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name=None,
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -529,15 +529,22 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="explicit-prompt-experiment-name",
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": MODEL_NAME,
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
 
 
 def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_name(
@@ -678,15 +685,22 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name=None,
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": MODEL_NAME,
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
 
 
 def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_unique_names(
