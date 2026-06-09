@@ -63,6 +63,28 @@ ORDER BY (workspace_id, event_type, id);
 
 ```
 
+## Rollback: Additive vs In-Place Changes
+
+The kind of change decides whether a rollback is allowed:
+
+- **Additive / structural changes → provide a rollback** that undoes them (new table → `DROP TABLE`, new column → `DROP COLUMN`, new index → `DROP INDEX`). Dropping what was just added is safe.
+- **In-place changes to an existing column → rollback MUST be empty (`--rollback empty`)**: enum modify/rename, type or precision changes, default/codec changes. Reverting them (1) often reintroduces the bug the migration fixed, and (2) is lossy or fails once new data is written under the new definition — they are effectively irreversible.
+
+```sql
+-- ✅ Additive change → real rollback
+ALTER TABLE events ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS source String DEFAULT '';
+--rollback ALTER TABLE events ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS source;
+
+-- ✅ In-place enum change → empty rollback
+ALTER TABLE events ON CLUSTER '{cluster}' MODIFY COLUMN level Enum8('TRACE' = 0, 'INFO' = 2, 'WARN' = 3, 'ERROR' = 4);
+--rollback empty
+
+-- ❌ In-place enum change → reverting reintroduces the old (buggy) label and breaks rows already written
+--rollback ALTER TABLE events ON CLUSTER '{cluster}' MODIFY COLUMN level Enum8('TRACE' = 0, 'INFO' = 2, 'WARM' = 3, 'ERROR' = 4);
+```
+
+Always declare an intentionally empty rollback explicitly as `--rollback empty` (see `000029_add_thread_enum_value_to_feedback_scores.sql`) — never just omit it.
+
 ## Rollback Dependency Order
 
 Rollback statements run in the order they appear. When columns have dependencies (e.g. a `MATERIALIZED` column that references another column), **drop dependent columns first** — the reverse of creation order.

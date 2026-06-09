@@ -1,6 +1,5 @@
 package com.comet.opik.domain.mcpoauth;
 
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
@@ -20,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_ACCESS;
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_REFRESH;
@@ -33,14 +33,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class McpOAuthService {
 
-    private static final String REASON_ROTATED = "rotated";
-    private static final String REASON_REUSE = "reuse";
-    private static final String REASON_CLIENT_REQUEST = "client_request";
-
     private static final Base64.Encoder URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
 
     private final @NonNull TransactionTemplate template;
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull OpikConfiguration opikConfig;
 
     private McpOAuthConfig config() {
@@ -48,11 +43,12 @@ public class McpOAuthService {
     }
 
     public String createAuthorizationCode(@NonNull CreateOAuthCodeCommand cmd) {
-        String rawCode = McpOAuthTokens.generateCode();
+        String rawCode = McpOAuthTokenUtils.generateCode();
         Instant now = Instant.now();
 
         var code = McpOAuthCode.builder()
-                .codeHash(McpOAuthTokens.hash(rawCode))
+                .id(UUID.randomUUID().toString())
+                .codeHash(McpOAuthTokenUtils.hash(rawCode))
                 .clientId(cmd.clientId())
                 .userName(cmd.userName())
                 .workspaceName(cmd.workspaceName())
@@ -74,7 +70,7 @@ public class McpOAuthService {
 
     public TokenResponse exchangeCode(@NonNull String code, @NonNull String codeVerifier,
             @NonNull String redirectUri, @NonNull String clientId) {
-        String codeHash = McpOAuthTokens.hash(code);
+        String codeHash = McpOAuthTokenUtils.hash(code);
         Instant now = Instant.now();
 
         // Burn the code in its own committed transaction: a thrown exception rolls the enclosing
@@ -88,19 +84,19 @@ public class McpOAuthService {
             return codeDao.findByHash(codeHash);
         });
 
-        if (!row.clientId().equals(clientId) || !row.redirectUri().equals(redirectUri)
-                || !verifyPkce(codeVerifier, row.codeChallenge())) {
+        if (!matchesGrantRequest(row, clientId, redirectUri, codeVerifier)) {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
-        String familyId = idGenerator.generateId().toString();
-        String accessToken = McpOAuthTokens.generateAccessToken();
-        String refreshToken = McpOAuthTokens.generateRefreshToken();
+        String familyId = UUID.randomUUID().toString();
+        String accessToken = McpOAuthTokenUtils.generateAccessToken();
+        String refreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
             tokenDao.save(McpOAuthToken.builder()
-                    .tokenHash(McpOAuthTokens.hash(accessToken))
+                    .id(UUID.randomUUID().toString())
+                    .tokenHash(McpOAuthTokenUtils.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -111,7 +107,8 @@ public class McpOAuthService {
                     .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
-                    .tokenHash(McpOAuthTokens.hash(refreshToken))
+                    .id(UUID.randomUUID().toString())
+                    .tokenHash(McpOAuthTokenUtils.hash(refreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -127,43 +124,41 @@ public class McpOAuthService {
     }
 
     public TokenResponse refresh(@NonNull String refreshToken, @NonNull String clientId) {
-        String tokenHash = McpOAuthTokens.hash(refreshToken);
+        String tokenHash = McpOAuthTokenUtils.hash(refreshToken);
         Instant now = Instant.now();
 
         McpOAuthToken row = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(McpOAuthTokenDAO.class).findByHash(tokenHash));
 
-        if (row == null || !TYPE_REFRESH.equals(row.type()) || !row.clientId().equals(clientId)
-                || !row.expiresAt().isAfter(now)) {
+        if (!isValidRefreshToken(row, clientId, now)) {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
         if (row.revokedAt() != null) {
-            boolean benignRetry = REASON_ROTATED.equals(row.revokedReason())
-                    && !now.isAfter(row.revokedAt().plus(config().getRefreshRotationGrace()));
-            if (!benignRetry) {
+            if (!isBenignRotationRetry(row, now)) {
                 // Reuse detected: kill the whole lineage. Must run in its own committed transaction —
                 // throwing invalid_grant from inside the same transaction would roll the revocation back.
                 template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
-                        .revokeFamily(row.familyId(), REASON_REUSE));
+                        .revokeFamily(row.familyId(), RevokedReason.REUSE));
             }
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
-        String accessToken = McpOAuthTokens.generateAccessToken();
-        String newRefreshToken = McpOAuthTokens.generateRefreshToken();
+        String accessToken = McpOAuthTokenUtils.generateAccessToken();
+        String newRefreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
 
             // Atomic rotation guard: only the request that flips revoked_at mints the next pair; a
             // concurrent duplicate sees 0 rows and gets invalid_grant (same outcome as the grace path).
-            if (tokenDao.revoke(row.tokenHash(), REASON_ROTATED) != 1) {
+            if (tokenDao.revoke(row.tokenHash(), RevokedReason.ROTATED) != 1) {
                 throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
             tokenDao.save(McpOAuthToken.builder()
-                    .tokenHash(McpOAuthTokens.hash(accessToken))
+                    .id(UUID.randomUUID().toString())
+                    .tokenHash(McpOAuthTokenUtils.hash(accessToken))
                     .type(TYPE_ACCESS)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -171,11 +166,12 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(row.familyId())
-                    .rotatedFrom(row.tokenHash())
+                    .rotatedFromId(row.id())
                     .expiresAt(now.plus(config().getAccessTokenTtl()))
                     .build());
             tokenDao.save(McpOAuthToken.builder()
-                    .tokenHash(McpOAuthTokens.hash(newRefreshToken))
+                    .id(UUID.randomUUID().toString())
+                    .tokenHash(McpOAuthTokenUtils.hash(newRefreshToken))
                     .type(TYPE_REFRESH)
                     .clientId(clientId)
                     .userName(row.userName())
@@ -183,7 +179,7 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .resource(row.resource())
                     .familyId(row.familyId())
-                    .rotatedFrom(row.tokenHash())
+                    .rotatedFromId(row.id())
                     .expiresAt(row.expiresAt())
                     .build());
 
@@ -192,7 +188,7 @@ public class McpOAuthService {
     }
 
     public void revoke(@NonNull String token) {
-        String tokenHash = McpOAuthTokens.hash(token);
+        String tokenHash = McpOAuthTokenUtils.hash(token);
 
         template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
@@ -203,9 +199,9 @@ public class McpOAuthService {
             }
 
             if (TYPE_REFRESH.equals(row.type())) {
-                tokenDao.revokeFamily(row.familyId(), REASON_CLIENT_REQUEST);
+                tokenDao.revokeFamily(row.familyId(), RevokedReason.CLIENT_REQUEST);
             } else {
-                tokenDao.revoke(row.tokenHash(), REASON_CLIENT_REQUEST);
+                tokenDao.revoke(row.tokenHash(), RevokedReason.CLIENT_REQUEST);
             }
 
             return null;
@@ -215,36 +211,103 @@ public class McpOAuthService {
     public ValidatedToken validateAccessTokenForWorkspace(@NonNull String token, String headerWorkspace) {
         ValidatedToken validated = validateAccessToken(token)
                 .orElseThrow(() -> new NotAuthorizedException(TOKEN_TYPE_BEARER));
-        if (StringUtils.isNotBlank(headerWorkspace) && !headerWorkspace.equals(validated.workspaceName())) {
+        if (!workspaceMatches(headerWorkspace, validated.workspaceName())) {
             throw new ClientErrorException("workspace does not match access token", Response.Status.FORBIDDEN);
         }
         return validated;
     }
 
     public Optional<ValidatedToken> validateAccessToken(@NonNull String token) {
-        String tokenHash = McpOAuthTokens.hash(token);
+        String tokenHash = McpOAuthTokenUtils.hash(token);
         Instant now = Instant.now();
 
         return template.inTransaction(READ_ONLY, handle -> {
             McpOAuthToken row = handle.attach(McpOAuthTokenDAO.class).findByHash(tokenHash);
 
-            if (row == null || !TYPE_ACCESS.equals(row.type()) || row.revokedAt() != null
-                    || !row.expiresAt().isAfter(now)) {
+            if (!isActiveAccessToken(row, now)) {
                 return Optional.empty();
             }
 
-            return Optional.of(new ValidatedToken(
-                    row.userName(), row.workspaceId(), row.workspaceName(), row.resource()));
+            return Optional.of(ValidatedToken.builder()
+                    .userName(row.userName())
+                    .workspaceId(row.workspaceId())
+                    .workspaceName(row.workspaceName())
+                    .resource(row.resource())
+                    .build());
         });
     }
 
     private TokenResponse buildTokenResponse(String accessToken, String refreshToken, String workspaceId,
             String workspaceName) {
-        return new TokenResponse(accessToken, refreshToken, TOKEN_TYPE_BEARER,
-                config().getAccessTokenTtl().toSeconds(), workspaceId, workspaceName);
+        return TokenResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType(TOKEN_TYPE_BEARER)
+                .expiresIn(config().getAccessTokenTtl().toSeconds())
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .build();
     }
 
-    private static boolean verifyPkce(String codeVerifier, String codeChallenge) {
+    /**
+     * An authorization code is single-use and bound to the exact request that created it: the same
+     * {@code client_id} and {@code redirect_uri} must be presented, and the PKCE {@code code_verifier}
+     * must hash to the stored {@code code_challenge}. Any mismatch means the presenter is not the
+     * legitimate client, so the exchange is rejected as {@code invalid_grant}.
+     */
+    private static boolean matchesGrantRequest(McpOAuthCode code, String clientId, String redirectUri,
+            String codeVerifier) {
+        return code.clientId().equals(clientId)
+                && code.redirectUri().equals(redirectUri)
+                && verifyPkce(codeVerifier, code.codeChallenge());
+    }
+
+    /**
+     * A refresh token is usable only if it exists, is actually a refresh token (not an access token),
+     * was issued to the requesting client, and has not passed its absolute expiry.
+     */
+    private static boolean isValidRefreshToken(McpOAuthToken token, String clientId, Instant now) {
+        return token != null
+                && TYPE_REFRESH.equals(token.type())
+                && token.clientId().equals(clientId)
+                && token.expiresAt().isAfter(now);
+    }
+
+    /**
+     * Distinguishes a harmless client retry from token theft. After rotation the old refresh token is
+     * revoked; if the rotation response was lost in transit the client legitimately re-presents it. Such
+     * a re-presentation is benign only when the token was revoked specifically for rotation and arrives
+     * within the configured grace window. Anything else is treated as reuse of a compromised token.
+     */
+    private boolean isBenignRotationRetry(McpOAuthToken token, Instant now) {
+        return token.revokedReason() == RevokedReason.ROTATED
+                && !now.isAfter(token.revokedAt().plus(config().getRefreshRotationGrace()));
+    }
+
+    /**
+     * An access token grants access only while it exists, is actually an access token, has not been
+     * revoked, and has not expired.
+     */
+    private static boolean isActiveAccessToken(McpOAuthToken token, Instant now) {
+        return token != null
+                && TYPE_ACCESS.equals(token.type())
+                && token.revokedAt() == null
+                && token.expiresAt().isAfter(now);
+    }
+
+    /**
+     * When the caller pins a workspace via header it must match the workspace the access token was issued
+     * for; a blank header expresses no preference and always matches.
+     */
+    private static boolean workspaceMatches(String headerWorkspace, String tokenWorkspace) {
+        return StringUtils.isBlank(headerWorkspace) || headerWorkspace.equals(tokenWorkspace);
+    }
+
+    /**
+     * Verifies a PKCE S256 challenge per RFC 7636. The spec restricts the verifier to ASCII
+     * unreserved characters, and Base64URL output is itself ASCII.
+     */
+    private static boolean verifyPkce(@NonNull String codeVerifier, @NonNull String codeChallenge) {
         String computed;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -252,9 +315,6 @@ public class McpOAuthService {
             computed = URL_ENCODER.encodeToString(digest);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available", e);
-        }
-        if (codeChallenge == null) {
-            return false;
         }
         return MessageDigest.isEqual(
                 computed.getBytes(StandardCharsets.US_ASCII),

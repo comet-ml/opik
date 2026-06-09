@@ -63,6 +63,7 @@ import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -797,6 +798,17 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Two-phase, wide-column-deferred span page query.
+     * <p>
+     * Phase 1 ({@code page_ids}) paginates on the light, deduped id + sort-key set only — wide text columns
+     * (input/output/metadata) are dropped from the scanned {@code spans_deduped} CTE unless the sort targets them
+     * ({@code sort_needs_wide}). Phase 2 ({@code page_wide}) re-reads the full rows, including wide columns, for just
+     * the page ids. The custom {@code sort_fields} are rendered into both the {@code page_ids} ORDER BY (so pagination
+     * picks the right page) and the final ORDER BY (so the page is returned in order); {@code page_wide}'s own order is
+     * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
+     * truncation are layered on top without dropping the sort key.
+     */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
                 SELECT DISTINCT id FROM spans
@@ -965,9 +977,7 @@ public class SpanDAO {
             <endif>
             <endif>, spans_deduped AS (
                 SELECT
-                      s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
-                      truncated_input,
-                      truncated_output,
+                      s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       input_length,
                       output_length,
                       duration
@@ -999,8 +1009,8 @@ public class SpanDAO {
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT 1 BY id
-            ), spans_final AS (
-                SELECT sd.*
+            ), page_ids AS (
+                SELECT sd.id
                 FROM spans_deduped sd
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = sd.id
@@ -1011,9 +1021,26 @@ public class SpanDAO {
                 ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            ), page_wide AS (
+                SELECT
+                    s.* EXCEPT (input_slim, output_slim)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
+                    <if(truncate)><if(!exclude_input)>truncated_input,<endif><if(!exclude_output)>truncated_output,<endif><endif>
+                    input_length,
+                    output_length,
+                    duration
+                FROM spans s
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id IN (SELECT id FROM page_ids)
+                <if(stream)>
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                <else>
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                <endif>
+                LIMIT 1 BY id
             )
             SELECT
-                s.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
+                s.* <if(exclude_fields)>EXCEPT (<exclude_fields><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><if(truncate)><if(!exclude_input)>, truncated_input<endif><if(!exclude_output)>, truncated_output<endif><endif>) <else> EXCEPT (input, output, metadata<if(truncate)>, truncated_input, truncated_output<endif>)<endif>
                 <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.truncated_input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
                 <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.truncated_output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
                 <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
@@ -1024,7 +1051,7 @@ public class SpanDAO {
                 , fsa.feedback_scores as feedback_scores
                 <endif>
                 <if(!exclude_comments)>, c.comments AS comments <endif>
-            FROM spans_final s
+            FROM page_wide s
             LEFT JOIN comments_final c ON s.id = c.entity_id
             <if(!exclude_feedback_scores)>LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id<endif>
             <if(stream)>
@@ -2352,6 +2379,8 @@ public class SpanDAO {
 
             bindTemplateExcludeFieldVariables(criteria, template);
 
+            addSortNeedsWideFlag(template, criteria.sortingFields());
+
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
@@ -2385,6 +2414,8 @@ public class SpanDAO {
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
+
+            addSortNeedsWideFlag(template, spanSearchCriteria.sortingFields());
 
             var orderBySql = sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields());
             boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)

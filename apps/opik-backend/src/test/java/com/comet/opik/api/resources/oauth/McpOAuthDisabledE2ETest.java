@@ -7,8 +7,10 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.domain.mcpoauth.McpOAuthScrubJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Form;
@@ -64,11 +66,13 @@ class McpOAuthDisabledE2ETest {
 
     private String baseURI;
     private ClientSupport client;
+    private Injector injector;
 
     @BeforeAll
-    void beforeAll(ClientSupport client) {
+    void beforeAll(ClientSupport client, Injector injector) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.injector = injector;
         ClientSupportUtils.config(client);
     }
 
@@ -109,5 +113,19 @@ class McpOAuthDisabledE2ETest {
                 .get()) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
         }
+    }
+
+    @Test
+    @DisplayName("the data-deleting scrub job is not scheduled when disabled")
+    void scrubJobNotScheduledWhenDisabled() {
+        // GuiceJobManager schedules every Job-typed Guice binding it finds. The kill switch for this
+        // destructive job rests on disableExtensions(McpOAuthScrubJob.class) removing the binding so the
+        // manager never sees it; assert the binding is genuinely gone rather than trusting that contract.
+        assertThat(hasScrubJobBinding(injector)).isFalse();
+    }
+
+    static boolean hasScrubJobBinding(Injector injector) {
+        return injector.getAllBindings().keySet().stream()
+                .anyMatch(key -> key.getTypeLiteral().getRawType().equals(McpOAuthScrubJob.class));
     }
 }

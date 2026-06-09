@@ -1,10 +1,4 @@
 ---
-# Scheduled job cron expressions resolved by dropwizard-jobs from the @On("${name}") placeholder.
-jobs:
-  # Default: every 5 minutes
-  # Description: Cron expression for the MCP OAuth scrub job (expired codes + expired/revoked tokens).
-  mcpOAuthScrubCron: ${MCP_OAUTH_SCRUB_CRON:-0 0/5 * * * ?}
-
 # https://www.dropwizard.io/en/stable/manual/configuration.html#logging
 logging:
   #  Default: INFO
@@ -183,7 +177,7 @@ authentication:
   reactService:
     url: ${REACT_SERVICE_URL:-http://react-svc:8080}
 
-# OAuth 2.1 Authorization Server for hosted/local Opik MCP (OPIK-6666)
+# OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:
   # Default: false
   # Description: Whether to enable the MCP OAuth Authorization Server endpoints
@@ -1107,14 +1101,14 @@ serviceToggles:
   # Use case: customer-driven V1 stickiness — pin specific workspaces to legacy navigation without affecting the rest of the deployment.
   # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
   v1WorkspaceAllowlist: ${TOGGLE_V1_WORKSPACE_ALLOWLIST:-""}
-  # Default: disabled
+  # Default: version_2
   # Description: Forces ALL workspaces to a specific navigation version.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
   # Scope: Global — applies to all workspaces regardless of their entity state.
   # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
-  # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
-  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"disabled"}
+  # Operational impact: Default is "version_2". Override to "disabled" (entity-based determination) or "version_1" if global enforcement is needed.
+  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_2"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

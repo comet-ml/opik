@@ -1,37 +1,42 @@
 package com.comet.opik.domain.mcpoauth;
 
 import lombok.experimental.UtilityClass;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.HexFormat;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
 
 @UtilityClass
-public class McpOAuthTokens {
+public class McpOAuthTokenUtils {
 
-    public static final String ACCESS_PREFIX = "opik_at_";
-    public static final String REFRESH_PREFIX = "opik_rt_";
+    public static final String ACCESS_PREFIX = "opik_mcp_at_";
+    public static final String REFRESH_PREFIX = "opik_mcp_rt_";
     public static final int RANDOM_BYTES = 32;
 
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
+    private static final SecureRandom SECURE_RANDOM = getSecureRandom();
 
     public static String generateAccessToken() {
-        return ACCESS_PREFIX + randomSuffix();
+        return ACCESS_PREFIX + randomToken();
     }
 
     public static String generateRefreshToken() {
-        return REFRESH_PREFIX + randomSuffix();
+        return REFRESH_PREFIX + randomToken();
     }
 
     public static String generateCode() {
-        return randomSuffix();
+        return randomToken();
+    }
+
+    public static String randomToken() {
+        byte[] bytes = new byte[RANDOM_BYTES];
+        SECURE_RANDOM.nextBytes(bytes);
+        return ENCODER.encodeToString(bytes);
     }
 
     // Token prefixes are fixed lowercase literals minted by us — match case-sensitively.
@@ -56,18 +61,30 @@ public class McpOAuthTokens {
     }
 
     public static String hash(String token) {
+        return DigestUtils.sha256Hex(token);
+    }
+
+    /**
+     * Masks a token for safe logging. Never emits token fragments: a SHA-256 prefix is non-reversible
+     * yet stable enough to correlate the same token across log lines.
+     *
+     * @param token the raw token; may be {@code null} or empty
+     * @return an empty string for null/empty input, otherwise {@code "sha256:"} followed by the first
+     *         12 hex characters of the token's SHA-256 hash
+     */
+    public static String maskToken(String token) {
+        if (StringUtils.isEmpty(token)) {
+            return "";
+        }
+        return "sha256:" + hash(token).substring(0, 12);
+    }
+
+    private static SecureRandom getSecureRandom() {
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(token.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
+            return SecureRandom.getInstanceStrong();
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
+            throw new IllegalStateException("Strong SecureRandom not available", e);
         }
     }
 
-    private static String randomSuffix() {
-        byte[] bytes = new byte[RANDOM_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
-        return ENCODER.encodeToString(bytes);
-    }
 }

@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
@@ -44,6 +45,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.ACCESS_PREFIX;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.REFRESH_PREFIX;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -92,20 +95,29 @@ class McpOAuthFlowE2ETest {
                         .customConfigs(List.of(
                                 new CustomConfig("mcpOAuth.enabled", "true"),
                                 new CustomConfig("mcpOAuth.baseUrl", BASE_URL),
-                                new CustomConfig("mcpOAuth.refreshRotationGrace", "PT2S"),
-                                // resolve the @On placeholder; midnight so the job never fires mid-test
-                                new CustomConfig("jobs.mcpOAuthScrubCron", "0 0 0 * * ?")))
+                                new CustomConfig("mcpOAuth.refreshRotationGrace", "PT2S")))
                         .build());
     }
 
     private String baseURI;
     private ClientSupport client;
+    private Injector injector;
 
     @BeforeAll
-    void beforeAll(ClientSupport client) {
+    void beforeAll(ClientSupport client, Injector injector) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.injector = injector;
         ClientSupportUtils.config(client);
+    }
+
+    @Test
+    @DisplayName("the scrub job is scheduled when MCP OAuth is enabled")
+    void scrubJobScheduledWhenEnabled() {
+        // Positive control for McpOAuthDisabledE2ETest#scrubJobNotScheduledWhenDisabled: the binding the
+        // GuiceJobManager schedules must be present when the feature is on, otherwise the disabled-side
+        // assertion would pass even if the job were never wired at all.
+        assertThat(McpOAuthDisabledE2ETest.hasScrubJobBinding(injector)).isTrue();
     }
 
     // --- flow helpers ---------------------------------------------------------------------------
@@ -264,8 +276,8 @@ class McpOAuthFlowE2ETest {
         Map<String, Object> tokens = mintTokens(clientId);
 
         String accessToken = (String) tokens.get("access_token");
-        assertThat(accessToken).startsWith("opik_at_");
-        assertThat((String) tokens.get("refresh_token")).startsWith("opik_rt_");
+        assertThat(accessToken).startsWith(ACCESS_PREFIX);
+        assertThat((String) tokens.get("refresh_token")).startsWith(REFRESH_PREFIX);
         assertThat(tokens.get("token_type")).isEqualTo("Bearer");
         assertThat(tokens.get("workspace_name")).isEqualTo(DEFAULT_WORKSPACE_NAME);
 
@@ -417,16 +429,16 @@ class McpOAuthFlowE2ETest {
 
         try (var response = client.target(baseURI + "/opik/auth-oauth")
                 .request()
-                .header(HttpHeaders.AUTHORIZATION, "Bearer opik_at_garbage")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + ACCESS_PREFIX + "garbage")
                 .post(Entity.json(""))) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
         }
     }
 
     @Test
-    @DisplayName("data API rejects an unknown opik_at_ bearer token when OAuth is enabled")
+    @DisplayName("data API rejects an unknown opik_mcp_at_ bearer token when OAuth is enabled")
     void dataApiRejectsUnknownBearer() {
-        try (var response = callDataApi("opik_at_definitely-not-a-real-token")) {
+        try (var response = callDataApi(ACCESS_PREFIX + "definitely-not-a-real-token")) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
         }
     }

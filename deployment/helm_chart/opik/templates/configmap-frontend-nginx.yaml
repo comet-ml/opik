@@ -153,7 +153,7 @@ data:
         }
         {{- if .Values.mcpOAuth.enabled }}
 
-        # --- MCP OAuth (OPIK-6666) — issuer at {{ $rootPath | default "/" }} -------
+        # MCP OAuth — issuer at {{ $rootPath | default "/" }}.
         # AS endpoints are mounted directly at /oauth/* on opik-backend
         # (no /api prefix in @Path). The exact-match `consent` route MUST
         # come before the prefix block — nginx exact-match wins, so the
@@ -188,7 +188,6 @@ data:
           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
           proxy_set_header X-Forwarded-Proto $scheme;
         }
-        # --- end MCP OAuth -------------------------------------------------
         {{- end }}
 
         location @swagger {

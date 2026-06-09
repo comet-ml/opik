@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.oauth;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
-import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
 import com.comet.opik.domain.mcpoauth.TokenResponse;
 import jakarta.inject.Inject;
@@ -20,11 +20,28 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_GRANT_TYPE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_CODE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
 
+/**
+ * OAuth token and revocation endpoints (RFC 6749 / RFC 7009).
+ * <p>
+ * Parameter validation is performed in-method rather than via constraint-validation annotations
+ * for three reasons:
+ * <ul>
+ *   <li><b>Conditional requirements.</b> Annotations apply unconditionally and would
+ *       reject otherwise-valid requests.</li>
+ *   <li><b>RFC-specific error bodies.</b> Failures must return the OAuth error envelope
+ *       (e.g. {@code {"error":"invalid_request"}}, {@code unsupported_grant_type}.
+ *       A constraint violation would instead yield the framework's default validation
+ *       response, breaking the contract.</li>
+ *   <li><b>RFC 7009 §2.2.</b> {@code /revoke} must return {@code 200} even for a blank or invalid
+ *       token, so a {@code @NotBlank} constraint on {@code token} would be incorrect.</li>
+ * </ul>
+ */
 @Path("/oauth")
 @Timed
 @Slf4j
@@ -57,7 +74,8 @@ public class OAuthTokenResource {
             try {
                 return okToken(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId));
             } catch (BadRequestException e) {
-                return error(e.getMessage());
+                log.warn("MCP OAuth authorization_code exchange failed [client_id={}]", clientId, e);
+                return error(ERROR_INVALID_GRANT);
             }
         }
 
@@ -71,7 +89,8 @@ public class OAuthTokenResource {
             try {
                 return okToken(mcpOAuthService.refresh(refreshToken, clientId));
             } catch (BadRequestException e) {
-                return error(e.getMessage());
+                log.warn("MCP OAuth refresh failed [client_id={}]", clientId, e);
+                return error(ERROR_INVALID_GRANT);
             }
         }
 
@@ -92,23 +111,10 @@ public class OAuthTokenResource {
                 mcpOAuthService.revoke(token);
             } catch (Exception e) {
                 log.warn("MCP OAuth revoke failed [token={}, client_id={}]",
-                        maskToken(token), clientId, e);
+                        McpOAuthTokenUtils.maskToken(token), clientId, e);
             }
         }
         return Response.ok().build();
-    }
-
-    private static String maskToken(String token) {
-        if (StringUtils.isEmpty(token)) {
-            return "";
-        }
-        //expected Opik token size
-        if (token.length() > McpOAuthTokens.RANDOM_BYTES) {
-            return token.substring(0, 12) + "..." + token.substring(token.length() - 4);
-        } else {
-            //return full string as confirmed not to be expected token shape
-            return token;
-        }
     }
 
     private static Response okToken(TokenResponse body) {
@@ -123,7 +129,7 @@ public class OAuthTokenResource {
                 .type(MediaType.APPLICATION_JSON)
                 .header("Cache-Control", "no-store")
                 .header("Pragma", "no-cache")
-                .entity(new OAuthError(code, null))
+                .entity(OAuthError.builder().error(code).build())
                 .build();
     }
 

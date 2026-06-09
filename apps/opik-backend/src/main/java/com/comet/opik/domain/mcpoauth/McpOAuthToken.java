@@ -6,6 +6,7 @@ import java.time.Instant;
 
 @Builder(toBuilder = true)
 public record McpOAuthToken(
+        String id,
         String tokenHash,
         String type,
         String clientId,
@@ -14,11 +15,11 @@ public record McpOAuthToken(
         String workspaceId,
         String resource,
         String familyId,
-        String rotatedFrom,
+        String rotatedFromId,
         Instant issuedAt,
         Instant expiresAt,
         Instant revokedAt,
-        String revokedReason) {
+        RevokedReason revokedReason) {
 
     public static final String TYPE_ACCESS = "access";
     public static final String TYPE_REFRESH = "refresh";

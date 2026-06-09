@@ -9,7 +9,6 @@ import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
-import java.util.List;
 import java.util.Optional;
 
 @RegisterConstructorMapper(McpOAuthClient.class)
@@ -17,21 +16,12 @@ import java.util.Optional;
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 interface McpOAuthClientDAO {
 
-    @SqlUpdate("INSERT INTO mcp_oauth_clients (client_id, name, redirect_uris, logo_uri, owner_user_name) "
-            +
-            "VALUES (:bean.clientId, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.ownerUserName)")
+    @SqlUpdate("""
+            INSERT INTO mcp_oauth_clients (client_id, name, redirect_uris, logo_uri, owner_user_name)
+            VALUES (:bean.clientId, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.ownerUserName)
+            """)
     void save(@BindMethods("bean") McpOAuthClient client);
 
-    @SqlQuery("SELECT * FROM mcp_oauth_clients WHERE client_id = :clientId AND revoked_at IS NULL")
-    McpOAuthClient findActiveById(@Bind("clientId") String clientId);
-
-    @SqlQuery("SELECT * FROM mcp_oauth_clients ORDER BY created_at DESC")
-    List<McpOAuthClient> findAll();
-
-    @SqlUpdate("UPDATE mcp_oauth_clients SET revoked_at = NOW(6) WHERE client_id = :clientId AND revoked_at IS NULL")
-    int revoke(@Bind("clientId") String clientId);
-
-    default Optional<McpOAuthClient> fetchActive(String clientId) {
-        return Optional.ofNullable(findActiveById(clientId));
-    }
+    @SqlQuery("SELECT * FROM mcp_oauth_clients WHERE client_id = :clientId")
+    Optional<McpOAuthClient> findActiveById(@Bind("clientId") String clientId);
 }

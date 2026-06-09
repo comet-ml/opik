@@ -32,7 +32,8 @@ class SpanCostCalculator {
 
         // Get the cached read input tokens; fall back to OTel bare key for LiteLLM/OTel spans
         int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens",
-                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0));
+                usage.getOrDefault("original_usage.input_tokens_details.cached_tokens",
+                        usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0)));
 
         // If we got cached tokens, substract them from the input tokens count
         if (cachedReadInputTokens > 0) {
