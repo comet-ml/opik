@@ -78,7 +78,7 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
     @Override
     protected Mono<Void> processEvent(M message) {
         return Mono.defer(() -> score(message))
-                .doOnError(error -> onlineScoringMetrics.recordEvalOutcome(type,
+                .doOnError(error -> onlineScoringMetrics.recordEvalOutcome(type, workspaceId(message),
                         OnlineScoringMetrics.EvalOutcome.ERROR));
     }
 
@@ -89,12 +89,17 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
      */
     protected abstract Mono<Void> score(M message);
 
+    /**
+     * Resolves the workspace id from a message for funnel metrics tagging.
+     */
+    protected abstract String workspaceId(M message);
+
     protected Mono<Map<String, List<BigDecimal>>> storeScores(
             List<FeedbackScoreBatchItem> scores, Trace trace, String userName, String workspaceId) {
         log.info("Received '{}' scores for traceId '{}' in workspace '{}'. Storing them",
                 scores.size(), trace.id(), workspaceId);
-        onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SCORED);
-        onlineScoringMetrics.recordScoresStored(type, scores.size());
+        onlineScoringMetrics.recordEvalOutcome(type, workspaceId, OnlineScoringMetrics.EvalOutcome.SCORED);
+        onlineScoringMetrics.recordScoresStored(type, workspaceId, scores.size());
         return feedbackScoreService.scoreBatchOfTraces(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -105,8 +110,8 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
             List<FeedbackScoreBatchItem> scores, com.comet.opik.api.Span span, String userName, String workspaceId) {
         log.info("Received '{}' scores for spanId '{}' in workspace '{}'. Storing them",
                 scores.size(), span.id(), workspaceId);
-        onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SCORED);
-        onlineScoringMetrics.recordScoresStored(type, scores.size());
+        onlineScoringMetrics.recordEvalOutcome(type, workspaceId, OnlineScoringMetrics.EvalOutcome.SCORED);
+        onlineScoringMetrics.recordScoresStored(type, workspaceId, scores.size());
         return feedbackScoreService.scoreBatchOfSpans(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -117,8 +122,8 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
             List<FeedbackScoreBatchItemThread> scores, String threadId, String userName, String workspaceId) {
         log.info("Received '{}' scores for threadId '{}' in workspace '{}'. Storing them",
                 scores.size(), threadId, workspaceId);
-        onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SCORED);
-        onlineScoringMetrics.recordScoresStored(type, scores.size());
+        onlineScoringMetrics.recordEvalOutcome(type, workspaceId, OnlineScoringMetrics.EvalOutcome.SCORED);
+        onlineScoringMetrics.recordScoresStored(type, workspaceId, scores.size());
         return feedbackScoreService.scoreBatchOfThreads(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))

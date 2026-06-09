@@ -142,11 +142,11 @@ public class OnlineScoringSpanSampler {
                                 .map(span -> toLlmAsJudgeMessage(spansBatch, rule, span))
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
-                        onlineScoringMetrics.recordSampled(rule.getType(), messages.size(),
+                        onlineScoringMetrics.recordSampled(rule.getType(), spansBatch.workspaceId(), messages.size(),
                                 scorableSpans.size() - messages.size());
                         if (!messages.isEmpty()) {
                             onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE, spansBatch.workspaceId());
                         }
                     }
                     case AutomationRuleEvaluatorLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
@@ -169,11 +169,12 @@ public class OnlineScoringSpanSampler {
                                 .map(span -> toUserDefinedMetricPythonMessage(spansBatch, rule, span))
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
-                        onlineScoringMetrics.recordSampled(rule.getType(), messages.size(),
+                        onlineScoringMetrics.recordSampled(rule.getType(), spansBatch.workspaceId(), messages.size(),
                                 scorableSpans.size() - messages.size());
                         if (!messages.isEmpty()) {
                             onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
+                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON,
+                                    spansBatch.workspaceId());
                         }
                     }
                 }

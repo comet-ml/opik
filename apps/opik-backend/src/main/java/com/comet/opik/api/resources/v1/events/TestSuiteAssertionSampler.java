@@ -147,7 +147,7 @@ public class TestSuiteAssertionSampler {
                     if (!messages.isEmpty()) {
                         log.info("Enqueuing '{}' test suite assertion messages", messages.size());
                         onlineScorePublisher.enqueueMessage(messages,
-                                AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                                AutomationRuleEvaluatorType.LLM_AS_JUDGE, tracesBatch.workspaceId());
                     }
                 })
                 .contextWrite(reactiveContext)

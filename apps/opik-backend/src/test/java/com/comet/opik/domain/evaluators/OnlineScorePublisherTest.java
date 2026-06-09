@@ -53,7 +53,8 @@ class OnlineScorePublisherTest {
         var publisher = createPublisher(config);
 
         var message = podamFactory.manufacturePojo(String.class);
-        publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.LLM_AS_JUDGE,
+                podamFactory.manufacturePojo(String.class));
 
         await().untilAsserted(() -> {
             var streamAddParams = captureStreamAddParams();
@@ -69,7 +70,8 @@ class OnlineScorePublisherTest {
         var publisher = createPublisher(config);
 
         var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-        publisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        publisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE,
+                podamFactory.manufacturePojo(String.class));
 
         await().untilAsserted(() -> {
             var streamAddParams = captureStreamAddParams();

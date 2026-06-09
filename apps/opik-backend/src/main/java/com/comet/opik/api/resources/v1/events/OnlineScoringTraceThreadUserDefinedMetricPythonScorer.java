@@ -99,6 +99,11 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     }
 
     @Override
+    protected String workspaceId(TraceThreadToScoreUserDefinedMetricPython message) {
+        return message.workspaceId();
+    }
+
+    @Override
     protected Mono<Void> score(@NonNull TraceThreadToScoreUserDefinedMetricPython message) {
 
         log.info("Message received with projectId '{}', ruleId '{}' for workspace '{}'",

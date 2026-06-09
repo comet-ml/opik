@@ -206,10 +206,11 @@ public class OnlineScoringSampler {
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
-                        onlineScoringMetrics.recordSampled(evaluator.getType(), messages.size(),
+                        onlineScoringMetrics.recordSampled(evaluator.getType(), workspaceId, messages.size(),
                                 scorableTraces.size() - messages.size());
                         if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                            onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE,
+                                    workspaceId);
                         }
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
@@ -219,11 +220,11 @@ public class OnlineScoringSampler {
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
                             logSampledTrace(evaluator, messages, scorableTraces.size());
-                            onlineScoringMetrics.recordSampled(evaluator.getType(), messages.size(),
+                            onlineScoringMetrics.recordSampled(evaluator.getType(), workspaceId, messages.size(),
                                     scorableTraces.size() - messages.size());
                             if (!messages.isEmpty()) {
                                 onlineScorePublisher.enqueueMessage(messages,
-                                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON, workspaceId);
                             }
                         } else {
                             log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",

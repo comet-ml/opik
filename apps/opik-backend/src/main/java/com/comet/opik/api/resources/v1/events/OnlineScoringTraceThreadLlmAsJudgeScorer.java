@@ -108,6 +108,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * @param message a Redis message with the trace thread to score with an Evaluator code, workspace and username.
      */
     @Override
+    protected String workspaceId(TraceThreadToScoreLlmAsJudge message) {
+        return message.workspaceId();
+    }
+
+    @Override
     protected Mono<Void> score(@NonNull TraceThreadToScoreLlmAsJudge message) {
 
         log.info("Message received with projectId: '{}', ruleId: '{}', threadIds: '{}' for workspace '{}'",
@@ -144,7 +149,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                     "No traces found for threadId '{}' in projectId '{}'. Skipping scoring.",
                                     currentThreadId, message.projectId());
                         }
-                        onlineScoringMetrics.recordEvalOutcome(type,
+                        onlineScoringMetrics.recordEvalOutcome(type, message.workspaceId(),
                                 OnlineScoringMetrics.EvalOutcome.SKIPPED_NO_TRACES);
                         return Mono.empty();
                     }
@@ -155,7 +160,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                             "Thread model not found for threadId '{}' in projectId '{}'. Skipping scoring.",
                                             currentThreadId, message.projectId());
                                 }
-                                onlineScoringMetrics.recordEvalOutcome(type,
+                                onlineScoringMetrics.recordEvalOutcome(type, message.workspaceId(),
                                         OnlineScoringMetrics.EvalOutcome.SKIPPED_RULE_MISSING);
                                 return Mono.empty();
                             }))
@@ -202,7 +207,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 log.warn(
                         "Automation rule with ID '{}' not found in projectId '{}' for workspace '{}'. Skipping scoring for threadId '{}'.",
                         message.ruleId(), message.projectId(), message.workspaceId(), threadId);
-                onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SKIPPED_RULE_MISSING);
+                onlineScoringMetrics.recordEvalOutcome(type, message.workspaceId(),
+                        OnlineScoringMetrics.EvalOutcome.SKIPPED_RULE_MISSING);
                 return Optional.empty();
             }
         }
@@ -407,11 +413,20 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      */
     private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceThreadToScoreLlmAsJudge message) {
         return Mono.fromCallable(() -> {
-            var response = aiProxyService.scoreTrace(
-                    request, message.code().model(), message.workspaceId());
-            onlineScoringMetrics.recordPayloadSize(request, response, type,
-                    message.code().model().name(), message.workspaceId(), message.ruleId());
-            return response;
+            var model = message.code().model().name();
+            var startMillis = System.currentTimeMillis();
+            try {
+                var response = aiProxyService.scoreTrace(
+                        request, message.code().model(), message.workspaceId());
+                onlineScoringMetrics.recordPayloadSize(request, response, type,
+                        model, message.workspaceId(), message.ruleId());
+                onlineScoringMetrics.recordLlmCall(type, model, System.currentTimeMillis() - startMillis, true,
+                        response);
+                return response;
+            } catch (RuntimeException exception) {
+                onlineScoringMetrics.recordLlmCall(type, model, System.currentTimeMillis() - startMillis, false, null);
+                throw exception;
+            }
         }).subscribeOn(Schedulers.boundedElastic());
     }
 

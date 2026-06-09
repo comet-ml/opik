@@ -234,7 +234,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .build())
                                 .toList();
 
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType(), workspaceId);
                         log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'", messages.size(),
                                 rule.getId());
                     });
@@ -257,7 +257,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .build())
                                 .toList();
 
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType(), workspaceId);
                         log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(),
                                 rule.getId());
                     });
@@ -322,7 +322,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .build())
                                 .toList();
 
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType(), workspaceId);
                         log.info("Enqueued '{}' span LLM as Judge messages for rule '{}'", messages.size(),
                                 rule.getId());
                     });
@@ -345,7 +345,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .build())
                                 .toList();
 
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType(), workspaceId);
                         log.info("Enqueued '{}' span Python messages for rule '{}'", messages.size(),
                                 rule.getId());
                     });

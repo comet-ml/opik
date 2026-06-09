@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +77,11 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
      * @param message a Redis message with the Span to score with an Evaluator code, workspace and username.
      */
     @Override
+    protected String workspaceId(SpanToScoreLlmAsJudge message) {
+        return message.workspaceId();
+    }
+
+    @Override
     protected Mono<Void> score(@NonNull SpanToScoreLlmAsJudge message) {
         var span = message.span();
         log.info("Message received with spanId '{}', userName '{}', to be scored in '{}'",
@@ -121,10 +127,19 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             userFacingLogger.info("Sending spanId '{}' to LLM using the following input:\n\n{}",
                     span.id(), scoreRequest);
 
-            var score = aiProxyService.scoreTrace(
-                    scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
-            onlineScoringMetrics.recordPayloadSize(scoreRequest, score, type,
-                    message.llmAsJudgeCode().model().name(), message.workspaceId(), message.ruleId());
+            var model = message.llmAsJudgeCode().model().name();
+            var startMillis = System.currentTimeMillis();
+            ChatResponse score;
+            try {
+                score = aiProxyService.scoreTrace(
+                        scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
+                onlineScoringMetrics.recordPayloadSize(scoreRequest, score, type,
+                        model, message.workspaceId(), message.ruleId());
+                onlineScoringMetrics.recordLlmCall(type, model, System.currentTimeMillis() - startMillis, true, score);
+            } catch (RuntimeException exception) {
+                onlineScoringMetrics.recordLlmCall(type, model, System.currentTimeMillis() - startMillis, false, null);
+                throw exception;
+            }
             userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
 
             var parsed = OnlineScoringEngine.toFeedbackScores(score);

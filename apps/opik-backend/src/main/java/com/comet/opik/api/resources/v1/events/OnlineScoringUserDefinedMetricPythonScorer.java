@@ -73,6 +73,11 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     }
 
     @Override
+    protected String workspaceId(TraceToScoreUserDefinedMetricPython message) {
+        return message.workspaceId();
+    }
+
+    @Override
     protected Mono<Void> score(@NonNull TraceToScoreUserDefinedMetricPython message) {
         var trace = message.trace();
         log.info("Message received with traceId '{}', userName '{}'", trace.id(), message.userName());

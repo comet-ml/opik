@@ -70,6 +70,11 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
     }
 
     @Override
+    protected String workspaceId(SpanToScoreUserDefinedMetricPython message) {
+        return message.workspaceId();
+    }
+
+    @Override
     protected Mono<Void> score(@NonNull SpanToScoreUserDefinedMetricPython message) {
         var span = message.span();
         log.info("Message received with spanId '{}', userName '{}'", span.id(), message.userName());

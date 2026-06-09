@@ -148,6 +148,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     @Override
+    protected String workspaceId(TraceToScoreLlmAsJudge message) {
+        return message.workspaceId();
+    }
+
+    @Override
     protected Mono<Void> score(@NonNull TraceToScoreLlmAsJudge message) {
         var trace = message.trace();
         log.info("Message received with traceId '{}', userName '{}', to be scored in '{}'",
@@ -330,11 +335,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      */
     private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceToScoreLlmAsJudge message) {
         return Mono.fromCallable(() -> {
-            var response = aiProxyService.scoreTrace(
-                    request, message.llmAsJudgeCode().model(), message.workspaceId());
-            onlineScoringMetrics.recordPayloadSize(request, response, type,
-                    message.llmAsJudgeCode().model().name(), message.workspaceId(), message.ruleId());
-            return response;
+            var model = message.llmAsJudgeCode().model().name();
+            var startMillis = System.currentTimeMillis();
+            try {
+                var response = aiProxyService.scoreTrace(
+                        request, message.llmAsJudgeCode().model(), message.workspaceId());
+                onlineScoringMetrics.recordPayloadSize(request, response, type,
+                        model, message.workspaceId(), message.ruleId());
+                onlineScoringMetrics.recordLlmCall(type, model, System.currentTimeMillis() - startMillis, true,
+                        response);
+                return response;
+            } catch (RuntimeException exception) {
+                onlineScoringMetrics.recordLlmCall(type, model, System.currentTimeMillis() - startMillis, false, null);
+                throw exception;
+            }
         }).subscribeOn(Schedulers.boundedElastic());
     }
 

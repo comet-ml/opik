@@ -1,5 +1,7 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.resources.v1.events.OnlineScoringMetrics;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.Inject;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 class TraceThreadOnlineScorerPublisher {
 
     private final @NonNull OnlineScorePublisher onlineScorePublisher;
+    private final @NonNull OnlineScoringMetrics onlineScoringMetrics;
 
     public Mono<Void> publish(@NonNull UUID projectId, @NonNull List<TraceThreadModel> closeThreads) {
         return Mono.deferContextual(ctx -> {
@@ -43,6 +46,17 @@ class TraceThreadOnlineScorerPublisher {
                             .map(ruleId -> Map.entry(ruleId, closeThread.threadId())))
                     .collect(Collectors.groupingBy(Map.Entry::getKey,
                             Collectors.mapping(Map.Entry::getValue, Collectors.toSet())));
+
+            // Thread sampling is decided upstream (the sampling() map); count in vs out here for the funnel top.
+            // Tagged TRACE_THREAD_LLM_AS_JUDGE (the dominant thread evaluator); counts (thread, rule) decisions.
+            long threadsSampledIn = closeThreads.stream()
+                    .flatMap(closeThread -> closeThread.sampling().values().stream())
+                    .filter(Boolean::booleanValue).count();
+            long threadsDropped = closeThreads.stream()
+                    .flatMap(closeThread -> closeThread.sampling().values().stream())
+                    .filter(sampled -> !sampled).count();
+            onlineScoringMetrics.recordSampled(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE, workspaceId,
+                    threadsSampledIn, threadsDropped);
 
             return Flux.fromIterable(sampledThreadByRule.entrySet())
                     .flatMap(ruleIdToThreadIds -> Mono.fromCallable(() -> {

@@ -36,10 +36,11 @@ public interface OnlineScorePublisher {
     /**
      * Enqueues messages into the Redis stream for online scoring.
      *
-     * @param messages the messages to enqueue
-     * @param type     the type of evaluator for which the messages are intended
+     * @param messages    the messages to enqueue
+     * @param type        the type of evaluator for which the messages are intended
+     * @param workspaceId the ID of the workspace the messages belong to
      */
-    void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type);
+    void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type, @NonNull String workspaceId);
 
     /**
      * Enqueues a thread message for scoring based on the provided rule.
@@ -85,9 +86,9 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type) {
+    public void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type, @NonNull String workspaceId) {
         var config = streamConfigurations.get(type);
-        onlineScoringMetrics.recordEnqueued(type, messages.size());
+        onlineScoringMetrics.recordEnqueued(type, workspaceId, messages.size());
         var codec = config.getCodec();
         var stream = redisClient.getStream(config.getStreamName(), codec);
         Flux.fromIterable(messages)
@@ -120,14 +121,14 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
             case AutomationRuleEvaluatorTraceThreadLlmAsJudge llmAsJudge -> {
                 var message = toLlmAsJudgeMessage(threadIds, ruleId, projectId, workspaceId, userName,
                         llmAsJudge.getCode());
-                enqueueMessage(List.of(message), rule.getType());
+                enqueueMessage(List.of(message), rule.getType(), workspaceId);
             }
             case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython definedMetricPython -> {
                 var message = toDefinedMetricPython(threadIds, ruleId, projectId, workspaceId, userName,
                         definedMetricPython.getCode());
 
                 if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
-                    enqueueMessage(List.of(message), rule.getType());
+                    enqueueMessage(List.of(message), rule.getType(), workspaceId);
                 } else {
                     log.warn(
                             "Trace Thread online scoring python evaluator is disabled, skipping enqueueing for ruleId: '{}'",

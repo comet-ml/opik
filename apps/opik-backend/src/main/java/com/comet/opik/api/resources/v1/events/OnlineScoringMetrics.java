@@ -27,9 +27,12 @@ import java.util.UUID;
  * Stateful — owns the OTel instruments — so it is injected as a {@code @Singleton} rather than a
  * static utility.
  *
- * <p>The histograms are tagged with {@code evaluator_type} and {@code model} only: {@code rule_id}
- * and {@code workspace_id} are unbounded and would blow the prod metrics cardinality limit, so they
- * are emitted on a log line instead (sizes only — never the rendered content).
+ * <p>Cardinality discipline: the <b>histograms</b> ({@code *_chars}, {@code llm_call_duration},
+ * {@code llm_tokens}) carry {@code evaluator_type} + {@code model} only — never {@code workspace_id}
+ * (a histogram × #workspaces × buckets would blow the prod cardinality limit). The <b>funnel counters</b>
+ * ({@code sampled}/{@code enqueued}/{@code eval}/{@code scores_stored}) do carry {@code workspace_id} —
+ * bounded by the number of workspaces that actively run online scoring × type × outcome. {@code rule_id}
+ * stays off all of these (it rides only the rare offender metrics) and is emitted on a log line instead.
  */
 @Singleton
 @Slf4j
@@ -40,14 +43,24 @@ public class OnlineScoringMetrics {
     private static final AttributeKey<String> MODEL_KEY = AttributeKey.stringKey("model");
     private static final AttributeKey<String> DECISION_KEY = AttributeKey.stringKey("decision");
     private static final AttributeKey<String> OUTCOME_KEY = AttributeKey.stringKey("outcome");
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> DIRECTION_KEY = AttributeKey.stringKey("direction");
 
     private final LongHistogram inputChars;
     private final LongHistogram outputChars;
-    // End-to-end funnel counters (low cardinality: evaluator_type + a small fixed enum, never workspace_id).
+    // End-to-end funnel counters. Tagged with evaluator_type + a small fixed enum + workspace_id. Cardinality
+    // is bounded by the number of workspaces that actively run online scoring (a subset of all tenants) ×
+    // type × outcome, well under the per-instrument OTEL_JAVA_METRICS_CARDINALITY_LIMIT at current scale.
+    // workspace_id stays on the COUNTERS only — never on the char/duration histograms (×buckets is too costly).
     private final LongCounter sampled;
     private final LongCounter enqueued;
     private final LongCounter evals;
     private final LongCounter scoresStored;
+    // LLM round-trip health (isolates the provider call from the blended processing_time). evaluator_type +
+    // model only — no workspace_id.
+    private final LongHistogram llmCallDuration;
+    private final LongCounter llmCalls;
+    private final LongHistogram llmTokens;
 
     /**
      * Terminal outcome of one online-scoring eval, used as the bounded {@code outcome} label on
@@ -96,43 +109,88 @@ public class OnlineScoringMetrics {
         this.scoresStored = meter.counterBuilder("online_scoring_scores_stored")
                 .setDescription("Feedback scores produced and stored by online scoring")
                 .build();
+        this.llmCallDuration = meter.histogramBuilder("online_scoring_llm_call_duration")
+                .ofLongs()
+                .setDescription("Latency of one LLM-as-judge provider round-trip (isolated from fetch/store)")
+                .setUnit("ms")
+                .build();
+        this.llmCalls = meter.counterBuilder("online_scoring_llm_call")
+                .setDescription("LLM-as-judge provider round-trips by outcome (success|error)")
+                .build();
+        this.llmTokens = meter.histogramBuilder("online_scoring_llm_tokens")
+                .ofLongs()
+                .setDescription("Token usage per LLM-as-judge round-trip, by direction (input|output)")
+                .setUnit("tokens")
+                .build();
+    }
+
+    /**
+     * Records one LLM provider round-trip's latency, outcome and (optional) token usage. Tagged
+     * {@code evaluator_type} + {@code model} only — never workspace_id.
+     */
+    public void recordLlmCall(@NonNull AutomationRuleEvaluatorType evaluatorType, @NonNull String model,
+            long durationMs, boolean success, ChatResponse response) {
+        var type = evaluatorType.getType();
+        llmCallDuration.record(durationMs, Attributes.of(EVALUATOR_TYPE_KEY, type, MODEL_KEY, model));
+        llmCalls.add(1, Attributes.of(EVALUATOR_TYPE_KEY, type, MODEL_KEY, model,
+                OUTCOME_KEY, success ? "success" : "error"));
+        if (response != null && response.tokenUsage() != null) {
+            var usage = response.tokenUsage();
+            if (usage.inputTokenCount() != null) {
+                llmTokens.record(usage.inputTokenCount().longValue(),
+                        Attributes.of(EVALUATOR_TYPE_KEY, type, MODEL_KEY, model, DIRECTION_KEY, "input"));
+            }
+            if (usage.outputTokenCount() != null) {
+                llmTokens.record(usage.outputTokenCount().longValue(),
+                        Attributes.of(EVALUATOR_TYPE_KEY, type, MODEL_KEY, model, DIRECTION_KEY, "output"));
+            }
+        }
     }
 
     /**
      * Funnel top (B4): how many candidate traces a rule's sampling rate let through vs dropped.
      */
-    public void recordSampled(@NonNull AutomationRuleEvaluatorType evaluatorType, long sampledIn, long dropped) {
+    public void recordSampled(@NonNull AutomationRuleEvaluatorType evaluatorType, @NonNull String workspaceId,
+            long sampledIn, long dropped) {
         var type = evaluatorType.getType();
         if (sampledIn > 0) {
-            sampled.add(sampledIn, Attributes.of(EVALUATOR_TYPE_KEY, type, DECISION_KEY, "sampled"));
+            sampled.add(sampledIn,
+                    Attributes.of(EVALUATOR_TYPE_KEY, type, WORKSPACE_ID_KEY, workspaceId, DECISION_KEY, "sampled"));
         }
         if (dropped > 0) {
-            sampled.add(dropped, Attributes.of(EVALUATOR_TYPE_KEY, type, DECISION_KEY, "dropped"));
+            sampled.add(dropped,
+                    Attributes.of(EVALUATOR_TYPE_KEY, type, WORKSPACE_ID_KEY, workspaceId, DECISION_KEY, "dropped"));
         }
     }
 
     /**
-     * Funnel middle (B5): messages actually enqueued into Redis for a given evaluator type.
+     * Funnel middle (B5): messages actually enqueued into Redis for a given evaluator type / workspace.
      */
-    public void recordEnqueued(@NonNull AutomationRuleEvaluatorType evaluatorType, long count) {
+    public void recordEnqueued(@NonNull AutomationRuleEvaluatorType evaluatorType, @NonNull String workspaceId,
+            long count) {
         if (count > 0) {
-            enqueued.add(count, Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType()));
+            enqueued.add(count,
+                    Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType(), WORKSPACE_ID_KEY, workspaceId));
         }
     }
 
     /**
-     * Funnel bottom (B2): the terminal outcome of one eval (scored / skipped / error).
+     * Funnel bottom (B2): the terminal outcome of one eval (scored / skipped / error) per workspace.
      */
-    public void recordEvalOutcome(@NonNull AutomationRuleEvaluatorType evaluatorType, @NonNull EvalOutcome outcome) {
-        evals.add(1, Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType(), OUTCOME_KEY, outcome.label()));
+    public void recordEvalOutcome(@NonNull AutomationRuleEvaluatorType evaluatorType, @NonNull String workspaceId,
+            @NonNull EvalOutcome outcome) {
+        evals.add(1, Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType(), WORKSPACE_ID_KEY, workspaceId,
+                OUTCOME_KEY, outcome.label()));
     }
 
     /**
-     * Funnel bottom (B2): feedback scores actually written for an eval.
+     * Funnel bottom (B2): feedback scores actually written for an eval, per workspace.
      */
-    public void recordScoresStored(@NonNull AutomationRuleEvaluatorType evaluatorType, long count) {
+    public void recordScoresStored(@NonNull AutomationRuleEvaluatorType evaluatorType, @NonNull String workspaceId,
+            long count) {
         if (count > 0) {
-            scoresStored.add(count, Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType()));
+            scoresStored.add(count,
+                    Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType(), WORKSPACE_ID_KEY, workspaceId));
         }
     }
 
