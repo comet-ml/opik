@@ -16,8 +16,12 @@ import com.comet.opik.api.resources.utils.resources.AiSpendResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
+import com.comet.opik.api.spend.SpendRecommendationsResponse;
+import com.comet.opik.api.spend.SpendUserPage;
+import com.comet.opik.api.spend.SpendUserRow;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -236,18 +240,152 @@ class AiSpendResourceTest {
         assertThat(byName.get("active_users").current()).isEqualTo(0.0);
     }
 
-    private void createCcTraces(String projectName, String apiKey, String workspaceName, Instant time,
+    @Test
+    @DisplayName("breakdown: aggregates a lane's cc.* detail array per item")
+    void breakdown_happyPath() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        var user = UUID.randomUUID().toString();
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+
+        var breakdown = aiSpendResourceClient.getBreakdown("skills_loaded", SpendMetricRequest.builder()
+                .projectName(projectName)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), apiKey, workspaceName);
+
+        assertThat(breakdown.laneKey()).isEqualTo("skills_loaded");
+        assertThat(breakdown.title()).isEqualTo("Skills loaded");
+        assertThat(breakdown.itemCount()).isEqualTo(2);
+        assertThat(breakdown.totalTokens()).isEqualTo(2400L); // (500 + 300) × 3
+
+        Map<String, Long> byLabel = breakdown.items().stream()
+                .collect(Collectors.toMap(SpendBreakdownResponse.Item::label,
+                        SpendBreakdownResponse.Item::totalTokens));
+        assertThat(byLabel.get("opik-frontend")).isEqualTo(1500L);
+        assertThat(byLabel.get("find-skills")).isEqualTo(900L);
+    }
+
+    @Test
+    @DisplayName("users: ranks users by spend, joins per-user cost, flags high spenders")
+    void users_happyPath() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        var userA = UUID.randomUUID().toString();
+        var userB = UUID.randomUUID().toString();
+
+        // userA: 2 traces, each with a linked costed span → spend = 2 × SPAN_COST
+        var userATraces = createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
+        userATraces.forEach(traceId -> createLinkedSpan(projectName, apiKey, workspaceName, traceId, currentTime));
+        // userB: 1 trace, no linked span → spend = 0
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB));
+
+        SpendUserPage page = aiSpendResourceClient.getUsers(SpendMetricRequest.builder()
+                .projectName(projectName)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), 1, 25, apiKey, workspaceName);
+
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.content()).hasSize(2);
+
+        SpendUserRow top = page.content().getFirst();
+        assertThat(top.userUuid()).isEqualTo(userA);
+        assertThat(top.requests()).isEqualTo(2);
+        assertThat(top.totalEstimatedCost().doubleValue()).isCloseTo(4.0, within(0.0001));
+        assertThat(top.flags()).contains("high_spend");
+        assertThat(top.repositories()).containsExactly("repo-a");
+        assertThat(top.skills()).isEqualTo(4L); // loaded_count 2 × 2 traces
+
+        SpendUserRow second = page.content().get(1);
+        assertThat(second.userUuid()).isEqualTo(userB);
+        assertThat(second.totalEstimatedCost().doubleValue()).isCloseTo(0.0, within(0.0001));
+    }
+
+    @Test
+    @DisplayName("recommendations: returns up to 3 judgment-based items for the current usage")
+    void recommendations_happyPath() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        var user = UUID.randomUUID().toString();
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+        createCostSpans(projectName, apiKey, workspaceName, currentTime, 4);
+
+        var recommendations = aiSpendResourceClient.getRecommendations(SpendMetricRequest.builder()
+                .projectName(projectName)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), apiKey, workspaceName);
+
+        // thinking share 150/220 > 0.5 and mcp_servers > 0; prior_assistant share 1000/2630 < 0.4
+        List<String> ids = recommendations.items().stream()
+                .map(SpendRecommendationsResponse.Item::id)
+                .toList();
+        assertThat(ids).contains("thinking_effort", "fewer_mcps");
+        assertThat(ids).doesNotContain("compact_threshold");
+        assertThat(recommendations.items()).hasSizeLessThanOrEqualTo(3);
+        assertThat(recommendations.totalSavings().doubleValue()).isGreaterThan(0.0);
+    }
+
+    private List<UUID> createCcTraces(String projectName, String apiKey, String workspaceName, Instant time,
             List<String> userUuids) {
+        List<UUID> ids = new java.util.ArrayList<>();
         for (String userUuid : userUuids) {
+            UUID id = idGenerator.getTimeOrderedEpoch(time.toEpochMilli());
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                    .id(id)
                     .projectName(projectName)
                     .startTime(time)
                     .metadata(buildCcMetadata(userUuid))
                     .feedbackScores(null)
                     .build();
             traceResourceClient.createTrace(trace, apiKey, workspaceName);
+            ids.add(id);
         }
+        return ids;
+    }
+
+    private void createLinkedSpan(String projectName, String apiKey, String workspaceName, UUID traceId, Instant time) {
+        Span span = factory.manufacturePojo(Span.class).toBuilder()
+                .startTime(time)
+                .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                .traceId(traceId)
+                .projectId(null)
+                .projectName(projectName)
+                .totalEstimatedCost(SPAN_COST)
+                .feedbackScores(null)
+                .build();
+        spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
     }
 
     private void createCostSpans(String projectName, String apiKey, String workspaceName, Instant time, int count) {
@@ -268,15 +406,16 @@ class AiSpendResourceTest {
         String json = """
                 {
                   "cc": {
-                    "identity": { "user_uuid": "%s" },
+                    "identity": { "user_uuid": "%1$s", "user_email": "%1$s@comet.com", "user_display_name": "%1$s" },
+                    "git": { "repository": "repo-a" },
                     "prior_assistant": { "summary": { "total_tokens": 1000 } },
-                    "tool_results": { "summary": { "total_tokens": 200 } },
+                    "tool_results": { "summary": { "total_tokens": 200, "count": 8 }, "by_tool": [ { "name": "Bash", "tokens": 200 } ] },
                     "user_prompts": { "summary": { "total_tokens": 50 } },
-                    "skills": { "summary": { "loaded_tokens": 800, "menu_tokens": 100 } },
-                    "tools": { "summary": { "by_source": { "mcp": { "schema_tokens": 300 }, "builtin": { "schema_tokens": 80 } } } },
-                    "file_attachments": { "summary": { "total_tokens": 40 } },
-                    "memory": { "summary": { "total_tokens": 60 } },
-                    "thinking": { "summary": { "total_tokens": 150 } },
+                    "skills": { "summary": { "loaded_tokens": 800, "menu_tokens": 100, "loaded_count": 2 }, "loaded": [ { "name": "opik-frontend", "body_tokens": 500 }, { "name": "find-skills", "body_tokens": 300 } ] },
+                    "tools": { "summary": { "by_source": { "mcp": { "schema_tokens": 300, "available_count": 1 }, "builtin": { "schema_tokens": 80 } }, "by_server": [ { "server": "chrome-devtools", "schema_tokens": 300 } ] } },
+                    "file_attachments": { "summary": { "total_tokens": 40 }, "files": [ { "path": "a.png", "body_tokens": 40 } ] },
+                    "memory": { "summary": { "total_tokens": 60 }, "files": [ { "path": "AGENTS.md", "body_tokens": 60 } ] },
+                    "thinking": { "summary": { "total_tokens": 150 }, "by_model": [ { "model": "claude-opus-4-7", "tokens": 150 } ] },
                     "assistant_text": { "summary": { "total_tokens": 70 } }
                   }
                 }
