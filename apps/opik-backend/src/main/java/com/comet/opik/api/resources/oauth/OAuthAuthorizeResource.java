@@ -12,6 +12,11 @@ import com.comet.opik.infrastructure.auth.AuthService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.UserWorkspace;
 import com.comet.opik.infrastructure.auth.WorkspaceInfo;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -54,6 +59,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Path("/oauth")
 @Timed
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+@Tag(name = "MCP OAuth", description = "MCP OAuth 2.1 Authorization Server resources")
 public class OAuthAuthorizeResource {
 
     private final @NonNull OAuthClientService clientService;
@@ -63,6 +69,8 @@ public class OAuthAuthorizeResource {
 
     @GET
     @Path("/authorize")
+    @Operation(operationId = "authorize", summary = "OAuth Authorization Endpoint", description = "OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the client and PKCE parameters, then redirects to the login or consent page", responses = {
+            @ApiResponse(responseCode = "302", description = "Redirect to login, consent, or client redirect_uri with an error")})
     public Response authorize(
             @QueryParam("client_id") @NotBlank String clientId,
             @QueryParam("redirect_uri") @NotBlank String redirectUri,
@@ -111,6 +119,8 @@ public class OAuthAuthorizeResource {
     @GET
     @Path("/authorize/context")
     @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "getAuthorizeContext", summary = "Get Authorization Consent Context", description = "Get the client details, eligible workspaces, and a CSRF token used to render the consent screen", responses = {
+            @ApiResponse(responseCode = "200", description = "Authorization consent context", content = @Content(schema = @Schema(implementation = AuthorizeContext.class)))})
     public Response context(
             @QueryParam("client_id") @NotBlank String clientId,
             @QueryParam("redirect_uri") @NotBlank String redirectUri,
@@ -143,6 +153,8 @@ public class OAuthAuthorizeResource {
     @Path("/authorize")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "consent", summary = "Submit Authorization Consent", description = "Submit the user's consent, issue an authorization code, and return the client redirect target", responses = {
+            @ApiResponse(responseCode = "200", description = "Consent response with the client redirect target", content = @Content(schema = @Schema(implementation = ConsentResponse.class)))})
     public Response consent(@NotNull @Valid ConsentRequest request, @Context HttpHeaders headers) {
 
         Cookie csrfCookie = headers.getCookies().get(CSRF_COOKIE);
