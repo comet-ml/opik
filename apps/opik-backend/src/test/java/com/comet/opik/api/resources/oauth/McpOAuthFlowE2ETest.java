@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
@@ -100,12 +101,23 @@ class McpOAuthFlowE2ETest {
 
     private String baseURI;
     private ClientSupport client;
+    private Injector injector;
 
     @BeforeAll
-    void beforeAll(ClientSupport client) {
+    void beforeAll(ClientSupport client, Injector injector) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.injector = injector;
         ClientSupportUtils.config(client);
+    }
+
+    @Test
+    @DisplayName("the scrub job is scheduled when MCP OAuth is enabled")
+    void scrubJobScheduledWhenEnabled() {
+        // Positive control for McpOAuthDisabledE2ETest#scrubJobNotScheduledWhenDisabled: the binding the
+        // GuiceJobManager schedules must be present when the feature is on, otherwise the disabled-side
+        // assertion would pass even if the job were never wired at all.
+        assertThat(McpOAuthDisabledE2ETest.hasScrubJobBinding(injector)).isTrue();
     }
 
     // --- flow helpers ---------------------------------------------------------------------------
