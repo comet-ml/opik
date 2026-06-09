@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { PenLine, Tag, Trash } from "lucide-react";
 import slugify from "slugify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonProps } from "@/ui/button";
@@ -12,6 +12,7 @@ import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutati
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/v2/pages-shared/traces/AddTagDialog/AddTagDialog";
+import AddAnnotationDialog from "@/v2/pages-shared/traces/AddAnnotationDialog/AddAnnotationDialog";
 import EvaluateButton from "@/v2/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v2/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
@@ -131,6 +132,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           type={type}
         />
       )}
+      {canLogTraceSpanThread && (
+        <AddAnnotationDialog
+          key={`annotate-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 5}
+          setOpen={setOpen}
+          projectId={projectId}
+          type={type}
+        />
+      )}
       {enableEvaluate && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
@@ -151,6 +162,22 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         buttonVariant={buttonVariant}
         buttonSize={buttonSize}
       />
+      {canLogTraceSpanThread && (
+        <TooltipWrapper content="Annotate">
+          <Button
+            variant={buttonVariant}
+            size={buttonSize}
+            onClick={() => {
+              setOpen(5);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <PenLine className={leadIconClassName} />
+            <span>Annotate</span>
+          </Button>
+        </TooltipWrapper>
+      )}
       {canLogTraceSpanThread && (
         <TooltipWrapper content="Manage tags">
           <Button
