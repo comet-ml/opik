@@ -1,16 +1,8 @@
+import { isAiSpendRoute } from "@/lib/aiSpend";
 import { Workspace, WORKSPACE_KIND } from "./types";
 
 const AI_SPEND_NAME_PREFIX = "__cc_";
 const AI_SPEND_NAME_SUFFIX = "__";
-const AI_SPEND_ROUTE_SEGMENT = "/ai-spend";
-
-export const isAiSpendRoute = (pathname: string): boolean => {
-  const normalized = pathname.replace(/\/+$/, "");
-  return (
-    normalized.endsWith(AI_SPEND_ROUTE_SEGMENT) ||
-    normalized.includes(`${AI_SPEND_ROUTE_SEGMENT}/`)
-  );
-};
 
 // Backend (OPIK-6819) will expose `kind`; until then derive it from the
 // reserved `__cc_{orgId}__` workspace name so the FE works against a real
@@ -23,7 +15,6 @@ export const getWorkspaceKind = (
 
   const name = workspace.workspaceName ?? "";
 
-  // TODO lala fallback
   return name.startsWith(AI_SPEND_NAME_PREFIX) &&
     name.endsWith(AI_SPEND_NAME_SUFFIX)
     ? WORKSPACE_KIND.AI_SPEND

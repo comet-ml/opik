@@ -1,14 +1,6 @@
 import React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  Folder,
-  LayoutDashboard,
-  Plug,
-  Sparkles,
-  Trophy,
-  Undo2,
-  Zap,
-} from "lucide-react";
+import { LayoutDashboard, Trophy, Undo2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useAiSpend } from "@/contexts/AiSpendContext";
