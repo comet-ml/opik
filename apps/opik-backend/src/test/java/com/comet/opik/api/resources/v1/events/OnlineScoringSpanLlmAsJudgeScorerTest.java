@@ -50,6 +50,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     private TraceService traceService;
     @Mock
     private LlmProviderFactory llmProviderFactory;
+    @Mock
+    private OnlineScoringMetrics onlineScoringMetrics;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringSpanLlmAsJudgeScorer scorer;
@@ -69,7 +71,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getConsumerGroupName()).thenReturn("online_scoring");
 
         scorer = new OnlineScoringSpanLlmAsJudgeScorer(onlineScoringConfig, serviceTogglesConfig, redissonClient,
-                feedbackScoreService, aiProxyService, traceService, llmProviderFactory);
+                feedbackScoreService, aiProxyService, traceService, llmProviderFactory, onlineScoringMetrics);
     }
 
     @AfterEach
