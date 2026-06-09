@@ -1,5 +1,8 @@
 package com.comet.opik.domain.mcpoauth;
 
+import com.comet.opik.infrastructure.db.RevokedReasonMapper;
+import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
@@ -12,6 +15,8 @@ import java.time.Instant;
 import java.util.Optional;
 
 @RegisterConstructorMapper(McpOAuthToken.class)
+@RegisterArgumentFactory(RevokedReasonMapper.class)
+@RegisterColumnMapper(RevokedReasonMapper.class)
 interface McpOAuthTokenDAO {
 
     @SqlUpdate("""
