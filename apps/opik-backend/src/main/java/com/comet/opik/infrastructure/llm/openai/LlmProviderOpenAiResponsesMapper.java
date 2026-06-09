@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -10,8 +12,11 @@ import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.internal.JsonSchemaElementJsonUtils;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormat;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
@@ -43,9 +48,10 @@ import java.util.Optional;
  * to bridge the proxy contract (Chat-Completions in/out) onto the Responses-API-backed ChatModel.
  * <br/>
  * Scope: text-only system/user/assistant messages, tool calling (tool specs, tool_choice,
- * assistant tool_calls, tool result resume), basic sampling parameters, token usage, and finish
- * reason. Structured response formats, multimodal content, and per-token streaming of tool-call
- * argument deltas are intentionally out of scope and should be added incrementally.
+ * assistant tool_calls, tool result resume), structured response formats (json_object and
+ * json_schema), basic sampling parameters, token usage, and finish reason. Multimodal content and
+ * per-token streaming of tool-call argument deltas are intentionally out of scope and should be
+ * added incrementally.
  */
 @lombok.experimental.UtilityClass
 @Slf4j
@@ -54,6 +60,13 @@ class LlmProviderOpenAiResponsesMapper {
     // OpenAI Chat-Completions wire-format role token for assistant messages. langchain4j's Role enum
     // toString() yields the uppercase Java name; clients expect a lowercase per the OpenAI API spec.
     private static final String ASSISTANT_ROLE_WIRE_VALUE = "assistant";
+
+    // langchain4j's openai-internal JsonSchema has no public accessors — its fields are read back
+    // via a Jackson roundtrip. This dedicated mapper is intentionally minimal: it just needs to
+    // honour @JsonProperty annotations on the source class, which the default ObjectMapper does.
+    private static final ObjectMapper RESPONSE_FORMAT_MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     ChatRequest toChatRequest(@NonNull ChatCompletionRequest request) {
         var builder = ChatRequest.builder()
@@ -74,6 +87,7 @@ class LlmProviderOpenAiResponsesMapper {
             builder.toolSpecifications(toToolSpecifications(request.tools()));
         }
         Optional.ofNullable(toToolChoice(request.toolChoice())).ifPresent(builder::toolChoice);
+        Optional.ofNullable(toResponseFormat(request.responseFormat())).ifPresent(builder::responseFormat);
 
         return builder.build();
     }
@@ -257,6 +271,52 @@ class LlmProviderOpenAiResponsesMapper {
         log.info("Named-function tool_choice not supported by langchain4j ToolChoice enum; "
                 + "falling back to AUTO. tool_choice={}", toolChoice);
         return ToolChoice.AUTO;
+    }
+
+    /**
+     * Maps OpenAI's {@code response_format} to langchain4j's {@link ResponseFormat}. {@code text}
+     * returns {@code null} (langchain4j's default). {@code json_object} → loose JSON mode.
+     * {@code json_schema} → strict structured-output mode with name + root schema. The {@code strict}
+     * flag from the request is NOT propagated — langchain4j's per-request {@link JsonSchema} has no
+     * strict slot; strict mode is configured at {@code OpenAiOfficialResponsesChatModel} build time
+     * via {@code .strictJsonSchema(...)}. Returns {@code null} when {@code responseFormat} is absent.
+     */
+    private ResponseFormat toResponseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat inputFormat) {
+        if (inputFormat == null || inputFormat.type() == null) {
+            return null;
+        }
+        return switch (inputFormat.type()) {
+            case TEXT -> null;
+            case JSON_OBJECT -> ResponseFormat.JSON;
+            case JSON_SCHEMA -> toJsonSchemaResponseFormat(inputFormat.jsonSchema());
+        };
+    }
+
+    private ResponseFormat toJsonSchemaResponseFormat(
+            dev.langchain4j.model.openai.internal.chat.JsonSchema jsonSchema) {
+        if (jsonSchema == null) {
+            // json_schema variant without a schema body falls back to loose JSON mode rather than
+            // throwing — defensive against malformed clients that send the type alone.
+            return ResponseFormat.JSON;
+        }
+        // The openai-internal JsonSchema is opaque (no public accessors), so re-emit it through
+        // Jackson to read the underlying fields. Cheap roundtrip on a tiny POJO.
+        Map<String, Object> raw = RESPONSE_FORMAT_MAPPER.convertValue(jsonSchema, MAP_TYPE);
+        String name = (String) raw.get("name");
+        Object schemaObj = raw.get("schema");
+        if (!(schemaObj instanceof Map<?, ?>)) {
+            return ResponseFormat.JSON;
+        }
+        @SuppressWarnings("unchecked")
+        var schemaMap = (Map<String, Object>) schemaObj;
+        var rootSchema = toJsonObjectSchema(schemaMap);
+        return ResponseFormat.builder()
+                .type(ResponseFormatType.JSON)
+                .jsonSchema(JsonSchema.builder()
+                        .name(name)
+                        .rootElement(rootSchema)
+                        .build())
+                .build();
     }
 
     private Usage toUsage(TokenUsage tokenUsage) {

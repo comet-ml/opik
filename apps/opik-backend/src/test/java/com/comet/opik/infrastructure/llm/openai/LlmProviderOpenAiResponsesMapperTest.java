@@ -5,7 +5,9 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.ToolChoice;
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.ChatResponseMetadata;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
@@ -433,6 +435,87 @@ class LlmProviderOpenAiResponsesMapperTest {
             assertThat(call.type()).isEqualTo(ToolType.FUNCTION);
             assertThat(call.function().name()).isEqualTo("get_weather");
             assertThat(call.function().arguments()).isEqualTo("{\"city\":\"Lisbon\"}");
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class StructuredOutput {
+
+        @Test
+        void mapsJsonObjectResponseFormatToLooseJsonMode() {
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
+                            .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_OBJECT)
+                            .build())
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.responseFormat())
+                    .isEqualTo(dev.langchain4j.model.chat.request.ResponseFormat.JSON);
+        }
+
+        @Test
+        void mapsJsonSchemaResponseFormatWithNameAndRootObjectSchema() {
+            var schema = Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                            "summary", Map.of("type", "string"),
+                            "sentiment", Map.of("type", "string", "enum", List.of("positive", "negative"))),
+                    "required", List.of("summary", "sentiment"));
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("classify")
+                    .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
+                            .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_SCHEMA)
+                            .jsonSchema(dev.langchain4j.model.openai.internal.chat.JsonSchema.builder()
+                                    .name("classification")
+                                    .strict(true)
+                                    .schema(schema)
+                                    .build())
+                            .build())
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.responseFormat().type()).isEqualTo(ResponseFormatType.JSON);
+            var translatedJsonSchema = actual.responseFormat().jsonSchema();
+            assertThat(translatedJsonSchema.name()).isEqualTo("classification");
+            var root = (JsonObjectSchema) translatedJsonSchema.rootElement();
+            assertThat(root.properties()).containsKeys("summary", "sentiment");
+            assertThat(root.required()).containsExactlyInAnyOrder("summary", "sentiment");
+        }
+
+        @Test
+        void leavesResponseFormatUnsetWhenRequestOmitsIt() {
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.responseFormat()).isNull();
+        }
+
+        @Test
+        void textResponseFormatLeavesChatRequestDefault() {
+            // text is OpenAI's default — explicitly setting it should not force a non-default
+            // ResponseFormat on the langchain4j ChatRequest.
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
+                            .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.TEXT)
+                            .build())
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.responseFormat()).isNull();
         }
     }
 }
