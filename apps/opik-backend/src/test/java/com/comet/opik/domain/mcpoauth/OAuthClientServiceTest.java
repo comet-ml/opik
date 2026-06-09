@@ -69,6 +69,16 @@ class OAuthClientServiceTest {
     }
 
     @Test
+    @DisplayName("resolveForRedirect: null redirect_uri throws 400")
+    void resolveForRedirect_nullRedirect_throwsBadRequest() {
+        mockClient(REDIRECT_URI);
+
+        assertThatThrownBy(() -> service.resolveForRedirect(CLIENT_ID, null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("invalid redirect_uri");
+    }
+
+    @Test
     @DisplayName("resolveForRedirect: unregistered redirect_uri throws 400")
     void resolveForRedirect_unregisteredRedirect_throwsBadRequest() {
         mockClient("http://localhost:1234/other");
