@@ -12,6 +12,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -37,9 +38,37 @@ public class OnlineScoringMetrics {
     private static final String METER_NAME = "opik.online_scoring";
     private static final AttributeKey<String> EVALUATOR_TYPE_KEY = AttributeKey.stringKey("evaluator_type");
     private static final AttributeKey<String> MODEL_KEY = AttributeKey.stringKey("model");
+    private static final AttributeKey<String> DECISION_KEY = AttributeKey.stringKey("decision");
+    private static final AttributeKey<String> OUTCOME_KEY = AttributeKey.stringKey("outcome");
 
     private final LongHistogram inputChars;
     private final LongHistogram outputChars;
+    // End-to-end funnel counters (low cardinality: evaluator_type + a small fixed enum, never workspace_id).
+    private final LongCounter sampled;
+    private final LongCounter enqueued;
+    private final LongCounter evals;
+    private final LongCounter scoresStored;
+
+    /**
+     * Terminal outcome of one online-scoring eval, used as the bounded {@code outcome} label on
+     * {@link #recordEvalOutcome}. Kept a small fixed set so the counter stays low-cardinality.
+     */
+    public enum EvalOutcome {
+        SCORED("scored"),
+        SKIPPED_NO_TRACES("skipped_no_traces"),
+        SKIPPED_RULE_MISSING("skipped_rule_missing"),
+        ERROR("error");
+
+        private final String label;
+
+        EvalOutcome(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
+    }
 
     @Inject
     public OnlineScoringMetrics() {
@@ -54,6 +83,57 @@ public class OnlineScoringMetrics {
                 .setDescription("Approximate character count of the LLM-as-judge response text per round-trip")
                 .setUnit("chars")
                 .build();
+        this.sampled = meter.counterBuilder("online_scoring_sampled")
+                .setDescription("Traces evaluated against a rule's sampling rate, by decision (sampled|dropped)")
+                .build();
+        this.enqueued = meter.counterBuilder("online_scoring_enqueued")
+                .setDescription("Messages enqueued into the online-scoring Redis streams (post-sampling, post-quota)")
+                .build();
+        this.evals = meter.counterBuilder("online_scoring_eval")
+                .setDescription(
+                        "Online-scoring eval terminal outcomes (scored|skipped_no_traces|skipped_rule_missing|error)")
+                .build();
+        this.scoresStored = meter.counterBuilder("online_scoring_scores_stored")
+                .setDescription("Feedback scores produced and stored by online scoring")
+                .build();
+    }
+
+    /**
+     * Funnel top (B4): how many candidate traces a rule's sampling rate let through vs dropped.
+     */
+    public void recordSampled(@NonNull AutomationRuleEvaluatorType evaluatorType, long sampledIn, long dropped) {
+        var type = evaluatorType.getType();
+        if (sampledIn > 0) {
+            sampled.add(sampledIn, Attributes.of(EVALUATOR_TYPE_KEY, type, DECISION_KEY, "sampled"));
+        }
+        if (dropped > 0) {
+            sampled.add(dropped, Attributes.of(EVALUATOR_TYPE_KEY, type, DECISION_KEY, "dropped"));
+        }
+    }
+
+    /**
+     * Funnel middle (B5): messages actually enqueued into Redis for a given evaluator type.
+     */
+    public void recordEnqueued(@NonNull AutomationRuleEvaluatorType evaluatorType, long count) {
+        if (count > 0) {
+            enqueued.add(count, Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType()));
+        }
+    }
+
+    /**
+     * Funnel bottom (B2): the terminal outcome of one eval (scored / skipped / error).
+     */
+    public void recordEvalOutcome(@NonNull AutomationRuleEvaluatorType evaluatorType, @NonNull EvalOutcome outcome) {
+        evals.add(1, Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType(), OUTCOME_KEY, outcome.label()));
+    }
+
+    /**
+     * Funnel bottom (B2): feedback scores actually written for an eval.
+     */
+    public void recordScoresStored(@NonNull AutomationRuleEvaluatorType evaluatorType, long count) {
+        if (count > 0) {
+            scoresStored.add(count, Attributes.of(EVALUATOR_TYPE_KEY, evaluatorType.getType()));
+        }
     }
 
     /**

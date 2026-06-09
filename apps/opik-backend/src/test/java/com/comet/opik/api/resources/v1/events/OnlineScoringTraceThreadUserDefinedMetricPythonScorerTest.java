@@ -87,6 +87,9 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     @Mock
     private com.comet.opik.domain.SpanService spanService;
 
+    @Mock
+    private OnlineScoringMetrics onlineScoringMetrics;
+
     private OnlineScoringTraceThreadUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private Logger userFacingLogger;
@@ -131,7 +134,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 traceThreadService,
                 projectService,
                 automationRuleEvaluatorService,
-                spanService);
+                spanService,
+                onlineScoringMetrics);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();

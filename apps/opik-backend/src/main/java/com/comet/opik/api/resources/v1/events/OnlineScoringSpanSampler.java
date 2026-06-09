@@ -55,18 +55,21 @@ public class OnlineScoringSpanSampler {
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineScorePublisher onlineScorePublisher;
     private final OnlineScoringQuotaService quotaService;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringSpanSampler(@NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull SpanFilterEvaluationService filterEvaluationService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
-            @NonNull OnlineScoringQuotaService quotaService) throws NoSuchAlgorithmException {
+            @NonNull OnlineScoringQuotaService quotaService,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.quotaService = quotaService;
+        this.onlineScoringMetrics = onlineScoringMetrics;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanSampler.class);
     }
@@ -142,6 +145,8 @@ public class OnlineScoringSpanSampler {
                                 .map(span -> toLlmAsJudgeMessage(spansBatch, rule, span))
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
+                        onlineScoringMetrics.recordSampled(rule.getType(), messages.size(),
+                                scorableSpans.size() - messages.size());
                         var admitted = quotaService.admit(spansBatch.workspaceId(), rule.getId(),
                                 rule.getType().getType(), messages);
                         if (!admitted.isEmpty()) {
@@ -169,6 +174,8 @@ public class OnlineScoringSpanSampler {
                                 .map(span -> toUserDefinedMetricPythonMessage(spansBatch, rule, span))
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
+                        onlineScoringMetrics.recordSampled(rule.getType(), messages.size(),
+                                scorableSpans.size() - messages.size());
                         var admitted = quotaService.admit(spansBatch.workspaceId(), rule.getId(),
                                 rule.getType().getType(), messages);
                         if (!admitted.isEmpty()) {

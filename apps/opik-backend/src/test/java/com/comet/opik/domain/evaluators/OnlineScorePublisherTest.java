@@ -83,7 +83,8 @@ class OnlineScorePublisherTest {
         when(redisClient.getStream(anyString(), any())).thenReturn(stream);
         when(stream.add(any())).thenReturn(Mono.just(new StreamMessageId(System.currentTimeMillis(), 0)));
         return new OnlineScorePublisherImpl(
-                onlineScoringConfig, serviceTogglesConfig, redisClient, automationRuleEvaluatorService);
+                onlineScoringConfig, serviceTogglesConfig, redisClient, automationRuleEvaluatorService,
+                org.mockito.Mockito.mock(com.comet.opik.api.resources.v1.events.OnlineScoringMetrics.class));
     }
 
     private StreamAddParams<Object, Object> captureStreamAddParams() {

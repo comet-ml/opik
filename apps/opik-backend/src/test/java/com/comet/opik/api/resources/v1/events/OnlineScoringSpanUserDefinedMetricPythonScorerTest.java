@@ -67,6 +67,9 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
 
+    @Mock
+    private OnlineScoringMetrics onlineScoringMetrics;
+
     private OnlineScoringSpanUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
 
@@ -105,7 +108,8 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                 redissonClient,
                 feedbackScoreService,
                 traceService,
-                pythonEvaluatorService);
+                pythonEvaluatorService,
+                onlineScoringMetrics);
     }
 
     @AfterEach

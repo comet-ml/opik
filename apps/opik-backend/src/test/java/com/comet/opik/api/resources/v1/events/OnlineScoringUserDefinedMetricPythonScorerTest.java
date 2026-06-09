@@ -70,6 +70,9 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
 
+    @Mock
+    private OnlineScoringMetrics onlineScoringMetrics;
+
     private OnlineScoringUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private Logger userFacingLogger;
@@ -110,7 +113,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 feedbackScoreService,
                 traceService,
                 spanService,
-                pythonEvaluatorService);
+                pythonEvaluatorService,
+                onlineScoringMetrics);
 
         projectId = UUID.randomUUID();
         traceId = UUID.randomUUID();

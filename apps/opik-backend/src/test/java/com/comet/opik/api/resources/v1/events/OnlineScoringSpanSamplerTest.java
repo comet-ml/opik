@@ -78,6 +78,9 @@ class OnlineScoringSpanSamplerTest {
     @Mock
     private OnlineScoringQuotaService quotaService;
 
+    @Mock
+    private OnlineScoringMetrics onlineScoringMetrics;
+
     private OnlineScoringSpanSampler sampler;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
 
@@ -101,7 +104,8 @@ class OnlineScoringSpanSamplerTest {
                 ruleEvaluatorService,
                 filterEvaluationService,
                 onlineScorePublisher,
-                quotaService);
+                quotaService,
+                onlineScoringMetrics);
 
         projectId = UUID.randomUUID();
         workspaceId = "workspace-123";

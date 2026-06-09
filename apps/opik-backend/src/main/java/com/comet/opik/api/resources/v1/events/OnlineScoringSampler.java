@@ -65,6 +65,7 @@ public class OnlineScoringSampler {
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineScorePublisher onlineScorePublisher;
     private final OnlineScoringQuotaService quotaService;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringSampler(@NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
@@ -73,7 +74,8 @@ public class OnlineScoringSampler {
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull TraceService traceService,
             @NonNull ProjectService projectService,
-            @NonNull OnlineScoringQuotaService quotaService) throws NoSuchAlgorithmException {
+            @NonNull OnlineScoringQuotaService quotaService,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
@@ -81,6 +83,7 @@ public class OnlineScoringSampler {
         this.traceService = traceService;
         this.projectService = projectService;
         this.quotaService = quotaService;
+        this.onlineScoringMetrics = onlineScoringMetrics;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
     }
@@ -206,6 +209,8 @@ public class OnlineScoringSampler {
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
+                        onlineScoringMetrics.recordSampled(evaluator.getType(), messages.size(),
+                                scorableTraces.size() - messages.size());
                         var admitted = quotaService.admit(workspaceId, evaluator.getId(),
                                 evaluator.getType().getType(), messages);
                         if (!admitted.isEmpty()) {
@@ -219,6 +224,8 @@ public class OnlineScoringSampler {
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
                             logSampledTrace(evaluator, messages, scorableTraces.size());
+                            onlineScoringMetrics.recordSampled(evaluator.getType(), messages.size(),
+                                    scorableTraces.size() - messages.size());
                             var admitted = quotaService.admit(workspaceId, evaluator.getId(),
                                     evaluator.getType().getType(), messages);
                             if (!admitted.isEmpty()) {
