@@ -228,3 +228,107 @@ def test_pydantic_ai_logfire_with_opik_track__two_agent_calls__correct_nesting(
             trace_id=trace_id,
             parent_span_id=agent_run.id,
         )
+
+
+def test_pydantic_ai_logfire__nested_track_and_otel__cross_origin_nesting(
+    opik_client: opik.Opik,
+):
+    """Interleave native @opik.track spans with logfire/PydanticAI OTel spans at
+    different depths. Each OTel 'agent run' must attach to the innermost active
+    native span — one under the nested `inner_step`, the other under the
+    top-level `outer_entrypoint` — so parent-child links are preserved across
+    origins (native <-> OTel) within a single trace."""
+    config = opik_config.OpikConfig()
+    exporter = _build_otlp_exporter(config)
+
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+        additional_span_processors=[
+            BatchSpanProcessor(exporter),
+            OpikSpanProcessor(),
+        ],
+    )
+    logfire.instrument_pydantic_ai()
+
+    agent = Agent(TestModel(custom_output_text="ok"))
+    ID_STORAGE = {}
+
+    @opik.track(name="inner_step")
+    def inner_step() -> None:
+        ID_STORAGE["inner_span_id"] = opik_context.get_current_span_data().id
+        agent.run_sync("inner question")
+
+    @opik.track(name="outer_entrypoint")
+    def outer() -> str:
+        ID_STORAGE["trace_id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["outer_span_id"] = opik_context.get_current_span_data().id
+        inner_step()
+        agent.run_sync("outer question")
+        return "done"
+
+    outer()
+    opik.flush_tracker()
+    logfire.force_flush()
+
+    trace_id = ID_STORAGE["trace_id"]
+    outer_span_id = ID_STORAGE["outer_span_id"]
+    inner_span_id = ID_STORAGE["inner_span_id"]
+
+    # outer + inner (native) + 2x (agent run + model) = 6 spans in one trace
+    if not synchronization.until(
+        lambda: len(
+            opik_client.search_spans(
+                project_name=opik_client.config.project_name, trace_id=trace_id
+            )
+        )
+        == 6,
+        max_try_seconds=15,
+    ):
+        raise AssertionError(
+            "Expected 6 spans (nested native steps + two agent-run subtrees) in a "
+            "single trace within timeout"
+        )
+
+    spans = opik_client.search_spans(
+        project_name=opik_client.config.project_name,
+        trace_id=trace_id,
+    )
+
+    # native spans: outer is the root, inner is its child
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=outer_span_id,
+        trace_id=trace_id,
+        parent_span_id=None,
+        name="outer_entrypoint",
+    )
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=inner_span_id,
+        trace_id=trace_id,
+        parent_span_id=outer_span_id,
+        name="inner_step",
+    )
+
+    # the two OTel 'agent run' spans attach to the innermost native span that was
+    # active when each was started: one under inner_step, one under outer.
+    agent_runs = [span for span in spans if span.name == "agent run"]
+    assert len(agent_runs) == 2
+    assert {run.parent_span_id for run in agent_runs} == {inner_span_id, outer_span_id}
+    for agent_run in agent_runs:
+        verifiers.verify_span(
+            opik_client=opik_client,
+            span_id=agent_run.id,
+            trace_id=trace_id,
+            parent_span_id=agent_run.parent_span_id,
+            name="agent run",
+        )
+        children = [span for span in spans if span.parent_span_id == agent_run.id]
+        assert len(children) == 1, "each agent run should own exactly one model span"
+        verifiers.verify_span(
+            opik_client=opik_client,
+            span_id=children[0].id,
+            trace_id=trace_id,
+            parent_span_id=agent_run.id,
+        )
