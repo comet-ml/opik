@@ -52,7 +52,7 @@ const persistMcpOAuthReturn = () => {
   const returnTo = new URLSearchParams(window.location.search).get("returnTo");
   if (!returnTo) return;
   try {
-    if (new URL(returnTo).host === window.location.host) {
+    if (new URL(returnTo).origin === window.location.origin) {
       window.localStorage.setItem(MCP_OAUTH_REDIRECT_URL_KEY, returnTo);
     }
   } catch {

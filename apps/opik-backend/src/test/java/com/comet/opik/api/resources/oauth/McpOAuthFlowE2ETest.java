@@ -42,14 +42,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.ACCESS_PREFIX;
 import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.REFRESH_PREFIX;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 
 /**
  * Full-stack OAuth 2.1 flow against a real app + MySQL: registration, PKCE dance, token lifecycle.
@@ -352,7 +350,7 @@ class McpOAuthFlowE2ETest {
 
     @Test
     @DisplayName("refresh token reuse after the grace window revokes the whole family — and it persists")
-    void refreshReuseRevokesFamily() {
+    void refreshReuseRevokesFamily() throws InterruptedException {
         String clientId = registerClient();
         Map<String, Object> tokens = mintTokens(clientId);
         String oldRefresh = (String) tokens.get("refresh_token");
@@ -371,9 +369,9 @@ class McpOAuthFlowE2ETest {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
         }
 
-        await().pollDelay(ROTATION_GRACE_MS + 500, TimeUnit.MILLISECONDS)
-                .atMost(ROTATION_GRACE_MS + 5_000, TimeUnit.MILLISECONDS)
-                .until(() -> true);
+        // refresh() gates reuse on wall-clock Instant.now() vs revokedAt + grace, so this
+        // is a genuine wait for the grace window to lapse, not an async condition to poll.
+        Thread.sleep(ROTATION_GRACE_MS + 500);
 
         // replaying the rotated token after grace is reuse: invalid_grant + family revocation
         try (var response = refreshToken(clientId, oldRefresh)) {

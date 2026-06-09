@@ -5,7 +5,9 @@ export type OAuthWorkspaceInfo = {
 
 export type OAuthAuthorizeContext = {
   client_name: string;
-  client_logo_uri: string | null;
+  // Backend serializes AuthorizeContext with @JsonInclude(NON_NULL), so this
+  // field is omitted from the payload (arrives as undefined) when unset.
+  client_logo_uri?: string | null;
   workspaces: OAuthWorkspaceInfo[];
   csrf_token: string;
 };

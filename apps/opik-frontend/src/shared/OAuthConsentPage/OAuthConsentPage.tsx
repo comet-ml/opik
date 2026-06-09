@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import get from "lodash/get";
 import useOAuthAuthorizeContext from "@/api/oauth/useOAuthAuthorizeContext";
 import useOAuthConsentMutation from "@/api/oauth/useOAuthConsentMutation";
 import { OAuthAuthorizeContext } from "@/api/oauth/types";
@@ -19,7 +20,6 @@ import { useToast } from "@/ui/use-toast";
 type ParsedParams = {
   client_id: string;
   redirect_uri: string;
-  response_type: string;
   code_challenge: string;
   code_challenge_method: string;
   resource: string;
@@ -28,6 +28,8 @@ type ParsedParams = {
 
 const parseParams = (search: string): ParsedParams | null => {
   const q = new URLSearchParams(search);
+  // response_type is required by the OAuth spec; we gate on its presence but
+  // never forward it (the backend already validated it before this redirect).
   const required = [
     "client_id",
     "redirect_uri",
@@ -42,7 +44,6 @@ const parseParams = (search: string): ParsedParams | null => {
   return {
     client_id: q.get("client_id") as string,
     redirect_uri: q.get("redirect_uri") as string,
-    response_type: q.get("response_type") as string,
     code_challenge: q.get("code_challenge") as string,
     code_challenge_method: q.get("code_challenge_method") as string,
     resource: q.get("resource") as string,
@@ -50,11 +51,19 @@ const parseParams = (search: string): ParsedParams | null => {
   };
 };
 
-const denyAndRedirect = (redirectUri: string, state: string | null) => {
-  const url = new URL(redirectUri);
-  url.searchParams.set("error", "access_denied");
-  if (state) url.searchParams.set("state", state);
-  window.location.href = url.toString();
+const denyAndRedirect = (
+  redirectUri: string,
+  state: string | null,
+): boolean => {
+  try {
+    const url = new URL(redirectUri);
+    url.searchParams.set("error", "access_denied");
+    if (state) url.searchParams.set("state", state);
+    window.location.href = url.toString();
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const OAuthConsentPage: React.FC = () => {
@@ -134,11 +143,15 @@ const OAuthConsentPage: React.FC = () => {
         onSuccess: ({ redirect_to }) => {
           window.location.href = redirect_to;
         },
-        onError: () => {
+        onError: (error) => {
+          const description = get(
+            error,
+            ["response", "data", "message"],
+            "The server rejected the consent. Please retry from your AI host.",
+          );
           toast({
             title: "Could not complete authorization",
-            description:
-              "The server rejected the consent. Please retry from your AI host.",
+            description,
             variant: "destructive",
           });
         },
@@ -146,7 +159,16 @@ const OAuthConsentPage: React.FC = () => {
     );
   };
 
-  const handleDeny = () => denyAndRedirect(params.redirect_uri, params.state);
+  const handleDeny = () => {
+    if (!denyAndRedirect(params.redirect_uri, params.state)) {
+      toast({
+        title: "Could not complete authorization",
+        description:
+          "The redirect target is invalid. Restart the authorization flow from your AI host.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <FullPage>
