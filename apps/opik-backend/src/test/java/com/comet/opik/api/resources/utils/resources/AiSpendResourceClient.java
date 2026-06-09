@@ -1,8 +1,11 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
+import com.comet.opik.api.spend.SpendRecommendationsResponse;
+import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -43,6 +46,50 @@ public class AiSpendResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return response.readEntity(SpendCompositionResponse.class);
+        }
+    }
+
+    public SpendBreakdownResponse getBreakdown(String laneKey, SpendMetricRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/composition").path(laneKey).path("breakdown")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(SpendBreakdownResponse.class);
+        }
+    }
+
+    public SpendUserPage getUsers(SpendMetricRequest request, int page, int size, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/users")
+                .queryParam("page", page)
+                .queryParam("size", size)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(SpendUserPage.class);
+        }
+    }
+
+    public SpendRecommendationsResponse getRecommendations(SpendMetricRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/recommendations")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(SpendRecommendationsResponse.class);
         }
     }
 }

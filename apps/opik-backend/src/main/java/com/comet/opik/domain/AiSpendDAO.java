@@ -1,9 +1,12 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
+import com.comet.opik.api.spend.SpendUserRow;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Statement;
@@ -12,12 +15,15 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -29,6 +35,10 @@ public interface AiSpendDAO {
     Mono<List<WorkspaceMetricsSummaryResponse.Result>> getSummary(SpendMetricRequest request);
 
     Mono<SpendCompositionResponse> getComposition(SpendMetricRequest request);
+
+    Mono<SpendBreakdownResponse> getBreakdown(SpendMetricRequest request, SpendLane lane);
+
+    Mono<List<SpendUserRow>> getUsers(SpendMetricRequest request);
 }
 
 @Slf4j
@@ -36,7 +46,9 @@ public interface AiSpendDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AiSpendDAOImpl implements AiSpendDAO {
 
+    private static final String USER_UUID_KEY = "cc.identity.user_uuid";
     private static final String USER_UUID_EXPR = "JSONExtractString(metadata, 'cc', 'identity', 'user_uuid')";
+    private static final String USER_FILTER = " AND " + USER_UUID_EXPR + " = :user_uuid";
 
     private static final String COST_SUMMARY = """
             SELECT
@@ -68,12 +80,13 @@ class AiSpendDAOImpl implements AiSpendDAO {
 
     private static final String COMPOSITION_TOKENS = """
             SELECT
-                %s
+                %1$s
             FROM traces final
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id BETWEEN :id_start AND :id_end
                 AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+                %2$s
             ;
             """;
 
@@ -86,6 +99,100 @@ class AiSpendDAOImpl implements AiSpendDAO {
                 AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
             ;
             """;
+
+    private static final String COMPOSITION_COST_BY_USER = """
+            SELECT SUM(s.total_estimated_cost) AS total_cost
+            FROM spans s final
+            INNER JOIN (
+                SELECT id
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id BETWEEN :id_start AND :id_end
+                    AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+                    AND %s = :user_uuid
+            ) t ON s.trace_id = t.id
+            WHERE s.workspace_id = :workspace_id
+                AND s.project_id = :project_id
+                AND s.id BETWEEN :id_start AND :id_end
+                AND s.start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+            ;
+            """
+            .formatted(USER_UUID_EXPR);
+
+    private static final String BREAKDOWN = """
+            SELECT label, SUM(token_value) AS total_tokens
+            FROM (
+                SELECT JSONExtractString(item, '%2$s') AS label,
+                       JSONExtractInt(item, '%3$s') AS token_value
+                FROM traces final
+                ARRAY JOIN JSONExtractArrayRaw(metadata, %1$s) AS item
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id BETWEEN :id_start AND :id_end
+                    AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+                    %4$s
+            )
+            WHERE label != ''
+            GROUP BY label
+            ORDER BY total_tokens DESC
+            LIMIT 200
+            ;
+            """;
+
+    private static final String USERS_TRACE_AGG = """
+            SELECT
+                user_uuid,
+                anyLast(user_email) AS user_email,
+                anyLast(user_display_name) AS user_display_name,
+                count() AS requests,
+                sum(skills_loaded) AS skills,
+                max(mcps_available) AS mcps,
+                sum(tool_results_count) AS mcp_calls,
+                arrayFilter(x -> x != '', groupUniqArray(repository)) AS repositories
+            FROM (
+                SELECT
+                    %1$s AS user_uuid,
+                    JSONExtractString(metadata, 'cc', 'identity', 'user_email') AS user_email,
+                    JSONExtractString(metadata, 'cc', 'identity', 'user_display_name') AS user_display_name,
+                    JSONExtractInt(metadata, 'cc', 'skills', 'summary', 'loaded_count') AS skills_loaded,
+                    JSONExtractInt(metadata, 'cc', 'tools', 'summary', 'by_source', 'mcp', 'available_count') AS mcps_available,
+                    JSONExtractInt(metadata, 'cc', 'tool_results', 'summary', 'count') AS tool_results_count,
+                    JSONExtractString(metadata, 'cc', 'git', 'repository') AS repository
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id BETWEEN :id_start AND :id_end
+                    AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+            )
+            WHERE user_uuid != ''
+            GROUP BY user_uuid
+            ;
+            """
+            .formatted(USER_UUID_EXPR);
+
+    private static final String USERS_SPEND = """
+            SELECT
+                t.user_uuid AS user_uuid,
+                SUM(s.total_estimated_cost) AS spend,
+                anyLastIf(s.model, s.model != '') AS model
+            FROM spans s final
+            INNER JOIN (
+                SELECT id, %1$s AS user_uuid
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id BETWEEN :id_start AND :id_end
+                    AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+            ) t ON s.trace_id = t.id
+            WHERE s.workspace_id = :workspace_id
+                AND s.project_id = :project_id
+                AND s.id BETWEEN :id_start AND :id_end
+                AND s.start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+            GROUP BY t.user_uuid
+            ;
+            """
+            .formatted(USER_UUID_EXPR);
 
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull IdGenerator idGenerator;
@@ -100,6 +207,40 @@ class AiSpendDAOImpl implements AiSpendDAO {
     public Mono<SpendCompositionResponse> getComposition(@NonNull SpendMetricRequest request) {
         return Mono.zip(compositionTokens(request), compositionCost(request))
                 .map(tuple -> buildComposition(tuple.getT1(), tuple.getT2()));
+    }
+
+    @Override
+    public Mono<SpendBreakdownResponse> getBreakdown(@NonNull SpendMetricRequest request, @NonNull SpendLane lane) {
+        Optional<String> userUuid = userUuidFromFilters(request.filters());
+        String sql = BREAKDOWN.formatted(lane.getBreakdownArrayPath(), lane.getBreakdownLabelField(),
+                lane.getBreakdownTokenField(), userUuid.map(u -> USER_FILTER).orElse(""));
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql);
+            bindCompositionRange(statement, request);
+            userUuid.ifPresent(value -> statement.bind("user_uuid", value));
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> SpendBreakdownResponse.Item.builder()
+                            .label(row.get("label", String.class))
+                            .totalTokens(getLong(row.get("total_tokens", Long.class)))
+                            .build()))
+                    .collectList();
+        }).map(items -> {
+            long total = items.stream().mapToLong(SpendBreakdownResponse.Item::totalTokens).sum();
+            return SpendBreakdownResponse.builder()
+                    .laneKey(lane.getKey())
+                    .title(lane.getLabel())
+                    .subtitle(lane.getBreakdownSubtitle())
+                    .totalTokens(total)
+                    .itemCount(items.size())
+                    .items(items)
+                    .build();
+        });
+    }
+
+    @Override
+    public Mono<List<SpendUserRow>> getUsers(@NonNull SpendMetricRequest request) {
+        return Mono.zip(usersTraceAgg(request), usersSpend(request))
+                .map(tuple -> mergeUsers(tuple.getT1(), tuple.getT2()));
     }
 
     private Mono<CostRow> costSummary(SpendMetricRequest request) {
@@ -130,20 +271,21 @@ class AiSpendDAOImpl implements AiSpendDAO {
     }
 
     private Mono<long[]> compositionTokens(SpendMetricRequest request) {
-        var lanes = List.copyOf(java.util.Arrays.asList(SpendLane.values()));
+        var lanes = List.of(SpendLane.values());
+        Optional<String> userUuid = userUuidFromFilters(request.filters());
         String selectList = lanes.stream()
                 .map(lane -> "SUM(%s) AS %s".formatted(lane.getTokenExpression(), lane.getKey()))
                 .collect(Collectors.joining(",\n    "));
-        String sql = COMPOSITION_TOKENS.formatted(selectList);
+        String sql = COMPOSITION_TOKENS.formatted(selectList, userUuid.map(u -> USER_FILTER).orElse(""));
         return template.nonTransaction(connection -> {
             var statement = connection.createStatement(sql);
             bindCompositionRange(statement, request);
+            userUuid.ifPresent(value -> statement.bind("user_uuid", value));
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, metadata) -> {
                         long[] tokens = new long[lanes.size()];
                         for (int i = 0; i < lanes.size(); i++) {
-                            Long value = row.get(lanes.get(i).getKey(), Long.class);
-                            tokens[i] = value == null ? 0L : value;
+                            tokens[i] = getLong(row.get(lanes.get(i).getKey(), Long.class));
                         }
                         return tokens;
                     }))
@@ -152,16 +294,65 @@ class AiSpendDAOImpl implements AiSpendDAO {
     }
 
     private Mono<BigDecimal> compositionCost(SpendMetricRequest request) {
+        Optional<String> userUuid = userUuidFromFilters(request.filters());
+        String sql = userUuid.isPresent() ? COMPOSITION_COST_BY_USER : COMPOSITION_COST;
         return template.nonTransaction(connection -> {
-            var statement = connection.createStatement(COMPOSITION_COST);
+            var statement = connection.createStatement(sql);
             bindCompositionRange(statement, request);
+            userUuid.ifPresent(value -> statement.bind("user_uuid", value));
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, metadata) -> {
-                        BigDecimal value = row.get("total_cost", BigDecimal.class);
-                        return value == null ? BigDecimal.ZERO : value;
-                    }))
+                    .flatMapMany(result -> result.map((row, metadata) -> Optional
+                            .ofNullable(row.get("total_cost", BigDecimal.class)).orElse(BigDecimal.ZERO)))
                     .single(BigDecimal.ZERO);
         });
+    }
+
+    private Mono<List<SpendUserRow>> usersTraceAgg(SpendMetricRequest request) {
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(USERS_TRACE_AGG);
+            bindCompositionRange(statement, request);
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> SpendUserRow.builder()
+                            .userUuid(row.get("user_uuid", String.class))
+                            .userEmail(row.get("user_email", String.class))
+                            .userDisplayName(row.get("user_display_name", String.class))
+                            .requests(getLong(row.get("requests", Long.class)))
+                            .skills(getLong(row.get("skills", Long.class)))
+                            .mcps(getLong(row.get("mcps", Long.class)))
+                            .mcpCalls(getLong(row.get("mcp_calls", Long.class)))
+                            .repositories(toList(row.get("repositories", String[].class)))
+                            .build()))
+                    .collectList();
+        });
+    }
+
+    private Mono<List<SpendUserRow>> usersSpend(SpendMetricRequest request) {
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(USERS_SPEND);
+            bindCompositionRange(statement, request);
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> SpendUserRow.builder()
+                            .userUuid(row.get("user_uuid", String.class))
+                            .totalEstimatedCost(toBigDecimal(row.get("spend", Double.class)))
+                            .model(row.get("model", String.class))
+                            .build()))
+                    .collectList();
+        });
+    }
+
+    private List<SpendUserRow> mergeUsers(List<SpendUserRow> traceAgg, List<SpendUserRow> spend) {
+        var spendByUser = spend.stream()
+                .filter(row -> row.userUuid() != null)
+                .collect(Collectors.toMap(SpendUserRow::userUuid, row -> row, (a, b) -> a));
+        List<SpendUserRow> merged = new ArrayList<>();
+        for (SpendUserRow agg : traceAgg) {
+            SpendUserRow costRow = spendByUser.get(agg.userUuid());
+            merged.add(agg.toBuilder()
+                    .totalEstimatedCost(costRow != null ? costRow.totalEstimatedCost() : BigDecimal.ZERO)
+                    .model(costRow != null ? costRow.model() : null)
+                    .build());
+        }
+        return merged;
     }
 
     private void bindSummaryRange(Statement statement, SpendMetricRequest request) {
@@ -184,6 +375,17 @@ class AiSpendDAOImpl implements AiSpendDAO {
                 .bind("id_end", idGenerator.getTimeOrderedEpoch(request.intervalEnd().toEpochMilli()));
     }
 
+    private Optional<String> userUuidFromFilters(List<TraceFilter> filters) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return Optional.empty();
+        }
+        return filters.stream()
+                .filter(filter -> USER_UUID_KEY.equals(filter.key()))
+                .map(TraceFilter::value)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst();
+    }
+
     private List<WorkspaceMetricsSummaryResponse.Result> buildSummaryResults(CostRow cost, CountsRow counts) {
         Double avgCurrent = average(cost.current(), counts.activeUsersCurrent());
         Double avgPrevious = average(cost.previous(), counts.activeUsersPrevious());
@@ -197,8 +399,8 @@ class AiSpendDAOImpl implements AiSpendDAO {
 
     private SpendCompositionResponse buildComposition(long[] tokens, BigDecimal totalCost) {
         var lanes = SpendLane.values();
-        List<SpendCompositionResponse.Lane> inputLanes = new java.util.ArrayList<>();
-        List<SpendCompositionResponse.Lane> outputLanes = new java.util.ArrayList<>();
+        List<SpendCompositionResponse.Lane> inputLanes = new ArrayList<>();
+        List<SpendCompositionResponse.Lane> outputLanes = new ArrayList<>();
         long inputTokens = 0L;
         long outputTokens = 0L;
 
@@ -209,7 +411,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                     .key(lane.getKey())
                     .label(lane.getLabel())
                     .totalTokens(laneTokens)
-                    .hasBreakdown(lane.isHasBreakdown())
+                    .hasBreakdown(lane.hasBreakdown())
                     .build();
             if (lane.getSide() == SpendLane.Side.INPUT) {
                 inputLanes.add(laneResponse);
@@ -248,6 +450,18 @@ class AiSpendDAOImpl implements AiSpendDAO {
 
     private Double toDouble(Long value) {
         return value == null ? null : value.doubleValue();
+    }
+
+    private long getLong(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    private BigDecimal toBigDecimal(Double value) {
+        return value == null ? BigDecimal.ZERO : BigDecimal.valueOf(value);
+    }
+
+    private List<String> toList(String[] values) {
+        return values == null ? List.of() : List.of(values);
     }
 
     private Instant getPriorStart(Instant intervalStart, Instant intervalEnd) {
