@@ -320,6 +320,9 @@ navigation:
               - page: Datasets & Experiments
                 path: ../docs-v2/evaluation/advanced/evaluate_your_llm.mdx
                 slug: evaluate_your_llm
+              - page: Resume an interrupted evaluation
+                path: ../docs-v2/evaluation/advanced/resume_evaluations.mdx
+                slug: resume_evaluations
               - page: Manage datasets
                 path: ../docs-v2/evaluation/advanced/manage_datasets.mdx
                 slug: manage_datasets
