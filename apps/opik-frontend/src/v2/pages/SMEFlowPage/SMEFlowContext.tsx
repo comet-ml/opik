@@ -195,6 +195,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
   );
 
   const lockMutation = useAnnotationQueueItemLockMutation();
+  const { mutate: lockMutate, reset: lockReset } = lockMutation;
 
   const locks = useMemo(() => locksData?.locks ?? {}, [locksData?.locks]);
 
@@ -414,11 +415,11 @@ export const SMEFlowProvider: React.FunctionComponent<{
 
     // Only lock items available for review — scored/completed/in-review items don't need locks
     if (state && state !== ITEM_STATE.DEFAULT) {
-      lockMutation.reset();
+      lockReset();
       return;
     }
 
-    lockMutation.mutate({ queueId, itemId });
+    lockMutate({ queueId, itemId });
 
     // Heartbeat at half the TTL to keep the lock alive while viewing
     const heartbeatMs =
@@ -427,7 +428,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
         1000) /
       2;
     const heartbeatInterval = setInterval(() => {
-      lockMutation.mutate({ queueId, itemId });
+      lockMutate({ queueId, itemId });
     }, heartbeatMs);
 
     return () => {
@@ -439,6 +440,8 @@ export const SMEFlowProvider: React.FunctionComponent<{
     queueId,
     annotationQueue?.id,
     annotationQueue?.lock_timeout_minutes,
+    lockMutate,
+    lockReset,
   ]);
 
   // --- Initialize annotation state when navigating to a different item ---

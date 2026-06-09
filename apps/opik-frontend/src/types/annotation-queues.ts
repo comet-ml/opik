@@ -19,8 +19,8 @@ export interface AnnotationQueue {
   instructions?: string;
   comments_enabled: boolean;
   feedback_definition_names: string[];
-  annotators_per_item?: number; // optional for v1 compat
-  lock_timeout_minutes?: number; // optional for v1 compat
+  annotators_per_item?: number; // optional for opik v1 compat
+  lock_timeout_minutes?: number; // optional for opik v1 compat
   scope: ANNOTATION_QUEUE_SCOPE;
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];
