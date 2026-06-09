@@ -3,6 +3,13 @@ import uniq from "lodash/uniq";
 
 import { PROVIDER_TYPE } from "@/types/providers";
 
+export const OPENAI_PIPELINE_MODE_VALUES = [
+  "chat_completions_api",
+  "responses_api",
+] as const;
+
+export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
+
 export const CloudAIProviderDetailsFormSchema = z.object({
   provider: z.enum(
     Object.values(PROVIDER_TYPE).filter(
@@ -22,6 +29,9 @@ export const CloudAIProviderDetailsFormSchema = z.object({
       required_error: "API key is required",
     })
     .min(1, { message: "API key is required" }),
+  // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
+  // because non-OpenAI cloud providers ignore it. The dialog defaults to chat_completions_api.
+  openaiPipelineMode: z.enum(OPENAI_PIPELINE_MODE_VALUES).optional(),
 });
 
 export const VertexAIProviderDetailsFormSchema = z.object({
