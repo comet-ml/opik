@@ -31,11 +31,9 @@ RUN set -eux; \
     printf '%s' "import sys, json, time, traceback, uuid, inspect, opik; from types import ModuleType; print('essential modules cached')" > /prewarm.py; \
     PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b /prewarm.py
 
-# Fail the build if the compiled runner can't score a real metric end-to-end
-# (exercises the import-patching path and the BaseMetric -> ScoreResult flow).
-RUN SELFTEST_CODE="from opik.evaluation.metrics import BaseMetric\nfrom opik.evaluation.metrics.score_result import ScoreResult\nclass T(BaseMetric):\n    def score(self, output, **ignored):\n        return ScoreResult(name='selftest', value=1.0)"; \
-    python ./scoring_runner.pyc "$(printf '%b' "$SELFTEST_CODE")" '{"output": "ok"}' \
-    | grep -q '"value": 1.0'
+# Fail the build if the compiled runner can't score a real metric end-to-end.
+COPY selftest.sh /usr/local/bin/selftest.sh
+RUN sh /usr/local/bin/selftest.sh ./scoring_runner.pyc
 
 #######################################################################
 # Multi-stage build: Runtime stage
@@ -57,12 +55,11 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 
 COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc
 COPY --from=builder /prewarm.pyc /tmp/prewarm.pyc
+COPY --from=builder /usr/local/bin/selftest.sh /usr/local/bin/selftest.sh
 
 # Prewarm imports, then fail the build if the runner can't score in this stage.
-RUN SELFTEST_CODE="from opik.evaluation.metrics import BaseMetric\nfrom opik.evaluation.metrics.score_result import ScoreResult\nclass T(BaseMetric):\n    def score(self, output, **ignored):\n        return ScoreResult(name='selftest', value=1.0)"; \
-    python /tmp/prewarm.pyc \
-    && python ./scoring_runner.pyc "$(printf '%b' "$SELFTEST_CODE")" '{"output": "ok"}' \
-       | grep -q '"value": 1.0'
+RUN python /tmp/prewarm.pyc \
+    && sh /usr/local/bin/selftest.sh ./scoring_runner.pyc
 
 # Drop privileges: the sandbox executes untrusted user code.
 RUN chown -R 1001:1001 /opt/opik-sandbox-executor-python
