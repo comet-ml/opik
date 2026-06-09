@@ -4,15 +4,11 @@ import isNull from "lodash/isNull";
 
 import {
   COMPOSED_PROVIDER_TYPE,
-  PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
   ProviderObject,
 } from "@/types/providers";
-import {
-  getProviderDisplayName,
-  getProviderIcon,
-  parseComposedProviderType,
-} from "@/lib/provider";
+import { getProviderDisplayName, getProviderIcon } from "@/lib/provider";
+import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 
 interface ModelOption {
   label: string;
@@ -64,19 +60,6 @@ export const sortProviderModels = (
   return sorted;
 };
 
-const getRoutableModelValue = (
-  composedProviderType: COMPOSED_PROVIDER_TYPE,
-  modelValue: string,
-): PROVIDER_MODEL_TYPE => {
-  const providerType = parseComposedProviderType(composedProviderType);
-
-  if (providerType === PROVIDER_TYPE.VERTEX_AI && !modelValue.includes("/")) {
-    return `vertex_ai/${modelValue}` as PROVIDER_MODEL_TYPE;
-  }
-
-  return modelValue as PROVIDER_MODEL_TYPE;
-};
-
 export function useModelOptions(
   configuredProvidersList: ProviderObject[],
   providerModelsMap: Record<string, ModelOption[]>,
@@ -124,7 +107,7 @@ export function useModelOptions(
 
         providerModels.forEach(({ value }) => {
           modelProviderMapRef.current[
-            getRoutableModelValue(composedProviderType, value)
+            getRoutableProviderModelValue(composedProviderType, value)
           ] = composedProviderType;
         });
       },
@@ -142,7 +125,7 @@ export function useModelOptions(
           providerModels,
         ).map((providerModel) => ({
           label: providerModel.label,
-          value: getRoutableModelValue(
+          value: getRoutableProviderModelValue(
             composedProviderType,
             providerModel.value,
           ),

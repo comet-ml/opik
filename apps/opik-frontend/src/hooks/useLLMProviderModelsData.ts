@@ -17,6 +17,7 @@ import {
   setLatestModelFlags,
   setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
+import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
@@ -72,7 +73,10 @@ const transformFetched = (
   for (const [provider, models] of Object.entries(fetched)) {
     const filtered = onlyVisible ? models.filter(isDropdownVisible) : models;
     out[provider] = filtered.map((m) => ({
-      value: (m.qualifiedName ?? m.id) as PROVIDER_MODEL_TYPE,
+      value: getRoutableProviderModelValue(
+        provider as COMPOSED_PROVIDER_TYPE,
+        m.qualifiedName ?? m.id,
+      ),
       label: m.label ?? m.id,
     }));
   }
@@ -83,7 +87,7 @@ const buildFlagsIndex = (
   fetched: LlmModelsByProvider,
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
-  for (const models of Object.values(fetched)) {
+  for (const [provider, models] of Object.entries(fetched)) {
     for (const m of models) {
       const flags: ModelFlags = {
         reasoning: m.reasoning,
@@ -93,6 +97,13 @@ const buildFlagsIndex = (
       if (m.qualifiedName) {
         index.set(m.qualifiedName, flags);
       }
+      index.set(
+        getRoutableProviderModelValue(
+          provider as COMPOSED_PROVIDER_TYPE,
+          m.qualifiedName ?? m.id,
+        ),
+        flags,
+      );
     }
   }
   return index;
