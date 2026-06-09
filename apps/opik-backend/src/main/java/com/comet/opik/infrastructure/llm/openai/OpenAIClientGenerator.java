@@ -4,9 +4,12 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
+import com.openai.core.LogLevel;
+import com.openai.core.Timeout;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatModel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -14,15 +17,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
 
 @RequiredArgsConstructor
 @Slf4j
-public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
+public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAIClient> {
 
     private static final String CONFIG_KEY_PIPELINE_MODE = "pipeline_mode";
 
@@ -33,11 +38,10 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
-    public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
-        var openAiClientBuilder = OpenAiClient.builder()
-                .baseUrl(DEFAULT_OPENAI_URL)
-                .logRequests(llmProviderClientConfig.getLogRequests())
-                .logResponses(llmProviderClientConfig.getLogResponses());
+    public OpenAIClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
+        var openAiClientBuilder = OpenAIOkHttpClient.builder()
+                .apiKey(config.apiKey())
+                .baseUrl(DEFAULT_OPENAI_URL);
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
                 .map(LlmProviderClientConfig.OpenAiClientConfig::url)
@@ -50,16 +54,33 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
-                .ifPresent(openAiClientBuilder::customHeaders);
+                .map(headers -> headers.entrySet().stream()
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey,
+                                entry -> List.of(entry.getValue()))))
+                .ifPresent(openAiClientBuilder::headers);
 
+        openAiClientBuilder.timeout(buildTimeout());
+        openAiClientBuilder.logLevel(resolveLogLevel());
+
+        return openAiClientBuilder.build();
+    }
+
+    private Timeout buildTimeout() {
+        var timeoutBuilder = Timeout.builder();
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
-                .ifPresent(connectTimeout -> openAiClientBuilder.connectTimeout(connectTimeout.toJavaDuration()));
+                .ifPresent(connectTimeout -> timeoutBuilder.connect(connectTimeout.toJavaDuration()));
         Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
-                .ifPresent(readTimeout -> openAiClientBuilder.readTimeout(readTimeout.toJavaDuration()));
+                .ifPresent(readTimeout -> timeoutBuilder.read(readTimeout.toJavaDuration()));
+        Optional.ofNullable(llmProviderClientConfig.getWriteTimeout())
+                .ifPresent(writeTimeout -> timeoutBuilder.write(writeTimeout.toJavaDuration()));
+        return timeoutBuilder.build();
+    }
 
-        return openAiClientBuilder
-                .apiKey(config.apiKey())
-                .build();
+    private LogLevel resolveLogLevel() {
+        boolean logRequests = Boolean.TRUE.equals(llmProviderClientConfig.getLogRequests());
+        boolean logResponses = Boolean.TRUE.equals(llmProviderClientConfig.getLogResponses());
+        return (logRequests || logResponses) ? LogLevel.DEBUG : LogLevel.OFF;
     }
 
     public ChatModel newOpenAiChatLanguageModel(@NonNull LlmProviderClientApiConfig config,
@@ -71,7 +92,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     @Override
-    public OpenAiClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
+    public OpenAIClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
         return newOpenAiClient(config);
     }
 
