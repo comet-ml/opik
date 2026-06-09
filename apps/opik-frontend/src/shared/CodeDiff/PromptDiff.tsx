@@ -110,14 +110,8 @@ const NamedPromptsDiff: React.FC<{
   baseline: NamedPrompts;
   current: NamedPrompts;
 }> = ({ baseline, current }) => {
-  const flatBase = useMemo(
-    () => Object.values(baseline).flat(),
-    [baseline],
-  );
-  const flatCurr = useMemo(
-    () => Object.values(current).flat(),
-    [current],
-  );
+  const flatBase = useMemo(() => Object.values(baseline).flat(), [baseline]);
+  const flatCurr = useMemo(() => Object.values(current).flat(), [current]);
   return <MessagesDiff baseline={flatBase} current={flatCurr} />;
 };
 

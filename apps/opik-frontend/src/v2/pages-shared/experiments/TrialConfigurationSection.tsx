@@ -182,11 +182,13 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
 
         if ("prompt" in configObj) {
           if (studioConfig) {
-            const { "Initial prompt": _, ...base } =
-              buildConfigFromStudioConfig(studioConfig) as Record<
+            const base = {
+              ...(buildConfigFromStudioConfig(studioConfig) as Record<
                 string,
                 unknown
-              >;
+              >),
+            };
+            delete base["Initial prompt"];
             return { ...base, ...configObj } as ConfigurationType;
           }
           return configObj;
@@ -295,7 +297,9 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
               ) {
                 return (
                   <div key={key} className="flex items-baseline gap-1.5">
-                    <span className="comet-body-s text-muted-slate">{key}:</span>
+                    <span className="comet-body-s text-muted-slate">
+                      {key}:
+                    </span>
                     <span className="comet-body-s-accented">
                       {formatPrimitive(value)}
                     </span>
