@@ -137,3 +137,82 @@ def test_pydantic_ai_logfire_with_opik_track__single_merged_trace(
         for span in spans
         if span.parent_span_id == otel_root.id
     ), "Expected a model span nested under the PydanticAI 'agent run' span"
+
+
+def test_pydantic_ai_logfire_with_opik_track__two_agent_calls__correct_nesting(
+    opik_client: opik.Opik,
+):
+    """Two sequential agent calls inside one @opik.track entrypoint must produce
+    two sibling 'agent run' subtrees under the entrypoint — each with its own
+    model span and no cross-linking between the calls — all in a single trace."""
+    config = opik_config.OpikConfig()
+    exporter = _build_otlp_exporter(config)
+
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+        additional_span_processors=[
+            BatchSpanProcessor(exporter),
+            OpikSpanProcessor(),
+        ],
+    )
+    logfire.instrument_pydantic_ai()
+
+    agent = Agent(TestModel(custom_output_text="ok"))
+    ID_STORAGE = {}
+
+    @opik.track(name="run_entrypoint")
+    def run() -> str:
+        ID_STORAGE["trace_id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["entrypoint_span_id"] = opik_context.get_current_span_data().id
+        agent.run_sync("first question")
+        agent.run_sync("second question")
+        return "done"
+
+    run()
+    opik.flush_tracker()
+    logfire.force_flush()
+
+    trace_id = ID_STORAGE["trace_id"]
+    entrypoint_span_id = ID_STORAGE["entrypoint_span_id"]
+
+    # entrypoint + 2x (agent run + model span) = 5 spans in a single trace
+    if not synchronization.until(
+        lambda: len(
+            opik_client.search_spans(
+                project_name=opik_client.config.project_name, trace_id=trace_id
+            )
+        )
+        == 5,
+        max_try_seconds=15,
+    ):
+        raise AssertionError(
+            "Expected 5 spans (entrypoint + two agent-run subtrees) in a single "
+            "trace within timeout"
+        )
+
+    spans = opik_client.search_spans(
+        project_name=opik_client.config.project_name,
+        trace_id=trace_id,
+    )
+    by_id = {span.id: span for span in spans}
+
+    # single trace, single root (the tracked entrypoint)
+    assert all(span.trace_id == trace_id for span in spans)
+    roots = [span for span in spans if span.parent_span_id is None]
+    assert len(roots) == 1
+    assert roots[0].id == entrypoint_span_id
+
+    # both agent runs are siblings directly under the entrypoint
+    agent_runs = [span for span in spans if span.name == "agent run"]
+    assert len(agent_runs) == 2
+    assert all(run.parent_span_id == entrypoint_span_id for run in agent_runs)
+
+    # each agent run owns exactly one model span; the two never cross-link
+    model_parents = []
+    for agent_run in agent_runs:
+        children = [s for s in spans if s.parent_span_id == agent_run.id]
+        assert len(children) == 1, "each agent run should own exactly one model span"
+        assert by_id[children[0].parent_span_id].id == agent_run.id
+        model_parents.append(children[0].parent_span_id)
+    assert len(set(model_parents)) == 2, "model spans must not share a parent"

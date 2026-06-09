@@ -83,11 +83,15 @@ def _resolve_from_opik_context() -> Optional[InheritedContext]:
 
 
 def _resolve_inherited(parent_context: Optional[Context]) -> Optional[InheritedContext]:
-    # 1) In-process: pull from the parent OTel span's attributes. The parent must carry
-    # both opik.trace_id and opik.span_id — this pair is set together by attach_to_parent
-    # on the boundary and by this processor on every inherited descendant. A parent
-    # that has trace_id but not span_id means a misconfigured upstream, and we don't try
-    # to guess.
+    # The local @opik.track fallback (step 3) fires ONLY when there is no Opik
+    # signal at all in the parent span or baggage. Any partial/broken Opik payload
+    # means a distributed context exists but cannot be honored — we leave the span
+    # standalone rather than silently reattaching it to an unrelated local trace.
+    saw_opik_signal = False
+
+    # 1) In-process: pull from the parent OTel span's attributes. The parent must
+    # carry both opik.trace_id and opik.span_id — this pair is set together by
+    # attach_to_parent on the boundary and by this processor on every descendant.
     parent_span = trace.get_current_span(parent_context)
     if parent_span is not None and parent_span is not trace.INVALID_SPAN:
         attrs = getattr(parent_span, "attributes", None) or {}
@@ -96,6 +100,7 @@ def _resolve_inherited(parent_context: Optional[Context]) -> Optional[InheritedC
 
         # Both absent → parent isn't part of an Opik subtree; fall through to baggage.
         if parent_trace_id is not None or parent_span_id is not None:
+            saw_opik_signal = True
             if not id_helpers.is_valid_uuid_v7(parent_trace_id):
                 LOGGER.warning(
                     "Parent span attribute '%s' is missing or not a valid UUID v7: %r; "
@@ -116,15 +121,28 @@ def _resolve_inherited(parent_context: Optional[Context]) -> Optional[InheritedC
                     parent_span_id=parent_span_id,
                 )
 
-    # 2) Cross-process: pull from OTel baggage (propagated via the W3C
-    # `baggage` header). Used when a child process inherits OTel context
-    # from an upstream service that already had Opik IDs.
+    # 2) Cross-process: pull from OTel baggage (propagated via the W3C `baggage`
+    # header) when a child process inherits OTel context from an upstream service.
     baggage_trace_id = baggage.get_baggage(
         otel_attributes.OPIK_TRACE_ID, parent_context
     )
+    baggage_span_id = baggage.get_baggage(otel_attributes.OPIK_SPAN_ID, parent_context)
+    if baggage_trace_id is not None or baggage_span_id is not None:
+        saw_opik_signal = True
+
     if baggage_trace_id is None:
-        # No Opik context in baggage — fall back to the active @opik.track context.
+        if saw_opik_signal:
+            # Partial/broken distributed context (e.g. opik.span_id without
+            # opik.trace_id): leave the span standalone, don't reattach locally.
+            LOGGER.warning(
+                "Incomplete Opik distributed context (missing '%s'); "
+                "leaving span standalone.",
+                otel_attributes.OPIK_TRACE_ID,
+            )
+            return None
+        # 3) No Opik signal anywhere — fall back to the active @opik.track context.
         return _resolve_from_opik_context()
+
     if not id_helpers.is_valid_uuid_v7(baggage_trace_id):
         # A broken upstream distributed context: don't silently absorb the span
         # into an unrelated local @opik.track trace — leave it standalone.
@@ -135,27 +153,20 @@ def _resolve_inherited(parent_context: Optional[Context]) -> Optional[InheritedC
         )
         return None
 
-    baggage_parent_span_id = baggage.get_baggage(
-        otel_attributes.OPIK_SPAN_ID, parent_context
-    )
-    if baggage_parent_span_id is not None and not id_helpers.is_valid_uuid_v7(
-        baggage_parent_span_id
-    ):
+    if baggage_span_id is not None and not id_helpers.is_valid_uuid_v7(baggage_span_id):
         LOGGER.warning(
             "Baggage value for '%s' is not a valid UUID v7: %r; "
             "attaching to '%s' without a parent span id.",
             otel_attributes.OPIK_SPAN_ID,
-            baggage_parent_span_id,
+            baggage_span_id,
             otel_attributes.OPIK_TRACE_ID,
         )
-        baggage_parent_span_id = None
+        baggage_span_id = None
 
     return InheritedContext(
         trace_id=baggage_trace_id,
         parent_span_id=(
-            baggage_parent_span_id
-            if id_helpers.is_valid_uuid_v7(baggage_parent_span_id)
-            else None
+            baggage_span_id if id_helpers.is_valid_uuid_v7(baggage_span_id) else None
         ),
     )
 

@@ -345,6 +345,31 @@ class TestInProcessOpikTrackContextFallback:
         assert otel_attributes.OPIK_TRACE_ID not in captured["attrs"]
         assert otel_attributes.OPIK_PARENT_SPAN_ID not in captured["attrs"]
 
+    def test_on_start__partial_baggage_inside_track_context__not_linked(
+        self, tracer, fake_backend
+    ):
+        # Partial distributed context — opik.span_id present in baggage without
+        # opik.trace_id — must NOT be absorbed into the local @opik.track trace.
+        captured = {}
+        ctx = baggage.set_baggage(
+            otel_attributes.OPIK_SPAN_ID, "0193b3a5-dddd-7abc-9def-000000000004"
+        )
+
+        @opik.track(name="tracked")
+        def handler():
+            token = context_api.attach(ctx)
+            try:
+                with tracer.start_as_current_span("span") as span:
+                    captured["attrs"] = dict(span.attributes or {})
+            finally:
+                context_api.detach(token)
+
+        handler()
+        opik.flush_tracker()
+
+        assert otel_attributes.OPIK_TRACE_ID not in captured["attrs"]
+        assert otel_attributes.OPIK_PARENT_SPAN_ID not in captured["attrs"]
+
     def test_on_start__otel_span_started_in_worker_thread__not_linked(
         self, tracer, fake_backend
     ):
