@@ -694,6 +694,9 @@ export interface ProviderKeyConfiguration {
   auth_header_name?: string;
   /** Custom LLM (OPIK-4551): "true" to drop the default Authorization: Bearer header */
   suppress_default_auth?: string;
+  /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
+   * and falls back to chat_completions_api on unknown values. */
+  openai_pipeline_mode?: "chat_completions_api" | "responses_api";
 }
 
 export interface BaseProviderKey {
