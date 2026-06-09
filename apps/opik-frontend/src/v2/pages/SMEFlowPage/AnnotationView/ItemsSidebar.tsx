@@ -58,7 +58,10 @@ const STATE_CONFIG = {
   },
 };
 
-type SidebarFilter = "to_review" | "processed";
+enum SidebarFilter {
+  TO_REVIEW = "to_review",
+  PROCESSED = "processed",
+}
 type SidebarEntry = {
   index: number;
   itemId: string;
@@ -77,7 +80,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
   } = useSMEFlow();
   const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
-  const [filter, setFilter] = useState<SidebarFilter>("to_review");
+  const [filter, setFilter] = useState<SidebarFilter>(SidebarFilter.TO_REVIEW);
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -126,7 +129,8 @@ const ItemsSidebar: React.FunctionComponent = () => {
     return { toReviewItems: toReview, processedItems: processed };
   }, [entriesById, itemStates, shuffledItemIds, currentIndex]);
 
-  const filteredItems = filter === "to_review" ? toReviewItems : processedItems;
+  const filteredItems =
+    filter === SidebarFilter.TO_REVIEW ? toReviewItems : processedItems;
 
   const defaultCount = useMemo(
     () =>
@@ -160,14 +164,14 @@ const ItemsSidebar: React.FunctionComponent = () => {
             <TabsTrigger
               variant="segmented-primary"
               size="sm"
-              value="to_review"
+              value={SidebarFilter.TO_REVIEW}
             >
               To review
             </TabsTrigger>
             <TabsTrigger
               variant="segmented-primary"
               size="sm"
-              value="processed"
+              value={SidebarFilter.PROCESSED}
             >
               Processed
             </TabsTrigger>
@@ -193,7 +197,7 @@ const ItemsSidebar: React.FunctionComponent = () => {
               <div
                 className={cn(
                   "flex flex-col gap-0.5",
-                  filter === "to_review" &&
+                  filter === SidebarFilter.TO_REVIEW &&
                     state !== ITEM_STATE.DEFAULT &&
                     "opacity-60",
                 )}
