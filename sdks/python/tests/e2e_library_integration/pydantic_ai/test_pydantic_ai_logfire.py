@@ -195,24 +195,36 @@ def test_pydantic_ai_logfire_with_opik_track__two_agent_calls__correct_nesting(
         project_name=opik_client.config.project_name,
         trace_id=trace_id,
     )
-    by_id = {span.id: span for span in spans}
 
-    # single trace, single root (the tracked entrypoint)
-    assert all(span.trace_id == trace_id for span in spans)
-    roots = [span for span in spans if span.parent_span_id is None]
-    assert len(roots) == 1
-    assert roots[0].id == entrypoint_span_id
+    # the tracked entrypoint is the single root of the trace
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=entrypoint_span_id,
+        trace_id=trace_id,
+        parent_span_id=None,
+        name="run_entrypoint",
+    )
 
-    # both agent runs are siblings directly under the entrypoint
+    # both 'agent run' subtrees are siblings directly under the entrypoint
     agent_runs = [span for span in spans if span.name == "agent run"]
     assert len(agent_runs) == 2
-    assert all(run.parent_span_id == entrypoint_span_id for run in agent_runs)
-
-    # each agent run owns exactly one model span; the two never cross-link
-    model_parents = []
     for agent_run in agent_runs:
-        children = [s for s in spans if s.parent_span_id == agent_run.id]
+        verifiers.verify_span(
+            opik_client=opik_client,
+            span_id=agent_run.id,
+            trace_id=trace_id,
+            parent_span_id=entrypoint_span_id,
+            name="agent run",
+        )
+
+    # each 'agent run' owns exactly one model span parented to that run alone —
+    # with the 5-span total above, this rules out any cross-linking between calls
+    for agent_run in agent_runs:
+        children = [span for span in spans if span.parent_span_id == agent_run.id]
         assert len(children) == 1, "each agent run should own exactly one model span"
-        assert by_id[children[0].parent_span_id].id == agent_run.id
-        model_parents.append(children[0].parent_span_id)
-    assert len(set(model_parents)) == 2, "model spans must not share a parent"
+        verifiers.verify_span(
+            opik_client=opik_client,
+            span_id=children[0].id,
+            trace_id=trace_id,
+            parent_span_id=agent_run.id,
+        )
