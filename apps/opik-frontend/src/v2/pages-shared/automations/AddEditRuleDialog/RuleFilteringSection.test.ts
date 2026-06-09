@@ -1,14 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { COLUMN_TYPE } from "@/types/shared";
 import { TRACE_FILTER_COLUMNS } from "./RuleFilteringSection";
-import {
-  normalizeFilters,
-  resolveSelectedModel,
-  resolveSelectedModelProvider,
-} from "./helpers";
+import { normalizeFilters } from "./helpers";
 import { isFilterValid } from "@/lib/filters";
 import { Filter } from "@/types/filters";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
 const columns = TRACE_FILTER_COLUMNS as Parameters<typeof normalizeFilters>[1];
 
@@ -192,68 +187,5 @@ describe("rule editor key-optional validation for input/output", () => {
       key: "",
     });
     expect(ruleFilterValid(filter)).toBe(false);
-  });
-});
-
-describe("resolveSelectedModelProvider", () => {
-  const model = PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO;
-
-  it("should prefer the provider calculated from the selected model", () => {
-    const resolvedProvider = resolveSelectedModelProvider(
-      model,
-      PROVIDER_TYPE.VERTEX_AI,
-      () => PROVIDER_TYPE.GEMINI,
-    );
-
-    expect(resolvedProvider).toBe(PROVIDER_TYPE.GEMINI);
-  });
-
-  it("should not let stale selector provider override a qualified model", () => {
-    const resolvedProvider = resolveSelectedModelProvider(
-      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
-      PROVIDER_TYPE.GEMINI,
-      () => PROVIDER_TYPE.VERTEX_AI,
-    );
-
-    expect(resolvedProvider).toBe(PROVIDER_TYPE.VERTEX_AI);
-  });
-
-  it("should fall back to selector provider when model provider calculation is empty", () => {
-    const resolvedProvider = resolveSelectedModelProvider(
-      model,
-      PROVIDER_TYPE.VERTEX_AI,
-      () => "",
-    );
-
-    expect(resolvedProvider).toBe(PROVIDER_TYPE.VERTEX_AI);
-  });
-});
-
-describe("resolveSelectedModel", () => {
-  it("should qualify bare Gemini model ids selected from Vertex AI", () => {
-    const resolvedModel = resolveSelectedModel(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
-      PROVIDER_TYPE.VERTEX_AI,
-    );
-
-    expect(resolvedModel).toBe(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO);
-  });
-
-  it("should keep already-qualified Vertex AI model ids unchanged", () => {
-    const resolvedModel = resolveSelectedModel(
-      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
-      PROVIDER_TYPE.VERTEX_AI,
-    );
-
-    expect(resolvedModel).toBe(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO);
-  });
-
-  it("should keep Gemini provider model ids unchanged", () => {
-    const resolvedModel = resolveSelectedModel(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
-      PROVIDER_TYPE.GEMINI,
-    );
-
-    expect(resolvedModel).toBe(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO);
   });
 });

@@ -6,11 +6,6 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
-} from "@/types/providers";
 import { ColumnData } from "@/types/shared";
 
 export const getUIRuleType = (ruleType: EVALUATORS_RULE_TYPE) =>
@@ -88,25 +83,4 @@ export const normalizeFilters = (
       value: filter.value || "",
     };
   }) as Filter[];
-};
-
-export const resolveSelectedModelProvider = (
-  model: PROVIDER_MODEL_TYPE,
-  selectedProvider: COMPOSED_PROVIDER_TYPE | "" | undefined,
-  calculateModelProvider: (
-    model: PROVIDER_MODEL_TYPE,
-  ) => COMPOSED_PROVIDER_TYPE | "",
-): COMPOSED_PROVIDER_TYPE | "" => {
-  return calculateModelProvider(model) || selectedProvider || "";
-};
-
-export const resolveSelectedModel = (
-  model: PROVIDER_MODEL_TYPE,
-  selectedProvider: COMPOSED_PROVIDER_TYPE | "" | undefined,
-): PROVIDER_MODEL_TYPE => {
-  if (selectedProvider === PROVIDER_TYPE.VERTEX_AI && !model.includes("/")) {
-    return `vertex_ai/${model}` as PROVIDER_MODEL_TYPE;
-  }
-
-  return model;
 };
