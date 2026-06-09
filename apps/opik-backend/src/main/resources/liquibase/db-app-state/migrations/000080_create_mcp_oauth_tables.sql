@@ -6,14 +6,14 @@
 -- (RFC 7591) when remote hosts self-register.
 CREATE TABLE mcp_oauth_clients
 (
-    client_id        CHAR(36)  NOT NULL,
+    id               CHAR(36)      NOT NULL,
     name             VARCHAR(255)  NOT NULL,
     redirect_uris    JSON          NOT NULL,
     logo_uri         VARCHAR(2048) NULL,
     owner_user_name  VARCHAR(255)  NULL,
     created_at       TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    PRIMARY KEY (client_id)
+    PRIMARY KEY (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 
@@ -48,7 +48,7 @@ CREATE TABLE mcp_oauth_tokens
     id              CHAR(36)               NOT NULL,
     token_hash      CHAR(64)               NOT NULL,
     type            ENUM('access','refresh') NOT NULL,
-    client_id       VARCHAR(36)            NOT NULL,
+    client_id       CHAR(36)               NOT NULL,
     user_name       VARCHAR(255)           NOT NULL,
     workspace_name  VARCHAR(255)           NOT NULL,
     workspace_id    VARCHAR(255)           NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE mcp_oauth_tokens
     issued_at       TIMESTAMP(6)           NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     expires_at      TIMESTAMP(6)           NOT NULL,
     revoked_at      TIMESTAMP(6)           NULL,
-    revoked_reason  VARCHAR(64)            NULL,
+    revoked_reason  VARCHAR(255)            NULL,
 
     PRIMARY KEY (id),
     UNIQUE KEY mcp_oauth_tokens_token_hash_uk (token_hash),

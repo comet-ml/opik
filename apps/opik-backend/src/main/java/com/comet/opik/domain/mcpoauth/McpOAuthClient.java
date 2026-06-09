@@ -7,7 +7,7 @@ import java.util.Set;
 
 @Builder(toBuilder = true)
 public record McpOAuthClient(
-        @NonNull String clientId,
+        @NonNull String id,
         @NonNull String name,
         @NonNull Set<String> redirectUris,
         String logoUri,
