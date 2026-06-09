@@ -4,7 +4,9 @@ import isArray from "lodash/isArray";
 import isString from "lodash/isString";
 import get from "lodash/get";
 
-import { GitCompareArrows, List } from "lucide-react";
+import { ChevronRight, GitCompareArrows, List } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 
 import { Experiment } from "@/types/datasets";
 import { OptimizationStudioConfig } from "@/types/optimizations";
@@ -23,6 +25,7 @@ import {
   formatPrimitive,
   extractMessages,
   buildConfigFromStudioConfig,
+  getMetricParamLabels,
   MessageEntry,
 } from "@/lib/optimization-config";
 
@@ -116,6 +119,48 @@ const ToolsBlock: React.FC<{ value: unknown }> = ({ value }) => {
           {name}
         </Tag>
       ))}
+    </div>
+  );
+};
+
+type MetricParam = { key: string; value: unknown };
+
+const MetricEntry: React.FC<{
+  label: string;
+  value: unknown;
+  params: MetricParam[];
+}> = ({ label, value, params }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="comet-body-s text-muted-slate">{label}:</span>
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="flex items-center gap-1"
+        >
+          <span className="comet-body-s-accented">{formatPrimitive(value)}</span>
+          <ChevronRight
+            className={cn(
+              "size-3.5 shrink-0 text-muted-slate transition-transform duration-200",
+              isOpen && "rotate-90",
+            )}
+          />
+        </button>
+      </div>
+      {isOpen && (
+        <div className="mt-1 flex flex-col gap-2 pl-4">
+          {params.map(({ key, value: v }) => (
+            <div key={key}>
+              <p className="comet-body-xs text-muted-slate">{key}</p>
+              <p className="comet-body-s whitespace-pre-wrap break-words rounded-md bg-muted/40 pb-3 pr-3">
+                {String(v)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -238,6 +283,11 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
     return result;
   }, [configuration]);
 
+  const metricParamKeys = useMemo(
+    () => (studioConfig ? getMetricParamLabels(studioConfig) : []),
+    [studioConfig],
+  );
+
   if (!configuration) return null;
 
   const hasDiffBaseline = !!referenceExperiment;
@@ -288,8 +338,24 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       diffExperiment ? (
         <div className="flex flex-col gap-4">
           {entries
-            .filter(({ type }) => type !== "prompt")
+            .filter(
+              ({ type, key }) =>
+                type !== "prompt" && !metricParamKeys.includes(key),
+            )
             .map(({ key, value, type }) => {
+              if (key === "Metric" && metricParamKeys.length > 0) {
+                const params = entries.filter((e) =>
+                  metricParamKeys.includes(e.key),
+                );
+                return (
+                  <MetricEntry
+                    key={key}
+                    label={key}
+                    value={value}
+                    params={params}
+                  />
+                );
+              }
               if (
                 type === "number" ||
                 type === "string" ||
@@ -319,7 +385,22 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {entries.map(({ key, value, type }) => {
+          {entries
+            .filter(({ key }) => !metricParamKeys.includes(key))
+            .map(({ key, value, type }) => {
+            if (key === "Metric" && metricParamKeys.length > 0) {
+              const params = entries.filter((e) =>
+                metricParamKeys.includes(e.key),
+              );
+              return (
+                <MetricEntry
+                  key={key}
+                  label={key}
+                  value={value}
+                  params={params}
+                />
+              );
+            }
             if (type === "number" || type === "string" || type === "boolean") {
               return (
                 <div key={key} className="flex items-baseline gap-1.5">
