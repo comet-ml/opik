@@ -21,6 +21,7 @@ import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
+  preferredProvider?: COMPOSED_PROVIDER_TYPE | "",
 ) => COMPOSED_PROVIDER_TYPE | "";
 
 export type ModelResolver = (
@@ -182,7 +183,7 @@ const useLLMProviderModelsData = () => {
   }, [fetched, openAICompatibleModels]);
 
   const calculateModelProvider: ProviderResolver = useCallback(
-    (modelName) => {
+    (modelName, preferredProvider) => {
       if (!modelName) {
         return "";
       }
@@ -214,6 +215,21 @@ const useLLMProviderModelsData = () => {
 
       const entries = Object.entries(fullProviderModels);
 
+      if (preferredProvider && isKnownProvider(preferredProvider)) {
+        const normalizedModel = getRoutableProviderModelValue(
+          preferredProvider,
+          modelName,
+        );
+        const preferredModels = fullProviderModels[preferredProvider] ?? [];
+        if (
+          preferredModels.some(
+            (pm) => pm.value === normalizedModel || pm.value === modelName,
+          )
+        ) {
+          return preferredProvider;
+        }
+      }
+
       // Pass 1: exact value match.
       const exact = entries.find(
         ([providerName, models]) =>
@@ -242,7 +258,10 @@ const useLLMProviderModelsData = () => {
 
   const calculateDefaultModel: ModelResolver = useCallback(
     (lastPickedModel, setupProviders, preferredProvider?) => {
-      const lastPickedModelProvider = calculateModelProvider(lastPickedModel);
+      const lastPickedModelProvider = calculateModelProvider(
+        lastPickedModel,
+        preferredProvider,
+      );
 
       const isLastPickedModelValid =
         !!lastPickedModelProvider &&

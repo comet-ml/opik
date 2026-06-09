@@ -134,7 +134,11 @@ const PromptModelSelect = ({
       provider === PROVIDER_TYPE.OPIK_FREE &&
       selectedValue === freeModelOption.value
     ) {
-      return { icon: freeModelOption.icon, title: freeModelOption.label };
+      return {
+        icon: freeModelOption.icon,
+        modelName: freeModelOption.label,
+        title: freeModelOption.label,
+      };
     }
 
     const selectedGroup = groupOptions.find(

@@ -124,7 +124,7 @@ const PlaygroundPrompt = ({
     onMessagesLoaded: handleChatPromptMessagesLoaded,
   });
 
-  const provider = providerResolver(model);
+  const provider = providerResolver(model, prompt.provider);
 
   const promptVariablesArray = useMemo(
     () => datasetVariables || [],
@@ -206,7 +206,7 @@ const PlaygroundPrompt = ({
       const newModel = modelResolver(model, providerKeys, provider);
 
       if (newModel !== model) {
-        const newProvider = providerResolver(newModel);
+        const newProvider = providerResolver(newModel, provider);
         updatePrompt(promptId, {
           model: newModel,
           provider: newProvider,
