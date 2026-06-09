@@ -32,8 +32,6 @@ public class McpOAuthTokens {
         return randomSuffix();
     }
 
-    // Token prefixes are fixed lowercase literals minted by us — match case-sensitively.
-    // Only the Bearer scheme name is case-insensitive (RFC 6750 §2.1).
     public static boolean isAccessToken(String token) {
         return token != null && token.startsWith(ACCESS_PREFIX);
     }

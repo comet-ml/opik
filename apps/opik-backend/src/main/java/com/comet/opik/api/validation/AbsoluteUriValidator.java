@@ -11,7 +11,7 @@ public class AbsoluteUriValidator implements ConstraintValidator<AbsoluteUri, St
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
         if (value == null) {
-            return true; // Let @NotEmpty handle null/blank validation
+            return false;
         }
 
         try {

@@ -68,14 +68,15 @@ public class McpOAuthService {
         return rawCode;
     }
 
+    /**
+     * Burns the code in its own committed transaction. Single-use consumption is committed
+     * before the client/redirect/PKCE checks — a failed exchange attempt must not leave the code replayable.
+     */
     public TokenResponse exchangeCode(@NonNull String code, @NonNull String codeVerifier,
             @NonNull String redirectUri, @NonNull String clientId) {
         String codeHash = McpOAuthTokens.hash(code);
         Instant now = Instant.now();
 
-        // Burn the code in its own committed transaction: a thrown exception rolls the enclosing
-        // transaction back, so single-use consumption must commit before the client/redirect/PKCE
-        // checks below — a failed exchange attempt must not leave the code replayable.
         McpOAuthCode row = template.inTransaction(WRITE, handle -> {
             var codeDao = handle.attach(McpOAuthCodeDAO.class);
             if (codeDao.markUsed(codeHash) != 1) {
@@ -135,9 +136,7 @@ public class McpOAuthService {
         }
 
         if (row.revokedAt() != null) {
-            if (!isBenignRotationRetry(row, now)) {
-                // Reuse detected: kill the whole lineage. Must run in its own committed transaction —
-                // throwing invalid_grant from inside the same transaction would roll the revocation back.
+            if (!isBenignRotationRetry(row, now)) { // Reuse detected: kill the whole lineage
                 template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
                         .revokeFamily(row.familyId(), RevokedReason.REUSE));
             }
@@ -150,8 +149,6 @@ public class McpOAuthService {
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
 
-            // Atomic rotation guard: only the request that flips revoked_at mints the next pair; a
-            // concurrent duplicate sees 0 rows and gets invalid_grant (same outcome as the grace path).
             if (tokenDao.revoke(row.tokenHash(), RevokedReason.ROTATED) != 1) {
                 throw new BadRequestException(ERROR_INVALID_GRANT);
             }
