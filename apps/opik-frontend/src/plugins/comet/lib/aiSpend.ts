@@ -1,5 +1,5 @@
 import { isAiSpendRoute } from "@/lib/aiSpend";
-import { Workspace, WORKSPACE_KIND } from "./types";
+import { Workspace, WORKSPACE_KIND } from "../types";
 
 const AI_SPEND_NAME_PREFIX = "__cc_";
 const AI_SPEND_NAME_SUFFIX = "__";

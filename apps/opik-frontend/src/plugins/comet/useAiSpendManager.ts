@@ -2,7 +2,7 @@ import useAppStore from "@/store/AppStore";
 import useAllWorkspaces from "./useAllWorkspaces";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
-import { isAiSpendWorkspace } from "./aiSpend";
+import { isAiSpendWorkspace } from "./lib/aiSpend";
 import { ORGANIZATION_PLAN_ENTERPRISE, ORGANIZATION_ROLE_TYPE } from "./types";
 
 const useAiSpendManager = () => {

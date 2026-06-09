@@ -16,15 +16,11 @@ import {
 
 export interface LaneMeta {
   icon: LucideIcon;
-  // Concrete color usable both for the icon chip and the SVG ribbon stroke.
   color: string;
   labelFallback: string;
 }
 
-// Keyed off the STABLE backend lane key (not the label) so labels can change
-// server-side without breaking the mapping. Covers current + future lanes.
 const REGISTRY: Record<string, LaneMeta> = {
-  // input
   prior_assistant: {
     icon: History,
     color: "hsl(217 89% 58%)",
@@ -60,7 +56,6 @@ const REGISTRY: Record<string, LaneMeta> = {
     color: "hsl(225 14% 50%)",
     labelFallback: "Static overhead",
   },
-  // harness
   claude_code: {
     icon: Bot,
     color: "hsl(22 92% 55%)",
@@ -68,7 +63,6 @@ const REGISTRY: Record<string, LaneMeta> = {
   },
   codex: { icon: Bot, color: "hsl(0 0% 20%)", labelFallback: "Codex" },
   cursor: { icon: Bot, color: "hsl(0 0% 40%)", labelFallback: "Cursor" },
-  // output
   thinking: {
     icon: Brain,
     color: "hsl(287 85% 56%)",

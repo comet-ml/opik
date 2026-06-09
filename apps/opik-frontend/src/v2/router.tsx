@@ -65,9 +65,9 @@ import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
-import AiSpendGuard from "@/v2/pages/AiSpend/AiSpendGuard";
-import AiSpendHomePage from "@/v2/pages/AiSpend/AiSpendHomePage";
-import AiSpendLeaderboardPage from "@/v2/pages/AiSpend/AiSpendLeaderboardPage";
+import AiSpend from "@/v2/pages/AiSpend/AiSpend";
+import AiSpendHomePage from "@/v2/pages/AiSpendHomePage/AiSpendHomePage";
+import AiSpendLeaderboardPage from "@/v2/pages/AiSpendLeaderboardPage/AiSpendLeaderboardPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -597,11 +597,15 @@ const homeSMERoute = createRoute({
   component: lazy(() => import("@/v2/pages/SMEFlowPage/SMEFlowPage")),
 });
 
-// ----------- AI Spend Manager (reuses PageLayout via workspaceGuardRoute)
+// ----------- Cost Intelligence (reuses PageLayout via workspaceGuardRoute)
 const aiSpendRoute = createRoute({
   path: "/$workspaceName/ai-spend",
   getParentRoute: () => workspaceGuardRoute,
-  component: AiSpendGuard,
+  component: AiSpend,
+  staticData: {
+    title: "Cost Intelligence",
+    hideRoot: true,
+  },
 });
 
 const aiSpendIndexRoute = createRoute({
@@ -619,12 +623,18 @@ const aiSpendHomeRoute = createRoute({
   path: "/home",
   getParentRoute: () => aiSpendRoute,
   component: AiSpendHomePage,
+  staticData: {
+    title: "Home",
+  },
 });
 
 const aiSpendLeaderboardRoute = createRoute({
   path: "/leaderboard",
   getParentRoute: () => aiSpendRoute,
   component: AiSpendLeaderboardPage,
+  staticData: {
+    title: "User leaderboard",
+  },
 });
 
 // ----------- Automation logs

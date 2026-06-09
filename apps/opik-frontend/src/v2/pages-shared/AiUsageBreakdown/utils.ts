@@ -6,8 +6,6 @@ import { LaneView } from "./types";
 
 const MAX_RIBBON_WIDTH = 14;
 
-// Decision: ribbons + share are weighted by cost; until the backend populates
-// per-lane cost it falls back to tokens. Switches automatically when cost lands.
 export const laneWeight = (lane: {
   total_estimated_cost: number | null;
   total_tokens: number;

@@ -6,6 +6,5 @@ export interface LaneView {
   tokens: number;
   cost: number | null;
   hasBreakdown: boolean;
-  // cost when available, else tokens — drives ribbon thickness and % share.
   weight: number;
 }

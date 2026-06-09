@@ -1,90 +1,117 @@
 import React from "react";
-import { ChevronRight, Coins, PieChart } from "lucide-react";
+import { Coins, Lightbulb, PieChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/money";
-import { Tag } from "@/ui/tag";
 import { getLaneMeta } from "./laneRegistry";
 import { lanePct } from "./utils";
 import { LaneSide, LaneView } from "./types";
 
-export interface LaneCardProps {
+export interface LaneCardProps extends React.HTMLAttributes<HTMLDivElement> {
   lane: LaneView;
   side: LaneSide;
   sideWeightTotal: number;
-  onDrill?: (laneKey: string) => void;
+  onLaneClick?: (laneKey: string) => void;
+  onLaneHover?: (laneKey: string | null) => void;
   active?: boolean;
+  showRecommendation?: boolean;
   compact?: boolean;
 }
 
 const LaneCard = React.forwardRef<HTMLDivElement, LaneCardProps>(
-  ({ lane, side, sideWeightTotal, onDrill, active, compact }, ref) => {
+  (
+    {
+      lane,
+      side,
+      sideWeightTotal,
+      onLaneClick,
+      onLaneHover,
+      active,
+      showRecommendation,
+      compact,
+      ...rest
+    },
+    ref,
+  ) => {
     const meta = getLaneMeta(lane.key, lane.label);
     const Icon = meta.icon;
     const label = lane.label || meta.labelFallback;
-    const drillable = lane.hasBreakdown && Boolean(onDrill);
+    const drillable = lane.hasBreakdown && Boolean(onLaneClick);
     const pct = lanePct(lane.weight, sideWeightTotal);
+    const reverse = side === "output";
+    const hasData = lane.weight > 0;
 
     return (
       <div
         ref={ref}
+        {...rest}
         role={drillable ? "button" : undefined}
         tabIndex={drillable ? 0 : undefined}
-        onClick={drillable ? () => onDrill?.(lane.key) : undefined}
+        onClick={drillable ? () => onLaneClick?.(lane.key) : undefined}
+        onMouseEnter={() => {
+          if (hasData) onLaneHover?.(lane.key);
+        }}
+        onMouseLeave={() => onLaneHover?.(null)}
         onKeyDown={
           drillable
             ? (event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  onDrill?.(lane.key);
+                  onLaneClick?.(lane.key);
                 }
               }
             : undefined
         }
+        style={
+          {
+            "--lane-color": meta.color,
+            "--lane-color-soft": `color-mix(in srgb, ${meta.color} 10%, hsl(var(--background)))`,
+          } as React.CSSProperties
+        }
         className={cn(
-          "flex flex-col gap-1.5 rounded-lg border bg-background transition-colors",
-          compact ? "p-2" : "p-3",
-          drillable && "cursor-pointer hover:border-foreground/40",
-          active && "border-foreground/60",
+          "flex flex-col gap-0.5 rounded-md border bg-background p-2 transition-colors",
+          drillable && "cursor-pointer",
+          active && "border-[var(--lane-color)] bg-[var(--lane-color-soft)]",
+          compact && "gap-0",
         )}
       >
         <div
           className={cn(
             "flex items-center gap-2",
-            side === "output" && "flex-row-reverse text-right",
+            reverse && "flex-row-reverse",
           )}
         >
           <div
-            className="flex size-6 shrink-0 items-center justify-center rounded-md"
-            style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}
+            className="flex size-4 shrink-0 items-center justify-center rounded-sm text-white"
+            style={{ backgroundColor: meta.color }}
           >
-            <Icon className="size-3.5" />
+            <Icon className="size-2.5" />
           </div>
-          <span className="comet-body-s-accented truncate text-foreground">
+          <span
+            className={cn(
+              "comet-body-xs-accented min-w-0 flex-1 truncate text-foreground",
+              reverse && "text-right",
+            )}
+          >
             {label}
           </span>
-          {drillable && (
-            <ChevronRight
-              className={cn(
-                "size-3.5 shrink-0 text-muted-slate",
-                side === "output" && "rotate-180",
-              )}
-            />
+          {showRecommendation && (
+            <Lightbulb className="size-3 shrink-0 text-light-slate" />
           )}
         </div>
         <div
           className={cn(
-            "flex items-center gap-1.5",
-            side === "output" && "flex-row-reverse",
+            "flex items-center gap-3 py-0.5",
+            reverse && "flex-row-reverse",
           )}
         >
-          <Tag size="sm" variant="gray" className="flex items-center gap-1">
+          <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
             <PieChart className="size-3" />
             {pct.toFixed(0)}%
-          </Tag>
-          <Tag size="sm" variant="gray" className="flex items-center gap-1">
+          </span>
+          <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
             <Coins className="size-3" />
             {formatCost(lane.cost)}
-          </Tag>
+          </span>
         </div>
       </div>
     );

@@ -15,7 +15,7 @@ import {
   Organization,
   ORGANIZATION_ROLE_TYPE,
 } from "@/plugins/comet/types";
-import { isAiSpendWorkspace } from "@/plugins/comet/aiSpend";
+import { isAiSpendWorkspace } from "@/plugins/comet/lib/aiSpend";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { buildUrl } from "@/plugins/comet/utils";
 
