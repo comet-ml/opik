@@ -44,21 +44,12 @@ public class McpOAuthService {
 
     public String createAuthorizationCode(@NonNull CreateOAuthCodeCommand cmd) {
         String rawCode = McpOAuthTokenUtils.generateCode();
-        Instant now = Instant.now();
 
-        var code = McpOAuthCode.builder()
-                .id(UUID.randomUUID().toString())
-                .codeHash(McpOAuthTokenUtils.hash(rawCode))
-                .clientId(cmd.clientId())
-                .userName(cmd.userName())
-                .workspaceName(cmd.workspaceName())
-                .workspaceId(cmd.workspaceId())
-                .codeChallenge(cmd.codeChallenge())
-                .codeChallengeMethod(CODE_CHALLENGE_METHOD_S256)
-                .redirectUri(cmd.redirectUri())
-                .resource(cmd.resource())
-                .expiresAt(now.plus(config().getCodeTtl()))
-                .build();
+        var code = McpOAuthMapper.INSTANCE.toCode(cmd,
+                UUID.randomUUID().toString(),
+                McpOAuthTokenUtils.hash(rawCode),
+                CODE_CHALLENGE_METHOD_S256,
+                Instant.now().plus(config().getCodeTtl()));
 
         template.inTransaction(WRITE, handle -> {
             handle.attach(McpOAuthCodeDAO.class).save(code);
@@ -68,14 +59,15 @@ public class McpOAuthService {
         return rawCode;
     }
 
+    /**
+     * Burns the code in its own committed transaction. Single-use consumption is committed
+     * before the client/redirect/PKCE checks — a failed exchange attempt must not leave the code replayable.
+     */
     public TokenResponse exchangeCode(@NonNull String code, @NonNull String codeVerifier,
             @NonNull String redirectUri, @NonNull String clientId) {
         String codeHash = McpOAuthTokenUtils.hash(code);
         Instant now = Instant.now();
 
-        // Burn the code in its own committed transaction: a thrown exception rolls the enclosing
-        // transaction back, so single-use consumption must commit before the client/redirect/PKCE
-        // checks below — a failed exchange attempt must not leave the code replayable.
         McpOAuthCode row = template.inTransaction(WRITE, handle -> {
             var codeDao = handle.attach(McpOAuthCodeDAO.class);
             if (codeDao.markUsed(codeHash) != 1) {
@@ -94,30 +86,12 @@ public class McpOAuthService {
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokenUtils.hash(accessToken))
-                    .type(TYPE_ACCESS)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(familyId)
-                    .expiresAt(now.plus(config().getAccessTokenTtl()))
-                    .build());
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokenUtils.hash(refreshToken))
-                    .type(TYPE_REFRESH)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(familyId)
-                    .expiresAt(now.plus(config().getRefreshTokenTtl()))
-                    .build());
+            tokenDao.save(McpOAuthMapper.INSTANCE.toToken(row, TYPE_ACCESS,
+                    UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
+                    familyId, now.plus(config().getAccessTokenTtl())));
+            tokenDao.save(McpOAuthMapper.INSTANCE.toToken(row, TYPE_REFRESH,
+                    UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(refreshToken),
+                    familyId, now.plus(config().getRefreshTokenTtl())));
 
             return buildTokenResponse(accessToken, refreshToken, row.workspaceId(), row.workspaceName());
         });
@@ -135,9 +109,7 @@ public class McpOAuthService {
         }
 
         if (row.revokedAt() != null) {
-            if (!isBenignRotationRetry(row, now)) {
-                // Reuse detected: kill the whole lineage. Must run in its own committed transaction —
-                // throwing invalid_grant from inside the same transaction would roll the revocation back.
+            if (!isBenignRotationRetry(row, now)) { // Reuse detected: kill the whole lineage
                 template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
                         .revokeFamily(row.familyId(), RevokedReason.REUSE));
             }
@@ -150,38 +122,16 @@ public class McpOAuthService {
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
 
-            // Atomic rotation guard: only the request that flips revoked_at mints the next pair; a
-            // concurrent duplicate sees 0 rows and gets invalid_grant (same outcome as the grace path).
             if (tokenDao.revoke(row.tokenHash(), RevokedReason.ROTATED) != 1) {
                 throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokenUtils.hash(accessToken))
-                    .type(TYPE_ACCESS)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(row.familyId())
-                    .rotatedFromId(row.id())
-                    .expiresAt(now.plus(config().getAccessTokenTtl()))
-                    .build());
-            tokenDao.save(McpOAuthToken.builder()
-                    .id(UUID.randomUUID().toString())
-                    .tokenHash(McpOAuthTokenUtils.hash(newRefreshToken))
-                    .type(TYPE_REFRESH)
-                    .clientId(clientId)
-                    .userName(row.userName())
-                    .workspaceName(row.workspaceName())
-                    .workspaceId(row.workspaceId())
-                    .resource(row.resource())
-                    .familyId(row.familyId())
-                    .rotatedFromId(row.id())
-                    .expiresAt(row.expiresAt())
-                    .build());
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(row, TYPE_ACCESS,
+                    UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
+                    now.plus(config().getAccessTokenTtl())));
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(row, TYPE_REFRESH,
+                    UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(newRefreshToken),
+                    row.expiresAt()));
 
             return buildTokenResponse(accessToken, newRefreshToken, row.workspaceId(), row.workspaceName());
         });
