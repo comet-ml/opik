@@ -6,7 +6,7 @@
 -- (RFC 7591) when remote hosts self-register.
 CREATE TABLE mcp_oauth_clients
 (
-    client_id        VARCHAR(36)  NOT NULL,
+    client_id        CHAR(36)  NOT NULL,
     name             VARCHAR(255)  NOT NULL,
     redirect_uris    JSON          NOT NULL,
     logo_uri         VARCHAR(2048) NULL,
@@ -22,7 +22,7 @@ CREATE TABLE mcp_oauth_codes
 (
     id                    CHAR(36)      NOT NULL,
     code_hash             CHAR(64)      NOT NULL,
-    client_id             VARCHAR(36)   NOT NULL,
+    client_id             CHAR(36)      NOT NULL,
     user_name             VARCHAR(255)  NOT NULL,
     workspace_name        VARCHAR(255)  NOT NULL,
     workspace_id          VARCHAR(255)  NOT NULL,
