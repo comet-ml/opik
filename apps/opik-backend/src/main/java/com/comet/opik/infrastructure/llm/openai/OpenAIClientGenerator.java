@@ -4,12 +4,9 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
-import com.openai.client.OpenAIClient;
-import com.openai.client.okhttp.OpenAIOkHttpClient;
-import com.openai.core.LogLevel;
-import com.openai.core.Timeout;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatModel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -17,19 +14,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
 
 @RequiredArgsConstructor
 @Slf4j
-public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAIClient> {
+public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private static final String CONFIG_KEY_PIPELINE_MODE = "pipeline_mode";
+
+    // langchain4j's OpenAiOfficialResponsesChatModel constructor requires a non-null modelName at
+    // build time. On the proxy path the real model is supplied per request via
+    // ChatRequest.parameters().modelName(...), so this placeholder never reaches OpenAI.
+    private static final String PROXY_MODEL_NAME_PLACEHOLDER = "gpt-4o-mini";
 
     public enum ApiPipelineMode {
         CHAT_COMPLETIONS_API, // Uses traditional /v1/chat/completions
@@ -38,10 +38,11 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAIC
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
-    public OpenAIClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
-        var openAiClientBuilder = OpenAIOkHttpClient.builder()
-                .apiKey(config.apiKey())
-                .baseUrl(DEFAULT_OPENAI_URL);
+    public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
+        var openAiClientBuilder = OpenAiClient.builder()
+                .baseUrl(DEFAULT_OPENAI_URL)
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
                 .map(LlmProviderClientConfig.OpenAiClientConfig::url)
@@ -54,33 +55,16 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAIC
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
-                .map(headers -> headers.entrySet().stream()
-                        .collect(Collectors.toMap(
-                                Map.Entry::getKey,
-                                entry -> List.of(entry.getValue()))))
-                .ifPresent(openAiClientBuilder::headers);
+                .ifPresent(openAiClientBuilder::customHeaders);
 
-        openAiClientBuilder.timeout(buildTimeout());
-        openAiClientBuilder.logLevel(resolveLogLevel());
-
-        return openAiClientBuilder.build();
-    }
-
-    private Timeout buildTimeout() {
-        var timeoutBuilder = Timeout.builder();
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
-                .ifPresent(connectTimeout -> timeoutBuilder.connect(connectTimeout.toJavaDuration()));
+                .ifPresent(connectTimeout -> openAiClientBuilder.connectTimeout(connectTimeout.toJavaDuration()));
         Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
-                .ifPresent(readTimeout -> timeoutBuilder.read(readTimeout.toJavaDuration()));
-        Optional.ofNullable(llmProviderClientConfig.getWriteTimeout())
-                .ifPresent(writeTimeout -> timeoutBuilder.write(writeTimeout.toJavaDuration()));
-        return timeoutBuilder.build();
-    }
+                .ifPresent(readTimeout -> openAiClientBuilder.readTimeout(readTimeout.toJavaDuration()));
 
-    private LogLevel resolveLogLevel() {
-        boolean logRequests = Boolean.TRUE.equals(llmProviderClientConfig.getLogRequests());
-        boolean logResponses = Boolean.TRUE.equals(llmProviderClientConfig.getLogResponses());
-        return (logRequests || logResponses) ? LogLevel.DEBUG : LogLevel.OFF;
+        return openAiClientBuilder
+                .apiKey(config.apiKey())
+                .build();
     }
 
     public ChatModel newOpenAiChatLanguageModel(@NonNull LlmProviderClientApiConfig config,
@@ -92,7 +76,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAIC
     }
 
     @Override
-    public OpenAIClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
+    public OpenAiClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
         return newOpenAiClient(config);
     }
 
@@ -146,6 +130,17 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAIC
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
         return builder.build();
+    }
+
+    /**
+     * Proxy-path overload — synthesizes placeholder judge parameters. The real model name is
+     * supplied per request via {@code ChatRequest.parameters().modelName(...)}, so the placeholder
+     * never reaches OpenAI; it only satisfies langchain4j's required-field validation at build time.
+     */
+    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config) {
+        return newResponsesApiChatModel(config, LlmAsJudgeModelParameters.builder()
+                .name(PROXY_MODEL_NAME_PLACEHOLDER)
+                .build());
     }
 
     ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
