@@ -14,9 +14,7 @@ const EvaluateExperimentTracesButton: React.FC<
 > = ({ experiment }) => {
   if (!experiment?.project_id) return null;
 
-  return (
-    <Inner experiment={experiment} projectId={experiment.project_id} />
-  );
+  return <Inner experiment={experiment} projectId={experiment.project_id} />;
 };
 
 const Inner: React.FC<{ experiment: Experiment; projectId: string }> = ({
