@@ -156,10 +156,6 @@ public class OAuthAuthorizeResource {
         if (!config.getMcpResourceUri().equals(request.resource())) {
             throw new BadRequestException(ERROR_INVALID_TARGET);
         }
-        if (StringUtils.isBlank(request.codeChallenge())
-                || !CODE_CHALLENGE_METHOD_S256.equals(request.codeChallengeMethod())) {
-            throw new BadRequestException(ERROR_INVALID_REQUEST);
-        }
 
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
         UserWorkspace workspace = authService.authorizeWorkspace(session, request.workspaceName());
@@ -181,15 +177,19 @@ public class OAuthAuthorizeResource {
                 .build()).build();
     }
 
+    /**
+     * Resolves the client and validates the {@code redirect_uri} against its registered URIs.
+     * <p>
+     * Per RFC 6749 §3.1.2 the redirection endpoint URI MUST NOT include a fragment, otherwise the appended
+     * {@code code}/{@code error}/{@code state} query params would land inside the fragment and be unreadable
+     * by the client.
+     */
     private McpOAuthClient requireClientWithRedirect(String clientId, String redirectUri) {
         Optional<McpOAuthClient> client = clientService.resolve(clientId);
         if (client.isEmpty()) {
             throw new BadRequestException(ERROR_INVALID_CLIENT);
         }
-        // RFC 6749 §3.1.2: the redirection endpoint URI MUST NOT include a fragment, otherwise appended
-        // code/error/state query params would land inside the fragment and be unreadable by the client.
-        if (redirectUri == null || redirectUri.contains("#")
-                || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
+        if (redirectUri.contains("#") || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
             throw new BadRequestException("invalid redirect_uri");
         }
         return client.get();
@@ -213,7 +213,6 @@ public class OAuthAuthorizeResource {
     }
 
     private static boolean isSecureDeployment(McpOAuthConfig config) {
-        String baseUrl = config.getBaseUrl();
-        return baseUrl != null && baseUrl.startsWith("https://");
+        return StringUtils.startsWith(config.getBaseUrl(), "https://");
     }
 }

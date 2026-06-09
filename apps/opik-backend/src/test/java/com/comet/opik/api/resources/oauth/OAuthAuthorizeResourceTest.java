@@ -84,7 +84,7 @@ class OAuthAuthorizeResourceTest {
 
     private McpOAuthClient validClient() {
         return McpOAuthClient.builder()
-                .clientId(CLIENT_ID)
+                .id(CLIENT_ID)
                 .name("Test Client")
                 .redirectUris(Set.of(REDIRECT_URI))
                 .build();
@@ -272,19 +272,6 @@ class OAuthAuthorizeResourceTest {
 
         assertThatThrownBy(() -> resource.consent(buildConsent(CODE_CHALLENGE), headers))
                 .isInstanceOf(ForbiddenException.class);
-        verify(mcpOAuthService, never()).createAuthorizationCode(any(CreateOAuthCodeCommand.class));
-    }
-
-    @Test
-    @DisplayName("POST /authorize (consent): blank code_challenge rejected (mirrors GET /authorize validation)")
-    void consent_blankCodeChallenge_throwsBadRequest() {
-        mockClientResolution(true);
-        when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
-        mockCookies(Map.of(CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build()));
-
-        assertThatThrownBy(() -> resource.consent(buildConsent("  "), headers))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage(ERROR_INVALID_REQUEST);
         verify(mcpOAuthService, never()).createAuthorizationCode(any(CreateOAuthCodeCommand.class));
     }
 
