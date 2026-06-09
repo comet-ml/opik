@@ -4,7 +4,7 @@ import Loader from "@/shared/Loader/Loader";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 
-const AiSpendGuard: React.FC = () => {
+const AiSpend: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
   const { isPending, hasAccess } = useAiSpend();
 
@@ -19,4 +19,4 @@ const AiSpendGuard: React.FC = () => {
   return <Outlet />;
 };
 
-export default AiSpendGuard;
+export default AiSpend;

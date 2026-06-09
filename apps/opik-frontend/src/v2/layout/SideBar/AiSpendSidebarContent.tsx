@@ -59,7 +59,7 @@ const AiSpendSidebarContent: React.FC<AiSpendSidebarContentProps> = ({
           </span>
         </TooltipWrapper>
         <span className="comet-body-s-accented truncate text-foreground">
-          AI Spend Manager
+          Cost Intelligence
         </span>
       </div>
     </div>

@@ -1,14 +1,16 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Coins, PieChart } from "lucide-react";
 import useAiSpendComposition from "@/api/ai-spend/useAiSpendComposition";
+import useAiSpendRecommendations from "@/api/ai-spend/useAiSpendRecommendations";
 import { Card } from "@/ui/card";
 import { Skeleton } from "@/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/money";
 import BreakdownColumn from "./BreakdownColumn";
-import LaneBreakdownPanel from "./LaneBreakdownPanel";
 import SankeyLinks, { RibbonPath } from "./SankeyLinks";
 import { getLaneMeta } from "./laneRegistry";
-import { ribbonWidth, toLaneViews } from "./utils";
+import { lanePct, ribbonWidth, toLaneViews } from "./utils";
+import { LaneView } from "./types";
 
 export interface AiUsageBreakdownProps {
   projectName: string;
@@ -17,6 +19,14 @@ export interface AiUsageBreakdownProps {
   userUuid?: string;
   compact?: boolean;
   className?: string;
+  onLaneClick?: (laneKey: string) => void;
+  onLaneHover?: (laneKey: string | null) => void;
+  activeLaneKey?: string | null;
+  highlightedLaneKey?: string | null;
+  renderLaneWrapper?: (
+    lane: LaneView,
+    card: React.ReactNode,
+  ) => React.ReactNode;
 }
 
 interface PathsState {
@@ -34,6 +44,11 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
   userUuid,
   compact,
   className,
+  onLaneClick,
+  onLaneHover,
+  activeLaneKey,
+  highlightedLaneKey,
+  renderLaneWrapper,
 }) => {
   const { data, isPending, isError } = useAiSpendComposition({
     projectName,
@@ -42,7 +57,7 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
     userUuid,
   });
 
-  const [openLaneKey, setOpenLaneKey] = useState<string | null>(null);
+  const [hoveredLaneKey, setHoveredLaneKey] = useState<string | null>(null);
   const [paths, setPaths] = useState<PathsState>(EMPTY_PATHS);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -50,9 +65,38 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
   const leftRefs = useRef<(HTMLDivElement | null)[]>([]);
   const rightRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  const { data: recommendationsData } = useAiSpendRecommendations({
+    projectName,
+    intervalStart,
+    intervalEnd,
+    userUuid,
+  });
+  const recommendationLaneKeys = useMemo(
+    () =>
+      new Set(
+        (recommendationsData?.items ?? [])
+          .map((item) => item.related_lane_key)
+          .filter((key): key is string => Boolean(key)),
+      ),
+    [recommendationsData],
+  );
+
   const inputLanes = useMemo(() => toLaneViews(data?.input), [data]);
   const outputLanes = useMemo(() => toLaneViews(data?.output), [data]);
   const harness = data?.harness ?? [];
+  const harnessTotal = harness.reduce(
+    (acc, h) => acc + (h.total_estimated_cost ?? 0),
+    0,
+  );
+
+  const columnWidth = compact ? "w-52" : "w-60";
+
+  const handleHover = (laneKey: string | null) => {
+    setHoveredLaneKey(laneKey);
+    onLaneHover?.(laneKey);
+  };
+
+  const emphasizedLaneKey = hoveredLaneKey ?? highlightedLaneKey ?? null;
 
   const recompute = () => {
     const container = containerRef.current;
@@ -89,6 +133,7 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
         const yAttach = fanY(i, arr.length);
         const midX = (x + stackLeftX) / 2;
         return {
+          laneKey: lane.key,
           d: `M ${x} ${y} C ${midX} ${y}, ${midX} ${yAttach}, ${stackLeftX} ${yAttach}`,
           color: getLaneMeta(lane.key, lane.label).color,
           width: ribbonWidth(lane.weight, maxIn),
@@ -106,6 +151,7 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
         const yAttach = fanY(i, arr.length);
         const midX = (stackRightX + x) / 2;
         return {
+          laneKey: lane.key,
           d: `M ${stackRightX} ${yAttach} C ${midX} ${yAttach}, ${midX} ${y}, ${x} ${y}`,
           color: getLaneMeta(lane.key, lane.label).color,
           width: ribbonWidth(lane.weight, maxOut),
@@ -126,19 +172,12 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputLanes, outputLanes, harness.length]);
 
-  const title = (
-    <h2 className="comet-body-accented mb-4 text-foreground">
-      AI usage breakdown
-    </h2>
-  );
-
   if (isPending) {
     return (
       <Card className={cn("p-4", className)}>
-        {title}
-        <div className="grid grid-cols-3 gap-6">
+        <div className="flex items-center justify-between gap-12">
           {[0, 1, 2].map((col) => (
-            <div key={col} className="flex flex-col gap-2">
+            <div key={col} className={cn("flex flex-col gap-2", columnWidth)}>
               {[0, 1, 2].map((row) => (
                 <Skeleton key={row} className="h-14 w-full" />
               ))}
@@ -152,7 +191,6 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
   if (isError || !data) {
     return (
       <Card className={cn("p-4", className)}>
-        {title}
         <div className="comet-body-s py-8 text-center text-muted-slate">
           Could not load AI usage breakdown.
         </div>
@@ -169,7 +207,6 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
   if (isEmpty) {
     return (
       <Card className={cn("p-4", className)}>
-        {title}
         <div className="comet-body-s py-8 text-center text-muted-slate">
           No AI usage in this period.
         </div>
@@ -179,39 +216,40 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
 
   return (
     <Card className={cn("p-4", className)}>
-      {title}
       <div ref={containerRef} className="relative">
         <SankeyLinks
           paths={[...paths.left, ...paths.right]}
           width={paths.size.w}
           height={paths.size.h}
+          highlightedKey={emphasizedLaneKey}
         />
-        <div
-          className={cn(
-            "relative z-10 grid items-center gap-x-12",
-            compact
-              ? "grid-cols-[minmax(150px,1fr)_auto_minmax(150px,1fr)] gap-x-8"
-              : "grid-cols-[minmax(200px,1fr)_auto_minmax(200px,1fr)]",
-          )}
-        >
-          <BreakdownColumn
-            title="Input"
-            side="input"
-            totalCost={data.input?.total_estimated_cost ?? null}
-            lanes={inputLanes}
-            onDrill={setOpenLaneKey}
-            activeLaneKey={openLaneKey}
-            compact={compact}
-            registerRef={(index, el) => {
-              leftRefs.current[index] = el;
-            }}
-          />
+        <div className="relative z-10 flex items-center justify-between">
+          <div className={cn("shrink-0", columnWidth)}>
+            <BreakdownColumn
+              title="Input"
+              side="input"
+              totalCost={data.input?.total_estimated_cost ?? null}
+              lanes={inputLanes}
+              onLaneClick={onLaneClick}
+              onLaneHover={handleHover}
+              activeLaneKey={emphasizedLaneKey ?? activeLaneKey}
+              recommendationLaneKeys={recommendationLaneKeys}
+              renderLaneWrapper={renderLaneWrapper}
+              compact={compact}
+              registerRef={(index, el) => {
+                leftRefs.current[index] = el;
+              }}
+            />
+          </div>
 
           <div
             ref={harnessBoxRef}
-            className="flex flex-col gap-2 rounded-xl border border-dashed p-3"
+            className={cn(
+              "flex shrink-0 flex-col gap-2 rounded-xl border p-3 bg-background",
+              columnWidth,
+            )}
           >
-            <span className="comet-body-s-accented text-center text-muted-slate">
+            <span className="comet-body-s text-center text-foreground">
               Harness
             </span>
             {harness.map((entry) => {
@@ -220,51 +258,57 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
               return (
                 <div
                   key={entry.key}
-                  className="flex items-center gap-2 rounded-lg border bg-background p-2"
+                  className="flex flex-col gap-0.5 rounded-md border bg-background p-2"
                 >
-                  <div
-                    className="flex size-6 shrink-0 items-center justify-center rounded-md"
-                    style={{
-                      backgroundColor: `${meta.color}1f`,
-                      color: meta.color,
-                    }}
-                  >
-                    <Icon className="size-3.5" />
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-white"
+                      style={{ backgroundColor: meta.color }}
+                    >
+                      <Icon className="size-2.5" />
+                    </div>
+                    <span className="comet-body-xs-accented min-w-0 flex-1 truncate text-foreground">
+                      {entry.label || meta.labelFallback}
+                    </span>
                   </div>
-                  <span className="comet-body-s-accented truncate text-foreground">
-                    {entry.label || meta.labelFallback}
-                  </span>
-                  <span className="comet-body-xs ml-auto shrink-0 text-muted-slate">
-                    {formatCost(entry.total_estimated_cost)}
-                  </span>
+                  <div className="flex items-center gap-3 py-0.5">
+                    <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
+                      <PieChart className="size-3" />
+                      {lanePct(
+                        entry.total_estimated_cost ?? 0,
+                        harnessTotal,
+                      ).toFixed(0)}
+                      %
+                    </span>
+                    <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
+                      <Coins className="size-3" />
+                      {formatCost(entry.total_estimated_cost)}
+                    </span>
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          <BreakdownColumn
-            title="Output"
-            side="output"
-            totalCost={data.output?.total_estimated_cost ?? null}
-            lanes={outputLanes}
-            onDrill={setOpenLaneKey}
-            activeLaneKey={openLaneKey}
-            compact={compact}
-            registerRef={(index, el) => {
-              rightRefs.current[index] = el;
-            }}
-          />
+          <div className={cn("shrink-0", columnWidth)}>
+            <BreakdownColumn
+              title="Output"
+              side="output"
+              totalCost={data.output?.total_estimated_cost ?? null}
+              lanes={outputLanes}
+              onLaneClick={onLaneClick}
+              onLaneHover={handleHover}
+              activeLaneKey={emphasizedLaneKey ?? activeLaneKey}
+              recommendationLaneKeys={recommendationLaneKeys}
+              renderLaneWrapper={renderLaneWrapper}
+              compact={compact}
+              registerRef={(index, el) => {
+                rightRefs.current[index] = el;
+              }}
+            />
+          </div>
         </div>
       </div>
-
-      <LaneBreakdownPanel
-        laneKey={openLaneKey}
-        projectName={projectName}
-        intervalStart={intervalStart}
-        intervalEnd={intervalEnd}
-        userUuid={userUuid}
-        onClose={() => setOpenLaneKey(null)}
-      />
     </Card>
   );
 };

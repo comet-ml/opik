@@ -1,11 +1,13 @@
 import React, { useMemo } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
+  ArrowRightToLine,
   CircleDollarSign,
   MessagesSquare,
   PiggyBank,
   User,
-  Users,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import PercentageTrend, {
   PercentageTrendType,
 } from "@/shared/PercentageTrend/PercentageTrend";
@@ -15,32 +17,32 @@ import KpiCard from "./KpiCard";
 import {
   NO_DATA,
   SpendMetric,
-  SpendWindow,
   formatSpendCount,
   formatSpendUsd,
-  getSpendInterval,
   getSpendTrendPercentage,
 } from "@/lib/aiSpend";
 
 const EMPTY_METRIC: SpendMetric = { current: null, previous: null };
 
 interface HomeSummaryCardsProps {
-  windowDays: SpendWindow;
+  intervalStart: string;
+  intervalEnd: string;
 }
 
-const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({ windowDays }) => {
+const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
+  intervalStart,
+  intervalEnd,
+}) => {
   const { projectName } = useAiSpend();
 
-  const { intervalStart, intervalEnd } = useMemo(
-    () => getSpendInterval(windowDays),
-    [windowDays],
+  const { data, isPending, isPlaceholderData } = useAiSpendSummary(
+    {
+      projectName,
+      intervalStart,
+      intervalEnd,
+    },
+    { placeholderData: keepPreviousData },
   );
-
-  const { data, isPending } = useAiSpendSummary({
-    projectName,
-    intervalStart,
-    intervalEnd,
-  });
 
   const metrics = useMemo(() => {
     const map: Record<string, SpendMetric> = {};
@@ -53,7 +55,6 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({ windowDays }) => {
     return map;
   }, [data]);
 
-  // No data → render the "N/A" empty state instead of zeros/trends.
   const hasData = useMemo(
     () =>
       (data?.results ?? []).some(
@@ -73,13 +74,12 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({ windowDays }) => {
   const renderTrend = (
     metric: SpendMetric,
     trend: PercentageTrendType = "inverted",
-  ) =>
-    showData ? (
-      <PercentageTrend
-        percentage={getSpendTrendPercentage(metric)}
-        trend={trend}
-      />
-    ) : undefined;
+  ) => (
+    <PercentageTrend
+      percentage={showData ? getSpendTrendPercentage(metric) : undefined}
+      trend={trend}
+    />
+  );
 
   const usd = (metric: SpendMetric) =>
     showData ? formatSpendUsd(metric.current) : NO_DATA;
@@ -91,7 +91,12 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({ windowDays }) => {
       : NO_DATA;
 
   return (
-    <div className="flex items-start gap-2">
+    <div
+      className={cn(
+        "flex items-start gap-2 transition-opacity",
+        isPlaceholderData && "opacity-60",
+      )}
+    >
       <KpiCard
         icon={CircleDollarSign}
         label="Total spend"
@@ -106,7 +111,7 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({ windowDays }) => {
         loading={isPending}
       />
       <KpiCard
-        icon={Users}
+        icon={ArrowRightToLine}
         label="Active users"
         value={activeUsersValue}
         loading={isPending}

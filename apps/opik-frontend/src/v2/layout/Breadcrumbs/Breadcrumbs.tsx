@@ -18,6 +18,7 @@ type CustomRouteStaticData = {
   title?: string;
   param?: string;
   paramValue?: string;
+  hideRoot?: boolean;
 };
 
 const Breadcrumbs = () => {
@@ -26,6 +27,13 @@ const Breadcrumbs = () => {
     (state) => state.WorkspaceSelector,
   );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const hideRoot = useRouterState({
+    select: (state) =>
+      state.matches.some(
+        (match) => (match.staticData as CustomRouteStaticData).hideRoot,
+      ),
+  });
 
   const breadcrumbs = useRouterState({
     select: (state) => {
@@ -104,8 +112,12 @@ const Breadcrumbs = () => {
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        <BreadcrumbItem>{renderWorkspaceItem()}</BreadcrumbItem>
-        <BreadcrumbSeparator />
+        {!hideRoot && (
+          <>
+            <BreadcrumbItem>{renderWorkspaceItem()}</BreadcrumbItem>
+            <BreadcrumbSeparator />
+          </>
+        )}
         {renderBreadcrumbs()}
       </BreadcrumbList>
     </Breadcrumb>

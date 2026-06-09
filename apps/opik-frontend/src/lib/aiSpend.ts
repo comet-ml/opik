@@ -11,8 +11,6 @@ export const isAiSpendRoute = (pathname: string): boolean => {
 export type SpendWindow = 7 | 30 | 90;
 export const SPEND_WINDOWS: SpendWindow[] = [7, 30, 90];
 
-// All coding-agent data lives in one hardcoded project in the special
-// workspace (OPIK-6819 / open question A1). Adjust if the project name differs.
 export const AI_SPEND_PROJECT_NAME = "claude-code";
 export const NO_DATA = "N/A";
 

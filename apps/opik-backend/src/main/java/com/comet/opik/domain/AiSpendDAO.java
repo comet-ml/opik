@@ -19,6 +19,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -140,6 +141,19 @@ class AiSpendDAOImpl implements AiSpendDAO {
             ;
             """;
 
+    // Blended $/token rate over the window, used to estimate per-item cost for the
+    // breakdown (cc.* arrays carry tokens only; cost lives on spans as a total).
+    private static final String BREAKDOWN_RATE = """
+            SELECT SUM(total_estimated_cost) AS total_cost,
+                   SUM(usage['total_tokens']) AS total_tokens
+            FROM spans final
+            WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id BETWEEN :id_start AND :id_end
+                AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+            ;
+            """;
+
     private static final String USERS_TRACE_AGG = """
             SELECT
                 user_uuid,
@@ -214,7 +228,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
         Optional<String> userUuid = userUuidFromFilters(request.filters());
         String sql = BREAKDOWN.formatted(lane.getBreakdownArrayPath(), lane.getBreakdownLabelField(),
                 lane.getBreakdownTokenField(), userUuid.map(u -> USER_FILTER).orElse(""));
-        return template.nonTransaction(connection -> {
+        Mono<List<SpendBreakdownResponse.Item>> itemsMono = template.nonTransaction(connection -> {
             var statement = connection.createStatement(sql);
             bindCompositionRange(statement, request);
             userUuid.ifPresent(value -> statement.bind("user_uuid", value));
@@ -224,17 +238,48 @@ class AiSpendDAOImpl implements AiSpendDAO {
                             .totalTokens(getLong(row.get("total_tokens", Long.class)))
                             .build()))
                     .collectList();
-        }).map(items -> {
+        });
+
+        return Mono.zip(itemsMono, spendRate(request)).map(tuple -> {
+            BigDecimal rate = tuple.getT2();
+            // Per-item cost = item tokens × blended $/token rate (null when no cost data).
+            List<SpendBreakdownResponse.Item> items = tuple.getT1().stream()
+                    .map(item -> item.toBuilder()
+                            .totalEstimatedCost(costFor(item.totalTokens(), rate))
+                            .build())
+                    .toList();
             long total = items.stream().mapToLong(SpendBreakdownResponse.Item::totalTokens).sum();
             return SpendBreakdownResponse.builder()
                     .laneKey(lane.getKey())
                     .title(lane.getLabel())
                     .subtitle(lane.getBreakdownSubtitle())
                     .totalTokens(total)
+                    .totalEstimatedCost(costFor(total, rate))
                     .itemCount(items.size())
                     .items(items)
                     .build();
         });
+    }
+
+    private Mono<BigDecimal> spendRate(SpendMetricRequest request) {
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(BREAKDOWN_RATE);
+            bindCompositionRange(statement, request);
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> {
+                        BigDecimal cost = row.get("total_cost", BigDecimal.class);
+                        long tokens = getLong(row.get("total_tokens", Long.class));
+                        if (cost == null || tokens == 0L) {
+                            return BigDecimal.ZERO;
+                        }
+                        return cost.divide(BigDecimal.valueOf(tokens), 12, RoundingMode.HALF_UP);
+                    }))
+                    .single(BigDecimal.ZERO);
+        });
+    }
+
+    private BigDecimal costFor(long tokens, BigDecimal rate) {
+        return rate.signum() > 0 ? rate.multiply(BigDecimal.valueOf(tokens)) : null;
     }
 
     @Override
@@ -399,6 +444,16 @@ class AiSpendDAOImpl implements AiSpendDAO {
 
     private SpendCompositionResponse buildComposition(long[] tokens, BigDecimal totalCost) {
         var lanes = SpendLane.values();
+        long grandTotalTokens = 0L;
+        for (long laneTokens : tokens) {
+            grandTotalTokens += laneTokens;
+        }
+        // Blended $/token rate: distribute the native total span cost across lanes by
+        // token share, so each lane shows a proportional cost estimate (null otherwise).
+        BigDecimal rate = totalCost != null && totalCost.signum() > 0 && grandTotalTokens > 0L
+                ? totalCost.divide(BigDecimal.valueOf(grandTotalTokens), 12, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
         List<SpendCompositionResponse.Lane> inputLanes = new ArrayList<>();
         List<SpendCompositionResponse.Lane> outputLanes = new ArrayList<>();
         long inputTokens = 0L;
@@ -411,6 +466,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                     .key(lane.getKey())
                     .label(lane.getLabel())
                     .totalTokens(laneTokens)
+                    .totalEstimatedCost(costFor(laneTokens, rate))
                     .hasBreakdown(lane.hasBreakdown())
                     .build();
             if (lane.getSide() == SpendLane.Side.INPUT) {
@@ -423,8 +479,16 @@ class AiSpendDAOImpl implements AiSpendDAO {
         }
 
         return SpendCompositionResponse.builder()
-                .input(SpendCompositionResponse.Side.builder().totalTokens(inputTokens).lanes(inputLanes).build())
-                .output(SpendCompositionResponse.Side.builder().totalTokens(outputTokens).lanes(outputLanes).build())
+                .input(SpendCompositionResponse.Side.builder()
+                        .totalTokens(inputTokens)
+                        .totalEstimatedCost(costFor(inputTokens, rate))
+                        .lanes(inputLanes)
+                        .build())
+                .output(SpendCompositionResponse.Side.builder()
+                        .totalTokens(outputTokens)
+                        .totalEstimatedCost(costFor(outputTokens, rate))
+                        .lanes(outputLanes)
+                        .build())
                 .harness(List.of(SpendCompositionResponse.HarnessEntry.builder()
                         .key("claude_code")
                         .label("Claude Code")
