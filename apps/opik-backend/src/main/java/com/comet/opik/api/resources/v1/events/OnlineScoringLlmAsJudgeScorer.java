@@ -74,7 +74,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final OpikConfiguration opikConfiguration;
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
-    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -91,7 +90,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull WorkspaceNameService workspaceNameService,
             @NonNull OpikConfiguration opikConfiguration,
             @NonNull OnlineScoringMetrics onlineScoringMetrics) {
-        super(config, redisson, feedbackScoreService, traceService,
+        super(config, redisson, feedbackScoreService, traceService, onlineScoringMetrics,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
@@ -104,7 +103,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.opikConfiguration = opikConfiguration;
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
-        this.onlineScoringMetrics = onlineScoringMetrics;
     }
 
     /**

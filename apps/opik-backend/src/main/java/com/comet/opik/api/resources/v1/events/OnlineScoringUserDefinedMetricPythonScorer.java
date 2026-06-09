@@ -53,9 +53,10 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
             @NonNull SpanService spanService,
-            @NonNull PythonEvaluatorService pythonEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService, USER_DEFINED_METRIC_PYTHON,
-                Constants.USER_DEFINED_METRIC_PYTHON);
+            @NonNull PythonEvaluatorService pythonEvaluatorService,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) {
+        super(config, redisson, feedbackScoreService, traceService, onlineScoringMetrics,
+                USER_DEFINED_METRIC_PYTHON, Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.spanService = spanService;
         this.serviceTogglesConfig = serviceTogglesConfig;

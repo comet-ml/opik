@@ -64,6 +64,7 @@ public class OnlineScoringSampler {
     private final Logger userFacingLogger;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineScorePublisher onlineScorePublisher;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringSampler(@NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
@@ -71,13 +72,15 @@ public class OnlineScoringSampler {
             @NonNull TraceFilterEvaluationService filterEvaluationService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull TraceService traceService,
-            @NonNull ProjectService projectService) throws NoSuchAlgorithmException {
+            @NonNull ProjectService projectService,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceService = traceService;
         this.projectService = projectService;
+        this.onlineScoringMetrics = onlineScoringMetrics;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
     }
@@ -203,6 +206,8 @@ public class OnlineScoringSampler {
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
+                        onlineScoringMetrics.recordSampled(evaluator.getType(), messages.size(),
+                                scorableTraces.size() - messages.size());
                         if (!messages.isEmpty()) {
                             onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                         }
@@ -214,6 +219,8 @@ public class OnlineScoringSampler {
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
                             logSampledTrace(evaluator, messages, scorableTraces.size());
+                            onlineScoringMetrics.recordSampled(evaluator.getType(), messages.size(),
+                                    scorableTraces.size() - messages.size());
                             if (!messages.isEmpty()) {
                                 onlineScorePublisher.enqueueMessage(messages,
                                         AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);

@@ -111,6 +111,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongCounter listPendingErrors;
     private final LongHistogram listPendingTime;
     private final LongCounter unexpectedErrors;
+    private final LongCounter deadLettered;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription;
@@ -203,6 +204,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.unexpectedErrors = meter
                 .counterBuilder("%s_%s_unexpected_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Unexpected errors caught")
+                .build();
+        this.deadLettered = meter
+                .counterBuilder("%s_%s_dead_lettered_total".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Messages permanently dropped: non-retryable, or retryable past maxRetries")
                 .build();
     }
 
@@ -520,9 +525,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .filter(this::maxRetriesReached)
                 .map(this::handleMaxRetriesReached)
                 .collectList() // Emits an empty list if the sequence is empty
-                .flatMap(maxRetries ->
-                // Delete all non-retryable combined with max retries reached
-                ackAndRemoveMessages(Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList()))
+                .flatMap(maxRetries -> {
+                    // Delete all non-retryable combined with max retries reached — these leave the stream
+                    // for good, so count them as dead-lettered (the silent-loss signal).
+                    var deadLetteredIds = Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList();
+                    if (!deadLetteredIds.isEmpty()) {
+                        deadLettered.add(deadLetteredIds.size());
+                    }
+                    return ackAndRemoveMessages(deadLetteredIds);
+                })
                 .thenReturn(processingResults);
     }
 

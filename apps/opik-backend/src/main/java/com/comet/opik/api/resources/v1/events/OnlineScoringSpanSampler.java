@@ -54,16 +54,19 @@ public class OnlineScoringSpanSampler {
     private final Logger userFacingLogger;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineScorePublisher onlineScorePublisher;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringSpanSampler(@NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull SpanFilterEvaluationService filterEvaluationService,
-            @NonNull OnlineScorePublisher onlineScorePublisher) throws NoSuchAlgorithmException {
+            @NonNull OnlineScorePublisher onlineScorePublisher,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.onlineScoringMetrics = onlineScoringMetrics;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanSampler.class);
     }
@@ -139,6 +142,8 @@ public class OnlineScoringSpanSampler {
                                 .map(span -> toLlmAsJudgeMessage(spansBatch, rule, span))
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
+                        onlineScoringMetrics.recordSampled(rule.getType(), messages.size(),
+                                scorableSpans.size() - messages.size());
                         if (!messages.isEmpty()) {
                             onlineScorePublisher.enqueueMessage(messages,
                                     AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
@@ -164,6 +169,8 @@ public class OnlineScoringSpanSampler {
                                 .map(span -> toUserDefinedMetricPythonMessage(spansBatch, rule, span))
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
+                        onlineScoringMetrics.recordSampled(rule.getType(), messages.size(),
+                                scorableSpans.size() - messages.size());
                         if (!messages.isEmpty()) {
                             onlineScorePublisher.enqueueMessage(messages,
                                     AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);

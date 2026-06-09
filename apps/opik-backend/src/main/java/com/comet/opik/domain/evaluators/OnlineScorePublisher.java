@@ -6,6 +6,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefin
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
+import com.comet.opik.api.resources.v1.events.OnlineScoringMetrics;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -60,15 +61,18 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final Map<AutomationRuleEvaluatorType, OnlineScoringStreamConfigurationAdapter> streamConfigurations;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScorePublisherImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
+            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics) {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.onlineScoringMetrics = onlineScoringMetrics;
         this.streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
                     var evaluatorType = AutomationRuleEvaluatorType.fromString(streamConfiguration.getScorer());
@@ -83,6 +87,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
 
     public void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type) {
         var config = streamConfigurations.get(type);
+        onlineScoringMetrics.recordEnqueued(type, messages.size());
         var codec = config.getCodec();
         var stream = redisClient.getStream(config.getStreamName(), codec);
         Flux.fromIterable(messages)

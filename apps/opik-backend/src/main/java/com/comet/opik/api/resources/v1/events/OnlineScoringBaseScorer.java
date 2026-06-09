@@ -51,11 +51,13 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
     protected final AutomationRuleEvaluatorType type;
+    protected final OnlineScoringMetrics onlineScoringMetrics;
 
     protected OnlineScoringBaseScorer(@NonNull @Config OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
+            @NonNull OnlineScoringMetrics onlineScoringMetrics,
             @NonNull AutomationRuleEvaluatorType type,
             @NonNull String metricsBaseName) {
         super(OnlineScoringStreamConfigurationAdapter.create(config, type),
@@ -65,6 +67,7 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
                 metricsBaseName);
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
+        this.onlineScoringMetrics = onlineScoringMetrics;
         this.type = type;
     }
 
@@ -74,7 +77,9 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
      */
     @Override
     protected Mono<Void> processEvent(M message) {
-        return Mono.defer(() -> score(message));
+        return Mono.defer(() -> score(message))
+                .doOnError(error -> onlineScoringMetrics.recordEvalOutcome(type,
+                        OnlineScoringMetrics.EvalOutcome.ERROR));
     }
 
     /**
@@ -88,6 +93,8 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
             List<FeedbackScoreBatchItem> scores, Trace trace, String userName, String workspaceId) {
         log.info("Received '{}' scores for traceId '{}' in workspace '{}'. Storing them",
                 scores.size(), trace.id(), workspaceId);
+        onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SCORED);
+        onlineScoringMetrics.recordScoresStored(type, scores.size());
         return feedbackScoreService.scoreBatchOfTraces(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -98,6 +105,8 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
             List<FeedbackScoreBatchItem> scores, com.comet.opik.api.Span span, String userName, String workspaceId) {
         log.info("Received '{}' scores for spanId '{}' in workspace '{}'. Storing them",
                 scores.size(), span.id(), workspaceId);
+        onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SCORED);
+        onlineScoringMetrics.recordScoresStored(type, scores.size());
         return feedbackScoreService.scoreBatchOfSpans(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -108,6 +117,8 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
             List<FeedbackScoreBatchItemThread> scores, String threadId, String userName, String workspaceId) {
         log.info("Received '{}' scores for threadId '{}' in workspace '{}'. Storing them",
                 scores.size(), threadId, workspaceId);
+        onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SCORED);
+        onlineScoringMetrics.recordScoresStored(type, scores.size());
         return feedbackScoreService.scoreBatchOfThreads(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))

@@ -72,7 +72,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final SpanService spanService;
-    private final OnlineScoringMetrics onlineScoringMetrics;
 
     @Inject
     public OnlineScoringTraceThreadLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -88,7 +87,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull ToolRegistry toolRegistry,
             @NonNull SpanService spanService,
             @NonNull OnlineScoringMetrics onlineScoringMetrics) {
-        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
+        super(config, redisson, feedbackScoreService, traceService, onlineScoringMetrics, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.llmProviderFactory = llmProviderFactory;
@@ -99,7 +98,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.spanService = spanService;
-        this.onlineScoringMetrics = onlineScoringMetrics;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
 
@@ -146,6 +144,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                     "No traces found for threadId '{}' in projectId '{}'. Skipping scoring.",
                                     currentThreadId, message.projectId());
                         }
+                        onlineScoringMetrics.recordEvalOutcome(type,
+                                OnlineScoringMetrics.EvalOutcome.SKIPPED_NO_TRACES);
                         return Mono.empty();
                     }
                     return traceThreadService.getThreadModelId(message.projectId(), currentThreadId)
@@ -155,6 +155,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                             "Thread model not found for threadId '{}' in projectId '{}'. Skipping scoring.",
                                             currentThreadId, message.projectId());
                                 }
+                                onlineScoringMetrics.recordEvalOutcome(type,
+                                        OnlineScoringMetrics.EvalOutcome.SKIPPED_RULE_MISSING);
                                 return Mono.empty();
                             }))
                             .flatMap(threadModelId -> processScoring(message, traces, threadModelId,
@@ -200,6 +202,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 log.warn(
                         "Automation rule with ID '{}' not found in projectId '{}' for workspace '{}'. Skipping scoring for threadId '{}'.",
                         message.ruleId(), message.projectId(), message.workspaceId(), threadId);
+                onlineScoringMetrics.recordEvalOutcome(type, OnlineScoringMetrics.EvalOutcome.SKIPPED_RULE_MISSING);
                 return Optional.empty();
             }
         }
