@@ -10,8 +10,7 @@ import lombok.Builder;
 
 import java.util.Set;
 
-// RFC 7591 §2 client metadata; unknown fields are ignored.
-// Size caps mirror the mcp_oauth_clients column sizes.
+// RFC 7591 §2 client metadata.
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)

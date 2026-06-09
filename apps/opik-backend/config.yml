@@ -1,10 +1,4 @@
 ---
-# Scheduled job cron expressions resolved by dropwizard-jobs from the @On("${name}") placeholder.
-jobs:
-  # Default: every 5 minutes
-  # Description: Cron expression for the MCP OAuth scrub job (expired codes + expired/revoked tokens).
-  mcpOAuthScrubCron: ${MCP_OAUTH_SCRUB_CRON:-0 0/5 * * * ?}
-
 # https://www.dropwizard.io/en/stable/manual/configuration.html#logging
 logging:
   #  Default: INFO

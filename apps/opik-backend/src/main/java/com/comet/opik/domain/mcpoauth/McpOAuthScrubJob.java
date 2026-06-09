@@ -18,7 +18,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Singleton
 @Slf4j
 @DisallowConcurrentExecution
-@On(value = "${mcpOAuthScrubCron}", timeZone = "UTC")
+@On(value = "0 0/5 * * * ?", timeZone = "UTC") // every 5 minutes
 public class McpOAuthScrubJob extends Job {
 
     private final TransactionTemplate template;
@@ -31,11 +31,13 @@ public class McpOAuthScrubJob extends Job {
         this.opikConfig = opikConfig;
     }
 
+    /**
+     * Revoked tokens within the rotation grace window must remain queryable, so a duplicate refresh
+     * request (RFC 6749 §6 token rotation grace) returns invalid_grant instead of triggering reuse detection.
+     */
     @Override
     public void doJob(JobExecutionContext context) {
         Instant now = Instant.now();
-        // Revoked tokens within the rotation grace window must remain queryable, so a duplicate refresh
-        // request (RFC 6749 §6 token rotation grace) returns invalid_grant instead of triggering reuse detection.
         Instant tokenThreshold = now.minus(opikConfig.getMcpOAuth().getRefreshRotationGrace());
 
         int codes;
@@ -51,7 +53,7 @@ public class McpOAuthScrubJob extends Job {
         }
 
         if (codes > 0 || tokens > 0) {
-            log.info("MCP OAuth scrub: removed {} expired codes, {} expired/revoked tokens", codes, tokens);
+            log.info("MCP OAuth scrub: removed '{}' expired codes, '{}' expired/revoked tokens", codes, tokens);
         }
     }
 }
