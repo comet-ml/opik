@@ -75,7 +75,7 @@ public class OAuthAuthorizeResource {
             @Context UriInfo uriInfo) {
 
         McpOAuthConfig config = opikConfig.getMcpOAuth();
-        McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
+        requireClientWithRedirect(clientId, redirectUri);
 
         // client and redirect_uri are now trusted, so protocol errors are reported back to the client via redirect.
         if (!RESPONSE_TYPE_CODE.equals(responseType)) {
