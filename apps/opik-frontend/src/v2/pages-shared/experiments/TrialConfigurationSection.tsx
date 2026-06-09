@@ -175,11 +175,20 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       const config = get(experiment.metadata, "configuration");
       if (config && isObject(config)) {
         const configObj = config as ConfigurationType;
-        const hasRichContent =
-          "prompt_messages" in configObj ||
-          "model" in configObj ||
-          "prompt" in configObj;
-        if (hasRichContent || !studioConfig) {
+
+        if ("prompt_messages" in configObj || "model" in configObj) {
+          return configObj;
+        }
+
+        if ("prompt" in configObj) {
+          if (studioConfig) {
+            const { "Initial prompt": _, ...base } =
+              buildConfigFromStudioConfig(studioConfig) as Record<
+                string,
+                unknown
+              >;
+            return { ...base, ...configObj } as ConfigurationType;
+          }
           return configObj;
         }
       }
@@ -206,7 +215,7 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       const filtered = result.filter(
         (e) => e.type !== "prompt" && !isOptimizerMetaEntry(e.key, e.value),
       );
-      filtered.unshift({
+      filtered.push({
         key: "Prompt",
         value: configPrompt,
         type: "prompt",
@@ -275,10 +284,35 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       {(viewMode === CONFIG_VIEW_MODE.DIFF_BASELINE ||
         viewMode === CONFIG_VIEW_MODE.DIFF_PARENT) &&
       diffExperiment ? (
-        <ConfigurationDiffContent
-          baselineExperiment={diffExperiment}
-          currentExperiment={experiment}
-        />
+        <div className="flex flex-col gap-4">
+          {entries
+            .filter(({ type }) => type !== "prompt")
+            .map(({ key, value, type }) => {
+              if (
+                type === "number" ||
+                type === "string" ||
+                type === "boolean"
+              ) {
+                return (
+                  <div key={key} className="flex items-baseline gap-1.5">
+                    <span className="comet-body-s text-muted-slate">{key}:</span>
+                    <span className="comet-body-s-accented">
+                      {formatPrimitive(value)}
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <div key={key}>
+                  <ConfigEntry label={key} value={value} />
+                </div>
+              );
+            })}
+          <ConfigurationDiffContent
+            baselineExperiment={diffExperiment}
+            currentExperiment={experiment}
+          />
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
           {entries.map(({ key, value, type }) => {

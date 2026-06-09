@@ -28,6 +28,15 @@ const DiffSection: React.FunctionComponent<DiffSectionProps> = ({
 
   if (!hasChanged) return null;
 
+  if (type === "prompt") {
+    return (
+      <div>
+        <h4 className="comet-body-s-accented mb-1">{label}</h4>
+        <PromptDiff baseline={baselineValue} current={currentValue} />
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-md border p-3">
       <div className="mb-2 flex items-center gap-2">
@@ -49,9 +58,7 @@ const DiffSection: React.FunctionComponent<DiffSectionProps> = ({
         )}
       </div>
       <div className="comet-code whitespace-pre-wrap break-words text-sm">
-        {type === "prompt" ? (
-          <PromptDiff baseline={baselineValue} current={currentValue} />
-        ) : type === "tools" ? (
+        {type === "tools" ? (
           <ToolsDiff
             baseline={isArray(baselineValue) ? baselineValue : []}
             current={isArray(currentValue) ? currentValue : []}
