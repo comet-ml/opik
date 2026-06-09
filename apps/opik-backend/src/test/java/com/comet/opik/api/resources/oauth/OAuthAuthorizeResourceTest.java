@@ -9,7 +9,6 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthService;
 import com.comet.opik.infrastructure.auth.UserWorkspace;
 import com.comet.opik.infrastructure.auth.WorkspaceInfo;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.Cookie;
@@ -29,7 +28,6 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
@@ -90,10 +88,8 @@ class OAuthAuthorizeResourceTest {
                 .build();
     }
 
-    private void mockClientResolution(boolean redirectMatches) {
-        McpOAuthClient client = validClient();
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.of(client));
-        when(clientService.matchesRedirectUri(client, REDIRECT_URI)).thenReturn(redirectMatches);
+    private void mockClientResolution() {
+        when(clientService.resolveForRedirect(CLIENT_ID, REDIRECT_URI)).thenReturn(validClient());
     }
 
     private void mockCookies(Map<String, Cookie> cookies) {
@@ -103,7 +99,7 @@ class OAuthAuthorizeResourceTest {
     @Test
     @DisplayName("GET /authorize: valid request redirects to consent UI with PKCE+state preserved")
     void authorize_validRequest_redirectsToConsent() {
-        mockClientResolution(true);
+        mockClientResolution();
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
         when(authService.listEligibleWorkspaces(any()))
@@ -126,7 +122,7 @@ class OAuthAuthorizeResourceTest {
     @Test
     @DisplayName("GET /authorize: invalid response_type redirects with unsupported_response_type")
     void authorize_invalidResponseType_redirectsWithError() {
-        mockClientResolution(true);
+        mockClientResolution();
 
         Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, "token", CODE_CHALLENGE,
                 CODE_CHALLENGE_METHOD_S256,
@@ -141,7 +137,7 @@ class OAuthAuthorizeResourceTest {
     @Test
     @DisplayName("GET /authorize: blank code_challenge redirects with invalid_request")
     void authorize_blankCodeChallenge_redirectsWithError() {
-        mockClientResolution(true);
+        mockClientResolution();
 
         Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, "  ",
                 CODE_CHALLENGE_METHOD_S256,
@@ -153,7 +149,7 @@ class OAuthAuthorizeResourceTest {
     @Test
     @DisplayName("GET /authorize: mismatched resource redirects with invalid_target")
     void authorize_resourceMismatch_redirectsWithError() {
-        mockClientResolution(true);
+        mockClientResolution();
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
 
         Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, CODE_CHALLENGE,
@@ -164,31 +160,9 @@ class OAuthAuthorizeResourceTest {
     }
 
     @Test
-    @DisplayName("GET /authorize: unknown client_id throws 400 (pre-redirect; redirect URI not trusted yet)")
-    void authorize_unknownClient_throwsBadRequest() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, CODE_CHALLENGE,
-                CODE_CHALLENGE_METHOD_S256,
-                RESOURCE_URI, STATE, headers, uriInfo))
-                .isInstanceOf(BadRequestException.class);
-    }
-
-    @Test
-    @DisplayName("GET /authorize: redirect_uri with fragment throws 400 (RFC 6749 §3.1.2)")
-    void authorize_redirectUriWithFragment_throwsBadRequest() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.of(validClient()));
-
-        assertThatThrownBy(() -> resource.authorize(CLIENT_ID, REDIRECT_URI + "#app", RESPONSE_TYPE_CODE,
-                CODE_CHALLENGE, CODE_CHALLENGE_METHOD_S256, RESOURCE_URI, STATE, headers, uriInfo))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("invalid redirect_uri");
-    }
-
-    @Test
     @DisplayName("GET /authorize: session check failure redirects to login with return_to")
     void authorize_noSession_redirectsToLogin() {
-        mockClientResolution(true);
+        mockClientResolution();
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(new HashMap<>());
         when(authService.listEligibleWorkspaces(any())).thenThrow(new ClientErrorException(401));
@@ -212,7 +186,7 @@ class OAuthAuthorizeResourceTest {
     @Test
     @DisplayName("GET /authorize/context: secure cookie flag tracks baseUrl scheme (https → true)")
     void context_httpsBaseUrl_setsSecureCookieTrue() {
-        mockClientResolution(true);
+        mockClientResolution();
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
         when(authService.listEligibleWorkspaces(any()))
@@ -230,7 +204,7 @@ class OAuthAuthorizeResourceTest {
     @DisplayName("GET /authorize/context: secure cookie flag tracks baseUrl scheme (http → false)")
     void context_httpBaseUrl_setsSecureCookieFalse() {
         mcpConfig.setBaseUrl("http://localhost:5173");
-        mockClientResolution(true);
+        mockClientResolution();
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
         when(authService.listEligibleWorkspaces(any()))
@@ -245,7 +219,7 @@ class OAuthAuthorizeResourceTest {
     @Test
     @DisplayName("POST /authorize (consent): valid request mints code and returns redirect URL with state")
     void consent_validRequest_mintsCode() {
-        mockClientResolution(true);
+        mockClientResolution();
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(
                 CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build(),
@@ -278,7 +252,7 @@ class OAuthAuthorizeResourceTest {
     @Test
     @DisplayName("POST /authorize (consent): passes workspace from request body to code mint")
     void consent_propagatesWorkspaceToCodeCommand() {
-        mockClientResolution(true);
+        mockClientResolution();
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(Map.of(
                 CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build(),

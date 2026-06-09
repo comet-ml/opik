@@ -45,11 +45,9 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.util.List;
-import java.util.Optional;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CSRF_COOKIE;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_TARGET;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_RESPONSE_TYPE;
@@ -83,7 +81,7 @@ public class OAuthAuthorizeResource {
             @Context UriInfo uriInfo) {
 
         McpOAuthConfig config = opikConfig.getMcpOAuth();
-        requireClientWithRedirect(clientId, redirectUri);
+        clientService.resolveForRedirect(clientId, redirectUri);
 
         // client and redirect_uri are now trusted, so protocol errors are reported back to the client via redirect.
         if (!RESPONSE_TYPE_CODE.equals(responseType)) {
@@ -126,7 +124,7 @@ public class OAuthAuthorizeResource {
             @QueryParam("redirect_uri") @NotBlank String redirectUri,
             @Context HttpHeaders headers) {
 
-        McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
+        McpOAuthClient client = clientService.resolveForRedirect(clientId, redirectUri);
 
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
         List<WorkspaceInfo> workspaces = authService.listEligibleWorkspaces(session);
@@ -164,7 +162,7 @@ public class OAuthAuthorizeResource {
         }
 
         McpOAuthConfig config = opikConfig.getMcpOAuth();
-        requireClientWithRedirect(request.clientId(), request.redirectUri());
+        clientService.resolveForRedirect(request.clientId(), request.redirectUri());
         if (!config.getMcpResourceUri().equals(request.resource())) {
             throw new BadRequestException(ERROR_INVALID_TARGET);
         }
@@ -187,24 +185,6 @@ public class OAuthAuthorizeResource {
         return Response.ok(ConsentResponse.builder()
                 .redirectTo(appendQuery(request.redirectUri(), query))
                 .build()).build();
-    }
-
-    /**
-     * Resolves the client and validates the {@code redirect_uri} against its registered URIs.
-     * <p>
-     * Per RFC 6749 §3.1.2 the redirection endpoint URI MUST NOT include a fragment, otherwise the appended
-     * {@code code}/{@code error}/{@code state} query params would land inside the fragment and be unreadable
-     * by the client.
-     */
-    private McpOAuthClient requireClientWithRedirect(String clientId, String redirectUri) {
-        Optional<McpOAuthClient> client = clientService.resolve(clientId);
-        if (client.isEmpty()) {
-            throw new BadRequestException(ERROR_INVALID_CLIENT);
-        }
-        if (redirectUri.contains("#") || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
-            throw new BadRequestException("invalid redirect_uri");
-        }
-        return client.get();
     }
 
     private Response errorRedirect(String redirectUri, String error, String state) {
