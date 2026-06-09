@@ -126,12 +126,14 @@ def _resolve_inherited(parent_context: Optional[Context]) -> Optional[InheritedC
         # No Opik context in baggage — fall back to the active @opik.track context.
         return _resolve_from_opik_context()
     if not id_helpers.is_valid_uuid_v7(baggage_trace_id):
+        # A broken upstream distributed context: don't silently absorb the span
+        # into an unrelated local @opik.track trace — leave it standalone.
         LOGGER.warning(
             "Baggage value for '%s' is not a valid UUID v7: %r; ignoring.",
             otel_attributes.OPIK_TRACE_ID,
             baggage_trace_id,
         )
-        return _resolve_from_opik_context()
+        return None
 
     baggage_parent_span_id = baggage.get_baggage(
         otel_attributes.OPIK_SPAN_ID, parent_context

@@ -126,6 +126,9 @@ def test_pydantic_ai_logfire_with_opik_track__single_merged_trace(
     assert otel_root is not None, (
         "PydanticAI 'agent run' span was not nested under the tracked entrypoint"
     )
+    # logfire's PydanticAI instrumentation names the agent root span "agent run";
+    # assert it so a future hierarchy change can't pass on parentage alone
+    assert otel_root.name == "agent run"
 
     # and the model/LLM span chained below the OTel root (descendant chaining)
     span_ids = {span.id for span in spans}

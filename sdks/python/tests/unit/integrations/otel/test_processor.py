@@ -27,6 +27,18 @@ def tracer():
     provider.shutdown()
 
 
+@pytest.fixture
+def inmemory_provider():
+    """Provider that captures finished spans in memory, with OpikSpanProcessor
+    registered. Teardown via yield so shutdown runs even if a test fails."""
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    provider.add_span_processor(otel.OpikSpanProcessor())
+    yield provider, exporter
+    provider.shutdown()
+
+
 class TestOpikSpanProcessor:
     def test_on_start__parent_has_no_opik_attrs__leaves_span_and_child_untouched(
         self, tracer
@@ -218,14 +230,11 @@ class TestInProcessOpikTrackContextFallback:
         )
 
     def test_on_start__multiple_tracers_sibling_roots__all_link_to_tracked_span(
-        self, fake_backend
+        self, inmemory_provider, fake_backend
     ):
         # Generic OTel: spans from independent tracers (i.e. any OTel-based
         # instrumentation, not just logfire) all attach to the tracked span.
-        exporter = InMemorySpanExporter()
-        provider = TracerProvider()
-        provider.add_span_processor(SimpleSpanProcessor(exporter))
-        provider.add_span_processor(otel.OpikSpanProcessor())
+        provider, exporter = inmemory_provider
         lib_a = provider.get_tracer("vendor.a")
         lib_b = provider.get_tracer("framework.b")
         captured = {}
@@ -241,7 +250,6 @@ class TestInProcessOpikTrackContextFallback:
 
         handler()
         opik.flush_tracker()
-        provider.shutdown()
 
         spans = exporter.get_finished_spans()
         assert len(spans) == 2
@@ -310,8 +318,32 @@ class TestInProcessOpikTrackContextFallback:
         assert captured["attrs"][otel_attributes.OPIK_TRACE_ID] == TRACE_ID
         assert (
             captured["attrs"][otel_attributes.OPIK_TRACE_ID]
-            != (captured["track_trace_id"])
+            != captured["track_trace_id"]
         )
+
+    def test_on_start__invalid_baggage_inside_track_context__not_linked(
+        self, tracer, fake_backend
+    ):
+        # A broken upstream distributed context must not be silently absorbed into
+        # the local @opik.track trace — the span is left standalone, not linked.
+        captured = {}
+        ctx = baggage.set_baggage(otel_attributes.OPIK_TRACE_ID, "not-a-uuid")
+
+        @opik.track(name="tracked")
+        def handler():
+            captured["track_trace_id"] = opik_context.get_current_trace_data().id
+            token = context_api.attach(ctx)
+            try:
+                with tracer.start_as_current_span("span") as span:
+                    captured["attrs"] = dict(span.attributes or {})
+            finally:
+                context_api.detach(token)
+
+        handler()
+        opik.flush_tracker()
+
+        assert otel_attributes.OPIK_TRACE_ID not in captured["attrs"]
+        assert otel_attributes.OPIK_PARENT_SPAN_ID not in captured["attrs"]
 
     def test_on_start__otel_span_started_in_worker_thread__not_linked(
         self, tracer, fake_backend

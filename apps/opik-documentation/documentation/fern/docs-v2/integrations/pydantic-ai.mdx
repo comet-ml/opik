@@ -156,7 +156,7 @@ agent = Agent(
 
 # Run the agent
 result = agent.run_sync('Where does "hello world" come from?')
-print(result.data)
+print(result.output)
 ```
 
 <Frame>
@@ -194,9 +194,10 @@ logfire.instrument_pydantic_ai()
 agent = Agent("openai:gpt-4o")
 
 @opik.track
-async def run(question: str) -> str:
-    result = await agent.run(question)
-    return result.output
+def run(question: str) -> str:
+    return agent.run_sync(question).output
+
+run('Where does "hello world" come from?')
 ```
 
 The result is one trace with the `run` entrypoint as the root and the `agent run` / model spans nested underneath. See [Linking OpenTelemetry spans to an existing Opik trace](/integrations/opentelemetry-python-sdk#linking-opentelemetry-spans-to-an-existing-opik-trace) for the general mechanism.
