@@ -138,6 +138,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
+      label: "Claude Fable 5",
+    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -252,6 +256,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET_THINKING,
       label: "anthropic/claude-3.7-sonnet:thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5,
+      label: "anthropic/claude-fable-5",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
@@ -1187,6 +1195,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO_FREE,
+      label: "nex-agi/nex-n2-pro:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
       label: "nousresearch/deephermes-3-mistral-24b-preview",
     },
@@ -1246,6 +1258,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE,
       label: "nvidia/nemotron-3-super-120b-a12b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B,
+      label: "nvidia/nemotron-3-ultra-550b-a55b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE,
+      label: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      label: "nvidia/nemotron-3.5-content-safety:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_NANO_12B_V2_VL,
@@ -2154,6 +2178,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_LATEST,
+      label: "~anthropic/claude-fable-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_LATEST,

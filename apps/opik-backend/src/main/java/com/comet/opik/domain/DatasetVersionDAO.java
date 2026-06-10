@@ -380,19 +380,24 @@ public interface DatasetVersionDAO {
     int updateChangeDescription(@Bind("id") UUID id, @Bind("change_description") String changeDescription,
             @Bind("last_updated_by") String lastUpdatedBy, @Bind("workspace_id") String workspaceId);
 
+    /**
+     * Resolves the 'latest'-tagged version per dataset. The latest version is always the max-id row,
+     * so its version number equals the dataset's total version count: a correlated {@code COUNT(*)}
+     * served by the covering index {@code idx_dataset_versions_workspace_id_dataset_id_id} replaces a
+     * {@code ROW_NUMBER()} window over every version, which sorted the full version set into an
+     * on-disk temp table at scale. The subquery runs once per result row (one latest row per dataset).
+     */
     @SqlQuery("""
-            WITH version_sequences AS (
-                SELECT
-                    id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
-                FROM dataset_versions
-                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
-            )
             SELECT
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                CONCAT('v', vs.seq_num) AS version_name,
+                CONCAT('v', (
+                    SELECT COUNT(*)
+                    FROM dataset_versions c
+                    WHERE c.workspace_id = dv.workspace_id
+                        AND c.dataset_id = dv.dataset_id
+                )) AS version_name,
                 dv.items_total,
                 dv.items_added,
                 dv.items_modified,
@@ -408,12 +413,15 @@ public interface DatasetVersionDAO {
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 true AS is_latest
             FROM dataset_versions AS dv
-            INNER JOIN version_sequences vs ON dv.id = vs.id
-            INNER JOIN (
+            INNER JOIN dataset_version_tags dvt
+                ON dvt.workspace_id = dv.workspace_id
+                AND dvt.dataset_id = dv.dataset_id
+                AND dvt.version_id = dv.id
+                AND dvt.tag = 'latest'
+            LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
-                WHERE tag = 'latest'
-                AND version_id in (select id from version_sequences)
+                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id IN (<dataset_ids>)

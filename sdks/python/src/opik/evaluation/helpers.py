@@ -66,7 +66,6 @@ def _calculate_total_items(
     nb_samples: Optional[int],
     dataset_item_ids: Optional[List[str]],
 ) -> Optional[int]:
-    """Calculate the total number of items that will be evaluated."""
     if dataset_item_ids is not None:
         return len(dataset_item_ids)
 
@@ -78,7 +77,7 @@ def _calculate_total_items(
     return dataset_.dataset_items_count
 
 
-def resolve_dataset_items_generator(
+def resolve_dataset_items(
     dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
     nb_samples: Optional[int],
     dataset_item_ids: Optional[List[str]],
@@ -86,12 +85,14 @@ def resolve_dataset_items_generator(
     dataset_filter_string: Optional[str],
 ) -> Tuple[Iterator[dataset_item.DatasetItem], Optional[int]]:
     """
-    Resolve dataset items for evaluation.
+    Resolve the dataset items to evaluate.
 
-    Handles streaming vs sampling, and calculates total item count.
-
-    Returns:
-        Tuple of (items iterator, total item count or None).
+    Returns ``(items_iter, total)``. ``items_iter`` is a lazy iterator from
+    the dataset stream when no sampler is supplied, so the engine can start
+    processing items as the stream arrives. When a sampler is supplied the
+    full set must be materialized first — samplers operate on the complete
+    list — and the materialized list is re-wrapped as an iterator so the
+    return shape stays consistent.
     """
     if dataset_sampler is None:
         items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
@@ -116,5 +117,10 @@ def resolve_dataset_items_generator(
             filter_string=dataset_filter_string,
         )
     )
-    items_list = dataset_sampler.sample(items_list)
-    return iter(items_list), len(items_list)
+    sampled = dataset_sampler.sample(items_list)
+    if not isinstance(sampled, list):
+        raise TypeError(
+            "BaseDatasetSampler.sample() must return a list; got "
+            f"{type(sampled).__name__}. Streaming samplers are not supported."
+        )
+    return iter(sampled), len(sampled)
