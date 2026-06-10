@@ -374,6 +374,8 @@ public class FilterQueryBuilder {
                     .put(SpanField.NAME, NAME_DB)
                     .put(SpanField.START_TIME, START_TIME_ANALYTICS_DB)
                     .put(SpanField.END_TIME, END_TIME_ANALYTICS_DB)
+                    .put(SpanField.CREATED_AT, CREATED_AT_DB)
+                    .put(SpanField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(SpanField.INPUT, INPUT_ANALYTICS_DB)
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.INPUT_JSON, INPUT_ANALYTICS_DB)
@@ -599,6 +601,8 @@ public class FilterQueryBuilder {
                 SpanField.NAME,
                 SpanField.START_TIME,
                 SpanField.END_TIME,
+                SpanField.CREATED_AT,
+                SpanField.LAST_UPDATED_AT,
                 SpanField.INPUT,
                 SpanField.OUTPUT,
                 SpanField.INPUT_JSON,

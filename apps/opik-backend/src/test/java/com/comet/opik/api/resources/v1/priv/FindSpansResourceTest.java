@@ -71,6 +71,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -1937,6 +1938,141 @@ class FindSpansResourceTest {
                     .operator(Operator.EQUAL)
                     .value(spans.getFirst().endTime().toString())
                     .build());
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        // OPIK-6849: created_at / last_updated_at are server-generated, so each span must be created in its own
+        // insert to get a distinct timestamp, and the filter boundary is read back from the persisted span. Ids are
+        // time-ordered (UUIDv7) and the spans share a trace, so the response order reduces to id-descending, matching
+        // the time order. Runs against the span-returning endpoints (/spans and /spans/search).
+        private Stream<Arguments> timestampReturningEndpoints() {
+            return Stream.of(
+                    Arguments.of("/spans", spansTestAssertion),
+                    Arguments.of("/spans/search", spanStreamTestAssertion));
+        }
+
+        private Stream<Arguments> timestampFilterTestArguments() {
+            // expectedIndexes reference the time-ordered list [oldest=0, 1, newest=2], already in id-desc order
+            var cases = List.of(
+                    Arguments.of(Operator.GREATER_THAN_EQUAL, List.of(2, 1)),
+                    Arguments.of(Operator.GREATER_THAN, List.of(2)),
+                    Arguments.of(Operator.LESS_THAN, List.of(0)),
+                    Arguments.of(Operator.LESS_THAN_EQUAL, List.of(1, 0)),
+                    Arguments.of(Operator.EQUAL, List.of(1)),
+                    Arguments.of(Operator.NOT_EQUAL, List.of(2, 0)));
+            return timestampReturningEndpoints().flatMap(endpoint -> Stream
+                    .of(SpanField.CREATED_AT, SpanField.LAST_UPDATED_AT)
+                    .flatMap(field -> cases.stream()
+                            .map(c -> Arguments.of(endpoint.get()[0], endpoint.get()[1], field, c.get()[0],
+                                    c.get()[1]))));
+        }
+
+        private List<Span> createSpansWithDistinctTimestamps(String projectName, UUID traceId, String apiKey,
+                String workspaceName, int count) {
+            List<Span> created = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                // created_at is server-generated (now64(9)) and cannot be set via the API, so each span must be
+                // inserted in a distinct clock tick to get a strictly increasing, distinct created_at /
+                // last_updated_at. Space the inserts apart to keep the boundary-based assertions deterministic.
+                if (i > 0) {
+                    Mono.delay(Duration.ofMillis(10)).block();
+                }
+                var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                        .id(idGenerator.generateId())
+                        .projectId(null)
+                        .projectName(projectName)
+                        .traceId(traceId)
+                        .parentSpanId(null)
+                        .feedbackScores(null)
+                        .totalEstimatedCost(null)
+                        .build();
+                spanResourceClient.createSpan(span, apiKey, workspaceName);
+                created.add(span);
+            }
+            return created;
+        }
+
+        private Instant persistedTimestamp(Span span, SpanField field, String workspaceName, String apiKey) {
+            var stored = spanResourceClient.getById(span.id(), workspaceName, apiKey);
+            return field == SpanField.CREATED_AT ? stored.createdAt() : stored.lastUpdatedAt();
+        }
+
+        @ParameterizedTest
+        @MethodSource("timestampFilterTestArguments")
+        void whenFilterByCreatedAtOrLastUpdatedAt__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion, SpanField field, Operator operator,
+                List<Integer> expectedIndexes) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var traceId = generator.generate();
+
+            var spans = createSpansWithDistinctTimestamps(projectName, traceId, apiKey, workspaceName, 3);
+
+            var boundary = persistedTimestamp(spans.get(1), field, workspaceName, apiKey);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(field)
+                    .operator(operator)
+                    .value(boundary.toString())
+                    .build());
+
+            var expectedSpans = expectedIndexes.stream().map(spans::get).toList();
+            var unexpectedSpans = IntStream.range(0, spans.size())
+                    .filter(i -> !expectedIndexes.contains(i))
+                    .mapToObj(spans::get)
+                    .toList();
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("timestampReturningEndpoints")
+        void whenFilterByLastUpdatedAtWindow__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var traceId = generator.generate();
+
+            var spans = createSpansWithDistinctTimestamps(projectName, traceId, apiKey, workspaceName, 3);
+
+            var lowerBound = persistedTimestamp(spans.get(1), SpanField.LAST_UPDATED_AT, workspaceName, apiKey);
+            var upperBound = persistedTimestamp(spans.get(2), SpanField.LAST_UPDATED_AT, workspaceName, apiKey);
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(SpanField.LAST_UPDATED_AT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(lowerBound.toString())
+                            .build(),
+                    SpanFilter.builder()
+                            .field(SpanField.LAST_UPDATED_AT)
+                            .operator(Operator.LESS_THAN)
+                            .value(upperBound.toString())
+                            .build());
+
+            var expectedSpans = List.of(spans.get(1));
+            var unexpectedSpans = List.of(spans.get(2), spans.get(0));
 
             var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
