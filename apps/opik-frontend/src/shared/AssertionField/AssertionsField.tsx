@@ -1,6 +1,10 @@
 import React, { useEffect, useRef } from "react";
-import { CheckCheck, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
+import OpikLeaf from "@/icons/opik-leaf.svg?react";
+import OpikLeafDark from "@/icons/opik-leaf-dark.svg?react";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import AssertionField from "./AssertionField";
 
 type AssertionsVariant = "item" | "global";
@@ -41,6 +45,9 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
   onAdd,
   placeholder = "e.g. Response should be factually accurate",
 }) => {
+  const { themeMode } = useTheme();
+  const LeafIcon = themeMode === THEME_MODE.DARK ? OpikLeafDark : OpikLeaf;
+
   const prevCountRef = useRef(editableAssertions.length);
   const firstFieldRef = useRef<HTMLTextAreaElement>(null);
 
@@ -81,7 +88,7 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
             onClick={onAdd}
             className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 p-4"
           >
-            <CheckCheck className="size-4 text-muted-slate" />
+            <LeafIcon className="size-8" />
             <span className="comet-body-xs text-muted-slate">
               No assertions added yet
             </span>
