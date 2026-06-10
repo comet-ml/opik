@@ -1,49 +1,66 @@
 package com.comet.opik.api.resources.oauth;
 
-import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.JsonUtils;
+import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
+import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.AUTHORIZATION_SERVER_METADATA_PATH;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.AUTHORIZE_PATH;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.AUTH_METHOD_NONE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_CODE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.REGISTER_PATH;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.RESPONSE_TYPE_CODE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.REVOKE_PATH;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_PATH;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith(DropwizardExtensionsSupport.class)
 @DisplayName("OAuthMetadataResource")
 class OAuthMetadataResourceTest {
 
-    @Mock
-    private OpikConfiguration opikConfig;
+    private static final String ISSUER = "https://opik.example.com";
+
+    private static final ResourceExtension EXT = ResourceExtension.builder()
+            .setMapper(JsonUtils.getMapper())
+            .addResource(new OAuthMetadataResource(newConfig()))
+            .build();
+
+    private static OpikConfiguration newConfig() {
+        var config = new OpikConfiguration();
+        // Trailing slash is intentional: the issuer must be normalized by stripping it.
+        config.getMcpOAuth().setBaseUrl(ISSUER + "/");
+        return config;
+    }
 
     @Test
     @DisplayName("advertises RFC 8414 metadata derived from the configured issuer")
     void metadataAdvertisesEndpointsDerivedFromIssuer() {
-        var mcpOAuthConfig = new McpOAuthConfig();
-        // Trailing slash is intentional: the issuer must be normalized by stripping it.
-        mcpOAuthConfig.setBaseUrl("https://opik.example.com/");
-        when(opikConfig.getMcpOAuth()).thenReturn(mcpOAuthConfig);
-
-        var resource = new OAuthMetadataResource(opikConfig);
-
-        try (Response response = resource.metadata()) {
+        try (Response response = EXT.target(AUTHORIZATION_SERVER_METADATA_PATH).request().get()) {
             assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
 
-            String issuer = "https://opik.example.com";
-            var metadata = (AuthorizationServerMetadata) response.getEntity();
-            assertThat(metadata.issuer()).isEqualTo(issuer);
-            assertThat(metadata.authorizationEndpoint()).isEqualTo(issuer + "/oauth/authorize");
-            assertThat(metadata.tokenEndpoint()).isEqualTo(issuer + "/oauth/token");
-            assertThat(metadata.revocationEndpoint()).isEqualTo(issuer + "/oauth/revoke");
-            assertThat(metadata.registrationEndpoint()).isEqualTo(issuer + "/oauth/register");
-            assertThat(metadata.responseTypesSupported()).containsExactly("code");
-            assertThat(metadata.grantTypesSupported()).containsExactly("authorization_code", "refresh_token");
-            assertThat(metadata.codeChallengeMethodsSupported()).containsExactly("S256");
-            assertThat(metadata.tokenEndpointAuthMethodsSupported()).containsExactly("none");
+            var expected = AuthorizationServerMetadata.builder()
+                    .issuer(ISSUER)
+                    .authorizationEndpoint(ISSUER + AUTHORIZE_PATH)
+                    .tokenEndpoint(ISSUER + TOKEN_PATH)
+                    .revocationEndpoint(ISSUER + REVOKE_PATH)
+                    .registrationEndpoint(ISSUER + REGISTER_PATH)
+                    .responseTypesSupported(List.of(RESPONSE_TYPE_CODE))
+                    .grantTypesSupported(List.of(GRANT_AUTHORIZATION_CODE, GRANT_REFRESH_TOKEN))
+                    .codeChallengeMethodsSupported(List.of(CODE_CHALLENGE_METHOD_S256))
+                    .tokenEndpointAuthMethodsSupported(List.of(AUTH_METHOD_NONE))
+                    .build();
+
+            assertThat(response.readEntity(AuthorizationServerMetadata.class)).isEqualTo(expected);
         }
     }
 }

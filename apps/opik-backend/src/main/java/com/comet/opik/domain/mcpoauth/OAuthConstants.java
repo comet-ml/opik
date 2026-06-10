@@ -28,6 +28,13 @@ public class OAuthConstants {
     // RFC 8414 — token endpoint auth methods
     public static final String AUTH_METHOD_NONE = "none";
 
+    // RFC 8414 §3 — authorization server metadata discovery path and the advertised endpoint paths
+    public static final String AUTHORIZATION_SERVER_METADATA_PATH = "/.well-known/oauth-authorization-server";
+    public static final String AUTHORIZE_PATH = "/oauth/authorize";
+    public static final String TOKEN_PATH = "/oauth/token";
+    public static final String REVOKE_PATH = "/oauth/revoke";
+    public static final String REGISTER_PATH = "/oauth/register";
+
     // RFC 6749 §4.1.2.1, §5.2 + RFC 8707 — error codes
     public static final String ERROR_INVALID_REQUEST = "invalid_request";
     public static final String ERROR_INVALID_CLIENT = "invalid_client";
