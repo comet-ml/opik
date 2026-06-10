@@ -16,3 +16,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_spans_created_at, DROP INDEX IF EXISTS idx_spans_last_updated_at;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_traces_created_at, DROP INDEX IF EXISTS idx_traces_last_updated_at;
+

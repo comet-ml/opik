@@ -2057,7 +2057,7 @@ class FindSpansResourceTest {
             var spans = createSpansWithDistinctTimestamps(projectName, traceId, apiKey, workspaceName, 3);
 
             var lowerBound = persistedTimestamp(spans.get(1), SpanField.LAST_UPDATED_AT, workspaceName, apiKey);
-            var upperBound = persistedTimestamp(spans.get(2), SpanField.LAST_UPDATED_AT, workspaceName, apiKey);
+            var upperBound = persistedTimestamp(spans.getLast(), SpanField.LAST_UPDATED_AT, workspaceName, apiKey);
 
             var filters = List.of(
                     SpanFilter.builder()
@@ -2072,7 +2072,7 @@ class FindSpansResourceTest {
                             .build());
 
             var expectedSpans = List.of(spans.get(1));
-            var unexpectedSpans = List.of(spans.get(2), spans.get(0));
+            var unexpectedSpans = List.of(spans.getLast(), spans.getFirst());
 
             var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
