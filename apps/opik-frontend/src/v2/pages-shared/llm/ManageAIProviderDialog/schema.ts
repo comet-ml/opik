@@ -12,7 +12,8 @@ export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 
 // Default pipeline mode applied as a fallback in form defaults, resets, and save payloads.
 // Centralised here so changing the default requires editing only one place.
-export const DEFAULT_OPENAI_PIPELINE_MODE: OpenAiPipelineMode = "chat_completions_api";
+export const DEFAULT_OPENAI_PIPELINE_MODE: OpenAiPipelineMode =
+  "chat_completions_api";
 
 /**
  * Normalises a backend-stored {@code openai_pipeline_mode} string into a typed
