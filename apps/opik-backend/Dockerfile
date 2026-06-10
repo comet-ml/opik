@@ -1,4 +1,4 @@
-FROM maven:3.9.11-amazoncorretto-21-al2023 AS build
+FROM maven:3.9.16-amazoncorretto-25-al2023 AS build
 
 WORKDIR /opt/opik-backend
 
@@ -16,7 +16,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -DskipTests
 
 ###############################
-FROM amazoncorretto:21.0.11-al2023
+FROM amazoncorretto:25.0.3-al2023
 
 # Add metadata labels
 LABEL org.opencontainers.image.title="Opik Backend"
