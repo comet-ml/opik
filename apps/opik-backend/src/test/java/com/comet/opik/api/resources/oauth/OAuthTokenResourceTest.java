@@ -161,10 +161,12 @@ class OAuthTokenResourceTest {
     @Test
     @DisplayName("POST /revoke: valid token returns 200 OK and revokes")
     void revoke_validToken_returnsOk() {
-        Response response = resource.revoke(ACCESS_PREFIX + "xxx", "access_token", CLIENT_ID);
+        String accessToken = ACCESS_PREFIX + "xxx";
+
+        Response response = resource.revoke(accessToken, "access_token", CLIENT_ID);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-        verify(mcpOAuthService).revoke(ACCESS_PREFIX + "xxx");
+        verify(mcpOAuthService).revoke(accessToken);
     }
 
     @Test
