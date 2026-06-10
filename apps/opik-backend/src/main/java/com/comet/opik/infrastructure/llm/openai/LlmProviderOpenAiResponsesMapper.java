@@ -75,13 +75,16 @@ class LlmProviderOpenAiResponsesMapper {
 
         Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(request.topP()).ifPresent(builder::topP);
-        Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-        Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
         Optional.ofNullable(resolveMaxOutputTokens(request)).ifPresent(builder::maxOutputTokens);
 
-        if (CollectionUtils.isNotEmpty(request.stop())) {
-            builder.stopSequences(request.stop());
-        }
+        // frequency_penalty, presence_penalty, stop, and top_k are NOT supported by the OpenAI
+        // Responses API — langchain4j's OpenAiOfficialResponsesChatModel.validate() throws
+        // UnsupportedFeatureException for any of them. Clients (notably the playground) often
+        // send frequency_penalty: 0 / presence_penalty: 0 as framework defaults even when the
+        // user didn't tune them, so the request would fail before reaching OpenAI. We silently
+        // drop these fields rather than 500 the call; a user who explicitly tunes them and
+        // expects them to apply should use pipeline_mode=CHAT_COMPLETIONS_API.
+        warnIfDroppedSamplingParam(request);
 
         if (CollectionUtils.isNotEmpty(request.tools())) {
             builder.toolSpecifications(toToolSpecifications(request.tools()));
@@ -152,6 +155,12 @@ class LlmProviderOpenAiResponsesMapper {
             case dev.langchain4j.model.openai.internal.chat.SystemMessage sys -> SystemMessage.from(sys.content());
             case dev.langchain4j.model.openai.internal.chat.UserMessage user -> UserMessage.from(
                     MessageContentNormalizer.flattenContent(user.content()));
+            // OpikUserMessage is a sibling of openai-internal UserMessage (it implements Message
+            // directly to add video-URL support); MessageContentNormalizer rewrites user turns into
+            // this type whenever the inbound content is multimodal. Flatten to text — full
+            // multimodal propagation is deferred per the class Javadoc.
+            case com.comet.opik.domain.llm.langchain4j.OpikUserMessage opikUser -> UserMessage.from(
+                    MessageContentNormalizer.flattenContent(opikUser.content()));
             case AssistantMessage assistant -> toAiMessage(assistant);
             case ToolMessage tool -> new ToolExecutionResultMessage(tool.toolCallId(), null, tool.content());
             default -> throw new BadRequestException(
@@ -365,6 +374,20 @@ class LlmProviderOpenAiResponsesMapper {
             case CONTENT_FILTER -> "content_filter";
             default -> "other";
         };
+    }
+
+    private void warnIfDroppedSamplingParam(@NonNull ChatCompletionRequest request) {
+        if (request.frequencyPenalty() != null && request.frequencyPenalty() != 0.0) {
+            log.debug("Dropping unsupported 'frequency_penalty'='{}' for OpenAI Responses API",
+                    request.frequencyPenalty());
+        }
+        if (request.presencePenalty() != null && request.presencePenalty() != 0.0) {
+            log.debug("Dropping unsupported 'presence_penalty'='{}' for OpenAI Responses API",
+                    request.presencePenalty());
+        }
+        if (CollectionUtils.isNotEmpty(request.stop())) {
+            log.debug("Dropping unsupported 'stop'='{}' for OpenAI Responses API", request.stop());
+        }
     }
 
     private Integer resolveMaxOutputTokens(@NonNull ChatCompletionRequest request) {

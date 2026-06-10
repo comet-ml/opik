@@ -48,8 +48,6 @@ class LlmProviderOpenAiResponsesMapperTest {
                     .addUserMessage("hi")
                     .temperature(0.7)
                     .topP(0.9)
-                    .frequencyPenalty(0.1)
-                    .presencePenalty(0.2)
                     .maxCompletionTokens(512)
                     .build();
 
@@ -58,9 +56,28 @@ class LlmProviderOpenAiResponsesMapperTest {
             assertThat(actual.modelName()).isEqualTo("gpt-4o-mini");
             assertThat(actual.temperature()).isEqualTo(0.7);
             assertThat(actual.topP()).isEqualTo(0.9);
-            assertThat(actual.frequencyPenalty()).isEqualTo(0.1);
-            assertThat(actual.presencePenalty()).isEqualTo(0.2);
             assertThat(actual.maxOutputTokens()).isEqualTo(512);
+        }
+
+        @Test
+        void dropsSamplingParametersUnsupportedByResponsesApi() {
+            // OpenAI Responses API rejects frequency_penalty, presence_penalty, and stop sequences.
+            // langchain4j's OpenAiOfficialResponsesChatModel.validate() throws on any of them.
+            // The mapper silently drops these (typically framework defaults like
+            // frequency_penalty: 0 from playground SDKs) to keep the request from failing.
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.5)
+                    .stop(List.of("STOP1", "STOP2"))
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.frequencyPenalty()).isNull();
+            assertThat(actual.presencePenalty()).isNull();
+            assertThat(actual.stopSequences()).isNullOrEmpty();
         }
 
         @Test
@@ -84,16 +101,23 @@ class LlmProviderOpenAiResponsesMapperTest {
         }
 
         @Test
-        void mapsStopSequences() {
+        void handlesOpikUserMessageInPlaceOfOpenAiUserMessage() {
+            // MessageContentNormalizer rewrites multimodal user turns into OpikUserMessage (a
+            // sibling of openai-internal UserMessage that implements Message directly). The mapper
+            // must translate it through the same flattening path, not fall to the default branch.
+            var opikUser = com.comet.opik.domain.llm.langchain4j.OpikUserMessage.builder()
+                    .content("classify this")
+                    .build();
             var request = ChatCompletionRequest.builder()
                     .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .stop(List.of("STOP1", "STOP2"))
+                    .messages(List.of(opikUser))
                     .build();
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
-            assertThat(actual.stopSequences()).containsExactly("STOP1", "STOP2");
+            assertThat(actual.messages()).hasSize(1);
+            var translated = (UserMessage) actual.messages().getFirst();
+            assertThat(translated.singleText()).isEqualTo("classify this");
         }
 
         @Test
@@ -364,7 +388,7 @@ class LlmProviderOpenAiResponsesMapperTest {
             var request = ChatCompletionRequest.builder()
                     .model("gpt-4o-mini")
                     .addUserMessage("hi")
-                    .toolChoice((Object) namedFunctionChoice)
+                    .toolChoice(namedFunctionChoice)
                     .build();
 
             assertThatThrownBy(() -> LlmProviderOpenAiResponsesMapper.toChatRequest(request))
