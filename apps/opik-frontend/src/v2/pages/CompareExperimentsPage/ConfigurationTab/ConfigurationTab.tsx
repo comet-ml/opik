@@ -22,6 +22,8 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
+import NavigationTag from "@/shared/NavigationTag";
+import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
@@ -63,6 +65,11 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   });
 
   const isCompare = experimentsIds.length > 1;
+
+  const promptVersions =
+    !isCompare && experiments[0]?.prompt_versions?.length
+      ? experiments[0].prompt_versions
+      : [];
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -174,7 +181,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         direction="bidirectional"
         limitWidth
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
@@ -182,6 +189,14 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
+          {promptVersions.map((pv) => (
+            <NavigationTag
+              key={pv.id}
+              id={pv.prompt_id}
+              name={`${pv.prompt_name}${pv.commit ? ` (${pv.commit})` : ""}`}
+              resource={RESOURCE_TYPE.prompt}
+            />
+          ))}
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />
