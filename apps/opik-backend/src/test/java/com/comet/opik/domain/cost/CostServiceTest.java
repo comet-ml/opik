@@ -39,6 +39,31 @@ class CostServiceTest {
     }
 
     @Test
+    void calculateCostUsesAnthropicCacheCalculatorForClaudeOnVertexAI() {
+        // Claude models hosted on Google Vertex AI ship under the litellm_provider
+        // "vertex_ai-anthropic_models" (canonical provider "anthropic_vertexai"), separate from
+        // the bare-Anthropic and Bedrock paths. Without an entry in PROVIDERS_CACHE_COST_CALCULATOR
+        // these requests fell through to textGenerationCost, so prompt-cache tokens were billed
+        // at the full input rate instead of the configured cache-read rate.
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 100,
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 100,
+                "original_usage.cache_read_input_tokens", 200,
+                "original_usage.cache_creation_input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("vertex_ai/claude-haiku-4-5", "anthropic_vertexai", usage, null);
+
+        // vertex_ai/claude-haiku-4-5 (vertex_ai-anthropic_models):
+        // input 1e-6, output 5e-6, cache_read 1e-7, cache_creation 1.25e-6
+        // Anthropic shape: prompt_tokens EXCLUDES cached tokens, so we sum each bucket at its own rate.
+        // 1000*1e-6 + 100*5e-6 + 50*1.25e-6 + 200*1e-7
+        // = 0.001 + 0.0005 + 0.0000625 + 0.00002 = 0.0015825
+        assertThat(cost).isEqualByComparingTo("0.0015825");
+    }
+
+    @Test
     void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
         Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 1000,

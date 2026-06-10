@@ -9,7 +9,7 @@ import { useActiveProjectId } from "@/store/AppStore";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { sortCandidates } from "@/lib/optimizations";
 
-const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns-v3";
+const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns-v4";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "optimization-experiments-columns-order";
 const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort-v2";
@@ -18,6 +18,7 @@ const ROW_HEIGHT_KEY = "optimization-experiments-row-height";
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "step",
+  "prompt",
   "objective_name",
   "runtime_cost",
   "latency",
@@ -29,6 +30,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_NAME_ID,
   "step",
+  "prompt",
   COLUMN_ID_ID,
   "objective_name",
   "runtime_cost",
