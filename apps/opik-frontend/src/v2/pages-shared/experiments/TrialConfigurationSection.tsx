@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import isObject from "lodash/isObject";
-import isArray from "lodash/isArray";
 import isString from "lodash/isString";
 import get from "lodash/get";
 
@@ -28,8 +27,10 @@ import {
   getMetricParamLabels,
   MessageEntry,
 } from "@/lib/optimization-config";
+import { extractNamedPrompts } from "@/lib/prompt";
 
 const PROMPT_MAX_LENGTH = 200;
+const METRIC_KEY = "Metric";
 
 const CONFIG_VIEW_MODE = {
   CONFIG: "config",
@@ -80,13 +81,7 @@ const MessageBlock: React.FC<{ message: MessageEntry }> = ({ message }) => {
 };
 
 const PromptBlock: React.FC<{ value: unknown }> = ({ value }) => {
-  const namedPrompts = useMemo(() => {
-    if (!isRecord(value)) return null;
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return null;
-    if (!entries.every(([, v]) => isArray(v))) return null;
-    return entries as [string, unknown[]][];
-  }, [value]);
+  const namedPrompts = useMemo(() => extractNamedPrompts(value), [value]);
 
   const messages = useMemo(() => extractMessages(value), [value]);
   const text = useMemo(
@@ -97,16 +92,22 @@ const PromptBlock: React.FC<{ value: unknown }> = ({ value }) => {
   if (namedPrompts) {
     return (
       <div className="flex flex-col gap-4">
-        {namedPrompts.map(([name, msgs]) => (
-          <div key={name}>
-            <p className="comet-body-s mb-1 text-muted-slate">{name}</p>
-            <div className="flex flex-col gap-2">
-              {(msgs as MessageEntry[]).map((msg, i) => (
-                <MessageBlock key={`${name}-${msg.role}-${i}`} message={msg} />
-              ))}
+        {Object.entries(namedPrompts).map(([name, msgs]) => {
+          const normalized = extractMessages(msgs) ?? [];
+          return (
+            <div key={name}>
+              <p className="comet-body-s mb-1 text-muted-slate">{name}</p>
+              <div className="flex flex-col gap-2">
+                {normalized.map((msg, i) => (
+                  <MessageBlock
+                    key={`${name}-${msg.role}-${i}`}
+                    message={msg}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   }
@@ -372,7 +373,7 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
                 type !== "prompt" && !metricParamKeys.includes(key),
             )
             .map(({ key, value, type }) => {
-              if (key === "Metric" && metricParamKeys.length > 0) {
+              if (key === METRIC_KEY && metricParamKeys.length > 0) {
                 const params = entries.filter((e) =>
                   metricParamKeys.includes(e.key),
                 );
@@ -417,7 +418,7 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
           {entries
             .filter(({ key }) => !metricParamKeys.includes(key))
             .map(({ key, value, type }) => {
-              if (key === "Metric" && metricParamKeys.length > 0) {
+              if (key === METRIC_KEY && metricParamKeys.length > 0) {
                 const params = entries.filter((e) =>
                   metricParamKeys.includes(e.key),
                 );
