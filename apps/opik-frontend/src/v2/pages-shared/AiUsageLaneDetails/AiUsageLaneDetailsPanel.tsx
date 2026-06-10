@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import { formatCost } from "@/lib/money";
 import { getSpendInterval, SPEND_WINDOWS, SpendWindow } from "@/lib/aiSpend";
 import { getLaneMeta } from "@/v2/pages-shared/AiUsageBreakdown/laneRegistry";
+import { laneWeight, lanePct } from "@/v2/pages-shared/AiUsageBreakdown/utils";
 import RecommendationCard from "@/v2/pages-shared/AiUsageRecommendations/RecommendationCard";
 
 interface AiUsageLaneDetailsPanelProps {
@@ -30,14 +31,6 @@ interface AiUsageLaneDetailsPanelProps {
   showRecommendations?: boolean;
   onClose: () => void;
 }
-
-const itemWeight = (item: {
-  total_estimated_cost: number | null;
-  total_tokens: number;
-}): number =>
-  typeof item.total_estimated_cost === "number" && item.total_estimated_cost > 0
-    ? item.total_estimated_cost
-    : item.total_tokens;
 
 const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
   laneKey,
@@ -88,9 +81,9 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
   const LaneIcon = meta.icon;
   const title = breakdown?.title ?? laneLabel ?? meta.labelFallback;
 
-  const totalWeight = Math.max(...(breakdown?.items ?? []).map(itemWeight), 0);
+  const totalWeight = Math.max(...(breakdown?.items ?? []).map(laneWeight), 0);
   const weightSum = (breakdown?.items ?? []).reduce(
-    (acc, item) => acc + itemWeight(item),
+    (acc, item) => acc + laneWeight(item),
     0,
   );
 
@@ -166,9 +159,9 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
     return (
       <div className="grid grid-cols-[160px_auto_1fr] items-center gap-3">
         {breakdown.items.map((item) => {
-          const pct = weightSum > 0 ? (itemWeight(item) / weightSum) * 100 : 0;
-          const barPct =
-            totalWeight > 0 ? (itemWeight(item) / totalWeight) * 100 : 0;
+          const weight = laneWeight(item);
+          const pct = lanePct(weight, weightSum);
+          const barPct = lanePct(weight, totalWeight);
           return (
             <React.Fragment key={item.label}>
               <TooltipWrapper content={item.label}>

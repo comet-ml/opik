@@ -1,8 +1,6 @@
 import React from "react";
 import { Coins, PieChart } from "lucide-react";
-import useAiSpendLaneBreakdown, {
-  AiSpendBreakdownItemApi,
-} from "@/api/ai-spend/useAiSpendLaneBreakdown";
+import useAiSpendLaneBreakdown from "@/api/ai-spend/useAiSpendLaneBreakdown";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Button } from "@/ui/button";
 import { Skeleton } from "@/ui/skeleton";
@@ -10,6 +8,7 @@ import ProgressBar from "@/shared/ProgressBar/ProgressBar";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { formatCost } from "@/lib/money";
 import { getLaneMeta } from "@/v2/pages-shared/AiUsageBreakdown/laneRegistry";
+import { laneWeight, lanePct } from "@/v2/pages-shared/AiUsageBreakdown/utils";
 
 const TOP_N = 5;
 const MS_PER_DAY = 86_400_000;
@@ -23,11 +22,6 @@ interface LaneSpendPreviewHoverCardProps {
   onViewAll?: (laneKey: string) => void;
   children: React.ReactNode;
 }
-
-const itemWeight = (item: AiSpendBreakdownItemApi): number =>
-  typeof item.total_estimated_cost === "number" && item.total_estimated_cost > 0
-    ? item.total_estimated_cost
-    : item.total_tokens;
 
 const PreviewBody: React.FC<{
   laneKey: string;
@@ -79,9 +73,9 @@ const PreviewBody: React.FC<{
     );
   }
 
-  const totalWeight = items.reduce((acc, item) => acc + itemWeight(item), 0);
+  const totalWeight = items.reduce((acc, item) => acc + laneWeight(item), 0);
   const top = [...items]
-    .sort((a, b) => itemWeight(b) - itemWeight(a))
+    .sort((a, b) => laneWeight(b) - laneWeight(a))
     .slice(0, TOP_N);
   const itemCount = data?.item_count ?? items.length;
   const hasMore = itemCount > top.length;
@@ -97,8 +91,7 @@ const PreviewBody: React.FC<{
       <div className="my-1 h-px w-full bg-border" />
       <div className="grid grid-cols-[80px_auto_1fr] items-center gap-x-2 gap-y-1.5 px-2 py-1">
         {top.map((item) => {
-          const pct =
-            totalWeight > 0 ? (itemWeight(item) / totalWeight) * 100 : 0;
+          const pct = lanePct(laneWeight(item), totalWeight);
           return (
             <React.Fragment key={item.label}>
               <TooltipWrapper content={item.label}>
