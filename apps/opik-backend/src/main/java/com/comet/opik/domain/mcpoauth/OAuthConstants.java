@@ -9,6 +9,15 @@ public class OAuthConstants {
     public static final String GRANT_AUTHORIZATION_CODE = "authorization_code";
     public static final String GRANT_REFRESH_TOKEN = "refresh_token";
 
+    // RFC 6749 §4.1.3, §6 + RFC 7009 §2.1 — token/revocation request parameter names
+    public static final String PARAM_GRANT_TYPE = "grant_type";
+    public static final String PARAM_CODE = "code";
+    public static final String PARAM_REDIRECT_URI = "redirect_uri";
+    public static final String PARAM_CLIENT_ID = "client_id";
+    public static final String PARAM_CODE_VERIFIER = "code_verifier";
+    public static final String PARAM_REFRESH_TOKEN = "refresh_token";
+    public static final String PARAM_TOKEN = "token";
+
     // RFC 6749 §3.1.1 — response types
     public static final String RESPONSE_TYPE_CODE = "code";
 
