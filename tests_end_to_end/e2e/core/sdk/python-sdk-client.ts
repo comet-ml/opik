@@ -7,6 +7,36 @@ export interface PythonSdkClient {
     output: string;
     workspace?: string;
   }): Promise<{ id: string; name: string; project_id: string }>;
+  createNestedTrace(args: {
+    project_name: string;
+    name: string;
+    input?: Record<string, unknown>;
+    output?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+    thread_id?: string;
+    feedback_scores?: Array<{ name: string; value: number; reason?: string }>;
+    spans: Array<{
+      name: string;
+      type?: 'general' | 'llm' | 'tool';
+      input?: Record<string, unknown>;
+      output?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+      model?: string;
+      provider?: string;
+      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      total_cost?: number;
+      parent_index?: number;
+    }>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string; span_count: number }>;
+  createFeedbackDefinition(args: {
+    name: string;
+    min?: number;
+    max?: number;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  deleteFeedbackDefinition(args: { id: string; workspace?: string }): Promise<void>;
   createDataset(args: {
     name: string;
     project_name: string;
@@ -149,6 +179,19 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createTrace(args) {
       return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
+    },
+    async createNestedTrace(args) {
+      return request<{ id: string; name: string; project_id: string; span_count: number }>(
+        'POST',
+        '/traces/nested',
+        args,
+      );
+    },
+    async createFeedbackDefinition(args) {
+      return request<{ id: string; name: string }>('POST', '/feedback-definitions', args);
+    },
+    async deleteFeedbackDefinition({ id }) {
+      await request<{ deleted: boolean }>('DELETE', `/feedback-definitions/${id}`);
     },
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
