@@ -1,5 +1,9 @@
 """Unit tests for TestSuite validation and result building."""
 
+import json
+import os
+import tempfile
+
 import pytest
 from unittest import mock
 
@@ -904,3 +908,148 @@ class TestTestSuiteResultPassRate:
             evaluation_result_=mock.MagicMock(),
         )
         assert result.pass_rate is None
+
+
+def _sample_suite_items():
+    """Return a list of TestSuiteItem dicts used across import/export tests."""
+    return [
+        {
+            "id": "item-1",
+            "data": {"question": "How do I get a refund?", "context": "Premium user"},
+            "assertions": ["Response is polite"],
+            "description": "Refund scenario",
+            "execution_policy": {"runs_per_item": 3, "pass_threshold": 2},
+        },
+        {
+            "id": "item-2",
+            "data": {"question": "Is my account hacked?"},
+            "assertions": [],
+        },
+    ]
+
+
+# ---------------------------------------------------------------------------
+# TestSuite method integration tests (thin wrappers over converters)
+# ---------------------------------------------------------------------------
+
+
+def _make_suite_with_items(items):
+    """Create a TestSuite whose get_items() returns the given items."""
+    mock_dataset = _create_mock_dataset()
+    suite = test_suite.TestSuite(name="test_suite", dataset_=mock_dataset)
+
+    dataset_items = []
+    for item in items:
+        ep = item.get("execution_policy")
+        execution_policy_item = None
+        if ep:
+            execution_policy_item = dataset_item.ExecutionPolicyItem(
+                runs_per_item=ep["runs_per_item"],
+                pass_threshold=ep["pass_threshold"],
+            )
+        dataset_items.append(
+            dataset_item.DatasetItem(
+                id=item["id"],
+                description=item.get("description"),
+                execution_policy=execution_policy_item,
+                **item["data"],
+            )
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        dataset_items
+    )
+    return suite, mock_dataset
+
+
+class TestImportExport:
+    def test_to_json__delegates_to_converters(self):
+        items = _sample_suite_items()
+        suite, _ = _make_suite_with_items(items)
+
+        parsed = json.loads(suite.to_json())
+
+        assert len(parsed) == 2
+        assert parsed[0]["id"] == "item-1"
+
+    def test_to_pandas__delegates_to_converters(self):
+        pytest.importorskip("pandas")
+        items = _sample_suite_items()
+        suite, _ = _make_suite_with_items(items)
+
+        dataframe = suite.to_pandas()
+
+        assert len(dataframe) == 2
+        assert dataframe.iloc[0]["id"] == "item-1"
+
+    def test_insert_from_json__delegates_to_converters_and_insert(self):
+        mock_dataset = _create_mock_dataset()
+        suite = test_suite.TestSuite(name="test_suite", dataset_=mock_dataset)
+        json_str = json.dumps(
+            [
+                {"data": {"question": "Hello"}, "assertions": ["Is polite"]},
+            ]
+        )
+
+        suite.insert_from_json(json_str)
+
+        mock_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+        inserted = mock_dataset.__internal_api__insert_items_as_dataclasses__.call_args[
+            0
+        ][0]
+        assert inserted[0].get_content()["question"] == "Hello"
+        assert inserted[0].evaluators is not None
+
+    def test_insert_from_pandas__delegates_to_converters_and_insert(self):
+        pd = pytest.importorskip("pandas")
+        mock_dataset = _create_mock_dataset()
+        suite = test_suite.TestSuite(name="test_suite", dataset_=mock_dataset)
+        dataframe = pd.DataFrame(
+            [
+                {"data": {"question": "Hello"}, "assertions": ["Is polite"]},
+            ]
+        )
+
+        suite.insert_from_pandas(dataframe)
+
+        mock_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+        inserted = mock_dataset.__internal_api__insert_items_as_dataclasses__.call_args[
+            0
+        ][0]
+        assert inserted[0].get_content()["question"] == "Hello"
+        assert inserted[0].evaluators is not None
+
+    def test_insert_from_jsonl_file__delegates_to_converters_and_insert(self):
+        mock_dataset = _create_mock_dataset()
+        suite = test_suite.TestSuite(name="test_suite", dataset_=mock_dataset)
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(json.dumps({"data": {"question": "Hello"}}) + "\n")
+            temp_path = f.name
+
+        try:
+            suite.insert_from_jsonl_file(temp_path)
+        finally:
+            os.unlink(temp_path)
+
+        mock_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+
+    def test_to_json_roundtrip__insert_from_json__preserves_data(self):
+        items = _sample_suite_items()
+        suite_export, _ = _make_suite_with_items(items)
+        json_str = suite_export.to_json()
+
+        mock_dataset = _create_mock_dataset()
+        suite_import = test_suite.TestSuite(name="test_suite", dataset_=mock_dataset)
+        suite_import.insert_from_json(json_str)
+
+        inserted = mock_dataset.__internal_api__insert_items_as_dataclasses__.call_args[
+            0
+        ][0]
+        assert len(inserted) == 2
+        assert inserted[0].id == "item-1"
+        assert inserted[0].get_content()["question"] == "How do I get a refund?"
+        assert inserted[0].description == "Refund scenario"
+        assert inserted[0].execution_policy is not None
+        assert inserted[0].execution_policy.runs_per_item == 3
+        assert inserted[0].execution_policy.pass_threshold == 2

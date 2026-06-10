@@ -87,6 +87,7 @@ class TraceThreadListenerTest {
                             .firstTraceId(trace.id())
                             .maxLastUpdatedAt(now)
                             .firstTraceSource(source)
+                            .firstTraceEnvironment(trace.environment())
                             .build()));
         }
 
@@ -126,6 +127,7 @@ class TraceThreadListenerTest {
                     .firstTraceId(earlierTrace.id())
                     .maxLastUpdatedAt(now)
                     .firstTraceSource(earlierSource)
+                    .firstTraceEnvironment(earlierTrace.environment())
                     .build());
         }
     }
@@ -163,6 +165,7 @@ class TraceThreadListenerTest {
                             .firstTraceId(trace.id())
                             .maxLastUpdatedAt(now)
                             .firstTraceSource(Source.SDK)
+                            .firstTraceEnvironment(trace.environment())
                             .build()));
         }
     }
@@ -190,6 +193,7 @@ class TraceThreadListenerTest {
                     .firstTraceId(trace1.id())
                     .maxLastUpdatedAt(later)
                     .firstTraceSource(Source.SDK)
+                    .firstTraceEnvironment(trace1.environment())
                     .build());
         }
 
@@ -219,6 +223,7 @@ class TraceThreadListenerTest {
                     .firstTraceId(trace.id())
                     .maxLastUpdatedAt(timestamps.maxLastUpdatedAt())
                     .firstTraceSource(Source.SDK)
+                    .firstTraceEnvironment(trace.environment())
                     .build());
         }
     }
@@ -248,6 +253,7 @@ class TraceThreadListenerTest {
                             .firstTraceId(trace1.id())
                             .maxLastUpdatedAt(now)
                             .firstTraceSource(Source.SDK)
+                            .firstTraceEnvironment(trace1.environment())
                             .build()));
 
             var captured2 = captureThreadInfo(projectId2);
@@ -256,6 +262,7 @@ class TraceThreadListenerTest {
                             .firstTraceId(trace2.id())
                             .maxLastUpdatedAt(now)
                             .firstTraceSource(Source.PLAYGROUND)
+                            .firstTraceEnvironment(trace2.environment())
                             .build()));
         }
     }
@@ -284,11 +291,13 @@ class TraceThreadListenerTest {
                             .firstTraceId(trace1.id())
                             .maxLastUpdatedAt(now)
                             .firstTraceSource(Source.SDK)
+                            .firstTraceEnvironment(trace1.environment())
                             .build(),
                     threadId2, ThreadTimestamps.builder()
                             .firstTraceId(trace2.id())
                             .maxLastUpdatedAt(now)
                             .firstTraceSource(Source.PLAYGROUND)
+                            .firstTraceEnvironment(trace2.environment())
                             .build()));
         }
     }
@@ -335,6 +344,70 @@ class TraceThreadListenerTest {
             listener.onTracesCreated(event);
 
             verify(traceThreadService).processTraceThreads(any(), eq(projectId));
+        }
+    }
+
+    @Nested
+    class EnvironmentPropagationTests {
+
+        @Test
+        void propagatesEnvironmentFromSingleTrace() {
+            var threadId = randomThreadId();
+            var now = Instant.now();
+            var trace = createTrace(projectId, threadId, Source.SDK, now).toBuilder()
+                    .environment("production")
+                    .build();
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+
+            when(traceThreadService.processTraceThreads(any(), eq(projectId)))
+                    .thenReturn(Mono.empty());
+
+            listener.onTracesCreated(event);
+
+            var captured = captureThreadInfo(projectId);
+            assertThat(captured.get(threadId).firstTraceEnvironment()).isEqualTo("production");
+        }
+
+        @Test
+        void environmentAlwaysMatchesEarliestTrace() {
+            var threadId = randomThreadId();
+            var now = Instant.now();
+            var earlierTime = now.minus(1, ChronoUnit.SECONDS);
+
+            var earlierTrace = createTrace(projectId, threadId, Source.SDK, earlierTime).toBuilder()
+                    .environment("development")
+                    .build();
+            var laterTrace = createTrace(projectId, threadId, Source.SDK, now).toBuilder()
+                    .environment("production")
+                    .build();
+
+            // Process later trace first to verify the earlier trace's environment wins
+            var event = new TracesCreated(List.of(laterTrace, earlierTrace), workspaceId, userName);
+
+            when(traceThreadService.processTraceThreads(any(), eq(projectId)))
+                    .thenReturn(Mono.empty());
+
+            listener.onTracesCreated(event);
+
+            var captured = captureThreadInfo(projectId);
+            assertThat(captured.get(threadId).firstTraceEnvironment()).isEqualTo("development");
+        }
+
+        @Test
+        void propagatesNullEnvironment() {
+            var threadId = randomThreadId();
+            var trace = createTrace(projectId, threadId, Source.SDK, Instant.now()).toBuilder()
+                    .environment(null)
+                    .build();
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+
+            when(traceThreadService.processTraceThreads(any(), eq(projectId)))
+                    .thenReturn(Mono.empty());
+
+            listener.onTracesCreated(event);
+
+            var captured = captureThreadInfo(projectId);
+            assertThat(captured.get(threadId).firstTraceEnvironment()).isNull();
         }
     }
 

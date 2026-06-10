@@ -13,8 +13,10 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -24,23 +26,30 @@ import java.util.function.BiFunction;
 public class CostService {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
-    private static final Map<String, String> PROVIDERS_MAPPING = Map.of(
-            "openai", "openai",
-            "vertex_ai-language-models", "google_vertexai",
-            "gemini", "google_ai",
-            "anthropic", "anthropic",
-            "vertex_ai-anthropic_models", "anthropic_vertexai",
-            "bedrock", "bedrock",
-            "bedrock_converse", "bedrock",
-            "groq", "groq");
+    private static final Map<String, String> PROVIDERS_MAPPING = Map.ofEntries(
+            Map.entry("openai", "openai"),
+            Map.entry("vertex_ai-language-models", "google_vertexai"),
+            Map.entry("gemini", "google_ai"),
+            Map.entry("anthropic", "anthropic"),
+            Map.entry("vertex_ai-anthropic_models", "anthropic_vertexai"),
+            Map.entry("bedrock", "bedrock"),
+            Map.entry("bedrock_converse", "bedrock"),
+            Map.entry("groq", "groq"),
+            Map.entry("jina_ai", "jina_ai"),
+            Map.entry("elastic", "elastic"),
+            Map.entry("microsoft", "azure"),
+            Map.entry("mistral", "mistral"));
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
+    public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
     private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
-                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock);
+                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
+                    "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
+                    "gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle);
 
     static {
         try {
@@ -191,43 +200,149 @@ public class CostService {
 
         Map<String, ModelPrice> parsedModelPrices = new HashMap<>();
         modelCosts.forEach((modelName, modelCost) -> {
-            String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-            if (PROVIDERS_MAPPING.containsKey(provider)) {
-
-                if (!isValidModelProvider(modelName, PROVIDERS_MAPPING.get(provider))) {
-                    return;
-                }
-
-                BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal cacheCreationInputTokenPrice = Optional.ofNullable(modelCost.cacheCreationInputTokenCost())
-                        .map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal cacheReadInputTokenPrice = Optional.ofNullable(modelCost.cacheReadInputTokenCost())
-                        .map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal videoOutputPrice = Optional.ofNullable(modelCost.outputCostPerVideoPerSecond())
-                        .map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal audioInputCharacterPrice = Optional.ofNullable(modelCost.inputCostPerCharacter())
-                        .map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                ModelMode mode = ModelMode.fromValue(modelCost.mode());
-
-                BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
-                        inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
-                        videoOutputPrice, audioInputCharacterPrice);
-
-                parsedModelPrices.put(
-                        createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
-                        new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                                cacheReadInputTokenPrice, videoOutputPrice, audioInputCharacterPrice, calculator));
+            String runtimeKey = buildRuntimeKey(modelName, modelCost);
+            if (runtimeKey == null) {
+                return;
+            }
+            ModelPrice price = buildModelPrice(modelCost);
+            if (price != null) {
+                parsedModelPrices.put(runtimeKey, price);
             }
         });
 
+        // Apply Opik-owned overrides that survive the daily LiteLLM sync workflow.
+        // Three flavors are supported in the overrides file: aliases (`alias_of` pointing at an
+        // upstream key), brand-new models, and price overrides for existing keys.
+        applyOverrides(parsedModelPrices, modelCosts);
+
         return parsedModelPrices;
+    }
+
+    /**
+     * Loads {@link #MODEL_PRICES_OVERRIDES_FILE} if present and merges its entries into the
+     * given price map. Missing or malformed overrides files are tolerated with a log message.
+     */
+    private static void applyOverrides(Map<String, ModelPrice> prices,
+            Map<String, ModelCostData> upstream) {
+        Map<String, ModelCostData> overrides;
+        try {
+            overrides = JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE, new TypeReference<>() {
+            });
+        } catch (IOException | NullPointerException e) {
+            log.warn("No model price overrides loaded ('{}'): '{}'", MODEL_PRICES_OVERRIDES_FILE, e.getMessage());
+            return;
+        }
+        if (overrides == null || overrides.isEmpty()) {
+            return;
+        }
+
+        // Apply direct overrides first, then aliases. Aliases resolve their target against `upstream`
+        // (they exist to reuse an upstream LiteLLM row under a different name), but their *price* is
+        // read from the merged `prices` map — so a direct override that re-prices an upstream key
+        // must already be in place when its aliases are resolved. Order in the JSON file is irrelevant.
+        List<Map.Entry<String, ModelCostData>> aliasEntries = new ArrayList<>();
+        overrides.forEach((modelName, override) -> {
+            if (StringUtils.isNotBlank(override.aliasOf())) {
+                aliasEntries.add(Map.entry(modelName, override));
+            } else {
+                applyDirectOverride(prices, modelName, override);
+            }
+        });
+        aliasEntries.forEach(entry -> applyAlias(prices, upstream, entry.getKey(), entry.getValue()));
+    }
+
+    private static void applyAlias(Map<String, ModelPrice> prices, Map<String, ModelCostData> upstream,
+            String aliasName, ModelCostData override) {
+        String targetName = override.aliasOf();
+        ModelCostData target = upstream.get(targetName);
+        if (target == null) {
+            log.warn("Override alias '{}' points to unknown upstream model '{}'; skipping", aliasName, targetName);
+            return;
+        }
+        if (StringUtils.isNotBlank(target.aliasOf())) {
+            log.warn("Override alias '{}' points to another alias '{}'; alias-of-alias is not supported, skipping",
+                    aliasName, targetName);
+            return;
+        }
+        String targetKey = buildRuntimeKey(targetName, target);
+        if (targetKey == null) {
+            log.warn("Override alias '{}' target '{}' has no loadable provider; skipping", aliasName, targetName);
+            return;
+        }
+        ModelPrice targetPrice = prices.get(targetKey);
+        if (targetPrice == null) {
+            log.warn("Override alias '{}' target '{}' (key '{}') has no loaded price; skipping",
+                    aliasName, targetName, targetKey);
+            return;
+        }
+        // Aliases inherit the target's litellm_provider so the alias and target share a provider in the runtime key.
+        String aliasKey = buildRuntimeKey(aliasName, target);
+        if (aliasKey == null) {
+            return;
+        }
+        prices.put(aliasKey, targetPrice);
+    }
+
+    private static void applyDirectOverride(Map<String, ModelPrice> prices, String modelName, ModelCostData override) {
+        String runtimeKey = buildRuntimeKey(modelName, override);
+        if (runtimeKey == null) {
+            log.warn("Override entry '{}' has unknown provider '{}'; skipping",
+                    modelName, override.litellmProvider());
+            return;
+        }
+        ModelPrice price = buildModelPrice(override);
+        if (price != null) {
+            prices.put(runtimeKey, price);
+        }
+    }
+
+    /**
+     * Computes the runtime key {@code <parsedModel>/<canonicalProvider>} for a price-map entry.
+     * Returns null if the provider isn't in {@link #PROVIDERS_MAPPING} or the entry is invalid
+     * for the resolved provider (e.g. legacy Bedrock paths).
+     */
+    private static String buildRuntimeKey(String modelName, ModelCostData modelCost) {
+        String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
+        String canonical = PROVIDERS_MAPPING.get(provider);
+        if (canonical == null) {
+            return null;
+        }
+        if (!isValidModelProvider(modelName, canonical)) {
+            return null;
+        }
+        return createModelProviderKey(parseModelName(modelName), canonical);
+    }
+
+    private static ModelPrice buildModelPrice(ModelCostData modelCost) {
+        String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
+        if (!PROVIDERS_MAPPING.containsKey(provider)) {
+            return null;
+        }
+
+        BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal cacheCreationInputTokenPrice = Optional.ofNullable(modelCost.cacheCreationInputTokenCost())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal cacheReadInputTokenPrice = Optional.ofNullable(modelCost.cacheReadInputTokenCost())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal videoOutputPrice = Optional.ofNullable(modelCost.outputCostPerVideoPerSecond())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal audioInputCharacterPrice = Optional.ofNullable(modelCost.inputCostPerCharacter())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        ModelMode mode = ModelMode.fromValue(modelCost.mode());
+
+        BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
+                inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
+                videoOutputPrice, audioInputCharacterPrice);
+
+        return new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
+                cacheReadInputTokenPrice, videoOutputPrice, audioInputCharacterPrice, calculator);
     }
 
     private static String parseModelName(String modelName) {

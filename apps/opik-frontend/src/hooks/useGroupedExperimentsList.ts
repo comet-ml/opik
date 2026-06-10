@@ -11,6 +11,7 @@ import get from "lodash/get";
 import md5 from "md5";
 
 import {
+  DATASET_TYPE,
   Experiment,
   EXPERIMENT_TYPE,
   ExperimentsGroupNode,
@@ -63,6 +64,8 @@ const PROJECTS_SORTING: Sorting = [
 
 const MAX_ENTITIES_FOR_SORTING = 1000;
 
+const EXPERIMENTS_LIST_POLLING_INTERVAL_MS = 10_000;
+
 const buildOrderMap = <T extends { id: string }>(
   data: T[] | undefined,
 ): Record<string, number> | undefined => {
@@ -97,6 +100,7 @@ type UseGroupedExperimentsListResponse = {
     aggregationMap: Record<string, ExperimentsAggregations>;
     sortable_by: string[];
     total: number;
+    datasetTypeMap: Record<string, DATASET_TYPE>;
   };
   isPending: boolean;
   isPlaceholderData: boolean;
@@ -331,7 +335,9 @@ const useExperimentsCache = () => {
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
 ): UseGroupedExperimentsListResponse {
-  const refetchInterval = params.polling ? 30000 : undefined;
+  const refetchInterval = params.polling
+    ? EXPERIMENTS_LIST_POLLING_INTERVAL_MS
+    : undefined;
   const experimentsCache = useExperimentsCache();
   const groups = useMemo(() => params.groups ?? [], [params.groups]);
   const hasGroups = Boolean(groups?.length);
@@ -475,6 +481,16 @@ export default function useGroupedExperimentsList(
     () => buildOrderMap(datasetsData?.content),
     [datasetsData?.content],
   );
+
+  const datasetTypeMap = useMemo<Record<string, DATASET_TYPE>>(() => {
+    const map: Record<string, DATASET_TYPE> = {};
+    datasetsData?.content?.forEach((dataset) => {
+      if (dataset.type) {
+        map[dataset.id] = dataset.type;
+      }
+    });
+    return map;
+  }, [datasetsData?.content]);
 
   const projectOrderMap = useMemo(
     () => buildOrderMap(projectsData?.content),
@@ -701,6 +717,7 @@ export default function useGroupedExperimentsList(
         ? groupedData.sortable_by
         : data?.sortable_by ?? [],
       total: hasGroups ? groupedData.total : data?.total ?? 0,
+      datasetTypeMap,
     }),
     [
       hasGroups,
@@ -712,6 +729,7 @@ export default function useGroupedExperimentsList(
       data?.sortable_by,
       data?.total,
       aggregationMap,
+      datasetTypeMap,
     ],
   );
 

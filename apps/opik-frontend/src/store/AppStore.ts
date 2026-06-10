@@ -19,6 +19,8 @@ type AppStore = {
   setIsProjectLoading: (loading: boolean) => void;
   workspaceVersion: WorkspaceVersion | null;
   setWorkspaceVersion: (version: WorkspaceVersion) => void;
+  detectedWorkspaceVersion: WorkspaceVersion | null;
+  setDetectedWorkspaceVersion: (version: WorkspaceVersion | null) => void;
 };
 
 const useAppStore = create<AppStore>((set) => ({
@@ -43,6 +45,9 @@ const useAppStore = create<AppStore>((set) => ({
   workspaceVersion: null,
   setWorkspaceVersion: (version: WorkspaceVersion) =>
     set({ workspaceVersion: version }),
+  detectedWorkspaceVersion: null,
+  setDetectedWorkspaceVersion: (version: WorkspaceVersion | null) =>
+    set({ detectedWorkspaceVersion: version }),
 }));
 
 export const useActiveWorkspaceName = () =>
@@ -56,6 +61,9 @@ export const useIsProjectLoading = () =>
 
 export const useWorkspaceVersion = () =>
   useAppStore((state) => state.workspaceVersion);
+
+export const useDetectedWorkspaceVersion = () =>
+  useAppStore((state) => state.detectedWorkspaceVersion);
 
 const getResolvedUserName = (userName: string, defaultUserName?: string) => {
   return isDefaultUser(userName) ? defaultUserName : userName;

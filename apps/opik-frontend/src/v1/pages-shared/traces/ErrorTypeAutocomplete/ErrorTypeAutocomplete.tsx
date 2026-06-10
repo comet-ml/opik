@@ -42,6 +42,7 @@ const ErrorTypeAutocomplete: React.FC<ErrorTypeAutocompleteProps> = ({
       page: 1,
       size: 100,
       truncate: true,
+      stripAttachments: true,
       filters: ERROR_FILTER,
     },
     {

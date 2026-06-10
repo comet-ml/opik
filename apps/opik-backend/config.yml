@@ -177,6 +177,36 @@ authentication:
   reactService:
     url: ${REACT_SERVICE_URL:-http://react-svc:8080}
 
+# OAuth 2.1 Authorization Server for hosted/local Opik MCP
+mcpOAuth:
+  # Default: false
+  # Description: Whether to enable the MCP OAuth Authorization Server endpoints
+  enabled: ${MCP_OAUTH_ENABLED:-false}
+  # Default: empty
+  # Description: Public base URL of this deployment; drives the RFC 8414 issuer and the default RFC 8707 resource audience (baseUrl + /api/v1/mcp)
+  baseUrl: ${OPIK_BASE_URL:-}
+  # Default: empty (derived from baseUrl + /api/v1/mcp)
+  # Description: Canonical MCP resource URI for the OAuth instance. Set to a distinct path (e.g. .../api/v2/mcp) to run the OAuth-based opik-mcp alongside the existing API-key opik-mcp during migration.
+  mcpResourceUri: ${MCP_OAUTH_RESOURCE_URI:-}
+  # Default: PT1H
+  # Description: Access token lifetime
+  accessTokenTtl: ${MCP_OAUTH_ACCESS_TOKEN_TTL:-PT1H}
+  # Default: P7D
+  # Description: Refresh token absolute lifetime (not sliding)
+  refreshTokenTtl: ${MCP_OAUTH_REFRESH_TOKEN_TTL:-P7D}
+  # Default: PT60S
+  # Description: Authorization code lifetime
+  codeTtl: ${MCP_OAUTH_CODE_TTL:-PT60S}
+  # Default: PT30S
+  # Description: Grace window during which a just-rotated refresh token is still accepted
+  refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT30S}
+  # Default: 20
+  # Description: Max dynamic client registrations (RFC 7591) accepted per source IP per window
+  registrationRateLimit: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT:-20}
+  # Default: PT1H
+  # Description: Window for the dynamic client registration rate limit
+  registrationRateLimitDuration: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT_DURATION:-PT1H}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
@@ -262,9 +292,18 @@ experimentDenormalization:
   # Default: 300ms
   # Description: The time to wait for the denormalization scan job to acquire the lock before giving up
   jobLockWaitTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 1m
+  # Default: 10m
   # Description: Maximum duration for the per-experiment aggregation lock held by the stream subscriber
-  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-1m}
+  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-10m}
+  # Default: 500ms
+  # Description: Time to wait when trying to acquire the per-experiment aggregation lock before skipping (fail-fast). Must be between 100ms and 5s.
+  lockAcquireWait: ${OPIK_EXPERIMENT_DENORM_LOCK_ACQUIRE_WAIT:-500ms}
+  # Default: 3
+  # Description: Maximum automatic re-trigger attempts per (workspace, experiment) when the aggregation lock TTL is exceeded. Must be between 1 and 10.
+  maxLockExpiryRetries: ${OPIK_EXPERIMENT_DENORM_MAX_LOCK_EXPIRY_RETRIES:-3}
+  # Default: 30m
+  # Description: TTL applied to the per-(workspace, experiment) lock-expiry retry counter in Redis (minimum 1m). Prevents stale counters from accumulating when an experiment stops producing events.
+  retryCounterTtl: ${OPIK_EXPERIMENT_DENORM_RETRY_COUNTER_TTL:-30m}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${OPIK_REDIS_EXPERIMENT_DENORM_CLAIM_INTERVAL_RATIO:-10}
@@ -526,6 +565,16 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: ${REDIS_SCORING_STREAM_TRIM_LIMIT:-100}
+  # Default: 50000
+  # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes through the
+  #   agentic-tools path (skeleton initial prompt + read/jq/search tools). Below the threshold the inline
+  #   path is used.
+  agenticToolsThresholdTokens: ${ONLINE_SCORING_AGENTIC_TOOLS_THRESHOLD_TOKENS:-50000}
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate a trace's token count from its serialized JSON
+  #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
+  #   pessimistic estimate so the agentic-tools path engages earlier.
+  agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -736,6 +785,11 @@ optimizationLogs:
   # Description: Maximum number of concurrent S3 uploads during sync
   syncConcurrency: ${OPTIMIZATION_LOGS_SYNC_CONCURRENCY:-5}
 
+# Environment CRUD configuration
+environment:
+  # Maximum number of environments allowed per workspace.
+  maxPerWorkspace: ${OPIK_ENVIRONMENT_MAX_PER_WORKSPACE:-100}
+
 # Data retention policy enforcement
 # The job splits the workspace UUID space into N=executionsPerDay fractions and processes one fraction per tick.
 # Use a value that divides 1440 evenly for consistent interval spacing (e.g., 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 32, 36, 48, 60, 80, 96, 120, 144, 160, 180, 240, 288).
@@ -914,6 +968,51 @@ pythonEvaluator:
   # Default: 500ms
   # Description: Min delay between retry attempts
   minRetryDelay: ${PYTHON_EVALUATOR_MIN_RETRY_DELAY:-500ms}
+  # Default: 10s
+  # Description: Max wait for a Python evaluator response read per call.
+  readTimeout: ${PYTHON_EVALUATOR_READ_TIMEOUT:-10s}
+  # Default: 5s
+  # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
+  connectTimeout: ${PYTHON_EVALUATOR_CONNECT_TIMEOUT:-5s}
+
+# JAX-RS Jersey client configuration. This is the singleton HTTP client shared in the service.
+jerseyClient:
+  # Default: 30s
+  # Description: Overall response read timeout. Per-call timeouts can override via Jersey ClientProperties.READ_TIMEOUT.
+  timeout: ${JERSEY_CLIENT_TIMEOUT:-30s}
+  # Default: 2s
+  # Description: The maximum time to wait for a connection to open.
+  connectionTimeout: ${JERSEY_CLIENT_CONNECTION_TIMEOUT:-2s}
+  # Default: 1s
+  # Description: The maximum time to wait for a connection to be returned from the connection pool.
+  connectionRequestTimeout: ${JERSEY_CLIENT_CONNECTION_REQUEST_TIMEOUT:-1s}
+  # Default: 5m
+  # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
+  timeToLive: ${JERSEY_CLIENT_TIME_TO_LIVE:-5m}
+  # Default: 256
+  # Description: The maximum number of concurrent open connections.
+  maxConnections: ${JERSEY_CLIENT_MAX_CONNECTIONS:-256}
+  # Default: 64
+  # Description: The maximum number of concurrent open connections per route.
+  maxConnectionsPerRoute: ${JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE:-64}
+  # Default: 5s
+  # Description: The maximum time before a persistent connection is checked to remain active. If set to 0, no inactivity check will be performed.
+  validateAfterInactivityPeriod: ${JERSEY_CLIENT_VALIDATE_AFTER_INACTIVITY:-5s}
+  # Default: 16
+  # Description: Minimum idle Jersey async worker threads.
+  minThreads: ${JERSEY_CLIENT_MIN_THREADS:-16}
+  # Default: 128
+  # Description: Maximum Jersey async worker threads.
+  maxThreads: ${JERSEY_CLIENT_MAX_THREADS:-128}
+  # Default: 64
+  # Description: The size of the work queue of the pool used for asynchronous requests. Additional threads will be spawn only if the queue is reached its maximum size.
+  workQueueSize: ${JERSEY_CLIENT_WORK_QUEUE_SIZE:-64}
+  # Default: false
+  # Description: Whether to send gzipped request bodies. Off because not all upstreams handle Content-Encoding: gzip on requests.
+  gzipEnabledForRequests: ${JERSEY_CLIENT_GZIP_ENABLED_FOR_REQUESTS:-false}
+  # Default: false
+  # Description: Whether to enable Transfer-Encoding: chunked on outbound request bodies. Off because sending Content-Length is universally accepted.
+  chunkedEncodingEnabled: ${JERSEY_CLIENT_CHUNKED_ENCODING_ENABLED:-false}
 
 serviceToggles:
   # Default: true
@@ -940,9 +1039,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
@@ -952,6 +1048,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
   datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether the deployment is expected to produce demo project data on signup. When false, the FE skips the onboarding demo-loading screen and lets the user proceed to the empty workspace immediately.
+  demoDataEnabled: ${TOGGLE_DEMO_DATA_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
@@ -980,30 +1079,43 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
   # Default: false
-  # Description: Whether or not Collaborators tab feature is enabled
-  collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
+  # Default: false
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
+  #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
+  agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
   # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
   # Priority: Highest — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
-  # Use case: gradual V2 rollout — set forceWorkspaceVersion to "version_1" and allowlist specific workspace IDs for V2.
+  # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
   # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
   v2WorkspaceAllowlist: ${TOGGLE_V2_WORKSPACE_ALLOWLIST:-""}
-  # Default: version_1
+  # Default: "" (empty, no allowlisted workspaces)
+  # Description: Comma-separated list of workspace IDs that should always receive V1 navigation.
+  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
+  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
+  # Priority: Second — overridden by v2WorkspaceAllowlist; overrides forceWorkspaceVersion and all subsequent determination logic.
+  # Use case: customer-driven V1 stickiness — pin specific workspaces to legacy navigation without affecting the rest of the deployment.
+  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
+  v1WorkspaceAllowlist: ${TOGGLE_V1_WORKSPACE_ALLOWLIST:-""}
+  # Default: version_2
   # Description: Forces ALL workspaces to a specific navigation version.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
   # Scope: Global — applies to all workspaces regardless of their entity state.
-  # Priority: Second highest — overridden by v2WorkspaceAllowlist for listed workspaces.
+  # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
-  # Operational impact: Set to "version_1" until V2 is ready, then change to "disabled" to enable entity-based determination.
-  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_1"}
+  # Operational impact: Default is "version_2". Override to "disabled" (entity-based determination) or "version_1" if global enforcement is needed.
+  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_2"}
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
+  #              Lower this value to reduce initial render cost for high-volume workspaces.
+  defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}
 
 # Local Runner configuration
 localRunner:
-  # Default: false
-  # Description: Whether the local runner feature is enabled
-  enabled: ${TOGGLE_RUNNERS_ENABLED:-false}
   # Default: 30m
   # Description: Maximum time a job can run before being considered timed out
   jobTimeout: ${OPIK_RUNNER_JOB_TIMEOUT:-30m}
@@ -1294,9 +1406,199 @@ datasetVersioningMigration:
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
 
+# Dataset Versioning runtime configuration (OPIK-6674).
+# Tunes the application-side retry guard around the INSERT...SELECT operations that
+# materialise new dataset versions in ClickHouse (COPY_VERSION_ITEMS / EDIT_ITEM_VIA_SELECT_INSERT).
+# If the SELECT lands on a stale replica it can return 0 rows; without this guard the
+# new version row would be silently committed with truncated items_total.
+datasetVersioning:
+  zeroRowsRetry:
+    # Default: 3
+    # Description: Number of retry attempts when an INSERT...SELECT writes 0 rows
+    # while the input set was non-empty. Total call count = maxAttempts + 1 (initial + retries).
+    # Set to 0 to disable retries (the guard still surfaces the failure as an exception).
+    maxAttempts: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_ATTEMPTS:-3}
+    # Default: 100ms
+    # Description: Minimum backoff between retries. Actual delay grows exponentially
+    # from this value up to maxBackoff.
+    minBackoff: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MIN_BACKOFF:-100ms}
+    # Default: 1s
+    # Description: Maximum backoff between retries. Caps the exponential growth of
+    # the per-attempt delay.
+    maxBackoff: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_BACKOFF:-1s}
+
+# Experiment Project Migration configuration
+# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+experimentProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${EXPERIMENT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${EXPERIMENT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of experiments to update per ClickHouse INSERT batch
+  experimentBatchSize: ${EXPERIMENT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${EXPERIMENT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${EXPERIMENT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  # Intentionally shorter than jobTimeout: the lock covers typical cycle duration (minutes) and
+  # prevents redundant scheduling across replicas. Cycles that exceed lockTimeout tolerate replica
+  # overlap because the migration is idempotent (WHERE project_id = '' skips already-migrated rows).
+  lockTimeout: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
+  # lock doesn't block this fire — the next scheduled tick will try again.
+  lockWaitTime: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${EXPERIMENT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+datasetProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${DATASET_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${DATASET_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of datasets to update per MySQL batch
+  datasetBatchSize: ${DATASET_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${DATASET_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${DATASET_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${DATASET_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${DATASET_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${DATASET_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Optimization Project Migration configuration (D3)
+# Assigns project_id to orphan optimizations in ClickHouse. Inference is experiments-primary (Path
+# A) with a dataset fallback (Path B), so this job depends on D1 (experiments) and D2 (datasets)
+# being complete in production. The dependency ordering is enforced by the deployment runbook,
+# not by code.
+optimizationProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${OPTIMIZATION_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${OPTIMIZATION_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of optimizations to update per ClickHouse INSERT batch
+  optimizationBatchSize: ${OPTIMIZATION_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${OPTIMIZATION_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${OPTIMIZATION_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${OPTIMIZATION_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${OPTIMIZATION_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${OPTIMIZATION_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${OPTIMIZATION_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${OPTIMIZATION_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${OPTIMIZATION_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Prompt Project Migration configuration (D4)
+# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Mirrors
+# experimentProjectMigration. Operational prerequisite (enforced via the rollout runbook, not in
+# code): D1 (OPIK-6184) and OPIK-6579 must be fully shipped to this environment first because the
+# only inference signal is experiment.project_id.
+promptProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${PROMPT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${PROMPT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of prompts to update per MySQL UPDATE batch
+  promptBatchSize: ${PROMPT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${PROMPT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${PROMPT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas. Intentionally shorter than
+  # jobTimeout: the WHERE project_id IS NULL predicate makes the cycle idempotent so replica
+  # overlap after lock expiry is safe.
+  lockTimeout: ${PROMPT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it
+  lockWaitTime: ${PROMPT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${PROMPT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the idle window.
+  schedulerThreadTtl: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+automationRuleProjectMigration:
+  # Master switch — set to true to activate the recurring Quartz job.
+  enabled: ${AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED:-false}
+  # Max workspaces processed per cycle (global, across all replicas via distributed lock).
+  workspacesPerRun: ${AUTOMATION_RULE_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions.
+  maxRulesPerCycle: ${AUTOMATION_RULE_PROJECT_MIGRATION_MAX_RULES_PER_CYCLE:-100}
+  # How often the Quartz job fires.
+  interval: ${AUTOMATION_RULE_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay after application start before the first cycle runs.
+  startupDelay: ${AUTOMATION_RULE_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Redis distributed lock held by the winning replica — must be shorter than jobTimeout.
+  lockTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # How long to wait trying to acquire the lock before giving up (non-blocking skip).
+  lockWaitTime: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Hard timeout for the entire cycle — safety net if processing stalls.
+  jobTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated bounded-elastic scheduler — isolates migration from the shared reactive chain.
+  schedulerThreadCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-2}
+  schedulerQueuedTaskCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+alertProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${ALERT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${ALERT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-100}
+  # Number of orphan alerts to process per workspace per cycle
+  alertBatchSize: ${ALERT_PROJECT_MIGRATION_ALERT_BATCH_SIZE:-100}
+  # Interval between recurring job runs
+  interval: ${ALERT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${ALERT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  lockTimeout: ${ALERT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it.
+  lockWaitTime: ${ALERT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${ALERT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  schedulerThreadCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  schedulerQueuedTaskCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  schedulerThreadTtl: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
+
+# Shared configuration for V1 → V2 entity project migration jobs
+# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
+migration:
+  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
+  excludedWorkspaceIds: ${MIGRATION_EXCLUDED_WORKSPACE_IDS:-}
+
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
+  # Remote CDN fetch is opt-in. Self-hosted / OSS deployments stay on the
+  # classpath YAML shipped with the release by default, so no outbound
+  # traffic unless the operator explicitly enables it. Comet SaaS sets
+  # LLM_MODEL_REGISTRY_REMOTE_ENABLED=true + LLM_MODEL_REGISTRY_REMOTE_URL
+  # via its own Helm overrides.
   remoteEnabled: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-false}
   remoteUrl: ${LLM_MODEL_REGISTRY_REMOTE_URL:-}
   refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}

@@ -65,7 +65,7 @@ export const FilterRow = <TColumnData,>({
       case COLUMN_TYPE.number:
         return <NumberRow filter={filter} onChange={onChange} />;
       case COLUMN_TYPE.list:
-        return <ListRow filter={filter} onChange={onChange} />;
+        return <ListRow filter={filter} onChange={onChange} config={config} />;
       case COLUMN_TYPE.time:
         return <TimeRow filter={filter} onChange={onChange} />;
       case COLUMN_TYPE.dictionary:

@@ -46,6 +46,7 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
         duration: core.serialization.number().optional(),
         ttft: core.serialization.number().optional(),
         source: SpanPublicSource.optional(),
+        environment: core.serialization.string().optional(),
     });
 
 export declare namespace SpanPublic {
@@ -78,5 +79,6 @@ export declare namespace SpanPublic {
         duration?: number | null;
         ttft?: number | null;
         source?: SpanPublicSource.Raw | null;
+        environment?: string | null;
     }
 }

@@ -4,6 +4,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
 public class TraceDBUtils {
@@ -26,7 +27,8 @@ public class TraceDBUtils {
                     last_updated_at,
                     created_by,
                     last_updated_by,
-                    thread_id
+                    thread_id,
+                    environment
                 )
                 SELECT
                     :id,
@@ -43,7 +45,8 @@ public class TraceDBUtils {
                     if(:last_updated_at IS NULL, NULL, parseDateTime64BestEffort(:last_updated_at, 6)),
                     if(:created_by IS NULL, toString(generateUUIDv4()), :created_by),
                     if(:last_updated_by IS NULL, toString(generateUUIDv4()), :last_updated_by),
-                    :thread_id
+                    :thread_id,
+                    :environment
                 ;
                 """;
         templateAsync.nonTransaction(connection -> {
@@ -58,7 +61,8 @@ public class TraceDBUtils {
                     .bind("output", trace.output().toString())
                     .bind("metadata", trace.metadata().toString())
                     .bind("tags", trace.tags().toArray())
-                    .bind("thread_id", trace.threadId());
+                    .bind("thread_id", trace.threadId())
+                    .bind("environment", StringUtils.defaultString(trace.environment()));
 
             if (trace.createdAt() != null) {
                 statement.bind("created_at", trace.createdAt().toString());

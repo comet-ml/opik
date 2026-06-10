@@ -6,7 +6,9 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { updateProviderConfig } from "@/lib/modelUtils";
+import { getProviderFromModel } from "@/lib/provider";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -51,7 +53,10 @@ export const FilterSchema = z.object({
     z.literal("ends_with"),
     z.literal("is_empty"),
     z.literal("is_not_empty"),
+    z.literal("in"),
+    z.literal("not_in"),
     z.literal("="),
+    z.literal("!="),
     z.literal(">"),
     z.literal(">="),
     z.literal("<"),
@@ -101,10 +106,13 @@ export const FiltersSchema = z
         }
       }
 
-      // Validate key for dictionary types
+      // Validate key for dictionary types (optional for input/output)
+      const isKeyOptionalField =
+        filter.field === "input" || filter.field === "output";
       if (
         (filter.type === COLUMN_TYPE.dictionary ||
           filter.type === COLUMN_TYPE.numberDictionary) &&
+        !isKeyOptionalField &&
         (!filter.key || filter.key.trim().length === 0)
       ) {
         ctx.addIssue({
@@ -132,7 +140,7 @@ const LLMJudgeBaseSchema = z.object({
     })
     .min(1, { message: "Model is required" }),
   config: z.object({
-    temperature: z.number(),
+    temperature: z.number().optional(),
     seed: z
       .number()
       .int()
@@ -204,8 +212,12 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
     z
       .string()
       .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+      // Allow the standard JSONPath form (input/output/metadata.[...]) OR a reserved
+      // bare sentinel like `spans` — see RESERVED_TRACE_EVALUATOR_VARIABLES. The
+      // backend's OnlineScoringEngine substitutes the sentinel with the JSON-
+      // serialized spans list at render time.
+      .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
+        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
       }),
   ),
 }).superRefine((data, ctx) => {
@@ -356,8 +368,13 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
       z
         .string()
         .min(1, { message: "Key is required" })
-        .regex(/^(input|output|metadata)(\.|$)/, {
-          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+        // Allow the standard JSONPath form (input/output/metadata.[...]) OR a
+        // reserved bare sentinel like `spans` — see
+        // RESERVED_TRACE_EVALUATOR_VARIABLES. The Python scorer opts into the
+        // SpanService fetch when the arguments map carries the `spans` key and
+        // injects a List<Span> as the matching kwarg.
+        .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
+          message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
         }),
     ),
     parsingArgumentsError: z.boolean().optional(),
@@ -485,13 +502,25 @@ const convertProviderToLLMMessages = (
   }));
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
+  const model = data.model?.name ?? "";
+  const rawConfig = {
+    temperature: data.model?.temperature,
+    seed: data.model?.seed ?? null,
+    custom_parameters: data.model?.custom_parameters ?? null,
+  };
+  // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
+  // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
+  const config = model
+    ? updateProviderConfig(rawConfig, {
+        model: model as PROVIDER_MODEL_TYPE,
+        provider: getProviderFromModel(
+          model as PROVIDER_MODEL_TYPE,
+        ) as COMPOSED_PROVIDER_TYPE,
+      }) ?? rawConfig
+    : rawConfig;
   return {
-    model: data.model?.name ?? "",
-    config: {
-      temperature: data.model?.temperature ?? 0,
-      seed: data.model?.seed ?? null,
-      custom_parameters: data.model?.custom_parameters ?? null,
-    },
+    model,
+    config,
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
     variables: data.variables ?? {},
@@ -509,8 +538,11 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   const { temperature, seed, custom_parameters } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
-    temperature,
   };
+
+  if (temperature != null) {
+    model.temperature = temperature;
+  }
 
   if (seed != null) {
     model.seed = seed;

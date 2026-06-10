@@ -985,6 +985,18 @@ def test_dataset_item_oql__empty_filter__returns_none(filter_string):
             [{"field": "commit", "operator": "=", "value": "abc123"}],
         ),
         (
+            'version_number = "v3"',
+            [{"field": "version_number", "operator": "=", "value": "v3"}],
+        ),
+        (
+            'version_number != "v1"',
+            [{"field": "version_number", "operator": "!=", "value": "v1"}],
+        ),
+        (
+            'version_number ends_with "0"',
+            [{"field": "version_number", "operator": "ends_with", "value": "0"}],
+        ),
+        (
             'template contains "hello"',
             [{"field": "template", "operator": "contains", "value": "hello"}],
         ),
@@ -1069,6 +1081,22 @@ def test_prompt_version_oql__valid_filters__happyflow(filter_string, expected):
             'template = "test" extra_stuff',
             r"Invalid filter string, trailing characters.*",
         ),
+        (
+            'version_number > "v2"',
+            r"Operator > is not supported for field version_number.*",
+        ),
+        (
+            'version_number < "v2"',
+            r"Operator < is not supported for field version_number.*",
+        ),
+        (
+            'commit > "abc"',
+            r"Operator > is not supported for field commit.*",
+        ),
+        (
+            'id < "00000000"',
+            r"Operator < is not supported for field id.*",
+        ),
     ],
 )
 def test_prompt_version_oql__invalid_filters__raises_value_error(
@@ -1082,3 +1110,85 @@ def test_prompt_version_oql__invalid_filters__raises_value_error(
 def test_prompt_version_oql__empty_filter__returns_none(filter_string):
     oql = OpikQueryLanguage.for_prompt_versions(filter_string)
     assert oql.parsed_filters is None
+
+
+# ============================================================
+# in / not_in operator tests
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        (
+            'environment in ("prod", "staging")',
+            [{"field": "environment", "operator": "in", "value": "prod,staging"}],
+        ),
+        (
+            'environment not_in ("debug")',
+            [{"field": "environment", "operator": "not_in", "value": "debug"}],
+        ),
+        (
+            'environment in ("a") AND input contains "hello"',
+            [
+                {"field": "environment", "operator": "in", "value": "a"},
+                {"field": "input", "operator": "contains", "value": "hello"},
+            ],
+        ),
+    ],
+)
+def test_trace_oql__in_not_in_operators__happyflow(filter_string, expected):
+    oql = OpikQueryLanguage.for_traces(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        (
+            'environment in ("prod", "staging")',
+            [{"field": "environment", "operator": "in", "value": "prod,staging"}],
+        ),
+    ],
+)
+def test_span_oql__in_not_in_operators__happyflow(filter_string, expected):
+    oql = OpikQueryLanguage.for_spans(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
+
+
+@pytest.mark.parametrize(
+    "filter_string, error_pattern",
+    [
+        (
+            "environment in prod",
+            r"Expected array value starting with '\('.*",
+        ),
+        (
+            'environment in ("unterminated"',
+            r"Unterminated array value, missing '\)'",
+        ),
+        (
+            "environment in (unquoted)",
+            r"Array elements must be quoted strings.*",
+        ),
+        (
+            "environment in ()",
+            r"Expected at least one item inside.*",
+        ),
+        (
+            "environment not_in ()",
+            r"Expected at least one item inside.*",
+        ),
+    ],
+)
+def test_oql__in_operator__invalid_array_syntax(filter_string, error_pattern):
+    with pytest.raises(ValueError, match=error_pattern):
+        OpikQueryLanguage.for_traces(filter_string)

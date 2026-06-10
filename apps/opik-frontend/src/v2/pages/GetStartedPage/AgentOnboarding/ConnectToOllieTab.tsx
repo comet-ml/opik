@@ -1,7 +1,7 @@
 import React from "react";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
@@ -17,15 +17,15 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
-  const buildEnvVars = () => {
+  const buildConnectCommand = () => {
     if (apiKey) {
-      return `export OPIK_API_KEY="${apiKey}"\nexport OPIK_WORKSPACE="${workspaceName}"`;
+      return `opik connect --project "${agentName}" --workspace "${workspaceName}" --api-key "${apiKey}"`;
     }
     const url = new URL(BASE_API_URL, window.location.origin).toString();
-    return `export OPIK_URL_OVERRIDE="${url}"`;
+    return `OPIK_URL_OVERRIDE="${url}" opik connect --project "${agentName}"`;
   };
 
-  const connectCommandText = `${buildEnvVars()}\nopik connect --project "${agentName}"`;
+  const connectCommandText = buildConnectCommand();
 
   return (
     <div className="flex flex-col gap-4 px-1">
@@ -47,11 +47,6 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
             <h4 className="comet-body-s-accented">
               Connect your repo to Ollie
             </h4>
-            <p className="comet-body-xs text-muted-slate">
-              Run this command in the repository you want Ollie to work in. This
-              creates a local connection between Opik and your machine so Ollie
-              can help with setup.
-            </p>
             <CodeSnippet title="Terminal" code={connectCommandText} />
           </div>
         </TimelineStep>
@@ -71,7 +66,10 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
                   Run the command above in your repo. Once connected, Ollie can
                   inspect your code and help finish setup.{" "}
                   <a
-                    href={buildDocsUrl("/agents/local-runner#troubleshooting")}
+                    href={buildDocsUrl(
+                      "/agents/local-runner",
+                      "#troubleshooting",
+                    )}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline hover:text-foreground"

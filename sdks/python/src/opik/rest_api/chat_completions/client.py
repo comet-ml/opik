@@ -58,6 +58,8 @@ class ChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        logprobs: typing.Optional[bool] = OMIT,
+        top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -113,6 +115,10 @@ class ChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        logprobs : typing.Optional[bool]
+
+        top_logprobs : typing.Optional[int]
+
         functions : typing.Optional[typing.Sequence[Function]]
 
         function_call : typing.Optional[FunctionCall]
@@ -155,6 +161,8 @@ class ChatCompletionsClient:
             metadata=metadata,
             reasoning_effort=reasoning_effort,
             service_tier=service_tier,
+            logprobs=logprobs,
+            top_logprobs=top_logprobs,
             functions=functions,
             function_call=function_call,
             request_options=request_options,
@@ -203,6 +211,8 @@ class AsyncChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        logprobs: typing.Optional[bool] = OMIT,
+        top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -258,6 +268,10 @@ class AsyncChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        logprobs : typing.Optional[bool]
+
+        top_logprobs : typing.Optional[int]
+
         functions : typing.Optional[typing.Sequence[Function]]
 
         function_call : typing.Optional[FunctionCall]
@@ -303,6 +317,8 @@ class AsyncChatCompletionsClient:
             metadata=metadata,
             reasoning_effort=reasoning_effort,
             service_tier=service_tier,
+            logprobs=logprobs,
+            top_logprobs=top_logprobs,
             functions=functions,
             function_call=function_call,
             request_options=request_options,

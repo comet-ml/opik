@@ -4,3 +4,5 @@ respx
 rouge-score
 scipy
 textstat
+opentelemetry-api
+opentelemetry-sdk

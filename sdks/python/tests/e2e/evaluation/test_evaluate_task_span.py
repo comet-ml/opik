@@ -1,13 +1,57 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 import opik
-from opik import Prompt
+from opik import Prompt, synchronization
 from opik.evaluation import metrics
 from opik.evaluation.metrics import BaseMetric, score_result
 from opik.message_processing.emulation import models
 
 from .. import verifiers
 from ..conftest import random_chars
+
+
+def _wait_for_per_item_feedback_scores(
+    opik_client: opik.Opik,
+    experiment_name: str,
+    expected_count_per_item: int,
+    expected_item_count: int,
+    max_try_seconds: float = 10.0,
+) -> List[Any]:
+    """
+    Poll the backend until every experiment item has ``expected_count_per_item``
+    feedback scores. Returns the materialized list of experiment items.
+
+    The verifier ``verifiers.verify_experiment`` only checks the **experiment-
+    level** ``feedback_scores`` aggregate (one row per unique score name).
+    Per-item feedback scores can lag for an extra moment after the
+    aggregate has converged — especially when task-span scoring writes the
+    second batch of scores via ``client.log_traces_feedback_scores`` after
+    the per-item trace has been emitted. Polling avoids race-condition
+    flakes against the read-back without masking real bugs (a bounded
+    timeout still fails the test if the count never settles).
+    """
+    last_items: List[Any] = []
+
+    def _check() -> bool:
+        nonlocal last_items
+        experiment = opik_client.get_experiment_by_name(experiment_name)
+        last_items = experiment.get_items()
+        if len(last_items) != expected_item_count:
+            return False
+        return all(
+            len(item.feedback_scores) == expected_count_per_item for item in last_items
+        )
+
+    converged = synchronization.until(
+        _check, max_try_seconds=max_try_seconds, allow_errors=True
+    )
+    assert converged, (
+        f"Per-item feedback score counts did not converge to "
+        f"{expected_count_per_item} within {max_try_seconds}s. "
+        f"Last observed: items={len(last_items)}, "
+        f"counts={[len(item.feedback_scores) for item in last_items]}"
+    )
+    return last_items
 
 
 class TaskSpanTestMetric(BaseMetric):
@@ -112,8 +156,6 @@ def test_evaluate__with_task_span_metrics__single_metric__happy_flow(
         prompts=[prompt],
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -126,12 +168,14 @@ def test_evaluate__with_task_span_metrics__single_metric__happy_flow(
 
     assert evaluation_result.dataset_id == dataset.id
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 2
+    experiment_items_contents = _wait_for_per_item_feedback_scores(
+        opik_client,
+        experiment_name,
+        expected_count_per_item=2,
+        expected_item_count=2,
+    )
 
     for item in experiment_items_contents:
-        assert len(item.feedback_scores) == 2
         score_names = [score["name"] for score in item.feedback_scores]
         assert "equals_metric" in score_names
         assert "task_span_test_metric" in score_names
@@ -185,8 +229,6 @@ def test_evaluate__with_task_span_metrics__multiple_task_span_metrics__happyflow
         },
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -198,12 +240,13 @@ def test_evaluate__with_task_span_metrics__multiple_task_span_metrics__happyflow
 
     assert evaluation_result.dataset_id == dataset.id
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 1
-
+    experiment_items_contents = _wait_for_per_item_feedback_scores(
+        opik_client,
+        experiment_name,
+        expected_count_per_item=3,
+        expected_item_count=1,
+    )
     item = experiment_items_contents[0]
-    assert len(item.feedback_scores) == 3
     score_names = [score["name"] for score in item.feedback_scores]
     assert "equals_metric" in score_names
     assert "task_span_metric_1" in score_names
@@ -249,8 +292,6 @@ def test_evaluate__with_task_span_metrics__only_task_span_metrics__no_regular_me
         },
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -262,12 +303,13 @@ def test_evaluate__with_task_span_metrics__only_task_span_metrics__no_regular_me
 
     assert evaluation_result.dataset_id == dataset.id
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 1
-
+    experiment_items_contents = _wait_for_per_item_feedback_scores(
+        opik_client,
+        experiment_name,
+        expected_count_per_item=1,
+        expected_item_count=1,
+    )
     item = experiment_items_contents[0]
-    assert len(item.feedback_scores) == 1
     score = item.feedback_scores[0]
     assert score["name"] == "task_span_test_metric"
     assert score["value"] == 1.0
@@ -333,8 +375,6 @@ def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__multiple_
         trial_count=5,
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -345,9 +385,12 @@ def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__multiple_
         prompts=[prompt],
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 2 * 5
+    experiment_items_contents = _wait_for_per_item_feedback_scores(
+        opik_client,
+        experiment_name,
+        expected_count_per_item=4,
+        expected_item_count=2 * 5,
+    )
 
     expected_score_names = {
         "regular_equals",
@@ -357,7 +400,6 @@ def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__multiple_
     }
 
     for item in experiment_items_contents:
-        assert len(item.feedback_scores) == 4
         actual_score_names = {score["name"] for score in item.feedback_scores}
         assert actual_score_names == expected_score_names
 
@@ -425,8 +467,6 @@ def test_evaluate__with_task_span_metrics__metric_with_multiple_parameters__happ
         scoring_metrics=[multi_param_metric],
         experiment_name=experiment_name,
     )
-
-    opik.flush_tracker()
 
     # Verify the metric received all expected parameters in local test results
     assert len(evaluation_result.test_results) == 1

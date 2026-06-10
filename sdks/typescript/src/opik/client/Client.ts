@@ -8,6 +8,7 @@ import type { FeedbackScoreData } from "@/tracer/types";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
 import { getProjectUrlByTraceId } from "@/utils/url";
+import { AssertionResultsBatchQueue } from "./AssertionResultsBatchQueue";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
@@ -20,6 +21,7 @@ import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
 import type { TestSuite, CreateTestSuiteOptions } from "@/evaluation/suite";
 import { Experiment } from "@/experiment/Experiment";
+import { TestSuiteExperiment } from "@/experiment/TestSuiteExperiment";
 import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
@@ -31,13 +33,19 @@ import {
   PromptType,
 } from "@/prompt";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
-import { BasePrompt } from "@/prompt/BasePrompt";
+import { BasePrompt, PROMPT_SYNC_TIMEOUT_MS } from "@/prompt/BasePrompt";
 import { PromptTemplateStructure, type CreateChatPromptOptions, type CommonPromptOptions } from "@/prompt/types";
-import { PromptTemplateStructureMismatch } from "@/prompt/errors";
+import {
+  EnvironmentNotFoundError,
+  PromptNotFoundError,
+  PromptTemplateStructureMismatch,
+} from "@/prompt/errors";
 import {
   fetchLatestPromptVersion,
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
+import { getOrFetch as promptCacheGetOrFetch, getGlobalCache } from "@/prompt/promptCache";
+import { getActiveMaskForPrompt } from "@/prompt/maskContext";
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
@@ -63,8 +71,13 @@ import {
   getCachedBlueprint,
   initBlueprintCacheEntry,
 } from "@/agent-config/blueprintCache";
-import { trackStorage } from "@/decorators/track";
+import { trackStorage, getTrackContext } from "@/decorators/track";
+import { UpdateService } from "@/tracer/UpdateService";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
+import {
+  EnvironmentAlreadyExistsError,
+  EnvironmentConfigurationError,
+} from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
@@ -89,6 +102,8 @@ export function resetDefaultProjectWarning() {
   defaultProjectWarningEmitted = false;
 }
 
+const AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS = PROMPT_SYNC_TIMEOUT_MS + 500;
+
 export class OpikClient {
   public api: OpikApiClientTemp;
   public config: OpikConfig;
@@ -96,6 +111,7 @@ export class OpikClient {
   public traceBatchQueue: TraceBatchQueue;
   public spanFeedbackScoresBatchQueue: SpanFeedbackScoresBatchQueue;
   public traceFeedbackScoresBatchQueue: TraceFeedbackScoresBatchQueue;
+  public traceAssertionResultsBatchQueue: AssertionResultsBatchQueue;
   public datasetBatchQueue: DatasetBatchQueue;
 
   private lastProjectNameLogged: string | undefined;
@@ -137,6 +153,11 @@ export class OpikClient {
       this.api,
       delay
     );
+    this.traceAssertionResultsBatchQueue = new AssertionResultsBatchQueue(
+      this.api,
+      delay,
+      "TRACE"
+    );
     this.datasetBatchQueue = new DatasetBatchQueue(this.api, delay);
 
     clients.push(this);
@@ -159,7 +180,7 @@ export class OpikClient {
         'No project name configured. Traces are being logged to "Default Project".\n' +
           "Set OPIK_PROJECT_NAME environment variable or pass projectName to the Opik client\n" +
           "to log to a specific project.\n" +
-          "See https://www.comet.com/docs/opik/tracing/sdk_configuration"
+          "See https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
       );
     }
 
@@ -183,6 +204,10 @@ export class OpikClient {
   public trace = (traceData: TraceData) => {
     logger.debug("Creating new trace with data:", traceData);
     const projectName = this.resolveProjectName(traceData.projectName);
+    const environment =
+      traceData.environment !== undefined
+        ? traceData.environment
+        : this.config.environment;
     const trace = new Trace(
       {
         id: generateId(),
@@ -190,6 +215,7 @@ export class OpikClient {
         source: "sdk",
         ...traceData,
         projectName,
+        ...(environment !== undefined ? { environment } : {}),
       },
       this
     );
@@ -986,54 +1012,117 @@ export class OpikClient {
 
     const dataset = await this.getDataset(datasetName, projectName);
 
-    const pageSize = Math.min(100, maxResults);
-    const experiments: Experiment[] = [];
-
     try {
-      let page = 1;
-      while (experiments.length < maxResults) {
-        const pageExperiments = await this.api.experiments.findExperiments({
-          page,
-          size: pageSize,
-          datasetId: dataset.id,
-        });
-
-        const content = pageExperiments?.content ?? [];
-
-        if (content.length === 0) {
-          break;
-        }
-        const remainingItems = maxResults - experiments.length;
-        const itemsToProcess = Math.min(content.length, remainingItems);
-
-        for (let i = 0; i < itemsToProcess; i++) {
-          const exp = content[i];
-          experiments.push(
-            new Experiment(
-              {
-                id: exp.id,
-                name: exp.name,
-                datasetName: exp.datasetName ?? undefined,
-              },
-              this
-            )
-          );
-        }
-
-        if (itemsToProcess < content.length) {
-          break;
-        }
-
-        page += 1;
-      }
-
-      return experiments;
+      return await this.findExperimentsByDatasetId(
+        dataset.id,
+        maxResults,
+        (exp) =>
+          new Experiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+            },
+            this
+          )
+      );
     } catch (error) {
       logger.error(`Failed to get experiments for dataset "${datasetName}"`, {
         error,
       });
       throw error;
     }
+  };
+
+  /**
+   * Retrieves all experiments associated with a test suite.
+   *
+   * @param name The name of the test suite
+   * @param maxResults Maximum number of experiments to return (default: 100)
+   * @param projectName Optional project name to scope the suite lookup. If not provided, uses the client's configured project.
+   * @returns A list of TestSuiteExperiment objects associated with the test suite,
+   *   each carrying the suite-specific assertion aggregates (`passRate`, `passedCount`,
+   *   `totalCount`, `assertionScores`) populated by the backend.
+   * @throws {DatasetNotFoundError} If the test suite doesn't exist
+   */
+  public getTestSuiteExperiments = async (
+    name: string,
+    maxResults: number = 100,
+    projectName?: string
+  ): Promise<TestSuiteExperiment[]> => {
+    logger.debug(`Getting experiments for test suite "${name}"`);
+
+    const suiteDataset = await this.getDataset(name, projectName);
+
+    try {
+      return await this.findExperimentsByDatasetId(
+        suiteDataset.id,
+        maxResults,
+        (exp) =>
+          new TestSuiteExperiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+              passRate: exp.passRate,
+              passedCount: exp.passedCount,
+              totalCount: exp.totalCount,
+              assertionScores: exp.assertionScores,
+            },
+            this
+          )
+      );
+    } catch (error) {
+      logger.error(`Failed to get experiments for test suite "${name}"`, {
+        error,
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Paginated fetch of experiments for a given dataset ID, mapping each raw
+   * `ExperimentPublic` row to a caller-chosen entity. Used internally by
+   * `getDatasetExperiments` and `getTestSuiteExperiments` to share the
+   * loop shape and only differ on the constructed type.
+   */
+  private findExperimentsByDatasetId = async <T>(
+    datasetId: string,
+    maxResults: number,
+    factory: (exp: ExperimentPublic) => T
+  ): Promise<T[]> => {
+    const pageSize = Math.min(100, maxResults);
+    const experiments: T[] = [];
+    let page = 1;
+
+    while (experiments.length < maxResults) {
+      const pageExperiments = await this.api.experiments.findExperiments({
+        page,
+        size: pageSize,
+        datasetId,
+      });
+
+      const content = pageExperiments?.content ?? [];
+
+      if (content.length === 0) {
+        break;
+      }
+
+      const remainingItems = maxResults - experiments.length;
+      const itemsToProcess = Math.min(content.length, remainingItems);
+
+      for (let i = 0; i < itemsToProcess; i++) {
+        experiments.push(factory(content[i]));
+      }
+
+      if (itemsToProcess < content.length) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    return experiments;
   };
 
   /**
@@ -1131,6 +1220,7 @@ export class OpikClient {
 
       const promptData = await this.api.prompts.getPromptById(
         versionResponse.promptId,
+        {},
         this.api.requestOptions
       );
 
@@ -1148,10 +1238,7 @@ export class OpikClient {
 
       return promptInstance;
     } catch (error) {
-      if (
-        error instanceof OpikApiError ||
-        error instanceof OpikApiTimeoutError
-      ) {
+      if (error instanceof OpikApiError || error instanceof OpikApiTimeoutError) {
         logger.warn(
           `Failed to sync ${logContext} '${name}' with the backend. ` +
             "The prompt will work locally but is not persisted on the server. " +
@@ -1202,8 +1289,8 @@ export class OpikClient {
             type: options.type ?? PromptType.MUSTACHE,
             description: options.description,
             tags: options.tags,
-            synced: false,
             projectName: resolvedProjectName,
+            synced: false,
           },
           this
         ),
@@ -1270,8 +1357,8 @@ export class OpikClient {
             type: options.type ?? PromptType.MUSTACHE,
             description: options.description,
             tags: options.tags,
-            synced: false,
             projectName: resolvedProjectName,
+            synced: false,
           },
           this
         ),
@@ -1281,81 +1368,55 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a text prompt by name and optional version.
-   * Throws PromptTemplateStructureMismatch if the prompt is a chat prompt.
+   * Retrieves a text prompt by name, optionally targeting a specific `version`.
+   * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin or environment
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
    * @returns Promise resolving to Prompt or null if not found
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
    */
   public getPrompt = async (
     options: GetPromptOptions
   ): Promise<Prompt | null> => {
-    logger.debug("Getting prompt", options);
-
-    try {
-      // Resolve project name for filtering
-      const resolvedProjectName = this.resolveProjectName(options.projectName);
-      const resolvedOptions = { ...options, projectName: resolvedProjectName };
-
-      let projectId: string | undefined;
-      try {
-        projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch {
-        // Project doesn't exist yet — search without project filter
-      }
-
-      // Step 1: Search for the prompt by name to get tags and description
-      const searchResponse = await this.api.prompts.getPrompts(
-        {
-          filters: JSON.stringify([
-            { field: "name", operator: "=", value: options.name },
-          ]),
-          size: 1,
-          ...(projectId && { projectId }),
-        },
-        this.api.requestOptions
-      );
-
-      const promptData = searchResponse.content?.[0];
-      if (!promptData) {
-        logger.debug("Prompt not found", { name: options.name });
-        return null;
-      }
-
-      // Step 2: Get the version (latest if no commit specified)
-      const versionData = await this.api.prompts.retrievePromptVersion(
-        resolvedOptions,
-        this.api.requestOptions
-      );
-
-      // Step 3: Validate template structure
-      const templateStructure = versionData.templateStructure;
-      if (templateStructure && templateStructure !== PromptTemplateStructure.Text) {
-        throw new PromptTemplateStructureMismatch(
-          options.name,
-          templateStructure,
-          PromptTemplateStructure.Text
-        );
-      }
-
-      // Step 4: Create the Prompt object with metadata
-      return Prompt.fromApiResponse(promptData, versionData, this, resolvedProjectName);
-    } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
-        return null;
-      }
-      logger.error("Failed to get prompt", { name: options.name, error });
-      throw error;
-    }
+    return this.getPromptWithCache<Prompt>(
+      options,
+      PromptTemplateStructure.Text,
+      (promptData, versionData, projectName) =>
+        Prompt.fromApiResponse(promptData, versionData, this, projectName),
+      "prompt"
+    );
   };
 
   /**
-   * Retrieves a chat prompt by name and optional version.
-   * Throws PromptTemplateStructureMismatch if the prompt is a text prompt.
+   * Retrieves a chat prompt by name, optionally targeting a specific `version`.
+   * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin or environment
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
    * @returns Promise resolving to ChatPrompt or null if not found
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
    *
    * @example
@@ -1369,66 +1430,180 @@ export class OpikClient {
   public getChatPrompt = async (
     options: GetPromptOptions
   ): Promise<ChatPrompt | null> => {
-    logger.debug("Getting chat prompt", options);
+    return this.getPromptWithCache<ChatPrompt>(
+      options,
+      PromptTemplateStructure.Chat,
+      (promptData, versionData, projectName) =>
+        ChatPrompt.fromApiResponse(promptData, versionData, this, projectName),
+      "chat prompt"
+    );
+  };
 
-    try {
-      // Resolve project name for filtering
-      const resolvedProjectName = this.resolveProjectName(options.projectName);
-      const resolvedOptions = { ...options, projectName: resolvedProjectName };
-
-      let projectId: string | undefined;
-      try {
-        projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch {
-        // Project doesn't exist yet — search without project filter
-      }
-
-      // Step 1: Search for the prompt by name to get tags and description
-      const searchResponse = await this.api.prompts.getPrompts(
-        {
-          filters: JSON.stringify([
-            { field: "name", operator: "=", value: options.name },
-          ]),
-          size: 1,
-          ...(projectId && { projectId }),
-        },
-        this.api.requestOptions
+  private getPromptWithCache = async <T extends BasePrompt>(
+    options: GetPromptOptions,
+    expectedStructure: PromptTemplateStructure,
+    createInstance: (
+      promptData: OpikApi.PromptPublic,
+      versionData: OpikApi.PromptVersionDetail,
+      projectName: string
+    ) => T,
+    logContext: string
+  ): Promise<T | null> => {
+    // Validate mutual exclusivity synchronously, before touching any async work.
+    if (options.commit && options.version) {
+      throw new Error(
+        "Provide either `commit` or `version`, not both. " +
+          "Prefer `version` — `commit` is deprecated."
       );
-
-      const promptData = searchResponse.content?.[0];
-      if (!promptData) {
-        logger.debug("Chat prompt not found", { name: options.name });
-        return null;
-      }
-
-      // Step 2: Get the version (latest if no commit specified)
-      const versionData = await this.api.prompts.retrievePromptVersion(
-        resolvedOptions,
-        this.api.requestOptions
-      );
-
-      // Step 3: Validate template structure
-      const templateStructure = versionData.templateStructure;
-      if (!templateStructure || templateStructure !== PromptTemplateStructure.Chat) {
-        throw new PromptTemplateStructureMismatch(
-          options.name,
-          templateStructure ?? "undefined",
-          PromptTemplateStructure.Chat
-        );
-      }
-
-      // Step 4: Create the ChatPrompt object with metadata
-      return ChatPrompt.fromApiResponse(promptData, versionData, this, resolvedProjectName);
-    } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
-        return null;
-      }
-      logger.error("Failed to get chat prompt", {
-        name: options.name,
-        error,
-      });
-      throw error;
     }
+
+    logger.debug(`Getting ${logContext}`, options);
+
+    if (options.commit && options.environment) {
+      throw new Error(
+        "'commit' and 'environment' are mutually exclusive; pass at most one.",
+      );
+    }
+
+    if (options.version && options.environment) {
+      throw new Error(
+        "'version' and 'environment' are mutually exclusive; pass at most one.",
+      );
+    }
+
+    const resolvedProjectName = this.resolveProjectName(options.projectName);
+
+    const fetchFn = async (maskId?: string | null): Promise<T | null> => {
+      try {
+        let promptData: OpikApi.PromptPublic | undefined;
+        let versionData: OpikApi.PromptVersionDetail;
+
+        if (maskId) {
+          versionData = await this.api.prompts.getPromptVersionById(
+            maskId,
+            {},
+            this.api.requestOptions
+          );
+          if (!versionData.promptId) {
+            return null;
+          }
+          promptData = await this.api.prompts.getPromptById(
+            versionData.promptId,
+            {},
+            this.api.requestOptions
+          );
+        } else {
+          let projectId: string | undefined;
+          try {
+            projectId = await this.getProjectIdByName(resolvedProjectName);
+          } catch {
+            // Project doesn't exist yet — search without project filter
+          }
+
+          const searchResponse = await this.api.prompts.getPrompts(
+            {
+              filters: JSON.stringify([
+                { field: "name", operator: "=", value: options.name },
+              ]),
+              size: 1,
+              ...(projectId && { projectId }),
+            },
+            this.api.requestOptions
+          );
+
+          promptData = searchResponse.content?.[0];
+          if (!promptData) {
+            logger.debug(`${logContext.charAt(0).toUpperCase() + logContext.slice(1)} not found`, { name: options.name });
+            return null;
+          }
+
+          // Build the REST request body explicitly so we never leak SDK-only
+          // fields (such as `version` — the wire format calls it `versionNumber`).
+          const retrieveRequest: OpikApi.PromptVersionRetrieveDetail = {
+            name: options.name,
+            projectName: resolvedProjectName,
+            ...(options.commit ? { commit: options.commit } : {}),
+            ...(options.version ? { versionNumber: options.version } : {}),
+            ...(options.environment ? { environment: options.environment } : {}),
+          };
+
+          versionData = await this.api.prompts.retrievePromptVersion(
+            retrieveRequest,
+            this.api.requestOptions
+          );
+        }
+
+
+        const templateStructure = versionData.templateStructure;
+        if (expectedStructure === PromptTemplateStructure.Text) {
+          if (templateStructure && templateStructure !== PromptTemplateStructure.Text) {
+            throw new PromptTemplateStructureMismatch(
+              options.name,
+              templateStructure,
+              PromptTemplateStructure.Text
+            );
+          }
+        } else {
+          if (!templateStructure || templateStructure !== PromptTemplateStructure.Chat) {
+            throw new PromptTemplateStructureMismatch(
+              options.name,
+              templateStructure ?? "undefined",
+              PromptTemplateStructure.Chat
+            );
+          }
+        }
+
+        return createInstance(promptData, versionData, resolvedProjectName);
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 404) {
+          return null;
+        }
+        logger.error(`Failed to get ${logContext}`, { name: options.name, error });
+        throw error;
+      }
+    };
+
+    const unmasked = await promptCacheGetOrFetch<T>(
+      options.name,
+      options.commit,
+      resolvedProjectName,
+      expectedStructure,
+      () => fetchFn(),
+      this.config.promptCacheTtlSeconds,
+      undefined,
+      options.version,
+      options.environment
+    );
+
+    const activeMaskId = unmasked?.id
+      ? getActiveMaskForPrompt(unmasked.id)
+      : null;
+    const result = activeMaskId
+      ? await promptCacheGetOrFetch<T>(
+          options.name,
+          options.commit,
+          resolvedProjectName,
+          expectedStructure,
+          () => fetchFn(activeMaskId),
+          this.config.promptCacheTtlSeconds,
+          activeMaskId,
+          options.version
+        )
+      : unmasked;
+
+    if (result !== null) {
+      const ctx = getTrackContext();
+      if (ctx) {
+        if (!UpdateService.promptAlreadyInjected(ctx.trace.data.metadata, result.id, result.commit)) {
+          ctx.trace.update({ prompts: [result], appendPrompts: true });
+        }
+        if (!UpdateService.promptAlreadyInjected(ctx.span.data.metadata, result.id, result.commit)) {
+          ctx.span.update({ prompts: [result], appendPrompts: true });
+        }
+      }
+    }
+
+    return result;
   };
 
   /**
@@ -1571,11 +1746,88 @@ export class OpikClient {
         this.api.requestOptions
       );
 
+      getGlobalCache().evictByIds(ids);
       logger.info("Successfully deleted prompts", { count: ids.length });
     } catch (error) {
       logger.error("Failed to delete prompts", { count: ids.length, error });
       throw error;
     }
+  };
+
+  /**
+   * Assigns a prompt version to an environment, or clears the assignment.
+   *
+   * Replace the full set of environments owned by a prompt version. The
+   * provided list becomes the resolved version's complete set of environments.
+   * Pass an empty array to clear all environments. Any other version of the
+   * same prompt that previously owned one of the listed environments is
+   * cleared. Existing prompt objects already in memory are not mutated —
+   * re-fetch with `client.getPrompt(...)` to see the change.
+   *
+   * @param options.promptName - Name of the prompt
+   * @param options.environments - Environments to assign. Each must already be registered in the workspace. Pass `[]` to clear.
+   * @param options.version - Sequential version selector in the wire format `"v<N>"` (e.g. `"v3"`). Defaults to the latest version.
+   * @param options.projectName - Project the prompt belongs to. Defaults to the client's project.
+   *
+   * @throws {PromptNotFoundError} The prompt name (or the supplied `version`) does not exist in the resolved project.
+   * @throws {EnvironmentNotFoundError} One of `environments` is not registered in the workspace.
+   */
+  public setPromptEnvironments = async (
+    options: {
+      promptName: string;
+      environments: string[];
+      version?: string;
+      projectName?: string;
+    },
+  ): Promise<void> => {
+    let resolvedVersion;
+    try {
+      resolvedVersion = await this.api.prompts.retrievePromptVersion(
+        {
+          name: options.promptName,
+          versionNumber: options.version,
+          projectName: this.resolveProjectName(options.projectName),
+        },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        if (options.version !== undefined) {
+          throw new PromptNotFoundError(
+            `No version '${options.version}' found for prompt '${options.promptName}'.`,
+          );
+        }
+        throw new PromptNotFoundError(
+          `No prompt found with name '${options.promptName}'.`,
+        );
+      }
+      throw error;
+    }
+
+    const target = Array.from(new Set(options.environments));
+    try {
+      await this.api.prompts.setPromptVersionEnvironment(
+        resolvedVersion.id!,
+        { environments: target },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError) {
+        // The backend reports unknown environments as 404 (not found) or 409
+        // (conflict, when the name collides with the workspace registry check).
+        if (error.statusCode === 404 || error.statusCode === 409) {
+          throw new EnvironmentNotFoundError(
+            `One or more environments in [${target.join(", ")}] are not registered in this workspace.`,
+          );
+        }
+}
+      throw error;
+    }
+
+    getGlobalCache().invalidateForPrompt(
+      options.promptName,
+      this.resolveProjectName(options.projectName),
+    );
   };
 
   /**
@@ -1880,6 +2132,81 @@ export class OpikClient {
     this.logFeedbackScores(scores, this.spanFeedbackScoresBatchQueue);
   }
 
+  public createEnvironment = async (
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<OpikApi.EnvironmentPublic> => {
+    const newId = generateId();
+    try {
+      await this.api.environments.createEnvironment({
+        id: newId,
+        name,
+        description: options?.description,
+        color: options?.color,
+      });
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 409) {
+        throw new EnvironmentAlreadyExistsError(name);
+      }
+      throw error;
+    }
+    return this.api.environments.getEnvironmentById(newId);
+  };
+
+  public getEnvironments = async (): Promise<OpikApi.EnvironmentPublic[]> => {
+    const page = await this.api.environments.findEnvironments();
+    return page.content ?? [];
+  };
+
+  private static readonly BUILTIN_ENVIRONMENT_NAMES = new Set([
+    "production",
+    "staging",
+    "development",
+  ]);
+
+  public updateEnvironment = async (
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<OpikApi.EnvironmentPublic> => {
+    if (
+      options?.color !== undefined &&
+      OpikClient.BUILTIN_ENVIRONMENT_NAMES.has(name)
+    ) {
+      throw new EnvironmentConfigurationError(
+        `Cannot change the colour of the built-in environment '${name}'. ` +
+          "Colour updates are not allowed for 'production', 'staging', or 'development'."
+      );
+    }
+    const existing = await this._findEnvironmentByName(name, true);
+    await this.api.environments.updateEnvironment(existing!.id!, {
+      description: options?.description,
+      color: options?.color,
+    });
+    return this.api.environments.getEnvironmentById(existing!.id!);
+  };
+
+  public deleteEnvironment = async (name: string): Promise<void> => {
+    const existing = await this._findEnvironmentByName(name, false);
+    if (!existing) {
+      return;
+    }
+    await this.api.environments.deleteEnvironmentsBatch({
+      ids: [existing.id!],
+    });
+  };
+
+  private _findEnvironmentByName = async (
+    name: string,
+    strict: boolean
+  ): Promise<OpikApi.EnvironmentPublic | undefined> => {
+    const envs = await this.getEnvironments();
+    const match = envs.find((env) => env.name === name);
+    if (!match && strict) {
+      throw new Error(`No environment found with name "${name}".`);
+    }
+    return match;
+  };
+
   public flush = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
     logger.debug("Starting flush operation");
@@ -1888,6 +2215,7 @@ export class OpikClient {
       await this.spanBatchQueue.flush();
       await this.traceFeedbackScoresBatchQueue.flush();
       await this.spanFeedbackScoresBatchQueue.flush();
+      await this.traceAssertionResultsBatchQueue.flush();
       await this.datasetBatchQueue.flush();
       // Note: Prompt operations are synchronous and don't use batching
       if (!silent) logger.info("Successfully flushed all data to Opik");
@@ -1968,6 +2296,37 @@ export class OpikClient {
         );
       }
     }
+  }
+
+  /**
+   * Waits for all unsynced BasePrompt values in `values` to finish syncing,
+   * with a timeout. Returns true only when every prompt is synced.
+   */
+  private async _allPromptsSynced(values: Record<string, unknown>): Promise<boolean> {
+    const prompts = Object.values(values).filter(
+      (v): v is BasePrompt => v instanceof BasePrompt && !v.synced
+    );
+    if (prompts.length === 0) return true;
+
+    const TIMED_OUT = Symbol();
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        Promise.allSettled(prompts.map((v) => v.ready())).then(() => undefined),
+        new Promise<typeof TIMED_OUT>((resolve) => {
+          timerId = setTimeout(() => resolve(TIMED_OUT), AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS);
+        }),
+      ]);
+      if (result === TIMED_OUT) {
+        logger.debug("Timed out waiting for prompt sync before creating config.");
+        return false;
+      }
+    } finally {
+      clearTimeout(timerId);
+    }
+
+    // ready() resolved, but some prompts may have failed to sync.
+    return prompts.every((v) => v.synced);
   }
 
   private _makeFallbackConfig<T extends Record<string, unknown>>(
@@ -2110,6 +2469,13 @@ export class OpikClient {
     // Validate that all Prompt/ChatPrompt values in the fallback belong to this project.
     this._validatePromptProjects(fallback as Record<string, unknown>, projectName);
 
+    // Before auto-creating from fallback, wait for any unsynced prompts to finish syncing.
+    // Unsynced prompts lack commit/id, which would produce broken blueprint values.
+    const allSynced = await this._allPromptsSynced(fallback as Record<string, unknown>);
+    if (!allSynced) {
+      return this._makeFallbackConfig(fallback, maskId);
+    }
+
     // Auto-create from fallback (handle 409 race: another caller created it concurrently)
     let blueprint: Blueprint;
     try {
@@ -2189,6 +2555,7 @@ export class OpikClient {
     const fallback = options?.fallback;
     const projectName = options?.projectName ?? this.config.projectName;
     const maskId = getActiveConfigMask() ?? undefined;
+
     const blueprintName = getActiveConfigBlueprintName() ?? undefined;
     // A runner context that pins a blueprint name is an explicit request — no auto-create.
     const isExplicitBlueprintFromContext = blueprintName !== undefined;

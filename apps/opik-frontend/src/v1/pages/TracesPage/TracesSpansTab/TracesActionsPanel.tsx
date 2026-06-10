@@ -43,7 +43,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces },
+    permissions: { canDeleteTraces, canLogTraceSpanThread },
   } = usePermissions();
 
   const showEvaluate =
@@ -92,14 +92,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           confirmButtonVariant="destructive"
         />
       )}
-      <AddTagDialog
-        key={`tag-${resetKeyRef.current}`}
-        rows={selectedRows}
-        open={open === 3}
-        setOpen={setOpen}
-        projectId={projectId}
-        type={type}
-      />
+      {canLogTraceSpanThread && (
+        <AddTagDialog
+          key={`tag-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 3}
+          setOpen={setOpen}
+          projectId={projectId}
+          type={type}
+        />
+      )}
       {showEvaluate && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
@@ -118,19 +120,21 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         disabled={disabled}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
       />
-      <TooltipWrapper content="Manage tags">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={() => {
-            setOpen(3);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Tag />
-        </Button>
-      </TooltipWrapper>
+      {canLogTraceSpanThread && (
+        <TooltipWrapper content="Manage tags">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => {
+              setOpen(3);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <Tag />
+          </Button>
+        </TooltipWrapper>
+      )}
       {showEvaluate && (
         <EvaluateButton
           isNoRules={!rules?.length}

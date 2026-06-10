@@ -32,7 +32,7 @@ import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersion
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { Description } from "@/ui/description";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { useMessageContent } from "@/hooks/useMessageContent";

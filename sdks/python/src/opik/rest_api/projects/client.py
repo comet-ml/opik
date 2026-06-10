@@ -19,6 +19,7 @@ from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
 from ..types.prompt_page_public import PromptPagePublic
+from ..types.recent_activity_page_public import RecentActivityPagePublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
@@ -831,6 +832,44 @@ class ProjectsClient:
         client.projects.retrieve_project(name='name', )
         """
         _response = self._raw_client.retrieve_project(name=name, request_options=request_options)
+        return _response.data
+
+    def get_recent_activity(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> RecentActivityPagePublic:
+        """
+        Returns the most recent activity items across all entity types for a project, sorted by date descending.
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        RecentActivityPagePublic
+            Recent activity page
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.get_recent_activity(project_id='projectId', )
+        """
+        _response = self._raw_client.get_recent_activity(
+            project_id, page=page, size=size, request_options=request_options
+        )
         return _response.data
 
 
@@ -1687,4 +1726,45 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.retrieve_project(name=name, request_options=request_options)
+        return _response.data
+
+    async def get_recent_activity(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> RecentActivityPagePublic:
+        """
+        Returns the most recent activity items across all entity types for a project, sorted by date descending.
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        RecentActivityPagePublic
+            Recent activity page
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.get_recent_activity(project_id='projectId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_recent_activity(
+            project_id, page=page, size=size, request_options=request_options
+        )
         return _response.data

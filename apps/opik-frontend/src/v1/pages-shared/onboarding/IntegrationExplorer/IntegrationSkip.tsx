@@ -7,6 +7,7 @@ import useAppStore from "@/store/AppStore";
 type IntegrationSkipProps = {
   className?: string;
   label?: string;
+  onSkip?: () => void;
 };
 
 const IntegrationSkip: React.FunctionComponent<IntegrationSkipProps> = ({

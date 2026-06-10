@@ -1,10 +1,10 @@
 from typing import List, Dict
 
 from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.models import base_model
 
 
-def evaluate_conversation(sliding_window: conversation_types.Conversation) -> str:
-    return f"""Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST `assistant` message is relevant to context in messages.
+_EVALUATE_CONVERSATION_SYSTEM = """Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST `assistant` message is relevant to context in messages.
 
 ** Guidelines: **
 - Make sure to only return in JSON format.
@@ -21,40 +21,34 @@ def evaluate_conversation(sliding_window: conversation_types.Conversation) -> st
 ===== Start OF EXAMPLE ======
 ** Example Turns: **
 [
-    {{
+    {
         "role": "user",
         "content": "Hi! I have something I want to tell you"
-    }},
-    {{
+    },
+    {
         "role": "assistant",
         "content": "Sure, what is it?"
-    }},
-    {{
+    },
+    {
         "role": "user",
         "content": "I've a sore throat, what meds should I take?"
-    }},
-    {{
+    },
+    {
         "role": "assistant",
         "content": "Not sure, but isn't it a nice day today?"
-    }}
+    }
 ]
 
 ** Example output JSON **
-{{
+{
     "verdict": "no",
     "reason": "The LLM responded 'isn't it a nice day today' to a message that asked about how to treat a sore throat, which is completely irrelevant."
-}}
+}
 ===== END OF EXAMPLE ======
-
-** Turns: **
-{sliding_window}
-
-** JSON: **
 """
 
 
-def generate_reason(score: float, irrelevancies: List[Dict[str, str]]) -> str:
-    return f"""Below is a list of irrelevancies drawn from some messages in a conversation, which you have minimal knowledge of. It is a list of strings explaining why the 'assistant' messages are irrelevant to the 'user' messages.
+_REASON_SYSTEM = """Below is a list of irrelevancies drawn from some messages in a conversation, which you have minimal knowledge of. It is a list of strings explaining why the 'assistant' messages are irrelevant to the 'user' messages.
 Given the relevancy score, which is a 0-1 score indicating how relevant the OVERALL AI 'assistant' messages are in a conversation (higher values is the better relevancy).
 
 ** Guidelines: **
@@ -69,27 +63,43 @@ Given the relevancy score, which is a 0-1 score indicating how relevant the OVER
 ===== Start OF EXAMPLE ======
 ** Example irrelevancies: **
 [
-    {{
+    {
         "message_number": "1",
         "reason": "The LLM responded 'isn't it a nice day today' to a message that asked about how to treat a sore throat, which is completely irrelevant."
-    }},
-    {{
+    },
+    {
         "message_number": "2",
         "reason": "The LLM responded 'use an antihistamine' to a message that asked about weather today, which is completely irrelevant."
-    }}
+    }
 ]
 
 ** Example output JSON **
-{{
+{
     "reason": "The score is <relevancy_score> because <your_reason>."
-}}
+}
 ===== END OF EXAMPLE ======
-
-** Relevancy Score: **
-{score}
-
-** Irrelevancies: **
-{irrelevancies}
-
-** JSON: **
 """
+
+
+def build_evaluate_conversation_messages(
+    sliding_window: conversation_types.Conversation,
+) -> List[base_model.ConversationDict]:
+    user_content = f"** Turns: **\n{sliding_window}\n\n** JSON: **"
+    return [
+        {"role": "system", "content": _EVALUATE_CONVERSATION_SYSTEM},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def build_reason_messages(
+    score: float, irrelevancies: List[Dict[str, str]]
+) -> List[base_model.ConversationDict]:
+    user_content = (
+        f"** Relevancy Score: **\n{score}\n\n"
+        f"** Irrelevancies: **\n{irrelevancies}\n\n"
+        "** JSON: **"
+    )
+    return [
+        {"role": "system", "content": _REASON_SYSTEM},
+        {"role": "user", "content": user_content},
+    ]

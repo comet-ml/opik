@@ -112,7 +112,10 @@ const ThreadDataViewer: React.FunctionComponent = () => {
   return (
     <>
       <div className="relative pr-4">
-        <TraceIdentifier id={thread?.thread_model_id || thread?.id || ""} />
+        <TraceIdentifier
+          label="Thread"
+          id={thread?.thread_model_id || thread?.id || ""}
+        />
         {isFetching && (
           <div className="absolute right-6 top-2 z-10">
             <Loader2 className="size-4 animate-spin text-slate-400" />

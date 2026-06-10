@@ -72,7 +72,7 @@ const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
           size={buttonSize}
           onClick={() => setActiveSection(type)}
           className={cn(
-            "gap-1",
+            "gap-1 px-0",
             activeSection === type && "bg-primary-100 hover:bg-primary-100",
           )}
           disabled={disabled}

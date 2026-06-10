@@ -31,6 +31,7 @@ type PluginStore = {
     onWidthChange: (width: number) => void;
   }> | null;
   AssistantPrewarmer: React.ComponentType | null;
+  AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
@@ -53,6 +54,7 @@ const PLUGIN_NAMES = [
   "SidebarWorkspaceSelector",
   "AssistantSidebar",
   "AssistantPrewarmer",
+  "AssistantDebugInfo",
   "UpgradeButton",
   "init",
 ];
@@ -73,6 +75,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   SidebarWorkspaceSelector: null,
   AssistantSidebar: null,
   AssistantPrewarmer: null,
+  AssistantDebugInfo: null,
   UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {
@@ -80,20 +83,22 @@ const usePluginsStore = create<PluginStore>((set) => ({
       return set({ WorkspacePreloader });
     }
 
-    for (const pluginName of PLUGIN_NAMES) {
-      try {
-        // dynamic import does not support alias
-        const plugin = await import(
-          `../plugins/${folderName}/${pluginName}.tsx`
-        );
+    await Promise.all(
+      PLUGIN_NAMES.map(async (pluginName) => {
+        try {
+          // dynamic import does not support alias
+          const plugin = await import(
+            `../plugins/${folderName}/${pluginName}.tsx`
+          );
 
-        if (plugin.default) {
-          set({ [pluginName]: plugin.default });
+          if (plugin.default) {
+            set({ [pluginName]: plugin.default });
+          }
+        } catch {
+          // plugin file is optional — swallow and continue
         }
-      } catch (error) {
-        continue;
-      }
-    }
+      }),
+    );
 
     // Ensure WorkspacePreloader is always set (fallback to default)
     if (!usePluginsStore.getState().WorkspacePreloader) {

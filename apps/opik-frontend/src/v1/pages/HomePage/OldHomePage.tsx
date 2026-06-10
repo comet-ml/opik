@@ -5,9 +5,13 @@ import GetStartedSection from "@/v1/pages/HomePage/GetStartedSection";
 import { calculateWorkspaceName } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import OptimizationRunsSection from "./OptimizationRunsSection";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const OldHomePage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canViewOptimizationRuns },
+  } = usePermissions();
 
   return (
     <div className="pt-6">
@@ -19,7 +23,7 @@ const OldHomePage = () => {
       <GetStartedSection />
       <ObservabilitySection />
       <EvaluationSection />
-      <OptimizationRunsSection />
+      {canViewOptimizationRuns && <OptimizationRunsSection />}
     </div>
   );
 };

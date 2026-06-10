@@ -38,7 +38,8 @@ public record TraceThread(
         Instant lastUpdatedAt,
         String lastUpdatedBy,
         String createdBy,
-        Instant createdAt) {
+        Instant createdAt,
+        String environment) {
 
     @Builder(toBuilder = true)
     public record TraceThreadPage(

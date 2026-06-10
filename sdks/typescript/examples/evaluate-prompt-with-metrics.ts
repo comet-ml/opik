@@ -18,13 +18,14 @@
  * The example shows creating an initial prompt, evaluating it, then creating an
  * improved version and comparing the results to demonstrate measurable improvements.
  */
-import { Opik } from "../src/opik";
+import { Opik, Prompt } from "../src/opik";
 import { evaluatePrompt } from "../src/opik/evaluation/evaluatePrompt";
 import { Usefulness, Moderation } from "../src/opik/evaluation/metrics";
 
 // Initialize the Opik client
 const client = new Opik({
   apiKey: "your-api-key", // Replace with your API key or set OPIK_API_KEY env var
+  projectName: "customer-support-assistant",
 });
 
 // Define the dataset item type for customer support
@@ -69,9 +70,9 @@ async function main() {
   console.log(`Dataset ready with items`);
 
   // Step 2: Create a prompt using the Prompt management system
-  const prompt = await client.createPrompt({
+  const prompt = new Prompt({
     name: "customer-support-assistant",
-    prompt: `You are a helpful customer support assistant. 
+    prompt: `You are a helpful customer support assistant.
 
 Customer Query: {{customer_query}}
 
@@ -79,11 +80,12 @@ Customer Query: {{customer_query}}
 Customer Context: {{customer_context}}
 {{/customer_context}}
 
-Please provide a professional and helpful response that addresses the customer's concern. 
+Please provide a professional and helpful response that addresses the customer's concern.
 Your response should be {{expected_tone}}.`,
     description: "Prompt for generating customer support responses",
     tags: ["customer-support", "production"],
     type: "mustache", // Using Mustache template engine
+    projectName: "customer-support-assistant",
   });
 
   console.log(
@@ -151,7 +153,7 @@ Your response should be {{expected_tone}}.`,
   // Step 6: Advanced usage - Create a new version of the prompt
   console.log("\n=== Creating Improved Prompt Version ===");
 
-  const improvedPrompt = await client.createPrompt({
+  const improvedPrompt = new Prompt({
     name: "customer-support-assistant", // Same name = new version
     prompt: `You are a helpful and empathetic customer support assistant with expertise in problem-solving.
 
@@ -168,6 +170,7 @@ Please provide a professional, helpful, and {{expected_tone}} response that:
 4. Offers additional help if needed`,
     changeDescription: "Added structure and empathy focus",
     tags: ["customer-support", "production", "v2"],
+    projectName: "customer-support-assistant",
   });
 
   console.log(

@@ -44,6 +44,7 @@ const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
     useEffect(() => {
       if (!isFocusedRef.current) {
         setLocalValue(value);
+        pendingValueRef.current = undefined;
       } else {
         pendingValueRef.current = value;
       }

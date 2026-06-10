@@ -21,7 +21,6 @@ import OverrideVersionDialog from "@/v2/pages-shared/datasets/OverrideVersionDia
 import DatasetExpansionDialog from "@/v2/pages-shared/datasets/DatasetExpansionDialog";
 import { ExpansionDialogRenderProps } from "@/v2/pages-shared/datasets/DatasetItemsActionsPanel";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import Loader from "@/shared/Loader/Loader";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
@@ -67,7 +66,7 @@ function DatasetItemsPage(): React.ReactElement {
 
   const { mutate: updateDataset } = useDatasetUpdateMutation();
 
-  const { data: dataset, isPending } = useDatasetById(
+  const { data: dataset } = useDatasetById(
     { datasetId },
     {
       refetchInterval: (query) => {
@@ -217,10 +216,6 @@ function DatasetItemsPage(): React.ReactElement {
     ),
     [datasetId, datasetType, isTestSuite, effectiveAssertions],
   );
-
-  if (isPending) {
-    return <Loader />;
-  }
 
   return (
     <div className="pt-4">

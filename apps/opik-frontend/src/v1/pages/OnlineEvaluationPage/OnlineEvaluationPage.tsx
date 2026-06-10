@@ -50,7 +50,7 @@ import RulesActionsPanel from "@/v1/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v1/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v1/pages-shared/automations/RuleLogsCell";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/v1/pages-shared/automations/AddEditRuleDialog/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";

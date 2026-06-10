@@ -56,12 +56,12 @@ export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   {
     id: "input",
     label: "Input",
-    type: COLUMN_TYPE.string,
+    type: COLUMN_TYPE.dictionary,
   },
   {
     id: "output",
     label: "Output",
-    type: COLUMN_TYPE.string,
+    type: COLUMN_TYPE.dictionary,
   },
   {
     id: "duration",
@@ -89,11 +89,6 @@ export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
   },
-  // {
-  //   id: COLUMN_CUSTOM_ID,
-  //   label: "Custom filter",
-  //   type: COLUMN_TYPE.dictionary,
-  // },
 ];
 
 // Thread-specific columns for automation rule filtering
@@ -305,6 +300,44 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           },
           operators: ruleDictionaryOperators,
         },
+        ...(isTraceScope
+          ? {
+              input: {
+                keyComponent:
+                  TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
+                    placeholder: string;
+                    value: string;
+                    onValueChange: (value: string) => void;
+                  },
+                keyComponentProps: {
+                  rootKeys: ["input"],
+                  projectId,
+                  type: TRACE_DATA_TYPE.traces,
+                  placeholder: "key (optional)",
+                  excludeRoot: true,
+                },
+                operators: ruleDictionaryOperators,
+                defaultOperator: "contains" as FilterOperator,
+              },
+              output: {
+                keyComponent:
+                  TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
+                    placeholder: string;
+                    value: string;
+                    onValueChange: (value: string) => void;
+                  },
+                keyComponentProps: {
+                  rootKeys: ["output"],
+                  projectId,
+                  type: TRACE_DATA_TYPE.traces,
+                  placeholder: "key (optional)",
+                  excludeRoot: true,
+                },
+                operators: ruleDictionaryOperators,
+                defaultOperator: "contains" as FilterOperator,
+              },
+            }
+          : {}),
         [COLUMN_CUSTOM_ID]: {
           keyComponent: TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
             placeholder: string;
@@ -345,7 +378,13 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
         ...(isSpanScope ? getSpanTypeFilterConfig(isGuardrailsEnabled) : {}),
       },
     }),
-    [projectId, isSpanScope, isGuardrailsEnabled, ruleDictionaryOperators],
+    [
+      projectId,
+      isTraceScope,
+      isSpanScope,
+      isGuardrailsEnabled,
+      ruleDictionaryOperators,
+    ],
   );
 
   const handleAddFilter = useCallback(() => {

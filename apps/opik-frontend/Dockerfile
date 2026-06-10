@@ -5,7 +5,7 @@ WORKDIR /opt/frontend
 
 COPY package*.json ./
 COPY patches ./patches
-RUN npm install
+RUN npm ci
 # Copy and build the application
 COPY . .
 
@@ -26,7 +26,7 @@ RUN printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.29.8-alpine-otel AS nginx
+FROM nginx:1.30.1-alpine-otel AS nginx
 
 # Add label for later inspection
 ARG BUILD_MODE=production

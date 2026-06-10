@@ -1,25 +1,39 @@
-import React from "react";
-import { Navigate } from "@tanstack/react-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Navigate, useNavigate } from "@tanstack/react-router";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
+import useLocalStorageState from "use-local-storage-state";
 import AgentOnboardingOverlay from "./AgentOnboarding/AgentOnboardingOverlay";
 import {
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
+  AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
+  DEFAULT_ONBOARDING_FLOW,
+  MANUAL_ONBOARDING_KEY,
 } from "./AgentOnboarding/AgentOnboardingContext";
-import useLocalStorageState from "use-local-storage-state";
-import useAppStore from "@/store/AppStore";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
+import { IntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer";
+import OnboardingIntegrationsPage from "@/shared/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import DemoLoadingContent from "./AgentOnboarding/DemoLoadingContent";
+import LoggedDataStatus from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/LoggedDataStatus";
+import useFirstTraceReceived from "@/api/projects/useFirstTraceReceived";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
-const NewQuickstart: React.FunctionComponent = () => {
+const AgentOnboardingQuickstart: React.FC = () => {
+  const workspaceName = useActiveWorkspaceName();
   const [agentOnboardingState] = useLocalStorageState<{
     step: unknown;
     agentName?: string;
-  }>(AGENT_ONBOARDING_KEY);
+  }>(`${AGENT_ONBOARDING_KEY}-${workspaceName}`);
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canCreateProjects },
+  } = usePermissions();
 
   const isOnboardingDone =
     agentOnboardingState?.step === AGENT_ONBOARDING_STEPS.DONE;
-
   const agentName = agentOnboardingState?.agentName || "";
 
   const { data: project, isPending } = useProjectByName(
@@ -27,7 +41,7 @@ const NewQuickstart: React.FunctionComponent = () => {
     { enabled: isOnboardingDone && !!agentName },
   );
 
-  if (!isOnboardingDone) {
+  if (!isOnboardingDone && canCreateProjects) {
     return <AgentOnboardingOverlay />;
   }
 
@@ -38,13 +52,105 @@ const NewQuickstart: React.FunctionComponent = () => {
   if (project?.id) {
     return (
       <Navigate
-        to="/$workspaceName/projects/$projectId/home"
+        to="/$workspaceName/projects/$projectId/logs"
         params={{ workspaceName, projectId: project.id }}
       />
     );
   }
 
   return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
+};
+
+const NewQuickstart: React.FC = () => {
+  // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "control".
+  const variant =
+    useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
+    DEFAULT_ONBOARDING_FLOW;
+  const [showDemoLoading, setShowDemoLoading] = useState(false);
+  const workspaceName = useActiveWorkspaceName();
+  const navigate = useNavigate();
+  const demoDataEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DEMO_DATA_ENABLED,
+  );
+
+  const [manualOnboardingDone, setManualOnboardingDone] =
+    useLocalStorageState<boolean>(`${MANUAL_ONBOARDING_KEY}-${workspaceName}`, {
+      defaultValue: false,
+    });
+
+  // Capture done state at mount — the re-entry guard should only redirect when
+  // the user arrives already done, not when done flips mid-session (where
+  // explicit navigation from handleExplore / DemoLoadingContent is in flight).
+  const wasDoneOnMount = useRef(manualOnboardingDone);
+
+  const isManualActive =
+    variant === "manual" && !showDemoLoading && !manualOnboardingDone;
+  const { hasTraces, firstTraceProjectId, pollExpired } = useFirstTraceReceived(
+    {
+      workspaceName,
+      enabled: isManualActive,
+      poll: isManualActive,
+    },
+  );
+
+  useEffect(() => {
+    if (variant === "manual" && !manualOnboardingDone) {
+      window.history.replaceState(null, "", "#manual");
+    }
+  }, [variant, manualOnboardingDone]);
+
+  const handleExplore = useCallback(() => {
+    if (!firstTraceProjectId) return;
+    setManualOnboardingDone(true);
+    navigate({
+      to: "/$workspaceName/projects/$projectId/logs",
+      params: { workspaceName, projectId: firstTraceProjectId },
+    });
+  }, [navigate, workspaceName, firstTraceProjectId, setManualOnboardingDone]);
+
+  const handleSkip = useCallback(() => {
+    if (demoDataEnabled) {
+      setShowDemoLoading(true);
+      return;
+    }
+    setManualOnboardingDone(true);
+    void navigate({
+      to: "/$workspaceName/home",
+      params: { workspaceName },
+    });
+  }, [demoDataEnabled, navigate, workspaceName, setManualOnboardingDone]);
+
+  if (variant === "manual") {
+    if (wasDoneOnMount.current) {
+      return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
+    }
+    if (showDemoLoading) {
+      return (
+        <DemoLoadingContent
+          onRetry={() => setShowDemoLoading(false)}
+          retryLabel="Back to setup"
+          onComplete={() => setManualOnboardingDone(true)}
+        />
+      );
+    }
+    return (
+      <OnboardingIntegrationsPage
+        IntegrationExplorer={IntegrationExplorer}
+        source="get-started"
+        banner={
+          !pollExpired || hasTraces ? (
+            <LoggedDataStatus
+              status={hasTraces ? "logged" : "waiting"}
+              onExplore={handleExplore}
+            />
+          ) : undefined
+        }
+        onSkip={handleSkip}
+      />
+    );
+  }
+
+  return <AgentOnboardingQuickstart />;
 };
 
 export default NewQuickstart;

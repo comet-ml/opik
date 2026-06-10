@@ -11,6 +11,8 @@ import {
 } from "../mockUtils";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
 import { createMockExperiment, verifyExperiment } from "./utils";
+import { Experiment } from "@/experiment/Experiment";
+import { TestSuiteExperiment } from "@/experiment/TestSuiteExperiment";
 
 interface ExperimentTestContext extends TestContext {
   client: Opik;
@@ -531,6 +533,196 @@ describe("Opik experiment operations", () => {
 
       await expect(
         client.getDatasetExperiments("test-dataset")
+      ).rejects.toThrow(apiError);
+    });
+  });
+
+  describe("getTestSuiteExperiments", () => {
+    it<ExperimentTestContext>("should retrieve all experiments for a test suite", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const suiteId = "suite-123";
+      spies.getDatasetByIdentifier.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ id: suiteId, name: "test-suite" })
+      );
+
+      const mockExperiments = [
+        {
+          ...createMockExperiment({
+            id: "experiment-1",
+            dataset_name: "test-suite",
+          }),
+          passRate: 0.8,
+          passedCount: 4,
+          totalCount: 5,
+          assertionScores: [
+            { name: "accuracy", value: 0.9 },
+            { name: "relevance", value: 0.7 },
+          ],
+        },
+        {
+          ...createMockExperiment({
+            id: "experiment-2",
+            dataset_name: "test-suite",
+          }),
+          passRate: 1,
+          passedCount: 5,
+          totalCount: 5,
+          assertionScores: [],
+        },
+      ];
+
+      spies.findExperiments.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ content: mockExperiments })
+      );
+
+      const results = await client.getTestSuiteExperiments("test-suite");
+
+      expect(spies.getDatasetByIdentifier).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "opik-sdk-typescript",
+      });
+      expect(spies.findExperiments).toHaveBeenCalledWith({
+        page: 1,
+        size: 100,
+        datasetId: suiteId,
+      });
+      expect(results).toHaveLength(2);
+      expect(results[0]).toBeInstanceOf(TestSuiteExperiment);
+      expect(results[0]).toBeInstanceOf(Experiment);
+      expect(results[0].id).toBe("experiment-1");
+      expect(results[0].passRate).toBe(0.8);
+      expect(results[0].passedCount).toBe(4);
+      expect(results[0].totalCount).toBe(5);
+      expect(results[0].assertionScores).toEqual([
+        { name: "accuracy", value: 0.9 },
+        { name: "relevance", value: 0.7 },
+      ]);
+      expect(results[1].id).toBe("experiment-2");
+      expect(results[1].passRate).toBe(1);
+      expect(results[1].assertionScores).toEqual([]);
+    });
+
+    it<ExperimentTestContext>("should leave suite-specific fields undefined when the backend omits them", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const suiteId = "suite-legacy";
+      spies.getDatasetByIdentifier.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ id: suiteId, name: "legacy-suite" })
+      );
+
+      spies.findExperiments.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({
+          content: [
+            createMockExperiment({
+              id: "experiment-legacy",
+              dataset_name: "legacy-suite",
+            }),
+          ],
+        })
+      );
+
+      const results = await client.getTestSuiteExperiments("legacy-suite");
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toBeInstanceOf(TestSuiteExperiment);
+      expect(results[0].passRate).toBeUndefined();
+      expect(results[0].passedCount).toBeUndefined();
+      expect(results[0].totalCount).toBeUndefined();
+      expect(results[0].assertionScores).toBeUndefined();
+    });
+
+    it<ExperimentTestContext>("should handle pagination when there are more experiments than the limit", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const suiteId = "suite-123";
+      spies.getDatasetByIdentifier.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ id: suiteId, name: "test-suite" })
+      );
+
+      const page1Experiments = Array.from({ length: 20 }, (_, i) =>
+        createMockExperiment({ id: `exp-${i}`, dataset_name: "test-suite" })
+      );
+      const page2Experiments = Array.from({ length: 10 }, (_, i) =>
+        createMockExperiment({
+          id: `exp-${i + 20}`,
+          dataset_name: "test-suite",
+        })
+      );
+
+      spies.findExperiments.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ content: page1Experiments })
+      );
+
+      spies.findExperiments.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ content: page2Experiments })
+      );
+
+      spies.findExperiments.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ content: [] })
+      );
+
+      const results = await client.getTestSuiteExperiments("test-suite", 25);
+
+      expect(spies.getDatasetByIdentifier).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "opik-sdk-typescript",
+      });
+      expect(spies.findExperiments).toHaveBeenCalledTimes(2);
+      expect(spies.findExperiments).toHaveBeenNthCalledWith(1, {
+        page: 1,
+        size: 25,
+        datasetId: suiteId,
+      });
+      expect(spies.findExperiments).toHaveBeenNthCalledWith(2, {
+        page: 2,
+        size: 25,
+        datasetId: suiteId,
+      });
+      expect(results).toHaveLength(25);
+    });
+
+    it<ExperimentTestContext>("should handle test suite not found error", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const error = new Error("Suite not found");
+      spies.getDatasetByIdentifier.mockImplementationOnce(() => {
+        throw error;
+      });
+
+      await expect(
+        client.getTestSuiteExperiments("nonexistent-suite")
+      ).rejects.toThrow("Suite not found");
+    });
+
+    it<ExperimentTestContext>("should handle API errors when getting test suite experiments", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const suiteId = "suite-123";
+      spies.getDatasetByIdentifier.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ id: suiteId, name: "test-suite" })
+      );
+
+      const apiError = new OpikApiError({
+        message: "API error",
+        statusCode: 500,
+      });
+      spies.findExperiments.mockImplementationOnce(() => {
+        throw apiError;
+      });
+
+      await expect(
+        client.getTestSuiteExperiments("test-suite")
       ).rejects.toThrow(apiError);
     });
   });

@@ -20,7 +20,7 @@ import { formatDate } from "@/lib/date";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Button } from "@/ui/button";
 import { Checkbox } from "@/ui/checkbox";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { createFilter } from "@/lib/filters";
 
 const DEFAULT_SIZE = 5;

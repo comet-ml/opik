@@ -34,6 +34,7 @@ public interface CacheManager {
     // Non-reactive API (both synchronous and asynchronous methods without reactiveness)
     CompletionStage<Boolean> evictAsync(String key, boolean usePatternMatching);
     CompletionStage<Void> putAsync(String key, Object value, Duration ttlDuration);
+    boolean putIfAbsentSync(String key, Object value, Duration ttlDuration);
     <T> T getSync(String key, Class<T> clazz);
     <T> T getSync(String key, TypeReference<T> clazz);
 }

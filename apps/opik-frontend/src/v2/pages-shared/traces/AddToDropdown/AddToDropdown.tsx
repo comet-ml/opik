@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Span, Trace, Thread } from "@/types/traces";
+import { cn } from "@/lib/utils";
 import AddToDatasetDialog from "@/v2/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/v2/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -41,6 +42,14 @@ const DATASET_OPTIONS: DatasetOption[] = [
     openValue: 3,
   },
 ];
+
+const DEFAULT_CHEVRON_SIZE = "size-4";
+
+const CHEVRON_SIZE_BY_BUTTON_SIZE: Partial<
+  Record<NonNullable<ButtonProps["size"]>, string>
+> = {
+  "2xs": "size-3",
+};
 
 export type AddToDropdownProps = {
   getDataForExport: () => Promise<Array<Trace | Span | Thread>>;
@@ -102,10 +111,16 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
             variant={buttonVariant}
             size={buttonSize}
             disabled={disabled}
-            className="font-normal"
+            className={cn("font-normal", buttonVariant === "ghost" && "px-0")}
           >
             Add to
-            <ChevronDown className="ml-2 size-4" />
+            <ChevronDown
+              className={cn(
+                "ml-2",
+                (buttonSize && CHEVRON_SIZE_BY_BUTTON_SIZE[buttonSize]) ??
+                  DEFAULT_CHEVRON_SIZE,
+              )}
+            />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">

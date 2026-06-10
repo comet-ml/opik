@@ -31,6 +31,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.AbstractModule;
@@ -694,12 +695,33 @@ class ManualEvaluationResourceTest {
         }
     }
 
-    /**
-     * Helper method to create a thread with thread_model_id.
-     * Creates traces with a thread_id and waits for the thread to be created in the trace_threads table.
-     *
-     * @return The UUID thread_model_id of the created thread
-     */
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Evaluate traces returns 403 when ONLINE_EVALUATION_RULE_UPDATE permission is denied")
+        void evaluateTracesReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            var request = ManualEvaluationRequest.builder()
+                    .projectId(UUID.randomUUID())
+                    .entityIds(List.of(UUID.randomUUID()))
+                    .ruleIds(List.of(UUID.randomUUID()))
+                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .build();
+
+            try (var response = manualEvaluationResourceClient.callEvaluateTraces(
+                    UUID.randomUUID(), request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+    }
+
     private UUID createThreadAndGetModelId(String projectName) {
         var threadId = UUID.randomUUID().toString();
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -42,9 +42,9 @@ import {
   generateSelectColumDef,
   getRowId,
 } from "@/shared/DataTable/utils";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -74,7 +74,7 @@ import useTracesList from "@/api/traces/useTracesList";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import { generateTracesURL } from "@/lib/annotation-queues";
+import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
@@ -383,6 +383,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       size: size as number,
       search: search as string,
       truncate: truncationEnabled,
+      stripAttachments: true,
     },
     {
       placeholderData: keepPreviousData,
@@ -416,9 +417,13 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             placeholder: "Select score",
           },
         },
+        ...getTagsFilterConfig({
+          projectId: annotationQueue.project_id ?? "",
+          entityType: "traces",
+        }),
       },
     }),
-    [annotationQueue.feedback_definition_names],
+    [annotationQueue.feedback_definition_names, annotationQueue.project_id],
   );
 
   const rows: Trace[] = useMemo(() => data?.content ?? [], [data]);
@@ -477,36 +482,16 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
-  // TODO: Temporary workaround to open in new tab until sidebars are integrated in the page
-  const handleRowClick = useCallback(
-    (row: Trace) => {
-      if (!row) return;
-
-      const url = generateTracesURL(
-        workspaceName,
-        annotationQueue.project_id,
-        "traces",
-        row.id,
-      );
-      window.open(url, "_blank");
-    },
-    [workspaceName, annotationQueue.project_id],
-  );
-
-  const handleThreadIdClick = useCallback(
-    (row: Trace) => {
-      if (!row || !row.thread_id) return;
-
-      const url = generateTracesURL(
-        workspaceName,
-        annotationQueue.project_id,
-        "threads",
-        row.thread_id,
-      );
-      window.open(url, "_blank");
-    },
-    [workspaceName, annotationQueue.project_id],
-  );
+  const { traceId, handleRowClick, handleThreadIdClick, panels } =
+    useTraceThreadPanelsState<Trace>({
+      rows,
+      type: "trace",
+      traceDetailsPanelProps: { projectId: annotationQueue.project_id },
+      threadDetailsPanelProps: {
+        projectId: annotationQueue.project_id,
+        projectName: annotationQueue.project_name,
+      },
+    });
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Trace, Trace>(
@@ -576,9 +561,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
 
   return (
     <>
@@ -628,6 +611,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         columnsStatistic={columnsStatistic}
         data={rows}
         onRowClick={handleRowClick}
+        activeRowId={traceId}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -660,7 +644,8 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         }
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"
@@ -677,6 +662,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
+      {panels}
     </>
   );
 };

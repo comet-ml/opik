@@ -25,8 +25,9 @@ import {
   SpanOQLConfig,
   ThreadOQLConfig,
   PromptOQLConfig,
+  PromptVersionOQLConfig,
 } from "./configs";
-import { OPERATORS_WITHOUT_VALUES } from "./constants";
+import { OPERATORS_WITHOUT_VALUES, ARRAY_VALUE_OPERATORS } from "./constants";
 
 // Re-export types for backward compatibility
 export type { FilterExpression };
@@ -90,6 +91,13 @@ export class OpikQueryLanguage {
   }
 
   /**
+   * Create an OpikQueryLanguage instance for prompt version filtering
+   */
+  static forPromptVersions(queryString?: string): OpikQueryLanguage {
+    return new OpikQueryLanguage(queryString, new PromptVersionOQLConfig());
+  }
+
+  /**
    * Returns the parsed filter expressions
    */
   public getFilterExpressions(): FilterExpression[] | null {
@@ -132,7 +140,9 @@ export class OpikQueryLanguage {
     );
     const value = (OPERATORS_WITHOUT_VALUES as readonly string[]).includes(operator.operator)
       ? { value: null }
-      : ValueParser.parse(tokenizer);
+      : (ARRAY_VALUE_OPERATORS as readonly string[]).includes(operator.operator)
+        ? ValueParser.parseArrayValue(tokenizer)
+        : ValueParser.parse(tokenizer);
 
     return this.buildExpression(field, operator, value);
   }

@@ -9,11 +9,8 @@ import {
   generateSearchByFieldFilters,
   processFiltersArray,
 } from "@/lib/filters";
-import {
-  TagUpdateFields,
-  buildTagUpdatePayload,
-  extractErrorMessage,
-} from "@/lib/tags";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 type UseDatasetItemBatchUpdateMutationParams = {
   datasetId: string;

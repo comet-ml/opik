@@ -1,12 +1,8 @@
 import React, { useMemo } from "react";
-import uniq from "lodash/uniq";
 
-import useTracesOrSpansList, {
-  TRACE_DATA_TYPE,
-} from "@/hooks/useTracesOrSpansList";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import Autocomplete from "@/shared/Autocomplete/Autocomplete";
-import { COLUMN_TYPE } from "@/types/shared";
-import { BaseTraceData } from "@/types/traces";
+import { useErrorTypeOptions } from "./useErrorTypeOptions";
 
 type ErrorTypeAutocompleteProps = {
   projectId: string | "";
@@ -16,16 +12,6 @@ type ErrorTypeAutocompleteProps = {
   type?: TRACE_DATA_TYPE;
 };
 
-const ERROR_FILTER = [
-  {
-    id: "error_filter",
-    field: "error_info",
-    operator: "is_not_empty" as const,
-    type: COLUMN_TYPE.errors,
-    value: "",
-  },
-];
-
 const ErrorTypeAutocomplete: React.FC<ErrorTypeAutocompleteProps> = ({
   projectId,
   hasError,
@@ -33,35 +19,18 @@ const ErrorTypeAutocomplete: React.FC<ErrorTypeAutocompleteProps> = ({
   onValueChange,
   type = TRACE_DATA_TYPE.traces,
 }) => {
-  const isProjectId = Boolean(projectId);
+  const { items: allItems, isLoading } = useErrorTypeOptions({
+    projectId,
+    type,
+  });
 
-  const { data, isPending } = useTracesOrSpansList(
-    {
-      projectId,
-      type,
-      page: 1,
-      size: 100,
-      truncate: true,
-      filters: ERROR_FILTER,
-    },
-    {
-      enabled: isProjectId,
-    },
-  );
-
-  const items = useMemo(() => {
-    const traces = (data?.content || []) as BaseTraceData[];
-
-    const exceptionTypes = traces
-      .map((trace) => trace.error_info?.exception_type?.trim())
-      .filter((t): t is string => Boolean(t));
-
-    return uniq(exceptionTypes)
-      .filter((t) =>
+  const items = useMemo(
+    () =>
+      allItems.filter((t) =>
         value ? t.toLowerCase().includes(value.toLowerCase()) : true,
-      )
-      .sort();
-  }, [data, value]);
+      ),
+    [allItems, value],
+  );
 
   return (
     <Autocomplete
@@ -69,7 +38,7 @@ const ErrorTypeAutocomplete: React.FC<ErrorTypeAutocompleteProps> = ({
       onValueChange={onValueChange}
       items={items}
       hasError={hasError}
-      isLoading={isProjectId ? isPending : false}
+      isLoading={isLoading}
       placeholder="Select error type"
     />
   );

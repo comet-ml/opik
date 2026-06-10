@@ -73,6 +73,17 @@ export const createCustomProviderDetailsFormSchema = (
           }),
         )
         .optional(),
+      queryParams: z
+        .array(
+          z.object({
+            key: z.string(),
+            value: z.string(),
+            id: z.string(),
+          }),
+        )
+        .optional(),
+      authHeaderName: z.string().max(150).optional(),
+      suppressDefaultAuth: z.boolean().optional(),
     })
     .superRefine((data, ctx) => {
       // Validate headers: if a header has any content, both key and value must be non-empty
@@ -111,6 +122,45 @@ export const createCustomProviderDetailsFormSchema = (
               });
             } else {
               headerKeys.push(trimmedKey);
+            }
+          }
+        });
+      }
+
+      // Validate query params: same rules as headers (both key/value required, unique keys)
+      if (data.queryParams) {
+        const paramKeys: string[] = [];
+
+        data.queryParams.forEach((param, index) => {
+          const hasKey = param.key.trim().length > 0;
+          const hasValue = param.value.trim().length > 0;
+
+          if ((hasKey || hasValue) && !hasKey) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Query parameter key is required",
+              path: ["queryParams", index, "key"],
+            });
+          }
+
+          if ((hasKey || hasValue) && !hasValue) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Query parameter value is required",
+              path: ["queryParams", index, "value"],
+            });
+          }
+
+          if (hasKey) {
+            const trimmedKey = param.key.trim();
+            if (paramKeys.includes(trimmedKey)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Query parameter key must be unique",
+                path: ["queryParams", index, "key"],
+              });
+            } else {
+              paramKeys.push(trimmedKey);
             }
           }
         });

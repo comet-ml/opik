@@ -1,5 +1,7 @@
 from typing import List, TypedDict
 
+from opik.evaluation.models import base_model
+
 
 class FewShotExampleContextPrecision(TypedDict):
     title: str
@@ -42,32 +44,7 @@ FEW_SHOT_EXAMPLES: List[FewShotExampleContextPrecision] = [
 ]
 
 
-def generate_query(
-    input: str,
-    output: str,
-    expected_output: str,
-    context: List[str],
-    few_shot_examples: List[FewShotExampleContextPrecision] = FEW_SHOT_EXAMPLES,
-) -> str:
-    examples_str = "\n\n".join(
-        [
-            f"#### Example {i + 1}: {example['title']}\n\n"
-            f'- **Input:** "{example["input"]}"\n'
-            f'- **Output:** "{example["output"]}"\n'
-            f'- **Expected Output:** "{example["expected_output"]}"\n'
-            f'- **Context:** "{example["context"]}"\n'
-            f"- **Result:**\n"
-            f"  ```json\n"
-            f"  {{\n"
-            f'    "context_precision_score": {example["context_precision_score"]},\n'
-            f'    "reason": "{example["reason"]}"\n'
-            f"  }}\n"
-            f"  ```"
-            for i, example in enumerate(few_shot_examples)
-        ]
-    )
-
-    return f"""YOU ARE AN EXPERT EVALUATOR SPECIALIZED IN ASSESSING THE "CONTEXT PRECISION" METRIC FOR LLM GENERATED OUTPUTS.
+_SYSTEM_PROMPT = """YOU ARE AN EXPERT EVALUATOR SPECIALIZED IN ASSESSING THE "CONTEXT PRECISION" METRIC FOR LLM GENERATED OUTPUTS.
 YOUR TASK IS TO EVALUATE HOW PRECISELY A GIVEN ANSWER FROM AN LLM FITS THE EXPECTED ANSWER, GIVEN THE CONTEXT AND USER INPUT.
 
 ###INSTRUCTIONS###
@@ -104,21 +81,50 @@ YOUR TASK IS TO EVALUATE HOW PRECISELY A GIVEN ANSWER FROM AN LLM FITS THE EXPEC
 ###FEW-SHOT EXAMPLES###
 
 {examples_str}
+"""
 
-NOW, EVALUATE THE PROVIDED INPUTS AND CONTEXT TO DETERMINE THE CONTEXT PRECISION SCORE.
 
-###INPUTS:###
-***
-Input:
-{input}
+def _format_examples(few_shot_examples: List[FewShotExampleContextPrecision]) -> str:
+    return "\n\n".join(
+        [
+            f"#### Example {i + 1}: {example['title']}\n\n"
+            f'- **Input:** "{example["input"]}"\n'
+            f'- **Output:** "{example["output"]}"\n'
+            f'- **Expected Output:** "{example["expected_output"]}"\n'
+            f'- **Context:** "{example["context"]}"\n'
+            f"- **Result:**\n"
+            f"  ```json\n"
+            f"  {{\n"
+            f'    "context_precision_score": {example["context_precision_score"]},\n'
+            f'    "reason": "{example["reason"]}"\n'
+            f"  }}\n"
+            f"  ```"
+            for i, example in enumerate(few_shot_examples)
+        ]
+    )
 
-Output:
-{output}
 
-Expected Output:
-{expected_output}
-
-Context:
-{context}
-***
-    """
+def build_messages(
+    input: str,
+    output: str,
+    expected_output: str,
+    context: List[str],
+    few_shot_examples: List[FewShotExampleContextPrecision] = FEW_SHOT_EXAMPLES,
+) -> List[base_model.ConversationDict]:
+    system_content = _SYSTEM_PROMPT.format(
+        examples_str=_format_examples(few_shot_examples)
+    )
+    user_content = (
+        "NOW, EVALUATE THE PROVIDED INPUTS AND CONTEXT TO DETERMINE THE CONTEXT PRECISION SCORE.\n\n"
+        "###INPUTS:###\n"
+        "***\n"
+        f"Input:\n{input}\n\n"
+        f"Output:\n{output}\n\n"
+        f"Expected Output:\n{expected_output}\n\n"
+        f"Context:\n{context}\n"
+        "***"
+    )
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]

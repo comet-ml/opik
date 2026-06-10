@@ -2,6 +2,7 @@
 title: "Custom Optimizer Prompts"
 subtitle: "Customize the internal prompts used by optimizers"
 description: "Learn how to override and customize the internal prompt templates used by Opik optimizers to add domain constraints, safety requirements, or custom formatting."
+canonical-url: https://www.comet.com/docs/opik/development/optimization-runs/advanced/prompt_customization
 ---
 
 The Opik Optimizer uses a **PromptLibrary** system that lets you customize the internal prompts used by each optimizer. This is useful when you need to:
@@ -284,6 +285,6 @@ print(optimizer.get_prompt("reasoning_system")[:200] + "...")
 
 ## Related
 
-- [API Reference](/v1/agent_optimization/opik_optimizer/reference) – Full parameter documentation
+- [API Reference](/v1/agent_optimization/advanced/api_reference) – Full parameter documentation
 - [Custom metrics](/v1/agent_optimization/advanced/custom_metrics) – Build specialized evaluation metrics
-- [Extending optimizers](/v1/agent_optimization/algorithms/extending_optimizers) – Create custom optimizer subclasses
+- [Extending optimizers](/v1/agent_optimization/advanced/extending_optimizers) – Create custom optimizer subclasses

@@ -62,7 +62,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
-import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -229,7 +229,7 @@ class TraceServiceImpl implements TraceService {
     private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
-                        Project::name,
+                        WorkspaceUtils::stripProjectName,
                         Function.identity(),
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));

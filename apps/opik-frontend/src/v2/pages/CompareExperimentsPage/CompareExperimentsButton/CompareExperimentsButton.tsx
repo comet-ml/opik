@@ -5,7 +5,7 @@ import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import CompareExperimentsDialog from "@/v2/pages/CompareExperimentsPage/CompareExperimentsDialog";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 interface CompareExperimentsButtonProps {
   size?: "default" | "sm" | "lg" | "icon";

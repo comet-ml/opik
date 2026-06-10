@@ -2,19 +2,24 @@ import pytest
 
 from opik.evaluation.suite_evaluators import LLMJudge
 
+from ... import llm_constants
+
 
 MODEL_PARAMS = [
     pytest.param(
-        ("gpt-4o", ["ensure_openai_configured"]),
+        (llm_constants.OPENAI_GPT_NANO, ["ensure_openai_configured"]),
         id="openai",
     ),
     pytest.param(
-        ("anthropic/claude-sonnet-4-20250514", ["ensure_anthropic_configured"]),
+        (
+            f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_SONNET}",
+            ["ensure_anthropic_configured"],
+        ),
         id="anthropic",
     ),
     pytest.param(
-        ("gemini/gemini-2.0-flash", ["ensure_google_api_configured"]),
-        id="gemini",
+        (f"vertex_ai/{llm_constants.GEMINI_FLASH}", ["ensure_vertexai_configured"]),
+        id="vertex_ai",
     ),
 ]
 
@@ -43,6 +48,7 @@ class TestLLMJudgeScore:
             assertions=[assertion],
             model=llm_model,
             track=False,
+            reasoning_effort="minimal",
         )
 
         results = evaluator.score(
@@ -62,6 +68,7 @@ class TestLLMJudgeScore:
             assertions=[assertion_accurate, assertion_helpful],
             model=llm_model,
             track=False,
+            reasoning_effort="minimal",
         )
 
         results = evaluator.score(
@@ -83,6 +90,7 @@ class TestLLMJudgeScore:
             assertions=[assertion],
             model=llm_model,
             track=False,
+            reasoning_effort="minimal",
         )
 
         results = evaluator.score(
@@ -107,6 +115,7 @@ class TestLLMJudgeScore:
             assertions=assertions,
             model=llm_model,
             track=False,
+            reasoning_effort="minimal",
         )
 
         results = evaluator.score(
@@ -131,6 +140,7 @@ class TestLLMJudgeAsyncScore:
             assertions=[assertion],
             model=llm_model,
             track=False,
+            reasoning_effort="minimal",
         )
 
         results = await evaluator.ascore(
@@ -153,6 +163,7 @@ class TestLLMJudgeAsyncScore:
             assertions=[assertion_accurate, assertion_concise],
             model=llm_model,
             track=False,
+            reasoning_effort="minimal",
         )
 
         results = await evaluator.ascore(

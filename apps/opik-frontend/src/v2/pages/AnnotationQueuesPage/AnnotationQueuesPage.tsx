@@ -25,7 +25,6 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
@@ -38,7 +37,7 @@ import AnnotationQueueRowActionsCell from "@/v2/pages-shared/annotation-queues/A
 import AnnotationQueuesActionsPanel from "@/v2/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/v2/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyAnnotationQueuesLightUrl from "/images/empty-annotation-queues-light.svg";
 import emptyAnnotationQueuesDarkUrl from "/images/empty-annotation-queues-dark.svg";
 
@@ -382,11 +381,8 @@ export const AnnotationQueuesPage: React.FC = () => {
     [columnsWidth, setColumnsWidth],
   );
 
-  if (isLoading) {
-    return <Loader />;
-  }
-
-  const isEmpty = noData && rows.length === 0 && page === 1;
+  const isTableLoading = isLoading || (isPlaceholderData && rows.length === 0);
+  const isEmpty = !isTableLoading && noData && rows.length === 0 && page === 1;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -409,9 +405,13 @@ export const AnnotationQueuesPage: React.FC = () => {
           description={
             "Get started by creating a queue for human review.\nOrganize traces and threads, label outputs, and gather feedback to improve performance."
           }
-          primaryActionLabel="Create your first queue"
-          onPrimaryAction={handleNewQueue}
-          docsUrl={buildDocsUrl("/evaluation/annotation_queues")}
+          primaryActionLabel={
+            canCreateAnnotationQueues ? "Create your first queue" : undefined
+          }
+          onPrimaryAction={
+            canCreateAnnotationQueues ? handleNewQueue : undefined
+          }
+          docsUrl={buildDocsUrl("/evaluation/advanced/annotation_queues")}
         />
       ) : (
         <>
@@ -467,7 +467,10 @@ export const AnnotationQueuesPage: React.FC = () => {
             noData={<DataTableNoData title={noDataText} />}
             onRowClick={handleRowClick}
             stickyHeader
-            showLoadingOverlay={isPlaceholderData && isFetching}
+            showSkeleton={isTableLoading}
+            showLoadingOverlay={
+              !isTableLoading && isPlaceholderData && isFetching
+            }
           />
           <div className="py-4">
             <DataTablePagination

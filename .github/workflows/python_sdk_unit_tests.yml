@@ -35,13 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: [
-          "3.10",
-          "3.11",
-          "3.12",
-          "3.13",
-          "3.14",
-        ]
+        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS || '["3.10","3.11","3.12","3.13","3.14"]') }}
 
     steps:
       - name: Check out code
@@ -51,7 +45,7 @@ jobs:
         run: env
 
       - name: Print event object
-        run: cat $GITHUB_EVENT_PATH
+        run: cat "$GITHUB_EVENT_PATH"
 
       - name: Print the PR title
         env:
@@ -73,7 +67,7 @@ jobs:
           pip list
 
       - name: Running SDK Unit Tests
-        run: python -m pytest --cov=src/opik -vv tests/unit/ --junitxml=${{ github.workspace }}/test_results.xml
+        run: python -m pytest -vv tests/unit/ --junitxml=${{ github.workspace }}/test_results.xml
 
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2

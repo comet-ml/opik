@@ -31,6 +31,7 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
@@ -967,7 +968,8 @@ class OnlineScoringEngineTest {
                 .build();
 
         var renderedMessages = OnlineScoringEngine.renderThreadMessages(
-                evaluatorCode.messages(), Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), List.of(trace));
+                evaluatorCode.messages(), Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), List.of(trace),
+                List.of());
 
         assertThat(renderedMessages).hasSize(2);
 
@@ -989,11 +991,96 @@ class OnlineScoringEngineTest {
                 .build();
 
         var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
-                new ToolCallingStrategy());
+                new ToolCallingStrategy(), List.of());
 
         assertThat(request.responseFormat()).isNotNull();
         var expectedSchema = createTestSchema();
         assertThat(request.responseFormat().jsonSchema().rootElement()).isEqualTo(expectedSchema);
+    }
+
+    @Test
+    @DisplayName("thread {{context}} is wire-identical to today's shape when no spans are passed")
+    void prepareThreadLlmRequestKeepsLegacyContextShapeWhenSpansAreEmpty() {
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var trace = createTrace(traceId, generator.generate()).toBuilder()
+                .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
+                .build();
+
+        var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
+                new InstructionStrategy(), List.of());
+
+        // Empty spans → enriched serializer omits the `spans` field via @JsonInclude(NON_NULL).
+        // The substituted {{context}} JSON renders user/assistant entries from the trace but
+        // never the `spans` key. Mustache HTML-escapes the substituted JSON (`&quot;`), so
+        // we match on bare field names rather than full quoted-string fragments.
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        assertThat(allText).contains("role");
+        assertThat(allText).contains("user");
+        assertThat(allText).contains("assistant");
+        // The TEST_TRACE_THREAD_EVALUATOR system prompt does not mention "spans", so a bare
+        // substring check is sufficient to prove the field isn't in the substituted JSON.
+        assertThat(allText).doesNotContain("spans");
+    }
+
+    @Test
+    @DisplayName("thread {{context}} attaches sorted spans under the assistant entry when toggle on")
+    void prepareThreadLlmRequestAttachesSpansToAssistantEntryWhenProvided() {
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId).toBuilder()
+                .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
+                .build();
+        // Two spans on the same trace, out-of-order on input — the helper sorts by start_time
+        // so the wire order tracks call order regardless of how the caller hands them in.
+        var spanLate = Span.builder()
+                .id(generator.generate()).name("tool-late").type(SpanType.tool)
+                .startTime(java.time.Instant.now().plusMillis(10)).traceId(traceId).projectId(projectId)
+                .build();
+        var spanEarly = Span.builder()
+                .id(generator.generate()).name("tool-early").type(SpanType.tool)
+                .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
+                .build();
+
+        var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
+                new InstructionStrategy(), List.of(spanLate, spanEarly));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        // The `spans` array shows up nested under the assistant entry, with the earlier-started
+        // span first — the LLM sees call order matching the trace's actual execution order.
+        // Mustache HTML-escapes the substituted JSON, so we match on field/value substrings
+        // rather than full quoted-string fragments.
+        assertThat(allText).contains("spans");
+        assertThat(allText).contains("tool-early");
+        assertThat(allText).contains("tool-late");
+        assertThat(allText.indexOf("tool-early")).isLessThan(allText.indexOf("tool-late"));
+    }
+
+    @Test
+    @DisplayName("estimateThreadContextTokens reflects spans size, so big enriched threads route to agentic-tools")
+    void estimateThreadContextTokensFactorsInSpansSize() {
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+        var bigSpan = Span.builder()
+                .id(generator.generate()).name("huge-tool-call").type(SpanType.tool)
+                .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
+                .input(JsonUtils.readTree("{\"payload\":\"" + "x".repeat(2000) + "\"}"))
+                .build();
+
+        int estimateNoSpans = OnlineScoringEngine.estimateThreadContextTokens(
+                List.of(trace), List.of(), 4);
+        int estimateWithSpans = OnlineScoringEngine.estimateThreadContextTokens(
+                List.of(trace), List.of(bigSpan), 4);
+
+        // Adding ~2KB of span payload must move the estimate up — otherwise the agentic-tools
+        // routing gate would underestimate and inline-render an oversized prompt.
+        assertThat(estimateWithSpans).isGreaterThan(estimateNoSpans);
     }
 
     @Test
@@ -1002,7 +1089,8 @@ class OnlineScoringEngineTest {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
-        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy());
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy(),
+                List.of());
 
         assertThat(request.responseFormat()).isNotNull();
         var expectedSchema = createTestSchema();
@@ -1016,7 +1104,7 @@ class OnlineScoringEngineTest {
         var trace = createTrace(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareLlmRequest(
-                evaluatorCode, trace, new InstructionStrategy());
+                evaluatorCode, trace, new InstructionStrategy(), List.of());
 
         assertThat(request.responseFormat()).isNull();
 
@@ -1034,6 +1122,360 @@ class OnlineScoringEngineTest {
         assertThat(userMessage.singleText()).contains("Summary: " + SUMMARY_STR);
         assertThat(userMessage.singleText()).contains("Instruction: " + OUTPUT_STR);
         assertThat(userMessage.singleText()).contains("Literal: some literal value");
+    }
+
+    @Test
+    @DisplayName("templateReferencesSpans detects the 'spans' sentinel anywhere in the variables map")
+    void templateReferencesSpansDetectsSentinelInVariablesMap() {
+        var noMessages = List.<com.comet.opik.api.evaluators.LlmAsJudgeMessage>of();
+        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of(), mustache)).isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of(
+                "summary", "input.foo",
+                "out", "output.bar"), mustache)).isFalse();
+        // Sentinel matches the bare value "spans" — not "input.spans", not "Spans", not "$.spans".
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages,
+                Map.of("mySpans", "spans"), mustache)).isTrue();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of(
+                "summary", "input.foo",
+                "spansList", "spans"), mustache)).isTrue();
+        // Case-sensitive: only the lowercase bare sentinel triggers injection.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of("x", "Spans"), mustache)).isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages,
+                Map.of("x", "input.spans"), mustache)).isFalse();
+    }
+
+    @Test
+    @DisplayName("templateReferencesSpans detects {{spans}} inside a multimodal message's contentArray text part")
+    void templateReferencesSpansDetectsSpansInMultimodalContentArrayText() {
+        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
+        var multimodalMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .contentArray(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.builder()
+                                .type("text")
+                                .text("Spans: {{spans}}")
+                                .build(),
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.builder()
+                                .type("image_url")
+                                .imageUrl(com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.ImageUrl.builder()
+                                        .url("https://example.com/x.png").build())
+                                .build()))
+                .build());
+        // The text part inside contentArray references {{spans}} — detection must walk
+        // structured-content messages, not just the simple `content` string field.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(multimodalMessage, Map.of(), mustache)).isTrue();
+
+        // Variables explicitly maps "spans" to something else — explicit override wins
+        // even when {{spans}} sits in a multimodal text part.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(multimodalMessage,
+                Map.of("spans", "input.spans"), mustache)).isFalse();
+
+        // No text part references {{spans}} — false.
+        var multimodalNoSpans = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .contentArray(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.builder()
+                                .type("text")
+                                .text("Summary: {{summary}}")
+                                .build()))
+                .build());
+        assertThat(OnlineScoringEngine.templateReferencesSpans(multimodalNoSpans, Map.of(), mustache)).isFalse();
+    }
+
+    @Test
+    @DisplayName("templateReferencesSpans detects implicit {{spans}} references in messages when variables omits the binding")
+    void templateReferencesSpansDetectsImplicitMessageTemplateReference() {
+        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
+        var spansMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .content("Spans: {{spans}}")
+                .build());
+        var noSpansMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .content("Summary: {{summary}}")
+                .build());
+        // Implicit reference: prompt has {{spans}}, variables map doesn't bind "spans" at all.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(spansMessage, Map.of(), mustache)).isTrue();
+        // Variables explicitly map "spans" to something else (e.g. a JSONPath) — respect that
+        // mapping and don't claim the template references the sentinel.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(spansMessage,
+                Map.of("spans", "input.spans"), mustache)).isFalse();
+        // No {{spans}} in template, no sentinel in variables — false.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noSpansMessage, Map.of(), mustache)).isFalse();
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest substitutes {{spans}}-referencing variables with the serialized spans list")
+    void prepareLlmRequestInjectsSpansFromSentinelVariable() {
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Count the spans: {{mySpans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("mySpans", "spans")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span1 = Span.builder()
+                .id(generator.generate()).name("span-a").type(SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+        var span2 = Span.builder()
+                .id(generator.generate()).name("span-b").type(SpanType.general)
+                .startTime(java.time.Instant.now().plusMillis(1)).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span2, span1));
+
+        // The {{mySpans}} variable substitution should be the JSON-serialized spans list (sorted
+        // by start_time so the wire order is stable). Smoke-check: both span names appear and
+        // earliest-start span comes first.
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        assertThat(allText).contains("span-a");
+        assertThat(allText).contains("span-b");
+        assertThat(allText.indexOf("span-a")).isLessThan(allText.indexOf("span-b"));
+        // Sentinel literal should NOT leak into the rendered prompt.
+        assertThat(allText).doesNotContain("{{mySpans}}");
+    }
+
+    @Test
+    @DisplayName("buildSpanTree reconstructs parent/child hierarchy, promotes orphans, sorts siblings by start_time")
+    void buildSpanTreeReconstructsHierarchyAndPromotesOrphans() {
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var rootId = generator.generate();
+        var childA = generator.generate();
+        var childB = generator.generate();
+        var grandchild = generator.generate();
+        var orphanParent = generator.generate(); // intentionally NOT in the input set
+        var orphan = generator.generate();
+        var now = java.time.Instant.parse("2026-05-19T10:00:00Z");
+
+        // Layout:
+        //   root (no parent)
+        //     ├── child-A          (sibling, earlier start)
+        //     │     └── grandchild
+        //     └── child-B          (sibling, later start)
+        //   orphan (parent not in input — promoted to root)
+        // Input order is shuffled to prove buildSpanTree doesn't rely on it.
+        var spans = List.of(
+                Span.builder().id(childB).parentSpanId(rootId).name("child-B").type(SpanType.tool)
+                        .startTime(now.plusMillis(200)).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(orphan).parentSpanId(orphanParent).name("orphan").type(SpanType.general)
+                        .startTime(now.plusMillis(500)).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(grandchild).parentSpanId(childA).name("grandchild").type(SpanType.tool)
+                        .startTime(now.plusMillis(150)).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(rootId).parentSpanId(null).name("root").type(SpanType.general)
+                        .startTime(now).traceId(traceId).projectId(projectId).build(),
+                Span.builder().id(childA).parentSpanId(rootId).name("child-A").type(SpanType.tool)
+                        .startTime(now.plusMillis(100)).traceId(traceId).projectId(projectId).build());
+
+        var tree = OnlineScoringEngine.buildSpanTree(spans);
+
+        // Two roots — the real root + the orphan (promoted because its parent isn't in the set).
+        // root sorts before orphan because root.startTime < orphan.startTime.
+        assertThat(tree).hasSize(2);
+        assertThat(tree.get(0).name()).isEqualTo("root");
+        assertThat(tree.get(1).name()).isEqualTo("orphan");
+        // root has two direct children in start_time order: child-A then child-B.
+        assertThat(tree.get(0).spans()).hasSize(2);
+        assertThat(tree.get(0).spans().get(0).name()).isEqualTo("child-A");
+        assertThat(tree.get(0).spans().get(1).name()).isEqualTo("child-B");
+        // child-A has one nested child; child-B is a leaf (spans omitted via NON_NULL).
+        assertThat(tree.get(0).spans().get(0).spans()).hasSize(1);
+        assertThat(tree.get(0).spans().get(0).spans().get(0).name()).isEqualTo("grandchild");
+        assertThat(tree.get(0).spans().get(1).spans()).isNull();
+        // Orphan is a leaf with no children.
+        assertThat(tree.get(1).spans()).isNull();
+    }
+
+    @Test
+    @DisplayName("substituted {{spans}} carries only the LLM-relevant fields — not feedback scores, comments, audit metadata")
+    void prepareLlmRequestRendersSpansWithLeanProjection() {
+        // Build a Span with the full kitchen sink — every field that SpanForLlm intentionally
+        // drops gets populated here so the assertion can verify they're absent from the JSON.
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Inspect: {{mySpans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("mySpans", "spans")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var feedback = com.comet.opik.api.FeedbackScore.builder()
+                .name("relevance").value(java.math.BigDecimal.valueOf(0.9)).source(ScoreSource.UI).build();
+        var comment = com.comet.opik.api.Comment.builder()
+                .id(generator.generate()).text("audit-noise").build();
+        var fatSpan = Span.builder()
+                .id(generator.generate())
+                .name("inspect-tool")
+                .type(SpanType.tool)
+                .startTime(java.time.Instant.now())
+                .traceId(trace.id())
+                .projectId(trace.projectId())
+                .projectName("audit-project-name")
+                .createdBy("audit-creator")
+                .lastUpdatedBy("audit-updater")
+                .createdAt(java.time.Instant.now())
+                .lastUpdatedAt(java.time.Instant.now())
+                .feedbackScores(List.of(feedback))
+                .comments(List.of(comment))
+                .totalEstimatedCost(java.math.BigDecimal.valueOf(0.0042))
+                .totalEstimatedCostVersion("v2")
+                .tags(java.util.Set.of("audit-tag"))
+                .usage(Map.of("prompt_tokens", 42))
+                .environment("audit-env")
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(fatSpan));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        // Kept fields: name + type land in the rendered JSON.
+        assertThat(allText).contains("inspect-tool");
+        assertThat(allText).contains("tool");
+        // Dropped fields: not a single audit/score/cost field leaks through. These substring
+        // checks are deliberately tight against unique tokens the test set above so they can't
+        // accidentally collide with template/system-prompt text.
+        assertThat(allText).doesNotContain("audit-noise");
+        assertThat(allText).doesNotContain("audit-creator");
+        assertThat(allText).doesNotContain("audit-updater");
+        assertThat(allText).doesNotContain("audit-project-name");
+        assertThat(allText).doesNotContain("audit-tag");
+        assertThat(allText).doesNotContain("audit-env");
+        assertThat(allText).doesNotContain("feedback_scores");
+        assertThat(allText).doesNotContain("comments");
+        assertThat(allText).doesNotContain("total_estimated_cost");
+        assertThat(allText).doesNotContain("prompt_tokens");
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest renders {{spans}} as [] when the trace has no spans, not the literal sentinel")
+    void prepareLlmRequestRendersEmptySpansAsJsonArrayWhenTraceHasNoChildren() {
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Spans for this trace: {{mySpans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("mySpans", "spans")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of());
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        // Empty list renders as [], not the literal sentinel "spans" — guards against
+        // the bare "spans" value leaking through toVariableMapping when the trace has
+        // no children.
+        assertThat(allText).contains("Spans for this trace: []");
+        assertThat(allText).doesNotContain("Spans for this trace: spans");
+        assertThat(allText).doesNotContain("{{mySpans}}");
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest substitutes {{spans}} from a template-only reference (no sentinel in variables)")
+    void prepareLlmRequestInjectsSpansFromImplicitTemplateReference() {
+        // No "spans" key in variables. Mirrors an API-created rule where the caller put
+        // {{spans}} in the prompt but didn't (or didn't know to) set the sentinel mapping.
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("How many spans? {{spans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of()))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span = Span.builder()
+                .id(generator.generate()).name("template-only-span").type(SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        assertThat(allText).contains("template-only-span");
+        assertThat(allText).doesNotContain("{{spans}}");
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest respects an explicit variables mapping over the template-only spans injection")
+    void prepareLlmRequestRespectsExplicitSpansMappingOverImplicitInjection() {
+        // The user explicitly mapped "spans" to input.foo. Their intent overrides the
+        // template-only fallback: substitute the JSONPath value, not the spans list.
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Custom: {{spans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("spans", "input.foo")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span = Span.builder()
+                .id(generator.generate()).name("should-not-appear").type(SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        // The spans list should NOT leak in — the user mapped "spans" to a JSONPath.
+        assertThat(allText).doesNotContain("should-not-appear");
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest leaves non-spans variables alone when spans are passed")
+    void prepareLlmRequestLeavesNonSpansVariablesAloneWhenSpansArePassed() {
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span = Span.builder()
+                .id(generator.generate()).name("ignored-span").type(SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span));
+
+        // Template variables don't include the "spans" sentinel, so the span shouldn't appear
+        // in the rendered prompt — even though spans were available. Stringify the whole message
+        // list so the assertion catches the span name wherever it might have landed.
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        assertThat(allText).doesNotContain("ignored-span");
     }
 
     private static Stream<Arguments> feedbackParsingArguments() {
@@ -1061,7 +1503,7 @@ class OnlineScoringEngineTest {
                 .aiMessage(AiMessage.aiMessage(aiMessage))
                 .build();
 
-        var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse);
+        var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse).scores();
 
         assertThat(feedbackScores).hasSize(expectedSize);
 
@@ -1081,6 +1523,24 @@ class OnlineScoringEngineTest {
             assertThat(techAccuracy.value()).isEqualTo(BigDecimal.ZERO);
             assertThat(techAccuracy.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
         }
+    }
+
+    @Test
+    @DisplayName("skip feedback scores whose value is null in the AI response")
+    void whenScoreValueIsNull_thenSkipsThatScoreAndReportsItAsSkipped() {
+        var aiMessage = "{\"Relevance\":{\"score\":5,\"reason\":\"applies\"},"
+                + "\"Conciseness\":{\"score\":null,\"reason\":\"not applicable to this turn\"},"
+                + "\"Technical Accuracy\":{\"score\":4.0,\"reason\":\"good\"}}";
+        var chatResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.aiMessage(aiMessage))
+                .build();
+
+        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+
+        assertThat(parsed.scores()).hasSize(2);
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name)
+                .containsExactlyInAnyOrder("Relevance", "Technical Accuracy");
+        assertThat(parsed.nullScoreNames()).containsExactly("Conciseness");
     }
 
     private JsonObjectSchema createTestSchema() {

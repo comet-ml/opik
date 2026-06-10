@@ -3,12 +3,14 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.AssertionResultsCreated;
 import com.comet.opik.api.events.CommentsCreated;
 import com.comet.opik.api.events.CommentsDeleted;
 import com.comet.opik.api.events.CommentsUpdated;
 import com.comet.opik.api.events.ExperimentItemsCreated;
 import com.comet.opik.api.events.ExperimentItemsDeleted;
 import com.comet.opik.api.events.ExperimentUpdated;
+import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.api.events.FeedbackScoresDeleted;
 import com.comet.opik.api.events.SpansCreated;
@@ -18,19 +20,24 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.ExperimentItemRef;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentTraceRef;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -40,20 +47,23 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ExperimentAggregateEventListener {
 
-    private static final Set<ExperimentStatus> FINISHED_STATUSES = Set.of(
+    public static final Set<ExperimentStatus> FINISHED_STATUSES = Set.of(
             ExperimentStatus.COMPLETED, ExperimentStatus.CANCELLED);
 
     private final ExperimentItemService experimentItemService;
     private final ExperimentAggregationPublisher publisher;
+    private final ExperimentAggregatesService experimentAggregatesService;
     private final ExperimentDenormalizationConfig config;
 
     @Inject
     public ExperimentAggregateEventListener(
             ExperimentItemService experimentItemService,
             ExperimentAggregationPublisher publisher,
+            ExperimentAggregatesService experimentAggregatesService,
             @Config("experimentDenormalization") ExperimentDenormalizationConfig config) {
         this.experimentItemService = experimentItemService;
         this.publisher = publisher;
+        this.experimentAggregatesService = experimentAggregatesService;
         this.config = config;
     }
 
@@ -80,9 +90,35 @@ public class ExperimentAggregateEventListener {
     }
 
     @Subscribe
-    public void onExperimentItemsDeleted(ExperimentItemsDeleted event) {
-        triggerByExperimentIds(event.experimentIds(), event.workspaceId(), event.userName())
+    public void onExperimentItemsDeleted(@NonNull ExperimentItemsDeleted event) {
+        Map<UUID, Set<UUID>> itemsByExperiment = event.itemRefs().stream()
+                .collect(Collectors.groupingBy(
+                        ExperimentItemRef::experimentId,
+                        Collectors.mapping(ExperimentItemRef::itemId, Collectors.toSet())));
+
+        Flux.fromIterable(itemsByExperiment.entrySet())
+                .concatMap(entry -> experimentAggregatesService
+                        .deleteItemAggregatesByItemIds(entry.getKey(), entry.getValue()))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
+                .then(triggerByExperimentIds(event.experimentIds(), event.workspaceId(), event.userName()))
                 .subscribe(null, e -> log.error("Error triggering aggregation for experiment items deleted", e));
+    }
+
+    @Subscribe
+    public void onExperimentsDeleted(@NonNull ExperimentsDeleted event) {
+        if (CollectionUtils.isEmpty(event.experimentIds())) {
+            return;
+        }
+        experimentAggregatesService.deleteByExperimentIds(event.experimentIds())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
+                .subscribe(null,
+                        e -> log.error(
+                                "Error deleting aggregated experiments, workspaceId '{}', size '{}'",
+                                event.workspaceId(), event.experimentIds().size(), e));
     }
 
     @Subscribe
@@ -127,6 +163,17 @@ public class ExperimentAggregateEventListener {
     public void onFeedbackScoresCreated(FeedbackScoresCreated event) {
         triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
                 .subscribe(null, e -> log.error("Error triggering aggregation for feedback scores created", e));
+    }
+
+    @Subscribe
+    public void onAssertionResultsCreated(AssertionResultsCreated event) {
+        log.info("Received assertion results created event on workspaceId '{}', entityType '{}', entityIds size '{}'",
+                event.workspaceId(), event.entityType(), event.entityIds().size());
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+                .subscribe(null,
+                        e -> log.error(
+                                "Error triggering aggregation for assertion results created on workspaceId '{}', entityType '{}', entityIds size '{}'",
+                                event.workspaceId(), event.entityType(), event.entityIds().size(), e));
     }
 
     @Subscribe

@@ -9,6 +9,7 @@ from typing import Iterator, List
 import pytest
 
 import opik
+from opik import synchronization
 from opik.api_objects.experiment.experiment_item import ExperimentItemReferences
 from opik.cli.exports.dataset import export_dataset_by_name
 from opik.cli.exports.experiment import export_experiment_by_name
@@ -972,19 +973,18 @@ class TestCLIImportExport:
         original_span_id = span.id
         opik_client.flush()
 
-        # Wait for data to be available and get original span data
-        import time
-
-        time.sleep(2)  # Give backend time to process and calculate cost
+        # Wait for the span to be queryable with usage populated (backend
+        # calculates cost asynchronously after the span is created).
+        assert synchronization.until(
+            lambda: (
+                (_span := opik_client.get_span_content(id=original_span_id)) is not None
+                and _span.type == "llm"
+                and _span.usage is not None
+            ),
+            allow_errors=True,
+        ), "Failed to get original span data with populated usage"
 
         original_span_data = opik_client.get_span_content(id=original_span_id)
-        assert original_span_data is not None, "Failed to get original span data"
-        assert original_span_data.type == "llm", (
-            f"Original span type should be 'llm', got {original_span_data.type}"
-        )
-        assert original_span_data.usage is not None, (
-            "Original span should have usage data"
-        )
 
         # Store original values for comparison
         original_type = original_span_data.type
@@ -1072,9 +1072,14 @@ class TestCLIImportExport:
         assert stats.get("traces", 0) >= 1, "Expected at least 1 trace to be imported"
 
         opik_client.flush()
-        time.sleep(2)  # Give backend time to process
 
-        # Find the imported trace and span
+        # Wait for the imported trace to appear in the new project.
+        assert synchronization.until(
+            lambda: len(opik_client.search_traces(project_name=imported_project_name))
+            >= 1,
+            allow_errors=True,
+        ), f"No imported traces found in project {imported_project_name}"
+
         imported_traces = opik_client.search_traces(project_name=imported_project_name)
         assert len(imported_traces) >= 1, (
             f"Expected at least 1 imported trace, found: {len(imported_traces)}"

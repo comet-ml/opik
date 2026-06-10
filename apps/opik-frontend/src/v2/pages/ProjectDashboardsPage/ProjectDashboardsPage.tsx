@@ -27,6 +27,7 @@ import {
 import { Separator } from "@/ui/separator";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useActiveProjectId } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
@@ -37,6 +38,10 @@ const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 const ProjectDashboardsPage: React.FunctionComponent = () => {
   const projectId = useActiveProjectId()!;
   const workspaceName = useActiveWorkspaceName();
+
+  const {
+    permissions: { canEditDashboards },
+  } = usePermissions();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
     localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
@@ -62,6 +67,7 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
     dashboardId: dashboardId || null,
     enabled: Boolean(dashboardId),
     scope: DASHBOARD_SCOPE.INSIGHTS,
+    readOnly: !canEditDashboards,
   });
 
   useEffect(() => {
@@ -109,7 +115,13 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer
-        className="mt-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3 pt-2"
+        className="mb-4 mt-6 flex items-center justify-between"
+        direction="horizontal"
+      >
+        <h1 className="comet-body-accented truncate break-words">Dashboards</h1>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3"
         direction="bidirectional"
         limitWidth
       >

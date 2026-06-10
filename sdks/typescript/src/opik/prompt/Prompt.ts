@@ -21,9 +21,12 @@ export class Prompt extends BasePrompt {
 
   /**
    * Creates a new Prompt instance.
-   * This should not be created directly, use OpikClient.createPrompt() instead.
+   * All operations work seamlessly without requiring manual configuration.
    */
-  constructor(data: PromptData, opik: OpikClient) {
+  constructor(data: PromptData);
+  /** @deprecated Passing an opik client is deprecated. */
+  constructor(data: PromptData, opik: OpikClient);
+  constructor(data: PromptData, opik?: OpikClient) {
     super(
       {
         ...data,
@@ -32,6 +35,30 @@ export class Prompt extends BasePrompt {
       opik,
     );
     this.prompt = data.prompt;
+
+    if (!data.synced && !data.promptId) {
+      logger.warn(
+        "new Prompt() is deprecated. Use client.createPrompt() to create or " +
+          "client.getPrompt() to retrieve text prompts instead."
+      );
+    }
+
+    if (opik === undefined && !data.synced) {
+      this._pendingSync = this._performSync();
+    }
+  }
+
+  private _performSync(): Promise<void> {
+    return this._syncViaCreate(() =>
+      this.opik.createPrompt({
+        name: this._name,
+        prompt: this.prompt,
+        metadata: this._metadata,
+        type: this.type,
+        description: this._description,
+        tags: this._tags.length ? Array.from(this._tags) : undefined,
+      }),
+    );
   }
 
   /**
@@ -129,6 +156,7 @@ export class Prompt extends BasePrompt {
         name: promptData.name,
         prompt: apiResponse.template,
         commit: apiResponse.commit,
+        version: apiResponse.versionNumber,
         metadata: apiResponse.metadata,
         type: promptType,
         changeDescription: apiResponse.changeDescription,
@@ -136,6 +164,7 @@ export class Prompt extends BasePrompt {
         tags: promptData.tags,
         synced: true,
         projectName,
+        environments: apiResponse.environments,
       },
       opik,
     );
@@ -185,23 +214,6 @@ export class Prompt extends BasePrompt {
   }
 
   /**
-   * Get a Prompt with a specific version by commit hash.
-   *
-   * @param commit - Commit hash (8-char short form or full)
-   * @returns Prompt instance representing that version, or null if not found
-   *
-   * @example
-   * ```typescript
-   * const prompt = await client.getPrompt({ name: "greeting" });
-   *
-   * // Get a specific version directly as a Prompt
-   * const versionedPrompt = await prompt.getVersion("abc123de");
-   * if (versionedPrompt) {
-   *   const text = versionedPrompt.format({ name: "Alice" });
-   * }
-   * ```
-   */
-  /**
    * Synchronize the prompt with the backend.
    *
    * Creates or updates the prompt on the Opik server. If the sync fails,
@@ -223,15 +235,35 @@ export class Prompt extends BasePrompt {
       logger.warn(
         `Failed to sync prompt '${this.name}' with the backend. ` +
           "The prompt will work locally but is not persisted on the server. " +
-          "You can retry by calling .syncWithBackend().",
+          "Await prompt.ready(), then retry by calling .syncWithBackend() if prompt.synced is still false.",
         { error },
       );
       return this;
     }
   }
 
-  async getVersion(commit: string): Promise<Prompt | null> {
-    const response = await this.retrieveVersionByCommit(commit);
+  /**
+   * Get a Prompt at a specific version.
+   *
+   * Accepts either the sequential version identifier (e.g. `"v3"`) — preferred —
+   * or a commit hash for backwards compatibility. Inputs matching `/^v\d+$/`
+   * are treated as version numbers; anything else is treated as a commit.
+   *
+   * @param version - Sequential version (`"v<N>"`) or commit hash
+   *   (commit input is **deprecated** — pass a `"v<N>"` identifier instead).
+   * @returns Prompt instance representing that version, or null if not found
+   *
+   * @example
+   * ```typescript
+   * // Preferred
+   * const v3 = await prompt.getVersion("v3");
+   *
+   * // @deprecated — commit-shaped input
+   * const byCommit = await prompt.getVersion("abc123de");
+   * ```
+   */
+  async getVersion(version: string): Promise<Prompt | null> {
+    const response = await this.retrieveVersion(version);
     if (!response) {
       return null;
     }

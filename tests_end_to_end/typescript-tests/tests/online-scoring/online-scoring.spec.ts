@@ -7,8 +7,9 @@ import { modelConfigLoader } from '../../helpers/model-config-loader';
 
 // Timeout constants
 const RULE_ACTIVATION_TIMEOUT = 10000; // 10 seconds for rule to fully activate in backend
-const PAGE_REFRESH_TIMEOUT = 3000; // 3 seconds wait after page refresh
+const TABLE_READY_TIMEOUT = 4000; // 4 seconds per attempt for table to render rows / Moderation header after reload
 const POST_RELOAD_TIMEOUT = 1000; // 1 second wait after page reload
+const EXPECTED_ROW_COUNT = 10;
 
 const enabledModels = modelConfigLoader.getEnabledModelsForOnlineScoring();
 
@@ -107,16 +108,39 @@ test.describe('Online Scoring Tests', () => {
 
         // Retry loop: wait for Moderation column header in the table, then check score value.
         // Scoring is async and Anthropic models can take longer, so we allow generous retries.
+        // Critical: each iteration must wait for the table to FULLY render (rows + dynamic
+        // feedback-score columns) before scanning the header — header cells are appended
+        // after a second API call resolves, so a fresh DOM snapshot right after reload
+        // contains only the static columns and the Moderation header will be missing.
         const maxAttempts = 25;
+        const tableRows = page.locator('table tbody tr');
+        const headerCells = page.locator('table thead th, table thead td');
         let moderationColumnIndex = -1;
         let moderationValue = '';
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          // Find Moderation column in thead
-          const headerCells = page.locator('table thead th, table thead td');
+          try {
+            await expect(tableRows).toHaveCount(EXPECTED_ROW_COUNT, { timeout: TABLE_READY_TIMEOUT });
+          } catch {
+            console.log(`Traces table not yet showing ${EXPECTED_ROW_COUNT} rows (attempt ${attempt}/${maxAttempts}), refreshing...`);
+            await page.reload();
+            await page.waitForTimeout(POST_RELOAD_TIMEOUT);
+            continue;
+          }
+
+          try {
+            await expect(headerCells.filter({ hasText: 'Moderation' }).first()).toBeVisible({
+              timeout: TABLE_READY_TIMEOUT,
+            });
+          } catch {
+            console.log(`Moderation column header not found yet (attempt ${attempt}/${maxAttempts}), refreshing...`);
+            await page.reload();
+            await page.waitForTimeout(POST_RELOAD_TIMEOUT);
+            continue;
+          }
+
           const headerCount = await headerCells.count();
           moderationColumnIndex = -1;
-
           for (let i = 0; i < headerCount; i++) {
             const cellText = await headerCells.nth(i).textContent();
             if (cellText?.includes('Moderation')) {
@@ -126,16 +150,15 @@ test.describe('Online Scoring Tests', () => {
           }
 
           if (moderationColumnIndex === -1) {
-            console.log(`Moderation column header not found yet (attempt ${attempt}/${maxAttempts}), refreshing...`);
+            console.log(`Moderation column header disappeared between visibility check and index scan (attempt ${attempt}/${maxAttempts}), refreshing...`);
             await page.reload();
-            await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
+            await page.waitForTimeout(POST_RELOAD_TIMEOUT);
             continue;
           }
 
           console.log(`Found Moderation column at index ${moderationColumnIndex} (attempt ${attempt})`);
 
-          // Check if there's a score value (not "-")
-          const firstRow = page.locator('table tbody tr').first();
+          const firstRow = tableRows.first();
           const moderationCell = firstRow.locator('td').nth(moderationColumnIndex);
           moderationValue = (await moderationCell.textContent())?.trim() || '';
           console.log(`Moderation value: ${moderationValue}`);
@@ -147,7 +170,7 @@ test.describe('Online Scoring Tests', () => {
           if (attempt < maxAttempts) {
             console.log(`Score not populated yet (attempt ${attempt}/${maxAttempts}), refreshing...`);
             await page.reload();
-            await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
+            await page.waitForTimeout(POST_RELOAD_TIMEOUT);
           }
         }
 
@@ -155,10 +178,9 @@ test.describe('Online Scoring Tests', () => {
           throw new Error(`Moderation column did not appear after ${maxAttempts} attempts`);
         }
 
-        const tableRows = page.locator('table tbody tr');
         const rowCount = await tableRows.count();
         console.log(`Found ${rowCount} rows in traces table`);
-        expect(rowCount).toBeGreaterThanOrEqual(10);
+        expect(rowCount).toBeGreaterThanOrEqual(EXPECTED_ROW_COUNT);
 
         // The value should be "0" (safe content)
         expect(moderationValue).toBe('0');

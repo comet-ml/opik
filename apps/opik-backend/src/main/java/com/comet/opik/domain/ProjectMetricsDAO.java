@@ -39,7 +39,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
-import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;

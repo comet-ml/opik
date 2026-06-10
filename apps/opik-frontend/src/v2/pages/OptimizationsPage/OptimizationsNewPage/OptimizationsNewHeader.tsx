@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/ui/button";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 type OptimizationsNewHeaderProps = {
   isSubmitting: boolean;

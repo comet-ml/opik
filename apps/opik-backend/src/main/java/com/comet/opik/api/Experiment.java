@@ -26,7 +26,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Experiment(
-        @JsonView( {
+        @JsonView({
                 Experiment.View.Public.class, Experiment.View.Write.class}) UUID id,
         /* We need to ensure that datasetName is not null or blank for public write views.
         But at the same time allow it to be null for public read views. Otherwise, generated client
@@ -85,7 +85,7 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items for test suite experiments. Null for regular experiments.") Long totalCount,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Per-assertion average pass rates for test suite experiments. Null for regular experiments.") List<AssertionScoreAverage> assertionScores){
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Per-assertion average pass rates for test suite experiments. Null for regular experiments.") List<AssertionScoreAverage> assertionScores) {
 
     @Builder(toBuilder = true)
     public record ExperimentPage(
@@ -104,12 +104,14 @@ public record Experiment(
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record PromptVersionLink(@JsonView( {
+    public record PromptVersionLink(@JsonView({
             Experiment.View.Public.class, Experiment.View.Write.class}) @NotNull UUID id,
             @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String commit,
+            @JsonView({
+                    Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "sequential version number in the format v<N>; null for masks") String versionNumber,
             @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId,
             @JsonView({
-                    Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String promptName){
+                    Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String promptName) {
     }
 
     public static class View {

@@ -36,9 +36,9 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record UserDefinedMetricPythonCode(
-            @JsonView( {
+            @JsonView({
                     View.Public.class, View.Write.class}) @NotNull String metric,
-            @JsonView({View.Public.class, View.Write.class}) @NotEmpty Map<String, String> arguments){
+            @JsonView({View.Public.class, View.Write.class}) @NotEmpty Map<String, String> arguments) {
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",

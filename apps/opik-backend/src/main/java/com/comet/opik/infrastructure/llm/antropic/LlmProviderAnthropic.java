@@ -24,7 +24,6 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
-import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -68,9 +67,9 @@ class LlmProviderAnthropic implements LlmProviderService {
         if (CollectionUtils.isEmpty(request.messages())) {
             throw new BadRequestException(ERROR_EMPTY_MESSAGES);
         }
-        if (request.maxCompletionTokens() == null) {
-            throw new BadRequestException(ERROR_NO_COMPLETION_TOKENS);
-        }
+        // maxCompletionTokens is required by Anthropic but defaulted (with a log line) inside
+        // LlmProviderAnthropicMapper.resolveMaxTokens, so callers without an explicit cap still
+        // succeed — same UX as OpenAI in the same flows.
     }
 
     @Override

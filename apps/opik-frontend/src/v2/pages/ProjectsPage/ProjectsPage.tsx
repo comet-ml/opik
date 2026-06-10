@@ -22,7 +22,6 @@ import CostCell from "@/shared/DataTableCells/CostCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
-import Loader from "@/shared/Loader/Loader";
 import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
 import ProjectsActionsPanel from "@/v2/pages/ProjectsPage/ProjectsActionsPanel";
 import { ProjectRowActionsCell } from "@/v2/pages/ProjectsPage/ProjectRowActionsCell";
@@ -52,7 +51,7 @@ import {
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
@@ -433,9 +432,7 @@ const ProjectsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending;
 
   return (
     <div className="pt-4">
@@ -505,7 +502,8 @@ const ProjectsPage: React.FunctionComponent = () => {
             <DataTableNoMatchingData />
           )
         }
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

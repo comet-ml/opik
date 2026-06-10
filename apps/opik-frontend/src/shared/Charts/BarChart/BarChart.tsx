@@ -36,6 +36,9 @@ interface BarChartProps {
   data: ChartDataPoint[];
   xAxisKey?: string;
   xTickFormatter?: (value: string) => string;
+  xTickInterval?: number | "preserveStart" | "preserveEnd" | "preserveStartEnd";
+  hideXAxis?: boolean;
+  hideYAxis?: boolean;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
   renderTooltipValue?: (data: { value: ValueType }) => ValueType;
   renderTooltipHeader?: (
@@ -55,6 +58,9 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
   data,
   xAxisKey = "time",
   xTickFormatter,
+  xTickInterval,
+  hideXAxis = false,
+  hideYAxis = false,
   customYTickFormatter,
   renderTooltipValue = defaultRenderTooltipValue,
   renderTooltipHeader,
@@ -111,24 +117,29 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
       >
         <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
 
-        <XAxis
-          dataKey={xAxisKey}
-          axisLine={false}
-          tickLine={false}
-          dy={10}
-          tick={DEFAULT_CHART_TICK}
-          tickFormatter={xTickFormatter}
-        />
-        <YAxis
-          width={yTickWidth}
-          axisLine={false}
-          tickLine={false}
-          tick={DEFAULT_CHART_TICK}
-          interval={yTickInterval}
-          ticks={ticks}
-          tickFormatter={yTickFormatter}
-          domain={domain}
-        />
+        {!hideXAxis && (
+          <XAxis
+            dataKey={xAxisKey}
+            axisLine={false}
+            tickLine={false}
+            dy={10}
+            tick={DEFAULT_CHART_TICK}
+            tickFormatter={xTickFormatter}
+            interval={xTickInterval}
+          />
+        )}
+        {!hideYAxis && (
+          <YAxis
+            width={yTickWidth}
+            axisLine={false}
+            tickLine={false}
+            tick={DEFAULT_CHART_TICK}
+            interval={yTickInterval}
+            ticks={ticks}
+            tickFormatter={yTickFormatter}
+            domain={domain}
+          />
+        )}
         {showLegend && (
           <ChartLegend
             content={

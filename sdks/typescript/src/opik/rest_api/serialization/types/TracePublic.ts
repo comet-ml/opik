@@ -53,6 +53,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         providers: core.serialization.list(core.serialization.string()).optional(),
         experiment: ExperimentItemReferencePublic.optional(),
         source: TracePublicSource.optional(),
+        environment: core.serialization.string().optional(),
     });
 
 export declare namespace TracePublic {
@@ -87,5 +88,6 @@ export declare namespace TracePublic {
         providers?: string[] | null;
         experiment?: ExperimentItemReferencePublic.Raw | null;
         source?: TracePublicSource.Raw | null;
+        environment?: string | null;
     }
 }

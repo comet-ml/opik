@@ -10,7 +10,8 @@ import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBod
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import GeneralDatasetsTab from "./GeneralDatasetsTab/GeneralDatasetsTab";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import emptyExperimentsLightUrl from "/images/empty-experiments-light.svg";
 import emptyExperimentsDarkUrl from "/images/empty-experiments-dark.svg";
@@ -23,17 +24,22 @@ const ExperimentsPage: React.FC = () => {
     Boolean(query?.experiment),
   );
 
-  const { data: existenceData } = useExperimentsList(
-    {
-      projectId: activeProjectId ?? undefined,
-      page: 1,
-      size: 1,
-    },
-    {
-      enabled: !!activeProjectId,
-    },
-  );
-  const isEmpty = (existenceData?.total ?? 0) === 0;
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
+
+  const { data: existenceData, isPending: isExistencePending } =
+    useExperimentsList(
+      {
+        projectId: activeProjectId ?? undefined,
+        page: 1,
+        size: 1,
+      },
+      {
+        enabled: !!activeProjectId,
+      },
+    );
+  const isEmpty = !isExistencePending && (existenceData?.total ?? 0) === 0;
 
   const handleNewExperimentClick = useCallback(() => {
     setOpenDialog(true);
@@ -51,14 +57,16 @@ const ExperimentsPage: React.FC = () => {
           <h1 className="comet-body-accented truncate break-words">
             Experiments
           </h1>
-          <Button
-            variant="default"
-            size="xs"
-            onClick={handleNewExperimentClick}
-          >
-            <Plus className="mr-1 size-4" />
-            Create experiment
-          </Button>
+          {canCreateExperiments && (
+            <Button
+              variant="default"
+              size="xs"
+              onClick={handleNewExperimentClick}
+            >
+              <Plus className="mr-1 size-4" />
+              Create experiment
+            </Button>
+          )}
         </PageBodyStickyContainer>
         {isEmpty ? (
           <PageEmptyState
@@ -73,7 +81,7 @@ const ExperimentsPage: React.FC = () => {
             docsUrl={buildDocsUrl("/evaluation/overview")}
           />
         ) : (
-          <GeneralDatasetsTab onNewExperimentClick={handleNewExperimentClick} />
+          <GeneralDatasetsTab isExistencePending={isExistencePending} />
         )}
         <AddExperimentDialog
           key={resetDialogKeyRef.current}

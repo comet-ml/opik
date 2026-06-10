@@ -17,7 +17,7 @@ Covers the changes introduced to handle server-side 429 throttling:
     - bulk span fetch raises repeatedly → traces exported with empty spans, had_errors=True
 
   export_traces (inter-page delay)
-    - time.sleep called with _PAGE_FETCH_DELAY_SECONDS between full pages
+    - time.sleep NOT called between successful full pages (inter-page sleep removed)
     - time.sleep not called after partial (terminal) page
 
   export_single_project (had_errors propagation)
@@ -364,13 +364,11 @@ class TestExportTracesSpanFetchFailures:
 
 
 class TestExportTracesInterPageDelay:
-    def test_export_traces__multiple_full_pages__sleep_called_between_pages(self):
-        """sleep is called after each full page to throttle requests."""
+    def test_export_traces__multiple_full_pages__sleep_not_called_on_success(self):
+        """sleep is NOT called between successful pages — the inter-page delay was
+        removed because server-side 429s are already handled by the retry decorator."""
         from opik.cli.exports.project import export_traces, _PAGE_FETCH_DELAY_SECONDS
 
-        # Use page_size=2 so pages with 2 traces count as "full" (2 == page_size).
-        # Keeps file-write count tiny (4 files) while still exercising the sleep
-        # path — the loop only skips the inter-page sleep on a *short* page.
         mock_client = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -392,13 +390,12 @@ class TestExportTracesInterPageDelay:
                             page_size=2,
                         )
 
-        # sleep called once after page 1 and once after page 2.
         from unittest.mock import call as mock_call
 
         delay_calls = mock_sleep.call_args_list.count(
             mock_call(_PAGE_FETCH_DELAY_SECONDS)
         )
-        assert delay_calls == 2
+        assert delay_calls == 0
 
     def test_export_traces__single_partial_page__sleep_not_called(self):
         """A partial (< 100 trace) page means we're at the end — no sleep needed."""

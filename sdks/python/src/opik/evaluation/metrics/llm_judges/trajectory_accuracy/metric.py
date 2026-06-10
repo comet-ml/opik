@@ -109,20 +109,16 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
                 indicating trajectory accuracy, along with an explanation for the verdict.
         """
         try:
-            example = {
-                "goal": goal,
-                "trajectory": trajectory,
-                "final_result": final_result,
-            }
+            messages = templates.build_messages(
+                goal=goal, trajectory=trajectory, final_result=final_result
+            )
 
-            prompt = templates.create_evaluation_prompt(example)
-
-            response = self._model.generate_string(
-                input=prompt,
+            message = self._model.generate_chat_completion(
+                messages=messages,
                 response_format=TrajectoryAccuracyResponseFormat,
             )
 
-            return parser.parse_evaluation_response(response, self.name)
+            return parser.parse_evaluation_response(message["content"], self.name)
 
         except Exception as e:
             LOGGER.error(f"Trajectory accuracy evaluation failed: {e}", exc_info=True)
@@ -151,20 +147,16 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
                 indicating trajectory accuracy, along with an explanation for the verdict.
         """
         try:
-            example = {
-                "goal": goal,
-                "trajectory": trajectory,
-                "final_result": final_result,
-            }
+            messages = templates.build_messages(
+                goal=goal, trajectory=trajectory, final_result=final_result
+            )
 
-            prompt = templates.create_evaluation_prompt(example)
-
-            response = await self._model.agenerate_string(
-                input=prompt,
+            message = await self._model.agenerate_chat_completion(
+                messages=messages,
                 response_format=TrajectoryAccuracyResponseFormat,
             )
 
-            return parser.parse_evaluation_response(response, self.name)
+            return parser.parse_evaluation_response(message["content"], self.name)
 
         except Exception as e:
             LOGGER.error(f"Trajectory accuracy evaluation failed: {e}", exc_info=True)

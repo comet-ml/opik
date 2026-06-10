@@ -44,7 +44,8 @@ public record LocalRunner(
         @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
         public record Param(
                 @NotBlank String name,
-                @NotBlank String type) {
+                @NotBlank String type,
+                ParamPresence presence) {
         }
     }
 

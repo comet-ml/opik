@@ -4,7 +4,7 @@ import { Checkbox } from "@/ui/checkbox";
 import { Input } from "@/ui/input";
 import { LevenshteinMetricParameters } from "@/types/optimizations";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import DatasetVariablesHint from "../DatasetVariablesHint";
 
 interface LevenshteinMetricConfigsProps {

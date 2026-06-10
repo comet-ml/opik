@@ -5,12 +5,14 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -22,57 +24,27 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @EagerSingleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class BiEventListener {
 
     public static final String FIRST_TRACE_REPORT_BI_EVENT = "opik_os_first_trace_created";
 
-    private final UsageReportService usageReportService;
-    private final ProjectService projectService;
-    private final TraceService traceService;
-    private final LockService lockService;
-    private final OpikConfiguration config;
-    private final BiEventService biEventService;
-    private final AnalyticsService analyticsService;
-
-    /**
-     * Best-effort, in-memory dedup for per-workspace first_trace_created analytics events.
-     *
-     * <p>Known limitations:
-     * <ul>
-     *   <li>Grows monotonically — entries are never evicted, leading to unbounded memory usage.
-     *       Each entry is ~116 bytes (36-char UUID string + ConcurrentHashMap.Node overhead),
-     *       so 1M workspaces ≈ 116 MB.</li>
-     *   <li>Lost on JVM restarts — workspaces will be re-reported after a redeployment.</li>
-     *   <li>Not shared across replicas — each instance tracks independently, so multi-replica
-     *       deployments will emit duplicates.</li>
-     * </ul>
-     *
-     * TODO: replace with a bounded or persistent dedup mechanism in a follow-up PR.
-     */
-    private static final Set<String> ANALYTICS_REPORTED_WORKSPACES = ConcurrentHashMap.newKeySet();
-
-    @Inject
-    public BiEventListener(@NonNull ProjectService projectService,
-            @NonNull UsageReportService usageReportService, @NonNull TraceService traceService,
-            @NonNull OpikConfiguration config, @NonNull LockService lockService,
-            @NonNull BiEventService biEventService, @NonNull AnalyticsService analyticsService) {
-        this.projectService = projectService;
-        this.traceService = traceService;
-        this.config = config;
-        this.usageReportService = usageReportService;
-        this.lockService = lockService;
-        this.biEventService = biEventService;
-        this.analyticsService = analyticsService;
-    }
+    private final @NonNull UsageReportService usageReportService;
+    private final @NonNull ProjectService projectService;
+    private final @NonNull TraceService traceService;
+    private final @NonNull LockService lockService;
+    private final @NonNull OpikConfiguration config;
+    private final @NonNull BiEventService biEventService;
+    private final @NonNull AnalyticsService analyticsService;
+    private final @NonNull WorkspacesService workspacesService;
 
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
-        if (!config.getUsageReport().isEnabled()) {
+        if (!config.getUsageReport().isEnabled() && !config.getAnalytics().isEnabled()) {
             return;
         }
 
@@ -87,7 +59,9 @@ public class BiEventListener {
             return;
         }
 
-        checkIfItIsFirstTraceAndReport(event.workspaceId(), event, projectIds);
+        if (config.getUsageReport().isEnabled()) {
+            checkIfItIsFirstTraceAndReport(event.workspaceId(), event, projectIds);
+        }
 
         trackFirstTraceViaAnalytics(event.workspaceId(), event);
     }
@@ -150,7 +124,7 @@ public class BiEventListener {
             return;
         }
 
-        if (!ANALYTICS_REPORTED_WORKSPACES.add(workspaceId)) {
+        if (!workspacesService.markFirstTraceReported(workspaceId, event.userName())) {
             return;
         }
 

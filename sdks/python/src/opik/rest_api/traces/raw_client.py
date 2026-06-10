@@ -588,6 +588,7 @@ class RawTracesClient:
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         source: typing.Optional[TraceWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -625,6 +626,8 @@ class RawTracesClient:
 
         source : typing.Optional[TraceWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -658,6 +661,7 @@ class RawTracesClient:
                 "ttft": ttft,
                 "thread_id": thread_id,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",
@@ -768,6 +772,7 @@ class RawTracesClient:
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[TraceUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -810,6 +815,8 @@ class RawTracesClient:
 
         source : typing.Optional[TraceUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -843,6 +850,7 @@ class RawTracesClient:
                 "thread_id": thread_id,
                 "ttft": ttft,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",
@@ -2696,6 +2704,7 @@ class AsyncRawTracesClient:
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         source: typing.Optional[TraceWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2733,6 +2742,8 @@ class AsyncRawTracesClient:
 
         source : typing.Optional[TraceWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2766,6 +2777,7 @@ class AsyncRawTracesClient:
                 "ttft": ttft,
                 "thread_id": thread_id,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",
@@ -2876,6 +2888,7 @@ class AsyncRawTracesClient:
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[TraceUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2918,6 +2931,8 @@ class AsyncRawTracesClient:
 
         source : typing.Optional[TraceUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2951,6 +2966,7 @@ class AsyncRawTracesClient:
                 "thread_id": thread_id,
                 "ttft": ttft,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -35,9 +35,9 @@ import {
   generateSelectColumDef,
   getRowId,
 } from "@/shared/DataTable/utils";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -62,8 +62,8 @@ import { ExternalLink } from "lucide-react";
 import { LOGS_TYPE } from "@/constants/traces";
 import useThreadsList from "@/api/traces/useThreadsList";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import { generateTracesURL } from "@/lib/annotation-queues";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import useAppStore from "@/store/AppStore";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
@@ -332,9 +332,13 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             placeholder: "Select score",
           },
         },
+        ...getTagsFilterConfig({
+          projectId: annotationQueue.project_id ?? "",
+          entityType: "threads",
+        }),
       },
     }),
-    [annotationQueue.feedback_definition_names],
+    [annotationQueue.feedback_definition_names, annotationQueue.project_id],
   );
 
   const dynamicScoresColumns = useMemo(() => {
@@ -401,21 +405,16 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
-  // TODO: Temporary workaround to open in new tab until sidebars are integrated in the page
-  const handleRowClick = useCallback(
-    (row: Thread) => {
-      if (!row) return;
-
-      const url = generateTracesURL(
-        workspaceName,
-        annotationQueue.project_id,
-        "threads",
-        row.id,
-      );
-      window.open(url, "_blank");
-    },
-    [workspaceName, annotationQueue.project_id],
-  );
+  const { threadId, handleRowClick, panels } =
+    useTraceThreadPanelsState<Thread>({
+      rows,
+      type: "thread",
+      traceDetailsPanelProps: { projectId: annotationQueue.project_id },
+      threadDetailsPanelProps: {
+        projectId: annotationQueue.project_id,
+        projectName: annotationQueue.project_name,
+      },
+    });
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
@@ -480,9 +479,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
 
   return (
     <>
@@ -531,6 +528,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         columns={columns}
         data={rows}
         onRowClick={handleRowClick}
+        activeRowId={threadId}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -563,7 +561,8 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         }
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"
@@ -580,6 +579,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
+      {panels}
     </>
   );
 };

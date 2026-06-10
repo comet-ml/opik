@@ -64,7 +64,7 @@ const PromptModelSelect = ({
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] =
     useState<COMPOSED_PROVIDER_TYPE | null>(null);
-  const { getProviderModels } = useLLMProviderModelsData();
+  const { providerModels } = useLLMProviderModelsData();
 
   const {
     permissions: { canUpdateAIProviders },
@@ -90,7 +90,7 @@ const PromptModelSelect = ({
     filteredFreeModel,
     filteredGroups,
     modelProviderMapRef,
-  } = useModelOptions(configuredProvidersList, getProviderModels, filterValue);
+  } = useModelOptions(configuredProvidersList, providerModels, filterValue);
 
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {

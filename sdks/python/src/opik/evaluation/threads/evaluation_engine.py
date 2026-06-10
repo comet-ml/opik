@@ -12,6 +12,7 @@ from . import evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
 from ..engine import types as engine_types
 from ..metrics import score_result
+from ..suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
 from ...api_objects import trace
 from ...api_objects.threads import threads_client
 
@@ -54,20 +55,6 @@ class ThreadsEvaluationEngine:
                 f"No threads found with filter_string: {filter_string}"
             )
 
-        inactive_threads = [thread for thread in threads if thread.status == "inactive"]
-        if len(inactive_threads) == 0:
-            raise exceptions.EvaluationError(
-                f"No closed threads found with filter_string: {filter_string}. Only closed threads can be evaluated."
-            )
-        elif len(inactive_threads) < len(threads):
-            active_threads_ids = [
-                thread.id for thread in threads if thread.status == "active"
-            ]
-            inactive_threads_ids = [thread.id for thread in inactive_threads]
-            LOGGER.warning(
-                f"Some threads are active: {active_threads_ids} with filter_string: {filter_string}. Only closed threads will be evaluated: {inactive_threads_ids}."
-            )
-
         evaluation_tasks: List[
             engine_types.EvaluationTask[evaluation_result.ThreadEvaluationResult]
         ] = [
@@ -80,7 +67,7 @@ class ThreadsEvaluationEngine:
                 trace_output_transform=trace_output_transform,
                 max_traces_per_thread=max_traces_per_thread,
             )
-            for thread in inactive_threads
+            for thread in threads
         ]
 
         results = evaluation_tasks_executor.execute(
@@ -150,7 +137,10 @@ class ThreadsEvaluationEngine:
             scores=results,
         )
 
-    @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
+    @opik.track(  # type: ignore[attr-defined,has-type]
+        name="metrics_calculation",
+        tags=[INTERNAL_SPAN_TAG],
+    )
     def _evaluate_conversation(
         self,
         conversation: List[Dict[Literal["role", "content"], str]],

@@ -53,7 +53,7 @@ public class TestSuiteEvaluatorMapper {
     }
 
     public List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators,
-            String modelName) {
+            String modelName, boolean withTools) {
         return evaluators.stream()
                 .filter(evaluator -> {
                     if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
@@ -65,7 +65,7 @@ public class TestSuiteEvaluatorMapper {
                 })
                 .flatMap(evaluator -> {
                     try {
-                        LlmAsJudgeCode code = toScoringCode(evaluator.config(), modelName);
+                        LlmAsJudgeCode code = toScoringCode(evaluator.config(), modelName, withTools);
 
                         Map<String, String> scoreNameMapping = code.schema() != null
                                 ? code.schema().stream()
@@ -77,16 +77,16 @@ public class TestSuiteEvaluatorMapper {
                         return Stream.of(new PreparedEvaluator(evaluator.name(), code, scoreNameMapping));
                     } catch (java.io.UncheckedIOException e) {
                         log.error("Failed to deserialize evaluator config for '{}'", evaluator.name(), e);
-                        return Stream.<PreparedEvaluator>empty();
+                        return Stream.empty();
                     }
                 })
                 .toList();
     }
 
-    LlmAsJudgeCode toScoringCode(JsonNode config, String modelName) {
+    LlmAsJudgeCode toScoringCode(JsonNode config, String modelName, boolean withTools) {
         LlmAsJudgeCode code = deserializeScoringCode(config, modelName);
         code = renameSchemaToAssertionKeys(code);
-        code = applyTestSuitePrompt(code);
+        code = applyTestSuitePrompt(code, withTools);
         return code;
     }
 
@@ -128,6 +128,11 @@ public class TestSuiteEvaluatorMapper {
      * Replaces the evaluator's original messages and variables with the dedicated test suite
      * LLM-as-judge prompt (system + user template) and formats assertions in human-readable style.
      * <p>
+     * The {@code withTools} flag controls whether the system prompt's tool-teaching addendum is
+     * included; it must mirror whether the downstream scoring request will actually carry tool
+     * specifications, otherwise the LLM is taught about tools it can't call.
+     * See {@link LlmAsJudgeToolsMode} for the gate.
+     * <p>
      * The prompt templates are defined in {@link TestSuitePromptConstants} and mirror the Python SDK's
      * test suite LLM judge prompts. Variables use {@code {"input": "input", "output": "output"}}
      * which map to the full trace input/output via the OnlineScoringEngine variable resolution.
@@ -137,11 +142,11 @@ public class TestSuiteEvaluatorMapper {
      * TS SDK (llmJudgeTemplate.ts), FE (assertion-converters.ts), and BE
      * (TestSuitePromptConstants.java). See OPIK-5735.
      */
-    private LlmAsJudgeCode applyTestSuitePrompt(LlmAsJudgeCode code) {
+    private LlmAsJudgeCode applyTestSuitePrompt(LlmAsJudgeCode code, boolean withTools) {
         var messages = List.of(
                 LlmAsJudgeMessage.builder()
                         .role(ChatMessageType.SYSTEM)
-                        .content(TestSuitePromptConstants.SYSTEM_PROMPT)
+                        .content(TestSuitePromptConstants.systemPrompt(withTools))
                         .build(),
                 LlmAsJudgeMessage.builder()
                         .role(ChatMessageType.USER)

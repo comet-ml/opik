@@ -61,7 +61,7 @@ export const sortProviderModels = (
 
 export function useModelOptions(
   configuredProvidersList: ProviderObject[],
-  getProviderModels: () => Record<string, ModelOption[]>,
+  providerModelsMap: Record<string, ModelOption[]>,
   filterValue: string,
 ): UseModelOptionsResult {
   const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
@@ -75,7 +75,7 @@ export function useModelOptions(
 
     if (!freeProvider) return null;
 
-    const providerModels = getProviderModels()[PROVIDER_TYPE.OPIK_FREE];
+    const providerModels = providerModelsMap[PROVIDER_TYPE.OPIK_FREE];
     if (!providerModels?.length) return null;
 
     const model = providerModels[0];
@@ -90,11 +90,11 @@ export function useModelOptions(
       composedProviderType: PROVIDER_TYPE.OPIK_FREE as COMPOSED_PROVIDER_TYPE,
       icon: getProviderIcon(freeProvider),
     };
-  }, [configuredProvidersList, getProviderModels]);
+  }, [configuredProvidersList, providerModelsMap]);
 
   const groupOptions = useMemo(() => {
     const filteredByConfiguredProviders = pick(
-      getProviderModels(),
+      providerModelsMap,
       configuredProvidersList
         .filter((p) => p.provider !== PROVIDER_TYPE.OPIK_FREE)
         .map((p) => p.ui_composed_provider),
@@ -133,7 +133,7 @@ export function useModelOptions(
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProvidersList, getProviderModels]);
+  }, [configuredProvidersList, providerModelsMap]);
 
   // Combined filtering logic
   const { filteredFreeModel, filteredGroups } = useMemo(() => {

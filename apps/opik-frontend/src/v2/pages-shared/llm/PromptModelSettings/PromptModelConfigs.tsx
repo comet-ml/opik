@@ -1,6 +1,5 @@
 import React from "react";
 import { Settings2 } from "lucide-react";
-import isEmpty from "lodash/isEmpty";
 
 import {
   LLMAnthropicConfigsType,
@@ -30,7 +29,7 @@ import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/provid
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { parseComposedProviderType } from "@/lib/provider";
 
 interface PromptModelConfigsProps {
@@ -117,7 +116,7 @@ const PromptModelConfigs = ({
     return;
   };
 
-  const disabled = disabledProp || !composedProviderType || isEmpty(configs);
+  const disabled = disabledProp || !composedProviderType;
 
   return (
     <DropdownMenu>

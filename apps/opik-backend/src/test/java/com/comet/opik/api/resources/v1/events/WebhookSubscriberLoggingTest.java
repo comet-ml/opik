@@ -23,7 +23,6 @@ import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.MediaType;
 import org.awaitility.Awaitility;
 import org.eclipse.jetty.http.HttpHeader;
@@ -103,7 +102,8 @@ class WebhookSubscriberLoggingTest {
     private AlertEventLogsDAO alertEventLogsDAO;
 
     @BeforeAll
-    void setUpAll(ConnectionFactory connectionFactory, RedissonReactiveClient redissonReactiveClient) {
+    void setUpAll(
+            ConnectionFactory connectionFactory, RedissonReactiveClient redissonReactiveClient, Client httpClient) {
         // Get real dependencies via parameter injection
         var userLogTableFactory = UserLogTableFactory.getInstance(connectionFactory);
         alertEventLogsDAO = (AlertEventLogsDAO) userLogTableFactory
@@ -113,8 +113,6 @@ class WebhookSubscriberLoggingTest {
         setupWireMock();
 
         webhookConfig = createWebhookConfig();
-
-        Client httpClient = ClientBuilder.newClient();
 
         // Create real WebhookHttpClient
         webhookHttpClient = new WebhookHttpClient(httpClient, webhookConfig);

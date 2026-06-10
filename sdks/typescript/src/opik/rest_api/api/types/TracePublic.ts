@@ -37,4 +37,5 @@ export interface TracePublic {
     providers?: string[];
     experiment?: OpikApi.ExperimentItemReferencePublic;
     source?: OpikApi.TracePublicSource;
+    environment?: string;
 }

@@ -60,6 +60,8 @@ class BridgePollLoop:
         on_command_start: Optional[Callable[[str, str, str], None]] = None,
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         bridge_key: Optional[bytes] = None,
+        initial_backoff_seconds: float = 1.0,
+        backoff_cap_seconds: float = 30.0,
     ) -> None:
         self._api = api
         self._runner_id = runner_id
@@ -68,9 +70,11 @@ class BridgePollLoop:
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
         self._bridge_key = bridge_key
+        self._initial_backoff_seconds = initial_backoff_seconds
+        self._backoff_cap_seconds = backoff_cap_seconds
 
     def run(self) -> None:
-        backoff = 1.0
+        backoff = self._initial_backoff_seconds
         poll_failures = 0
         inflight_sem = threading.Semaphore(_MAX_WORKERS)
 
@@ -82,7 +86,7 @@ class BridgePollLoop:
                 try:
                     batch = self._poll()
                     poll_failures = 0
-                    backoff = 1.0
+                    backoff = self._initial_backoff_seconds
                 except ApiError as e:
                     if e.status_code == 410:
                         LOGGER.info("Runner evicted (410), stopping bridge loop")
@@ -97,8 +101,10 @@ class BridgePollLoop:
                         LOGGER.debug(
                             "Bridge poll error (API %s)", e.status_code, exc_info=True
                         )
-                    common.backoff_wait(self._shutdown_event, backoff)
-                    backoff = min(backoff * 2, 30.0)
+                    common.backoff_wait(
+                        self._shutdown_event, backoff, self._backoff_cap_seconds
+                    )
+                    backoff = min(backoff * 2, self._backoff_cap_seconds)
                     continue
                 except Exception:
                     poll_failures += 1
@@ -106,8 +112,10 @@ class BridgePollLoop:
                         LOGGER.warning("Bridge poll error. Retrying...", exc_info=True)
                     else:
                         LOGGER.debug("Bridge poll error", exc_info=True)
-                    common.backoff_wait(self._shutdown_event, backoff)
-                    backoff = min(backoff * 2, 30.0)
+                    common.backoff_wait(
+                        self._shutdown_event, backoff, self._backoff_cap_seconds
+                    )
+                    backoff = min(backoff * 2, self._backoff_cap_seconds)
                     continue
 
                 if not batch:

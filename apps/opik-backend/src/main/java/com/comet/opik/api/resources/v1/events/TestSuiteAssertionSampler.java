@@ -5,7 +5,9 @@ import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ProviderApiKey;
+import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
@@ -14,6 +16,7 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -22,6 +25,7 @@ import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
@@ -37,7 +41,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Listens for TracesCreated events and checks if traces contain test suite metadata.
@@ -63,6 +66,7 @@ public class TestSuiteAssertionSampler {
     private final TestSuiteConfig testSuiteConfig;
     private final TestSuiteEvaluatorMapper evaluatorMapper;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
+    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
 
     @Inject
     public TestSuiteAssertionSampler(
@@ -72,7 +76,8 @@ public class TestSuiteAssertionSampler {
             @NonNull IdGenerator idGenerator,
             @NonNull @Config("testSuite") TestSuiteConfig testSuiteConfig,
             @NonNull TestSuiteEvaluatorMapper evaluatorMapper,
-            @NonNull LlmProviderApiKeyService llmProviderApiKeyService) {
+            @NonNull LlmProviderApiKeyService llmProviderApiKeyService,
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService) {
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.onlineScorePublisher = onlineScorePublisher;
@@ -80,111 +85,179 @@ public class TestSuiteAssertionSampler {
         this.testSuiteConfig = testSuiteConfig;
         this.evaluatorMapper = evaluatorMapper;
         this.llmProviderApiKeyService = llmProviderApiKeyService;
+        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
     }
 
+    // TracesCreated fires only on insert; updates (e.g. endTime null→set) fire TracesUpdated,
+    // so a given trace ID appears here exactly once — safe to partition and decrement without double-counting.
     @Subscribe
     public void onTracesCreated(TracesCreated tracesBatch) {
         var completeTraces = tracesBatch.traces().stream()
                 .filter(trace -> trace.endTime() != null)
                 .toList();
 
-        if (completeTraces.isEmpty()) {
-            return;
-        }
-
         var reactiveContext = Context.of(
                 RequestContext.WORKSPACE_ID, tracesBatch.workspaceId(),
                 RequestContext.USER_NAME, tracesBatch.userName(),
-                RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
+                RequestContext.VISIBILITY, Visibility.PRIVATE);
 
         Duration fetchTimeout = Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds());
 
-        // Resolve model once per batch: prefer connected provider, fall back to first trace's model
+        var decrementIncomplete = Flux.fromIterable(tracesBatch.traces())
+                .filter(trace -> trace.endTime() == null)
+                .flatMap(trace -> decrementAssertionCounterForTrace(trace,
+                        tracesBatch.workspaceId()))
+                .then();
+
+        if (completeTraces.isEmpty()) {
+            decrementIncomplete
+                    .contextWrite(reactiveContext)
+                    .block();
+            return;
+        }
+
         var connectedProviders = getConnectedProviders(tracesBatch.workspaceId());
         String modelName = SupportedJudgeProvider.resolveModel(connectedProviders)
-                .or(() -> getMetadataString(completeTraces.getFirst(), "test_suite_model"))
+                .or(() -> getMetadataString(completeTraces.getFirst(), TestSuiteMetadataKeys.MODEL))
                 .orElse(null);
 
         if (modelName == null) {
             log.warn("No LLM model resolved for test suite batch in workspace '{}' — "
                     + "no supported provider connected and no test_suite_model in trace metadata",
                     tracesBatch.workspaceId());
+            decrementIncomplete
+                    .then(Flux.fromIterable(completeTraces)
+                            .flatMap(trace -> decrementAssertionCounterForTrace(trace,
+                                    tracesBatch.workspaceId()))
+                            .then())
+                    .contextWrite(reactiveContext)
+                    .block();
             return;
         }
 
-        // Cache dataset evaluators by (datasetId:versionHash) to avoid redundant fetches
-        Map<String, List<PreparedEvaluator>> datasetEvaluatorsCache = new HashMap<>();
+        Map<String, Mono<DatasetEvaluatorsResult>> datasetEvaluatorsCache = new HashMap<>();
 
-        List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
-                .flatMap(trace -> {
-                    var testSuiteDatasetId = getMetadataString(trace, "test_suite_dataset_id");
-                    if (testSuiteDatasetId.isEmpty()) {
-                        return Stream.empty();
+        decrementIncomplete
+                .thenMany(Flux.fromIterable(completeTraces)
+                        .concatMap(trace -> processTrace(trace, tracesBatch,
+                                datasetEvaluatorsCache, modelName, fetchTimeout)))
+                .flatMapIterable(list -> list)
+                .collectList()
+                .doOnNext(messages -> {
+                    if (!messages.isEmpty()) {
+                        log.info("Enqueuing '{}' test suite assertion messages", messages.size());
+                        onlineScorePublisher.enqueueMessage(messages,
+                                AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                     }
+                })
+                .contextWrite(reactiveContext)
+                .block();
+    }
 
-                    UUID datasetId;
-                    try {
-                        datasetId = UUID.fromString(testSuiteDatasetId.get());
-                    } catch (IllegalArgumentException e) {
-                        log.warn("Invalid test_suite_dataset_id '{}' in trace metadata",
-                                testSuiteDatasetId.get());
-                        return Stream.empty();
-                    }
+    private Mono<List<TraceToScoreLlmAsJudge>> processTrace(
+            Trace trace, TracesCreated tracesBatch,
+            Map<String, Mono<DatasetEvaluatorsResult>> datasetEvaluatorsCache,
+            String modelName, Duration fetchTimeout) {
 
-                    var versionHash = getMetadataString(trace, "test_suite_dataset_version_hash")
-                            .orElse(null);
+        var experimentId = getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
+                .flatMap(id -> parseUUID(id, trace.id()))
+                .orElse(null);
+        // Mirror the rule used by OnlineScoringLlmAsJudgeScorer: when tools won't be bound,
+        // we must also strip the tool-teaching addendum from the system prompt, otherwise
+        // the LLM tries to call tools the request doesn't declare.
+        boolean useTools = LlmAsJudgeToolsMode.shouldUseTools(experimentId);
 
-                    var cacheKey = datasetId + ":" + (versionHash != null ? versionHash : "");
-                    var preparedDatasetEvaluators = datasetEvaluatorsCache.computeIfAbsent(cacheKey, k -> {
-                        log.info("Fetching test suite evaluators for dataset '{}', version hash '{}'",
-                                datasetId, versionHash != null ? versionHash : "latest");
-                        DatasetEvaluatorsResult result = fetchDatasetEvaluators(datasetId, versionHash)
-                                .contextWrite(reactiveContext)
-                                .timeout(fetchTimeout)
-                                .block();
-                        return evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
-                    });
+        var testSuiteDatasetId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ID);
+        if (testSuiteDatasetId.isEmpty()) {
+            return decrementAssertionCounter(experimentId, tracesBatch.workspaceId())
+                    .then(Mono.empty());
+        }
 
-                    var datasetItemId = getMetadataString(trace, "test_suite_dataset_item_id");
-                    if (datasetItemId.isEmpty()) {
-                        log.debug("Skipping trace '{}' — no test_suite_dataset_item_id in metadata",
-                                trace.id());
-                        return Stream.empty();
-                    }
+        UUID datasetId;
+        try {
+            datasetId = UUID.fromString(testSuiteDatasetId.get());
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid test_suite_dataset_id '{}' in trace metadata",
+                    testSuiteDatasetId.get());
+            return decrementAssertionCounter(experimentId, tracesBatch.workspaceId())
+                    .then(Mono.empty());
+        }
 
-                    return parseUUID(datasetItemId.get(), trace.id()).stream()
-                            .flatMap(itemId -> {
-                                List<PreparedEvaluator> allEvaluators = new ArrayList<>(
-                                        preparedDatasetEvaluators);
-                                allEvaluators.addAll(fetchItemEvaluators(itemId, reactiveContext,
-                                        modelName));
+        var versionHash = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_VERSION_HASH)
+                .orElse(null);
 
-                                if (allEvaluators.isEmpty()) {
-                                    log.debug("No evaluators found for trace '{}', dataset item '{}'",
-                                            trace.id(), datasetItemId.get());
-                                    return Stream.empty();
-                                }
+        var cacheKey = datasetEvaluatorsCacheKey(datasetId, versionHash);
+        var datasetEvaluatorsMono = datasetEvaluatorsCache.computeIfAbsent(cacheKey, k -> {
+            log.debug("Fetching test suite evaluators for dataset '{}', version hash '{}'",
+                    datasetId, versionHash != null ? versionHash : "latest");
+            return fetchDatasetEvaluators(datasetId, versionHash)
+                    .timeout(fetchTimeout)
+                    .cache();
+        });
 
-                                return allEvaluators.stream()
-                                        .map(prepared -> TraceToScoreLlmAsJudge.builder()
-                                                .trace(trace)
-                                                .ruleId(idGenerator.generateId())
-                                                .ruleName(prepared.name())
-                                                .llmAsJudgeCode(prepared.code())
-                                                .workspaceId(tracesBatch.workspaceId())
-                                                .userName(tracesBatch.userName())
-                                                .categoryName(SUITE_ASSERTION_CATEGORY)
-                                                .scoreNameMapping(prepared.scoreNameMapping())
-                                                .promptType(PromptType.PYTHON)
-                                                .build());
+        var datasetItemId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ITEM_ID);
+        if (datasetItemId.isEmpty()) {
+            log.debug("Skipping trace '{}' — no test_suite_dataset_item_id in metadata",
+                    trace.id());
+            return decrementAssertionCounter(experimentId, tracesBatch.workspaceId())
+                    .then(Mono.empty());
+        }
+
+        var itemIdOpt = parseUUID(datasetItemId.get(), trace.id());
+        if (itemIdOpt.isEmpty()) {
+            return decrementAssertionCounter(experimentId, tracesBatch.workspaceId())
+                    .then(Mono.empty());
+        }
+        var itemId = itemIdOpt.get();
+
+        return datasetEvaluatorsMono
+                .flatMap(result -> {
+                    var datasetEvals = evaluatorMapper.prepareEvaluators(result.evaluators(), modelName,
+                            useTools);
+                    return fetchItemEvaluators(itemId, result.versionId(), modelName, useTools)
+                            .map(itemEvals -> {
+                                var allEvaluators = new ArrayList<>(datasetEvals);
+                                allEvaluators.addAll(itemEvals);
+                                return allEvaluators;
                             });
                 })
-                .toList();
+                .flatMap(allEvaluators -> {
+                    if (allEvaluators.isEmpty()) {
+                        log.debug("No evaluators found for trace '{}', dataset item '{}'",
+                                trace.id(), datasetItemId.get());
+                        return decrementAssertionCounter(experimentId,
+                                tracesBatch.workspaceId())
+                                .then(Mono.empty());
+                    }
 
-        if (!messages.isEmpty()) {
-            log.info("Enqueuing '{}' test suite assertion messages", messages.size());
-            onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
-        }
+                    Mono<Void> adjustCounter = allEvaluators.size() > 1
+                            ? adjustAssertionCounter(experimentId,
+                                    tracesBatch.workspaceId(), allEvaluators.size() - 1)
+                            : Mono.empty();
+
+                    return adjustCounter.thenReturn(
+                            allEvaluators.stream()
+                                    .map(prepared -> TraceToScoreLlmAsJudge.builder()
+                                            .trace(trace)
+                                            .ruleId(idGenerator.generateId())
+                                            .ruleName(prepared.name())
+                                            .llmAsJudgeCode(prepared.code())
+                                            .workspaceId(tracesBatch.workspaceId())
+                                            .userName(tracesBatch.userName())
+                                            .categoryName(SUITE_ASSERTION_CATEGORY)
+                                            .scoreNameMapping(prepared.scoreNameMapping())
+                                            .promptType(PromptType.PYTHON)
+                                            .experimentId(experimentId)
+                                            .build())
+                                    .toList());
+                })
+                .onErrorResume(e -> {
+                    log.error("Failed to fetch evaluators for trace '{}', "
+                            + "decrementing counter and skipping scoring", trace.id(), e);
+                    return decrementAssertionCounter(experimentId,
+                            tracesBatch.workspaceId())
+                            .then(Mono.empty());
+                });
     }
 
     private Mono<DatasetEvaluatorsResult> fetchDatasetEvaluators(UUID datasetId, String versionHash) {
@@ -205,32 +278,19 @@ public class TestSuiteAssertionSampler {
                                 .evaluators(v.evaluators() != null ? v.evaluators() : List.of())
                                 .build())
                         .orElse(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
-            }).subscribeOn(Schedulers.boundedElastic())
-                    .onErrorResume(e -> {
-                        log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
-                        return Mono.just(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
-                    });
+            }).subscribeOn(Schedulers.boundedElastic());
         });
     }
 
-    private List<PreparedEvaluator> fetchItemEvaluators(
-            UUID itemId, Context reactiveContext,
-            String modelName) {
-        try {
-            var item = datasetItemService.get(itemId)
-                    .contextWrite(reactiveContext)
-                    .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
-                    .block();
-
-            if (item == null || item.evaluators() == null || item.evaluators().isEmpty()) {
-                return List.of();
-            }
-
-            return evaluatorMapper.prepareEvaluators(item.evaluators(), modelName);
-        } catch (Exception e) {
-            log.error("Failed to fetch evaluators for item '{}'", itemId, e);
-            return List.of();
-        }
+    private Mono<List<PreparedEvaluator>> fetchItemEvaluators(UUID itemId, UUID versionId, String modelName,
+            boolean useTools) {
+        return datasetItemService.get(itemId, versionId)
+                .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
+                .map(item -> Optional.ofNullable(item.evaluators())
+                        .filter(evaluators -> !evaluators.isEmpty())
+                        .map(evaluators -> evaluatorMapper.prepareEvaluators(evaluators, modelName, useTools))
+                        .orElse(List.of()))
+                .defaultIfEmpty(List.of());
     }
 
     @lombok.Builder(toBuilder = true)
@@ -245,6 +305,10 @@ public class TestSuiteAssertionSampler {
                 .filter(s -> !s.isEmpty());
     }
 
+    private static String datasetEvaluatorsCacheKey(UUID datasetId, String versionHash) {
+        return datasetId + ":" + (versionHash != null ? versionHash : "");
+    }
+
     private Optional<UUID> parseUUID(String id, UUID traceId) {
         try {
             return Optional.of(UUID.fromString(id));
@@ -254,13 +318,46 @@ public class TestSuiteAssertionSampler {
         }
     }
 
+    private Mono<Void> decrementAssertionCounterForTrace(Trace trace, String workspaceId) {
+        return Mono.justOrEmpty(
+                getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
+                        .flatMap(id -> parseUUID(id, trace.id())))
+                .flatMap(experimentId -> decrementAssertionCounter(experimentId, workspaceId));
+    }
+
+    private Mono<Void> decrementAssertionCounter(UUID experimentId, String workspaceId) {
+        if (experimentId == null) {
+            return Mono.empty();
+        }
+        return testSuiteAssertionCounterService.decrementAndFinishIfComplete(workspaceId, experimentId)
+                .onErrorResume(e -> {
+                    log.error("Failed to decrement assertion counter for experiment '{}'",
+                            experimentId, e);
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<Void> adjustAssertionCounter(UUID experimentId, String workspaceId,
+            long additionalMessages) {
+        if (experimentId == null) {
+            return Mono.empty();
+        }
+        return testSuiteAssertionCounterService.adjust(workspaceId, experimentId, additionalMessages)
+                .then()
+                .onErrorResume(e -> {
+                    log.error("Failed to adjust assertion counter for experiment '{}'",
+                            experimentId, e);
+                    return Mono.empty();
+                });
+    }
+
     private Set<LlmProvider> getConnectedProviders(String workspaceId) {
         try {
             return llmProviderApiKeyService.find(workspaceId)
                     .content().stream()
                     .map(ProviderApiKey::provider)
                     .collect(Collectors.toSet());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Failed to fetch connected providers for workspace '{}'", workspaceId, e);
             return Set.of();
         }

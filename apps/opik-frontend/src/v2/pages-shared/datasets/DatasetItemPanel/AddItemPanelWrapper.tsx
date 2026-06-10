@@ -1,6 +1,7 @@
-import React, { ReactNode, useState } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import { Button } from "@/ui/button";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import { useConfirmAction } from "@/shared/ConfirmDialog/useConfirmAction";
@@ -23,11 +24,16 @@ interface AddItemPanelWrapperProps {
 const AddItemPanelWrapperContent: React.FC<{
   formId: string;
   onClose: () => void;
+  onDirtyChange: (dirty: boolean) => void;
   children: (context: AddItemPanelContext) => ReactNode;
-}> = ({ formId, onClose, children }) => {
+}> = ({ formId, onClose, onDirtyChange, children }) => {
   const [tags, setTags] = useState<string[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const isDirty = hasUnsavedChanges || tags.length > 0;
+
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   const {
     isOpen: showConfirmDialog,
@@ -39,8 +45,7 @@ const AddItemPanelWrapperContent: React.FC<{
   return (
     <>
       <div className="flex size-full flex-col">
-        <div className="shrink-0 border-b bg-background p-6 pb-4">
-          <div className="comet-body-accented">Add item</div>
+        <div className="shrink-0 border-b bg-background px-6 py-4">
           <TagListRenderer
             tags={tags}
             onAddTag={(tag) => setTags((prev) => [...prev, tag])}
@@ -99,16 +104,29 @@ const AddItemPanelWrapper: React.FC<AddItemPanelWrapperProps> = ({
   initialWidth,
   children,
 }) => {
+  const [isDirty, setIsDirty] = useState(false);
+
   return (
     <ResizableSidePanel
       panelId={panelId}
-      entity="item"
       open={open}
       onClose={onClose}
       initialWidth={initialWidth}
+      blockOverlayClose={isDirty}
+      header={
+        <ResizableSidePanelTopBar
+          variant="form"
+          title="Add item"
+          onClose={onClose}
+        />
+      }
     >
       {open && (
-        <AddItemPanelWrapperContent formId={formId} onClose={onClose}>
+        <AddItemPanelWrapperContent
+          formId={formId}
+          onClose={onClose}
+          onDirtyChange={setIsDirty}
+        >
           {children}
         </AddItemPanelWrapperContent>
       )}

@@ -5,10 +5,12 @@ from unittest import mock
 import pytest
 
 from opik import context_storage
-from opik.api_objects.agent_config.base import Config
+from opik.api_objects import type_helpers
+from opik.api_objects.agent_config.base import Config, _infer_python_type
 from opik.api_objects.agent_config.blueprint import Blueprint
 from opik.api_objects.agent_config.cache import get_global_registry, get_cached_config
 from opik.api_objects.agent_config.context import agent_config_context
+from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.span import span_data as span_data_mod
 from opik.exceptions import ConfigNotFound, ConfigMismatch, OpikException
 from opik.rest_api import core as rest_api_core
@@ -1531,28 +1533,18 @@ class TestTypeInference:
     """Types are derived from fallback instance values at runtime."""
 
     def test_none_value__inferred_as_str(self):
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert _infer_python_type(None) is str
 
     def test_float_value__inferred_as_float(self):
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert _infer_python_type(0.7) is float
 
     def test_str_value__inferred_as_str(self):
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert _infer_python_type("model") is str
 
     def test_int_value__inferred_as_int(self):
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert _infer_python_type(42) is int
 
     def test_bool_value__inferred_as_bool(self):
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert _infer_python_type(True) is bool
 
     def test_config_infer_field_types__returns_correct_mapping(self):
@@ -1574,34 +1566,22 @@ class TestTypeInference:
 
     def test_none_field__backend_type_is_string(self):
         """When a field value is None, the backend type sent should be 'string'."""
-        from opik.api_objects import type_helpers
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         inferred = _infer_python_type(None)
         assert inferred is str
         assert type_helpers.python_type_to_backend_type(inferred) == "string"
 
     def test_float_field__backend_type_is_float(self):
-        from opik.api_objects import type_helpers
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert (
             type_helpers.python_type_to_backend_type(_infer_python_type(0.7)) == "float"
         )
 
     def test_int_field__backend_type_is_integer(self):
-        from opik.api_objects import type_helpers
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert (
             type_helpers.python_type_to_backend_type(_infer_python_type(42))
             == "integer"
         )
 
     def test_bool_field__backend_type_is_boolean(self):
-        from opik.api_objects import type_helpers
-        from opik.api_objects.agent_config.base import _infer_python_type
-
         assert (
             type_helpers.python_type_to_backend_type(_infer_python_type(True))
             == "boolean"
@@ -1637,8 +1617,6 @@ class TestTypeInference:
 
 def _make_mock_prompt(project_name=None):
     """Return a mock BasePrompt with the given project_name."""
-    from opik.api_objects.prompt.base_prompt import BasePrompt
-
     p = mock.Mock(spec=BasePrompt)
     p.project_name = project_name
     return p
@@ -1786,3 +1764,197 @@ class TestGetOrCreateConfigPromptProjectValidation:
 
         with pytest.raises(ConfigMismatch, match="system_prompt"):
             mock_opik_client.get_or_create_config(fallback=fallback)
+
+
+# ---------------------------------------------------------------------------
+# Prompt sync validation tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_prompt_with_commit(project_name=None, commit=None):
+    """Return a mock BasePrompt with the given project_name and commit."""
+    p = mock.Mock(spec=BasePrompt)
+    p.project_name = project_name
+    p.commit = commit
+    return p
+
+
+class TestPromptSyncValidationOnCreateConfig:
+    """Tests for _all_prompts_synced called from _create_from_instance (create_config)."""
+
+    def test_create_config__prompt_with_commit__succeeds(
+        self, mock_rest_client, mock_opik_client
+    ):
+        prompt = _make_mock_prompt_with_commit(
+            project_name="test-project", commit="abc123"
+        )
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        cfg = MyConfig(system_prompt=prompt)
+
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[],
+            )
+        )
+
+        try:
+            mock_opik_client.create_config(cfg, project_name="test-project")
+        except ConfigMismatch:
+            pytest.fail("ConfigMismatch should not be raised when prompt has a commit")
+        except Exception:
+            pass
+
+    def test_create_config__prompt_without_commit__raises_config_mismatch(
+        self, mock_opik_client
+    ):
+        prompt = _make_mock_prompt_with_commit(project_name="test-project", commit=None)
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        cfg = MyConfig(system_prompt=prompt)
+
+        with pytest.raises(ConfigMismatch, match="not been persisted"):
+            mock_opik_client.create_config(cfg, project_name="test-project")
+
+    def test_create_config__multiple_prompts_one_unsynced__raises_config_mismatch(
+        self, mock_opik_client
+    ):
+        synced_prompt = _make_mock_prompt_with_commit(
+            project_name="test-project", commit="abc123"
+        )
+        unsynced_prompt = _make_mock_prompt_with_commit(
+            project_name="test-project", commit=None
+        )
+
+        class MyConfig(Config):
+            prompt_a: object
+            prompt_b: object
+
+        cfg = MyConfig(prompt_a=synced_prompt, prompt_b=unsynced_prompt)
+
+        with pytest.raises(ConfigMismatch, match="not been persisted"):
+            mock_opik_client.create_config(cfg, project_name="test-project")
+
+    def test_create_config__non_prompt_fields__not_checked_for_sync(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Scalar fields are not checked for sync — only BasePrompt instances are."""
+
+        class MyConfig(Config):
+            temperature: float
+            model: str
+
+        cfg = MyConfig(temperature=0.7, model="gpt-4")
+
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[],
+            )
+        )
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = (
+            rest_api_core.ApiError(status_code=404, body="not found")
+        )
+
+        mock_opik_client.create_config(cfg, project_name="test-project")
+
+
+class TestPromptSyncValidationOnGetOrCreateConfig:
+    """Tests for _all_prompts_synced called from _create_from_fallback (get_or_create_config)."""
+
+    def test_get_or_create_config__fallback_all_scalar_fields_synced_guard_not_triggered(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """When there are no prompt fields, _all_prompts_synced returns True immediately
+        and the auto-create path proceeds normally (guard does not short-circuit)."""
+
+        class MyConfig(Config):
+            temperature: float
+            model: str
+
+        fallback = MyConfig(temperature=0.7, model="gpt-4")
+
+        created_raw = AgentBlueprintPublic(
+            id="bp-new",
+            name="v1",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="temperature", type="float", value="0.7"),
+                AgentConfigValuePublic(key="model", type="string", value="gpt-4"),
+            ],
+        )
+        mock_rest_client.agent_configs.create_agent_config.return_value = None
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = created_raw
+
+        result = mock_opik_client.get_or_create_config(fallback=fallback)
+
+        # create_agent_config was called — the guard did not short-circuit
+        mock_rest_client.agent_configs.create_agent_config.assert_called_once()
+        assert result is not fallback
+
+    def test_get_or_create_config__fallback_prompt_unsynced__returns_fallback_without_creating(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Unsynced prompt (commit=None) must not create a blueprint — return fallback."""
+        prompt = _make_mock_prompt_with_commit(project_name="test-project", commit=None)
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        fallback = MyConfig(system_prompt=prompt)
+
+        result = mock_opik_client.get_or_create_config(fallback=fallback)
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+        assert result is fallback
+
+    def test_get_or_create_config__all_prompts_unsynced__returns_fallback(
+        self, mock_rest_client, mock_opik_client
+    ):
+        prompt_a = _make_mock_prompt_with_commit(
+            project_name="test-project", commit=None
+        )
+        prompt_b = _make_mock_prompt_with_commit(
+            project_name="test-project", commit=None
+        )
+
+        class MyConfig(Config):
+            prompt_a: object
+            prompt_b: object
+
+        fallback = MyConfig(prompt_a=prompt_a, prompt_b=prompt_b)
+
+        result = mock_opik_client.get_or_create_config(fallback=fallback)
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+        assert result is fallback
+
+    def test_get_or_create_config__mixed_synced_and_unsynced__returns_fallback(
+        self, mock_rest_client, mock_opik_client
+    ):
+        synced = _make_mock_prompt_with_commit(
+            project_name="test-project", commit="abc123"
+        )
+        unsynced = _make_mock_prompt_with_commit(
+            project_name="test-project", commit=None
+        )
+
+        class MyConfig(Config):
+            synced_prompt: object
+            unsynced_prompt: object
+
+        fallback = MyConfig(synced_prompt=synced, unsynced_prompt=unsynced)
+
+        result = mock_opik_client.get_or_create_config(fallback=fallback)
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+        assert result is fallback

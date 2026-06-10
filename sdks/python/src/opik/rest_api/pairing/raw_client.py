@@ -13,7 +13,6 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
-from ..errors.not_implemented_error import NotImplementedError
 from ..errors.too_many_requests_error import TooManyRequestsError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.create_session_response import CreateSessionResponse
@@ -116,17 +115,6 @@ class RawPairingClient:
                         ErrorMessage,
                         parse_obj_as(
                             type_=ErrorMessage,  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 501:
-                raise NotImplementedError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -235,17 +223,6 @@ class RawPairingClient:
                         ),
                     ),
                 )
-            if _response.status_code == 501:
-                raise NotImplementedError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -344,17 +321,6 @@ class AsyncRawPairingClient:
                         ErrorMessage,
                         parse_obj_as(
                             type_=ErrorMessage,  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 501:
-                raise NotImplementedError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -459,17 +425,6 @@ class AsyncRawPairingClient:
                         ErrorMessage,
                         parse_obj_as(
                             type_=ErrorMessage,  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 501:
-                raise NotImplementedError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),

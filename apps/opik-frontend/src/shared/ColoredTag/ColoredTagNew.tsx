@@ -10,6 +10,7 @@ export interface ColoredTagNewProps {
   label: string;
   colorKey?: string;
   className?: string;
+  labelClassName?: string;
   size?: "sm" | "default";
   readOnly?: boolean;
 }
@@ -30,6 +31,7 @@ const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
   label,
   colorKey,
   className,
+  labelClassName,
   size = "default",
   readOnly = false,
 }) => {
@@ -57,7 +59,9 @@ const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
         readOnly={readOnly}
       />
       <TooltipWrapper content={label} stopClickPropagation>
-        <div className={cn(labelVariants({ size }))}>{label}</div>
+        <div className={cn(labelVariants({ size }), labelClassName)}>
+          {label}
+        </div>
       </TooltipWrapper>
     </div>
   );

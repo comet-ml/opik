@@ -20,7 +20,7 @@ import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import TryInPlaygroundButton from "@/v1/pages/PromptPage/TryInPlaygroundButton";
 import ImproveInPlaygroundButton from "@/v1/pages/PromptPage/ImproveInPlaygroundButton";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";

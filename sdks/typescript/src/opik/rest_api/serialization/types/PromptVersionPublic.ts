@@ -6,6 +6,7 @@ import type * as serializers from "../index.js";
 import { JsonNodePublic } from "./JsonNodePublic.js";
 import { PromptVersionPublicTemplateStructure } from "./PromptVersionPublicTemplateStructure.js";
 import { PromptVersionPublicType } from "./PromptVersionPublicType.js";
+import { PromptVersionPublicVersionType } from "./PromptVersionPublicVersionType.js";
 
 export const PromptVersionPublic: core.serialization.ObjectSchema<
     serializers.PromptVersionPublic.Raw,
@@ -14,9 +15,13 @@ export const PromptVersionPublic: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
     commit: core.serialization.string().optional(),
+    versionNumber: core.serialization.property("version_number", core.serialization.string().optional()),
     template: core.serialization.string(),
     metadata: JsonNodePublic.optional(),
     type: PromptVersionPublicType.optional(),
+    versionType: core.serialization.property("version_type", PromptVersionPublicVersionType.optional()),
+    environment: core.serialization.string().optional(),
+    environments: core.serialization.list(core.serialization.string()).optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     tags: core.serialization.list(core.serialization.string()).optional(),
     templateStructure: core.serialization.property(
@@ -32,9 +37,13 @@ export declare namespace PromptVersionPublic {
         id?: string | null;
         prompt_id?: string | null;
         commit?: string | null;
+        version_number?: string | null;
         template: string;
         metadata?: JsonNodePublic.Raw | null;
         type?: PromptVersionPublicType.Raw | null;
+        version_type?: PromptVersionPublicVersionType.Raw | null;
+        environment?: string | null;
+        environments?: string[] | null;
         change_description?: string | null;
         tags?: string[] | null;
         template_structure?: PromptVersionPublicTemplateStructure.Raw | null;

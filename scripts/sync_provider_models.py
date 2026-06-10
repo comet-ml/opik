@@ -41,7 +41,7 @@ ANTHROPIC_JAVA = JAVA_BASE / "antropic" / "AnthropicModelName.java"
 GEMINI_JAVA = JAVA_BASE / "gemini" / "GeminiModelName.java"
 VERTEXAI_JAVA = JAVA_BASE / "vertexai" / "VertexAIModelName.java"
 PROVIDERS_TS = Path("apps/opik-frontend/src/types/providers.ts")
-MODELS_DATA_TS = Path("apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts")
+MODELS_DATA_TS = Path("apps/opik-frontend/src/constants/providerModels.ts")
 MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_and_context_window.json")
 LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
 
@@ -94,8 +94,6 @@ GEMINI_EXCLUDE_PATTERNS = [
     r"-image-generation",
     r"-computer-use-",
     r"^learnlm",
-    r"^gemma",
-    r"^gemini-gemma",
     r"^gemini-robotics",
     r"^text-embedding",
     r"^aqa$",
@@ -153,6 +151,15 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"-latest$",
     r"^nano-banana",
     r"-image",
+    r"-tts",
+    # Google removed Gemma 2 and Gemma 3 from the AI Studio Gemini API in
+    # April 2026 (replaced by Gemma 4). The LiteLLM prices JSON still ships
+    # `gemini/gemma-3-*-it` and `gemini/gemini-gemma-2-*-it` entries, but
+    # generateContent on /v1beta no longer routes them. Hide from dropdown
+    # until Gemma 4 (`gemma-4-31b-it`, `gemma-4-26b-a4b-it`) lands in the
+    # sync sources.
+    r"^gemma-(2|3)-",
+    r"^gemini-gemma-",
 ]
 
 VERTEXAI_DROPDOWN_EXCLUDE = [
@@ -200,11 +207,28 @@ def _anthropic_sort_key(entry: ModelEntry) -> tuple:
 
 
 def _gemini_sort_key(entry: ModelEntry) -> tuple:
-    """Sort Gemini/VertexAI: by generation desc, then Pro → Flash → Flash-Lite."""
+    """Sort Gemini first by generation, then Gemma by generation/size.
+
+    Within Gemini: Pro → Flash → Flash-Lite.
+    Within Gemma: base `gemma-N-*b-it` (small → large) before `gemma-Nn-*` variants.
+    """
     value = entry.value.removeprefix("vertex_ai/")
+
+    # Gemma family (including legacy `gemini-gemma-*`) — sorts after Gemini.
+    gemma = re.match(r'^(?:gemini-)?gemma-(\d+)(n)?(?:-(e?\d+)b-)?', value)
+    if gemma:
+        major = int(gemma.group(1))
+        is_3n = gemma.group(2) == "n"
+        size_token = gemma.group(3) or ""
+        size_digits = re.search(r"\d+", size_token)
+        size = int(size_digits.group()) if size_digits else 99
+        sub = 0 if not is_3n else 1
+        return (1, -major, sub, size, value)
+
+    # Gemini family — existing behaviour.
     m = re.match(r'^gemini-(\d+)(?:\.(\d+))?', value)
     if not m:
-        return (99, 0, 0, value)
+        return (1, 99, 0, 99, value)
     major, minor = int(m.group(1)), int(m.group(2)) if m.group(2) else 0
     if '-pro' in value:
         tier = 0
@@ -214,7 +238,7 @@ def _gemini_sort_key(entry: ModelEntry) -> tuple:
         tier = 1
     else:
         tier = 3
-    return (-major, -minor, tier, value)
+    return (0, -major, -minor, tier, value)
 
 
 def _deduplicate_by_base(entries: list[ModelEntry]) -> list[ModelEntry]:
@@ -294,6 +318,7 @@ def model_to_enum_name(model_str: str, provider: str) -> str:
         s = s.removeprefix("vertex_ai/")
     if provider == "openai" and re.match(r"^o\d", s):
         s = "GPT_" + s
+    s = s.lstrip("~")
     s = re.sub(r"[-.:\/]", "_", s)
     return s.upper()
 
@@ -333,6 +358,10 @@ def generate_anthropic_label(model_str: str) -> str:
 
 def generate_gemini_label(model_str: str) -> str:
     s = model_str.removeprefix("vertex_ai/")
+    # Google dropped the "Gemini" prefix from Gemma branding; the prices JSON
+    # still carries the old `gemini-gemma-*` keys. Collapse to match current
+    # naming so the dropdown reads "Gemma 2 …" not "Gemini Gemma 2 …".
+    s = re.sub(r"^gemini-gemma-", "gemma-", s)
     parts = s.split("-")
     result = []
     for p in parts:
@@ -678,7 +707,7 @@ def regenerate_models_data_ts(
     content: str,
     models_by_provider: dict[str, list[ModelEntry]],
 ) -> str:
-    """Regenerate PROVIDER_MODELS entries in useLLMProviderModelsData.ts."""
+    """Regenerate PROVIDER_MODELS entries in src/constants/providerModels.ts."""
     provider_type_map = {
         "openai": "OPEN_AI",
         "anthropic": "ANTHROPIC",
@@ -959,17 +988,25 @@ def _parse_yaml_reasoning_flags(yaml_content: str) -> dict[str, dict[str, bool]]
 def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
+    dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
 
     - Replaces sections for providers managed by the sync script.
+    - Emits the *full* model list per provider so the YAML stays a superset
+      and remains a complete routing fallback for the backend when the
+      remote CDN is unavailable. Dropdown-curated entries (when
+      `dropdown_by_provider` is supplied) lead their provider section in
+      curated order and carry their human-readable `label`; the remaining
+      entries follow alphabetically with no label.
     - Preserves reasoning flags carried over from the existing file.
     - Sections for providers not managed here (bedrock, ollama, opik-free,
       custom-llm) are preserved as-is if present.
     """
     # Carry over existing reasoning flags by provider/model-id
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
+    dropdown_by_provider = dropdown_by_provider or {}
 
     lines: list[str] = []
 
@@ -981,7 +1018,19 @@ def regenerate_llm_models_yaml(
         if not entries:
             lines.append("  []")
             continue
-        for entry in entries:
+
+        # Build the final ordering: dropdown-curated entries first (in curated
+        # order, with labels), then the remaining models alphabetically (no
+        # label, same entry identity as in `entries`).
+        dropdown_entries = dropdown_by_provider.get(provider_key, [])
+        dropdown_values = {e.value for e in dropdown_entries}
+        non_dropdown_entries = sorted(
+            (e for e in entries if e.value not in dropdown_values),
+            key=lambda e: e.value,
+        )
+        ordered_entries = list(dropdown_entries) + non_dropdown_entries
+
+        for entry in ordered_entries:
             if provider_key == "vertexai":
                 # value is qualified name (vertex_ai/gemini-...), id is base name
                 model_id = entry.value.removeprefix("vertex_ai/")
@@ -990,6 +1039,18 @@ def regenerate_llm_models_yaml(
             else:
                 model_id = entry.value
                 lines.append(f'  - id: "{model_id}"')
+
+            # Emit a label for every dropdown-visible entry, even when it
+            # equals the id. The FE filter uses label-presence as the
+            # "is this dropdown-visible?" signal, so dropping labels for
+            # OpenRouter (where label == id by convention) made every
+            # OpenRouter model invisible in the picker (OPIK-6360). The
+            # extra ~30KB on the cold-cached YAML is a non-issue compared
+            # to the correctness fragility of the omit-when-equal rule.
+            is_dropdown_entry = entry.value in dropdown_values
+            if is_dropdown_entry and entry.label:
+                escaped_label = entry.label.replace('"', '\\"')
+                lines.append(f'    label: "{escaped_label}"')
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
@@ -1053,6 +1114,7 @@ def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
 def main():
     parser = argparse.ArgumentParser(description="Sync LLM provider model definitions")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
+    parser.add_argument("--force-regen", action="store_true", help="Regenerate and write files even when no new models were found")
     args = parser.parse_args()
 
     print("## Provider Model Sync\n")
@@ -1174,16 +1236,22 @@ def main():
     models_by_provider = {k: v["entries"] for k, v in all_changes.items()}
     new_providers_ts = regenerate_providers_ts(providers_ts, models_by_provider)
 
-    # Dropdown (useLLMProviderModelsData.ts) gets curated subset — filtered and sorted
+    # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
     dropdown_by_provider = {
         provider: filter_for_dropdown(entries, provider, deprecated)
         for provider, entries in models_by_provider.items()
     }
     new_models_data_ts = regenerate_models_data_ts(models_data_ts, dropdown_by_provider)
 
-    # Regenerate llm-models-default.yaml
+    # Regenerate llm-models-default.yaml with the full model list per provider
+    # so the YAML stays a superset and the backend's classpath fallback covers
+    # every routable model. Dropdown-curated entries lead their provider
+    # section in curated order and carry human-readable labels; the rest
+    # follow alphabetically without a label.
     llm_models_yaml_content = read_file(LLM_MODELS_YAML)
-    new_llm_models_yaml = regenerate_llm_models_yaml(llm_models_yaml_content, models_by_provider)
+    new_llm_models_yaml = regenerate_llm_models_yaml(
+        llm_models_yaml_content, models_by_provider, dropdown_by_provider,
+    )
 
     # 5. Print summary
     total_added = 0
@@ -1222,12 +1290,15 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if total_added == 0:
+    if total_added == 0 and not args.force_regen:
         if total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
             print("No changes found.")
         sys.exit(1)
+
+    if total_added == 0 and args.force_regen:
+        print("No new models found, but --force-regen set: regenerating files anyway.")
 
     if args.dry_run:
         print(f"\n**Dry run**: {total_added} added. No files written.")

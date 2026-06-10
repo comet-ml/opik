@@ -21,11 +21,13 @@ const MAX_TOOLTIP_HEIGHT = 404;
 type AssertionsBreakdownTooltipProps = {
   children: ReactNode;
   assertionsByRun: AssertionResult[][];
+  passThreshold?: number;
+  runsPerItem?: number;
 };
 
 export const AssertionsBreakdownTooltip: React.FC<
   AssertionsBreakdownTooltipProps
-> = ({ children, assertionsByRun }) => {
+> = ({ children, assertionsByRun, passThreshold, runsPerItem }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [preferredSide, setPreferredSide] = useState<Side>("bottom");
@@ -122,6 +124,8 @@ export const AssertionsBreakdownTooltip: React.FC<
     [scrollToRun],
   );
 
+  const showPassCriteria = runsPerItem != null && runsPerItem > 1;
+
   if (assertionsByRun.length === 0 || assertionsByRun[0].length === 0) {
     return <>{children}</>;
   }
@@ -140,6 +144,13 @@ export const AssertionsBreakdownTooltip: React.FC<
         className="w-[30rem] overflow-hidden p-0"
         onClick={(e) => e.stopPropagation()}
       >
+        {showPassCriteria && (
+          <div className="border-b px-3 py-2">
+            <span className="comet-body-xs text-muted-slate">
+              Pass criteria: {passThreshold}/{runsPerItem} runs must pass
+            </span>
+          </div>
+        )}
         <Accordion
           type="single"
           defaultValue={defaultValue}

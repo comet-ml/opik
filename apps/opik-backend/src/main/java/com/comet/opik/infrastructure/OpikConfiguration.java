@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
@@ -24,6 +25,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
 
     @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
@@ -84,6 +88,9 @@ public class OpikConfiguration extends JobConfiguration {
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
+    private JerseyClientConfiguration jerseyClient = new JerseyClientConfiguration();
+
+    @Valid @NotNull @JsonProperty
     private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
 
     @Valid @NotNull @JsonProperty
@@ -120,6 +127,37 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatasetVersioningConfig datasetVersioning = DatasetVersioningConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
+    private MigrationConfig migration = new MigrationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentProjectMigrationConfig experimentProjectMigration = ExperimentProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private DatasetProjectMigrationConfig datasetProjectMigration = DatasetProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private OptimizationProjectMigrationConfig optimizationProjectMigration = OptimizationProjectMigrationConfig
+            .builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private PromptProjectMigrationConfig promptProjectMigration = PromptProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private AutomationRuleProjectMigrationConfig automationRuleProjectMigration = AutomationRuleProjectMigrationConfig
+            .builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private AlertProjectMigrationConfig alertProjectMigration = AlertProjectMigrationConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
 
     @Valid @NotNull @JsonProperty
@@ -142,4 +180,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AgentConfigConfiguration agentConfig = new AgentConfigConfiguration();
+
+    @Valid @NotNull @JsonProperty
+    private EnvironmentConfig environment = new EnvironmentConfig();
 }

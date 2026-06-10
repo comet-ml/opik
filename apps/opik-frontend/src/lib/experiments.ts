@@ -1,9 +1,16 @@
 import {
   EVALUATION_METHOD,
   Experiment,
+  EXPERIMENT_STATUS,
   TestSuiteExperiment,
 } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
+
+export const isExperimentTerminal = (
+  status: EXPERIMENT_STATUS | undefined | null,
+): boolean =>
+  status === EXPERIMENT_STATUS.COMPLETED ||
+  status === EXPERIMENT_STATUS.CANCELLED;
 
 export function isTestSuiteExperiment(
   experiment: Experiment | null | undefined,

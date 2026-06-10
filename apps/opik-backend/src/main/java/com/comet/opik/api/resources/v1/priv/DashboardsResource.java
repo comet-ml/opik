@@ -71,6 +71,7 @@ public class DashboardsResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/dashboards/{dashboardId}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = Dashboard.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_CREATE)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response createDashboard(
@@ -144,6 +145,7 @@ public class DashboardsResource {
             @ApiResponse(responseCode = "404", description = "Dashboard not found"),
             @ApiResponse(responseCode = "409", description = "Conflict - dashboard with this name already exists")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_EDIT)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response updateDashboard(
@@ -166,6 +168,7 @@ public class DashboardsResource {
     @Operation(operationId = "deleteDashboard", summary = "Delete dashboard", description = "Delete dashboard by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteDashboard(@PathParam("dashboardId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -182,6 +185,7 @@ public class DashboardsResource {
     @Operation(operationId = "deleteDashboardsBatch", summary = "Delete dashboards", description = "Delete dashboards batch", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteDashboardsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 

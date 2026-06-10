@@ -55,7 +55,7 @@ import { calculateHeightStyle } from "@/shared/DataTable/utils";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { generateDistinctColorMap } from "@/v1/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 

@@ -5,13 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  ArrowDownToLine,
-  Clock,
-  ListEnd,
-  Maximize2,
-  RotateCw,
-} from "lucide-react";
+import { ArrowDownToLine, Clock, ListEnd, Maximize2 } from "lucide-react";
 import { Card, CardContent } from "@/ui/card";
 import { Button } from "@/ui/button";
 import { Optimization } from "@/types/optimizations";
@@ -19,6 +13,7 @@ import useOptimizationStudioLogs from "@/api/optimizations/useOptimizationStudio
 import Loader from "@/shared/Loader/Loader";
 import { Spinner } from "@/ui/spinner";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { cn } from "@/lib/utils";
 import {
   IN_PROGRESS_OPTIMIZATION_STATUSES,
@@ -204,18 +199,13 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
                 </Button>
               </TooltipWrapper>
             )}
-            <TooltipWrapper content="Refresh logs">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => refetch()}
-                disabled={isPending}
-              >
-                <RotateCw
-                  className={cn("size-3.5", isPending && "animate-spin")}
-                />
-              </Button>
-            </TooltipWrapper>
+            <RefreshButton
+              tooltip="Refresh logs"
+              variant="ghost"
+              size="icon-xs"
+              isFetching={isPending}
+              onRefresh={() => refetch()}
+            />
             {logContent && (
               <TooltipWrapper content="Fullscreen">
                 <Button variant="ghost" size="icon-xs" onClick={openFullscreen}>

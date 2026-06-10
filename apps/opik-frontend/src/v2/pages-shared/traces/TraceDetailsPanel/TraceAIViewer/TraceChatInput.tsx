@@ -7,7 +7,7 @@ import { TEXT_AREA_CLASSES } from "@/ui/textarea";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { TraceLLMChatType } from "@/types/ai-assistant";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 const RUN_HOT_KEYS = ["⌘", "⏎"];
 

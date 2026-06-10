@@ -2,6 +2,15 @@ openai
 openai-agents
 langchain
 langchain_openai
+# ragas's `llms/base.py` imports `from langchain_community.chat_models.vertexai
+# import ChatVertexAI` (both 0.3.x and 0.4.x lines). That submodule was
+# removed in langchain-community 0.4 — its replacement lives in the
+# standalone langchain-google-vertexai package — so installing the latest
+# langchain-community here triggers ModuleNotFoundError before any test runs.
+# Pin langchain-community to the last line that still ships the module
+# until ragas migrates off the old import.
+langchain-community<0.4
 ragas<0.3.2; python_version<"3.10"
 ragas; python_version>="3.10"
 pillow # for ragas 0.3.0 to work
+litellm[google] # for vertexai models

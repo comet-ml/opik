@@ -101,6 +101,7 @@ This workflow will:
     ```bash
     git push --force-with-lease   # after rebase
     ```
+  - **Post-push: sync PR description.** If an open PR exists for this branch, invoke the `_pr-description-sync` sub-skill (`.agents/commands/comet/_pr-description-sync.md`) with `branch = git rev-parse --abbrev-ref HEAD`. The sub-skill is a no-op when no PR exists, when the description is already in sync, or when the user has opted out of refreshes for this repo.
 
 ---
 
@@ -108,8 +109,8 @@ This workflow will:
 
 - **Search existing PRs**: Use GitHub CLI when available (for example `gh pr list --head <branch> --state open`); if CLI is unavailable, use GitHub MCP fallback.
 - **If PR exists**: Show existing PR and ask:
-  > "PR already exists for this branch: <PR_URL>. Do you want to update the PR description and continue with the flow (quality checks, Jira status, progress comment)? (y/n)"
-  - **If yes**: Update PR description using the pre-filled template (Step 7 output), then continue with Steps 5–11 as usual
+  > "PR already exists for this branch: <PR_URL>. Continue with the flow (quality checks, Jira status, progress comment)? (y/n)"
+  - **If yes**: Continue with Steps 5–11. The `_pr-description-sync` sub-skill ran at the end of Step 3 — it refreshed the description if needed (no-op when the body was already in sync, the user opted out for this repo, or `gh` was unavailable). Either way, do not attempt a second refresh here.
   - **If no**: Stop the flow
 - **If no PR exists**: Continue to PR creation
 
@@ -160,7 +161,13 @@ This workflow will:
 
 - **Title**: Format as `[{TICKET-NUMBER}] [{COMPONENT}] {TYPE}: {TASK-SUMMARY}` extracted from branch description and change analysis
   - Examples: `[OPIK-2180] [DOCS] docs: add cursor git workflow rule`, `[OPIK-1234] [BE] feat(api): add trace request validation endpoint`
-- **Description**: Read the PR template from `.github/pull_request_template.md` at runtime and use it as the source of truth. Unless specifically requested, **never** include customer names in the description of the PR as they should not be public.
+- **Description**: Read the PR template from `.github/pull_request_template.md` at runtime and use it as the source of truth. The PR description is public on GitHub — **never** include any of the following unless the user explicitly requests it:
+  - Customer or client names
+  - Internal / private domains and hostnames (anything not publicly routable)
+  - Internal URLs (monitoring dashboards, log explorers, staging / preview deployments, internal wikis, chat threads, issue trackers other than the Jira `OPIK-####` key)
+  - IPs, storage bucket names, credentials, or any secret
+
+  When summarizing changes, describe behavior in generic terms ("a customer reported…", "in a production deployment…") rather than naming the source. Redact screenshots or log excerpts before including them. For anything that needs private context, reference the Jira ticket instead of embedding it here.
   ```bash
   # Read the actual PR template — do NOT hardcode it
   cat .github/pull_request_template.md

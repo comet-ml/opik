@@ -12,6 +12,7 @@ export type { ErrorInfo } from "@/rest_api/api/types/ErrorInfo";
 export type { SpanType } from "@/rest_api/api/types/SpanType";
 export { SpanType as OpikSpanType } from "@/rest_api/api/types/SpanType";
 export type { DatasetPublic } from "@/rest_api/api/types/DatasetPublic";
+export type { EnvironmentPublic as Environment } from "@/rest_api/api/types/EnvironmentPublic";
 export * from "./evaluation";
 
 // Dataset exports
@@ -21,6 +22,7 @@ export { DatasetVersionNotFoundError } from "@/errors/dataset/errors";
 export type { DatasetVersionPublic } from "@/rest_api/api/types/DatasetVersionPublic";
 
 export { Prompt, ChatPrompt, PromptType } from "@/prompt";
+export { getGlobalClient, setGlobalClient, resetGlobalClient } from "@/client/globalClient";
 export { OpikQueryLanguage } from "@/query";
 export type { FilterExpression } from "@/query";
 
@@ -35,6 +37,15 @@ export { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/
 // Runner exports
 export { activateRunner } from "@/runner/activate";
 export type { RegistryEntry, Param } from "@/runner/registry";
+
+// Distributed trace context helpers
+export {
+  OPIK_TRACE_ID_HEADER,
+  OPIK_PARENT_SPAN_ID_HEADER,
+  getDistributedTraceHeaders,
+} from "@/context";
+export type { DistributedTraceHeaders } from "@/context";
+
 
 // Re-export Zod to ensure consumers use the same version as the SDK
 export { z } from "zod";

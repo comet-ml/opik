@@ -6,6 +6,7 @@ import java.util.Map;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DURATION;
 import static com.comet.opik.api.sorting.SortableFields.END_TIME;
+import static com.comet.opik.api.sorting.SortableFields.ENVIRONMENT;
 import static com.comet.opik.api.sorting.SortableFields.ERROR_INFO;
 import static com.comet.opik.api.sorting.SortableFields.EXPERIMENT_ID;
 import static com.comet.opik.api.sorting.SortableFields.FEEDBACK_SCORES;
@@ -52,6 +53,7 @@ public class TraceSortingFactory extends SortingFactory {
                 ERROR_INFO,
                 CREATED_BY,
                 FEEDBACK_SCORES,
-                EXPERIMENT_ID);
+                EXPERIMENT_ID,
+                ENVIRONMENT);
     }
 }

@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from .. import base_metric, score_result
+from opik.exceptions import MetricComputationError
 
 
 class Equals(base_metric.BaseMetric):
@@ -56,6 +57,12 @@ class Equals(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with a value of 1.0 if the values match,
                 0.0 otherwise.
         """
+        if output is None or reference is None:
+            raise MetricComputationError(
+                f"Equals metric requires non-None 'output' and 'reference' arguments, "
+                f"got output={output!r}, reference={reference!r}"
+            )
+
         # Convert to string to handle numeric and other types
         output_str = str(output)
         reference_str = str(reference)

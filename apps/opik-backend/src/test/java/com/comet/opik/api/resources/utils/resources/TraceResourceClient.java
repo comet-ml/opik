@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
@@ -41,6 +43,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -861,6 +864,28 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .get();
     }
 
+    public Trace.TracePage getTracesByPage(String apiKey, String workspaceName, String projectName,
+            List<SortingField> sortingFields, List<Trace.TraceField> exclude, int page, int size) {
+        Map<String, String> queryParams = new HashMap<>();
+        queryParams.put("project_name", projectName);
+        queryParams.put("page", String.valueOf(page));
+        queryParams.put("size", String.valueOf(size));
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            queryParams.put("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+        }
+
+        if (CollectionUtils.isNotEmpty(exclude)) {
+            queryParams.put("exclude", TestUtils.toURLEncodedQueryParam(exclude));
+        }
+
+        try (var response = callGetTracesWithQueryParams(apiKey, workspaceName, queryParams)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Trace.TracePage.class);
+        }
+    }
+
     public Response callGetTraceThreadsWithQueryParams(String projectName, UUID projectId,
             Map<String, String> queryParams, String apiKey, String workspaceName) {
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -990,6 +1015,69 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(body));
+    }
+
+    public Response callAddTraceComment(UUID traceId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(traceId.toString())
+                .path("comments")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(comment));
+    }
+
+    public Response callUpdateTraceComment(UUID commentId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path(commentId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(comment));
+    }
+
+    public Response callDeleteTraceComments(BatchDelete batchDelete, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete));
+    }
+
+    public Response callAddThreadComment(UUID threadId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path(threadId.toString())
+                .path("comments")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(comment));
+    }
+
+    public Response callUpdateThreadComment(UUID commentId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("comments")
+                .path(commentId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(comment));
+    }
+
+    public Response callDeleteThreadComments(BatchDelete batchDelete, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("comments")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete));
     }
 
     public Response callDeleteTraceThreads(DeleteTraceThreads threadIds, String apiKey, String workspaceName) {

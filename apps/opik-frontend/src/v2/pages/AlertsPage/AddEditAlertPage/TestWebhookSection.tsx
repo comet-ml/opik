@@ -16,7 +16,7 @@ import WebhookPayloadExample from "./WebhookPayloadExample";
 import useWebhookTestMutation from "@/api/alerts/useWebhookTestMutation";
 import { useToast } from "@/ui/use-toast";
 import { z } from "zod";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { ALERT_TYPE } from "@/types/alerts";
 
 type TestWebhookSectionProps = {
@@ -194,7 +194,7 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
           </Button>
           <Button variant="ghost" asChild>
             <a
-              href={buildDocsUrl("/production/alerts")}
+              href={buildDocsUrl("/production/alerts/alerts")}
               target="_blank"
               rel="noreferrer"
             >

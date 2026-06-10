@@ -42,6 +42,11 @@
         "args": ["-y", "mcp-remote", "https://mcp.notion.com/mcp"],
         "env": {}
       },
+      "Sentry": {
+        "command": "npx",
+        "args": ["-y", "@sentry/mcp-server@latest"],
+        "envFile": "${workspaceFolder}/.env.local"
+      },
       "Playwright": {
         "command": "npx",
         "args": ["@playwright/mcp@latest"],

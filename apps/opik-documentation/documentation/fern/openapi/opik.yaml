@@ -42,6 +42,8 @@ tags:
   description: Alert resources
 - name: Annotation Queues
   description: Private annotation queue operations
+- name: Assertion Results
+  description: Assertion result related resources
 - name: Attachments
   description: Attachments related resources
 - name: Check
@@ -54,6 +56,8 @@ tags:
   description: Workspace Dashboard resources
 - name: Datasets
   description: Dataset resources
+- name: Environments
+  description: Environment related resources
 - name: Experiments
   description: Experiment resources
 - name: Feedback-definitions
@@ -1120,6 +1124,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/assertion-results:
+    put:
+      tags:
+      - Assertion Results
+      summary: Batch ingestion of assertion results
+      description: Batch ingestion of assertion results for traces or spans
+      operationId: storeAssertionsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssertionResultBatch"
+      responses:
+        "204":
+          description: No Content
   /v1/private/attachment/list:
     get:
       tags:
@@ -1814,6 +1833,11 @@ paths:
         - Returns 409 Conflict if baseVersion is stale and override is not set
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
       operationId: applyDatasetItemChanges
       parameters:
       - name: id
@@ -1968,6 +1992,10 @@ paths:
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
       operationId: createOrUpdateDatasetItems
       requestBody:
         content:
@@ -2008,8 +2036,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not Found - CSV upload feature is disabled
+  /v1/private/datasets/items/from-json:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from JSON file
+      description: |-
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+      operationId: createDatasetItemsFromJson
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - dataset_id
+              - file
+              - format
+              type: object
+              properties:
+                file:
+                  type: object
+                dataset_id:
+                  type: string
+                  format: uuid
+                format:
+                  type: string
+                  enum:
+                  - json
+                  - jsonl
+      responses:
+        "202":
+          description: Accepted - JSON processing started
+        "400":
+          description: Bad Request
           content:
             application/json:
               schema:
@@ -2826,6 +2890,124 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/environments:
+    get:
+      tags:
+      - Environments
+      summary: Find environments
+      description: Find environments for the workspace. Capped at the workspace limit
+        (default 20).
+      operationId: findEnvironments
+      responses:
+        "200":
+          description: Environments page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvironmentPage_Public"
+    post:
+      tags:
+      - Environments
+      summary: Create environment
+      description: Create environment
+      operationId: createEnvironment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Environment_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/environments/{environmentId}"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/environments/delete:
+    post:
+      tags:
+      - Environments
+      summary: Delete environments
+      description: Delete environments batch. Idempotent — missing ids are silently
+        ignored.
+      operationId: deleteEnvironmentsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/environments/{id}:
+    get:
+      tags:
+      - Environments
+      summary: Get environment by id
+      description: Get environment by id
+      operationId: getEnvironmentById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    patch:
+      tags:
+      - Environments
+      summary: Update environment by id
+      description: Update environment by id
+      operationId: updateEnvironment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnvironmentUpdate"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/batch:
     patch:
       tags:
@@ -4958,12 +5140,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/pairing/sessions:
     post:
       tags:
@@ -5004,12 +5180,6 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "429":
           description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
           content:
             application/json:
               schema:
@@ -5871,7 +6041,9 @@ paths:
       tags:
       - Prompts
       summary: Get prompt by id
-      description: Get prompt by id
+      description: "Get prompt by id; when mask_id or environment is provided, requestedVersion\
+        \ is populated with the resolved version. mask_id and environment are mutually\
+        \ exclusive."
       operationId: getPromptById
       parameters:
       - name: id
@@ -5880,6 +6052,22 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: mask_id
+        in: query
+        description: "Optional mask version id; when set, requestedVersion is the\
+          \ mask row for that id"
+        schema:
+          type: string
+          format: uuid
+      - name: environment
+        in: query
+        description: "Optional environment name; when set, requestedVersion is the\
+          \ version mapped to that environment for the prompt"
+        schema:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
       responses:
         "200":
           description: Prompt resource
@@ -5887,6 +6075,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Prompt_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
         "404":
           description: Not Found
           content:
@@ -6029,6 +6223,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PromptVersion_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/{promptId}/versions/by-number/{versionNumber}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt version by sequential number
+      description: Get a prompt version by its sequential v<N> number for the given
+        prompt.
+      operationId: getPromptVersionByNumber
+      parameters:
+      - name: promptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: versionNumber
+        in: path
+        required: true
+        schema:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+      responses:
+        "200":
+          description: Prompt version resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
         "404":
           description: Not Found
           content:
@@ -6181,6 +6417,122 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/versions/retrieve-by-ids:
+    post:
+      tags:
+      - Prompts
+      summary: Retrieve prompt versions by ids
+      description: Retrieve a batch of prompt versions by their ids. Typically used
+        by the UI to resolve mask overlays.
+      operationId: retrievePromptVersionsByIds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionIdsRequest_Detail"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PromptVersion_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/versions/{versionId}/environments:
+    patch:
+      tags:
+      - Prompts
+      summary: Set prompt version environment
+      description: |
+        Set or clear the environment owned by a prompt version.
+        Setting a non-null environment moves ownership atomically: any previous owner of that
+        environment for the same prompt has its environment cleared in the same transaction.
+        Setting null clears the environment from the version.
+        The environment must already exist in the workspace registry; unknown names return 404.
+      operationId: setPromptVersionEnvironment
+      parameters:
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionEnvironmentUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/projects/{projectId}/activities:
+    get:
+      tags:
+      - Projects
+      summary: Get recent activity for a project
+      description: "Returns the most recent activity items across all entity types\
+        \ for a project, sorted by date descending."
+      operationId: getRecentActivity
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Recent activity page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentActivityPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/retention/rules:
     get:
       tags:
@@ -8640,6 +8992,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -8709,6 +9068,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
     AlertTrigger_Write:
       required:
       - event_type
@@ -8850,6 +9216,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -9056,6 +9429,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9136,6 +9514,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
       description: List of annotation queues to create
     AnnotationQueueBatch:
       required:
@@ -9228,6 +9611,11 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9285,6 +9673,63 @@ components:
           items:
             minLength: 1
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+    AssertionResultBatch:
+      required:
+      - assertion_results
+      - entity_type
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum:
+          - TRACE
+          - SPAN
+          - THREAD
+        assertion_results:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AssertionResultBatchItem"
+    AssertionResultBatchItem:
+      required:
+      - entity_id
+      - name
+      - source
+      - status
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
+        name:
+          minLength: 1
+          type: string
+        status:
+          type: string
+          enum:
+          - passed
+          - failed
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
     Attachment:
       required:
       - file_name
@@ -9718,7 +10163,6 @@ components:
     LlmAsJudgeModelParameters:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -9783,6 +10227,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -9842,6 +10288,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -9866,6 +10314,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10148,7 +10598,6 @@ components:
     LlmAsJudgeModelParameters_Write:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10198,6 +10647,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10257,6 +10708,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10281,6 +10734,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10603,7 +11058,6 @@ components:
     LlmAsJudgeModelParameters_Public:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10668,6 +11122,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10727,6 +11183,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10751,6 +11209,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -11097,6 +11557,8 @@ components:
           $ref: "#/components/schemas/Delta"
         finish_reason:
           type: string
+        logprobs:
+          $ref: "#/components/schemas/LogProbs"
     ChatCompletionResponse:
       type: object
       properties:
@@ -11145,6 +11607,26 @@ components:
           type: string
         arguments:
           type: string
+    LogProb:
+      type: object
+      properties:
+        token:
+          type: string
+        logprob:
+          type: number
+          format: double
+        bytes:
+          type: array
+          items:
+            type: integer
+            format: int32
+    LogProbs:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogProb"
     PromptTokensDetails:
       type: object
       properties:
@@ -11249,6 +11731,11 @@ components:
           type: string
         service_tier:
           type: string
+        logprobs:
+          type: boolean
+        top_logprobs:
+          type: integer
+          format: int32
         functions:
           type: array
           items:
@@ -11613,6 +12100,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -11713,6 +12202,7 @@ components:
           minimum: 1
           type: integer
           format: int32
+      readOnly: true
     Dataset:
       required:
       - name
@@ -12026,6 +12516,17 @@ components:
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
           format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "Optional. Dataset to read carry-forward rows from when materializing\
+            \ the new version. Required together with copy_from_version_id. When null,\
+            \ carry-forward rows are read from the destination dataset's prior version."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: Optional. Version within copy_from_dataset_id to read carry-forward
+            rows from. Required together with copy_from_dataset_id.
+          format: uuid
     ExperimentItem:
       required:
       - dataset_item_id
@@ -12055,6 +12556,8 @@ components:
         input:
           $ref: "#/components/schemas/JsonListString"
         output:
+          $ref: "#/components/schemas/JsonListString"
+        trace_metadata:
           $ref: "#/components/schemas/JsonListString"
         feedback_scores:
           type: array
@@ -12103,6 +12606,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
         assertion_results:
           type: array
           readOnly: true
@@ -12239,6 +12744,17 @@ components:
           description: "Optional batch group ID to group multiple batches into a single\
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
+          format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "Optional. Dataset to read carry-forward rows from when materializing\
+            \ the new version. Required together with copy_from_version_id. When null,\
+            \ carry-forward rows are read from the destination dataset's prior version."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: Optional. Version within copy_from_dataset_id to read carry-forward
+            rows from. Required together with copy_from_dataset_id.
           format: uuid
     DatasetItem_Write:
       required:
@@ -12737,6 +13253,7 @@ components:
           minimum: 1
           type: integer
           format: int32
+      readOnly: true
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -12763,6 +13280,8 @@ components:
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
+          $ref: "#/components/schemas/JsonListString_Compare"
+        trace_metadata:
           $ref: "#/components/schemas/JsonListString_Compare"
         feedback_scores:
           type: array
@@ -12811,6 +13330,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
         assertion_results:
           type: array
           readOnly: true
@@ -13530,6 +14051,145 @@ components:
             type: string
             description: Optional list of tags to add to this version
             example: "[\"production\",\"reviewed\"]"
+    Environment:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    Environment_Write:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
+    EnvironmentPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Environment_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
+    Environment_Public:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    EnvironmentUpdate:
+      type: object
+      properties:
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
     ExperimentBatchUpdate:
       required:
       - ids
@@ -13805,6 +14465,10 @@ components:
           format: uuid
         commit:
           type: string
+          readOnly: true
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
           readOnly: true
         prompt_id:
           type: string
@@ -14239,6 +14903,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     Trace:
       required:
       - start_time
@@ -14369,6 +15037,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -14554,6 +15226,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -14603,6 +15279,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
       description: "Please provide either none, only one of evaluate_task_result or\
         \ trace, but never both"
     ValueEntry_ExperimentItemBulkWriteView:
@@ -15983,7 +16663,19 @@ components:
           format: uuid
         mask_id:
           type: string
+          description: Deprecated. Use prompt_masks to pass one or more mask overlays
+            keyed by prompt id.
           format: uuid
+          deprecated: true
+        prompt_masks:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Mask overlays to apply during agent execution, keyed by\
+              \ prompt id."
+            format: uuid
+          description: "Mask overlays to apply during agent execution, keyed by prompt\
+            \ id."
         blueprint_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -16084,7 +16776,19 @@ components:
           format: uuid
         mask_id:
           type: string
+          description: Deprecated. Use prompt_masks to read one or more mask overlays
+            keyed by prompt id.
           format: uuid
+          deprecated: true
+        prompt_masks:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Mask overlays to apply during agent execution, keyed by\
+              \ prompt id."
+            format: uuid
+          description: "Mask overlays to apply during agent execution, keyed by prompt\
+            \ id."
         blueprint_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -16169,6 +16873,11 @@ components:
         type:
           minLength: 1
           type: string
+        presence:
+          type: string
+          enum:
+          - required
+          - optional
     LocalRunnerHeartbeatResponse:
       type: object
       properties:
@@ -17237,9 +17946,14 @@ components:
           - total_cost
         current_value:
           type: number
+          description: "Metric value for the current period. Unit depends on `type`:\
+            \ `count` is an integer count; `errors` is a percentage in [0, 100]; `avg_duration`\
+            \ is milliseconds; `total_cost` is in USD."
           format: double
         previous_value:
           type: number
+          description: Metric value for the immediately preceding period of equal
+            length. Same unit as `current_value`.
           format: double
     KpiCardRequest:
       required:
@@ -17667,6 +18381,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -17678,6 +18396,29 @@ components:
           - mustache
           - jinja2
           - python
+        version_type:
+          type: string
+          description: version type discriminator; defaults to prompt_version
+          enum:
+          - prompt_version
+          - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -17781,6 +18522,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -17792,6 +18537,29 @@ components:
           - mustache
           - jinja2
           - python
+        version_type:
+          type: string
+          description: version type discriminator; defaults to prompt_version
+          enum:
+          - prompt_version
+          - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -17823,13 +18591,10 @@ components:
     ErrorMessage_Detail:
       type: object
       properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
+        errors:
+          type: array
+          items:
+            type: string
     CreatePromptVersion_Detail:
       required:
       - name
@@ -17956,6 +18721,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -17967,6 +18736,29 @@ components:
           - mustache
           - jinja2
           - python
+        version_type:
+          type: string
+          description: version type discriminator; defaults to prompt_version
+          enum:
+          - prompt_version
+          - mask
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18010,10 +18802,57 @@ components:
           type: string
         commit:
           type: string
+        environment:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+          description: "If provided, resolves to the version mapped to this environment\
+            \ for the prompt; mutually exclusive with commit and version_number"
+        version_number:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+          description: "If provided, resolves to the version with this sequential\
+            \ number (e.g. v3); mutually exclusive with commit and environment"
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If provided, scopes the search to the specified project"
+    PromptVersionIdsRequest_Detail:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            type: string
+            format: uuid
+    PromptVersionEnvironmentUpdate:
+      required:
+      - environments
+      type: object
+      properties:
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
+      description: |
+        Replace the full set of environments assigned to a prompt version.
+        The provided set becomes the new complete set of environments for this version.
+        - Non-empty set: assigns each environment to this version; if another version of the same prompt currently owns any of those environments, ownership is moved atomically.
+        - Empty set: clears all environments from this version.
+        All environments must already exist in the workspace registry; unknown names return 404.
     Prompt_Updatable:
       required:
       - name
@@ -18089,6 +18928,47 @@ components:
         Note: Prompt versions are immutable by design.
         Only organizational properties (such as tags etc.) can be updated.
         Core properties like template, metadata etc. cannot be modified after creation.
+    RecentActivityItem_Public:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - experiment
+          - dataset_version
+          - test_suite_version
+          - alert_event
+          - optimization
+          - agent_config_version
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        resource_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    RecentActivityPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentActivityItem_Public"
     RetentionRule_Public:
       required:
       - retention
@@ -18186,19 +19066,20 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
-      - collaboratorsTabEnabled
-      - csvUploadEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
+      - demoDataEnabled
       - exportEnabled
       - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
+      - ollieEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -18207,6 +19088,7 @@ components:
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
+      - v1WorkspaceAllowlistIds
       - v2WorkspaceAllowlistIds
       - vertexaiProviderEnabled
       - welcomeWizardEnabled
@@ -18228,8 +19110,6 @@ components:
           type: boolean
         welcomeWizardEnabled:
           type: boolean
-        csvUploadEnabled:
-          type: boolean
         exportEnabled:
           type: boolean
         optimizationStudioEnabled:
@@ -18237,6 +19117,8 @@ components:
         datasetVersioningEnabled:
           type: boolean
         datasetExportEnabled:
+          type: boolean
+        demoDataEnabled:
           type: boolean
         openaiProviderEnabled:
           type: boolean
@@ -18254,9 +19136,17 @@ components:
           type: boolean
         ollamaProviderEnabled:
           type: boolean
-        collaboratorsTabEnabled:
+        ollieEnabled:
+          type: boolean
+        agenticToolsEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
+        v1WorkspaceAllowlistIds:
           uniqueItems: true
           type: array
           items:
@@ -18265,7 +19155,15 @@ components:
         forceWorkspaceVersion:
           minLength: 1
           type: string
+        defaultPageSize:
+          maximum: 100
+          minimum: 5
+          type: integer
+          format: int32
         v2WorkspaceAllowlist:
+          type: string
+          writeOnly: true
+        v1WorkspaceAllowlist:
           type: string
           writeOnly: true
     SpanBatchUpdate:
@@ -18387,6 +19285,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ErrorInfo_Write:
       required:
       - exception_type
@@ -18476,6 +19378,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     SpanBatch:
       required:
       - spans
@@ -18675,6 +19581,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ValueEntry_Public:
       type: object
       properties:
@@ -18834,6 +19744,7 @@ components:
             - duration
             - ttft
             - source
+            - environment
         from_time:
           type: string
           description: Filter spans created from this time (ISO-8601 format).
@@ -18936,6 +19847,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -19056,6 +19971,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceBatch:
       required:
       - traces
@@ -19313,6 +20232,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceThread:
       type: object
       properties:
@@ -19375,6 +20298,8 @@ components:
         created_at:
           type: string
           format: date-time
+        environment:
+          type: string
     TraceThreadIdentifier:
       required:
       - thread_id
@@ -19586,6 +20511,7 @@ components:
             - providers
             - experiment
             - source
+            - environment
         from_time:
           type: string
           description: Filter traces created from this time (ISO-8601 format).

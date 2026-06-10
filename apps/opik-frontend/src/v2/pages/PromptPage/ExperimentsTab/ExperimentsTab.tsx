@@ -20,7 +20,9 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
@@ -29,13 +31,13 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/feedback-scores";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import { ExperimentPromptVersion } from "@/types/datasets";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -53,9 +55,9 @@ import {
 } from "@/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/ui/separator";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
 import {
   FILTER_AND_GROUP_COLUMNS,
@@ -91,7 +93,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_NAME_ID,
   "prompt",
   COLUMN_DATASET_ID,
-  "dataset_version",
   "pass_rate",
   "trace_count",
   "duration.p50",
@@ -126,15 +127,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
-    defaultValue: 100,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
-  });
+  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
@@ -185,19 +178,24 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: "prompt",
-        label: "Prompt commit",
+        label: "Prompt version",
         type: COLUMN_TYPE.list,
-        accessorFn: (row) => get(row, ["prompt_versions"], []),
+        accessorFn: (row) =>
+          (get(row, ["prompt_versions"], []) as ExperimentPromptVersion[]).map(
+            (v) => ({
+              ...v,
+              version_label: v.version_number ?? v.commit,
+            }),
+          ),
         cell: MultiResourceCell as never,
         customMeta: {
-          nameKey: "commit",
+          nameKey: "version_label",
           idKey: "prompt_id",
           resource: RESOURCE_TYPE.prompt,
           getSearch: (data: GroupedExperiment) => ({
             activeVersionId: get(data, "id", null),
           }),
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
       },
       {
         id: COLUMN_ID_ID,
@@ -207,23 +205,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: ITEM_SOURCE_LABEL,
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
         },
-      },
-      {
-        id: "dataset_version",
-        label: "Test suite version",
-        type: COLUMN_TYPE.string,
-        iconType: "version" as const,
-        accessorFn: (row: GroupedExperiment) =>
-          row.dataset_version_summary?.version_name || "",
-        cell: DatasetVersionCell as never,
       },
       {
         id: "created_at",
@@ -401,6 +389,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     return data?.aggregationMap ?? {};
   }, [data?.aggregationMap]);
 
+  const datasetTypeMap = useMemo(
+    () => data?.datasetTypeMap ?? {},
+    [data?.datasetTypeMap],
+  );
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -435,6 +428,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     rowSelection,
     sortedColumns,
     setSortedColumns,
+    datasetTypeMap,
   });
 
   const total = data?.total ?? 0;
@@ -530,7 +524,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
-        noData={<DataTableNoData title={noDataText}></DataTableNoData>}
+        noData={<DataTableNoData title={noDataText} />}
         TableBody={DataTableVirtualBody}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader

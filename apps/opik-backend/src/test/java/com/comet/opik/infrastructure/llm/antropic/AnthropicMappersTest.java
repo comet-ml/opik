@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.antropic;
 import com.comet.opik.podam.PodamFactoryUtils;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
+import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -11,11 +12,17 @@ import dev.langchain4j.model.openai.internal.shared.Usage;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 public class AnthropicMappersTest {
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -72,6 +79,73 @@ public class AnthropicMappersTest {
                             .map(LlmProviderAnthropicMapper.INSTANCE::mapToSystemMessage)
                             .toList());
         }
+
+        @Test
+        void toCreateMessage_appliesDefaultMaxTokens_whenNull() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(false)
+                    .addUserMessage("hi")
+                    .build();
+
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual.maxTokens).isEqualTo(LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+        }
+
+        @Test
+        void toCreateMessage_preservesExplicitMaxTokens() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(false)
+                    .addUserMessage("hi")
+                    .maxCompletionTokens(123)
+                    .build();
+
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual.maxTokens).isEqualTo(123);
+        }
+
+        @ParameterizedTest
+        @MethodSource("streamValues")
+        void toCreateMessage_mapsStreamWithNullDefaultingToFalse(Boolean input, boolean expected) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(input)
+                    .addUserMessage("hi")
+                    .build();
+
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual.stream).isEqualTo(expected);
+        }
+
+        static Stream<Arguments> streamValues() {
+            return Stream.of(
+                    Arguments.of(Boolean.TRUE, true),
+                    Arguments.of(Boolean.FALSE, false),
+                    Arguments.of(null, false));
+        }
     }
 
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ValidateRequest {
+        private final LlmProviderAnthropic provider = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class));
+
+        @Test
+        void acceptsNullMaxCompletionTokens() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(false)
+                    .addUserMessage("hi")
+                    .build();
+
+            assertThatCode(() -> provider.validateRequest(request)).doesNotThrowAnyException();
+        }
+    }
 }

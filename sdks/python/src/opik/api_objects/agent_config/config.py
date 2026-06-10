@@ -113,7 +113,10 @@ class ConfigManager:
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
-        """Create a new blueprint and return it.
+        """Create and return the initial blueprint for this agent config (first version only).
+
+        Use this method to establish the first version of the agent config.
+        For subsequent updates use :meth:`update_blueprint`.
 
         Pass either ``parameters`` (plain key-value pairs whose types are
         inferred) or ``fields_with_values`` (explicit ``{key: types.FieldValueSpec(type, value)}``
@@ -154,13 +157,35 @@ class ConfigManager:
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
-        """Add a new blueprint to an existing config and return it.
+        """Create a new blueprint with only the supplied fields (not merged with previous).
+
+        Each call creates a new versioned snapshot containing exactly the fields
+        you provide in ``fields_with_values``. Fields omitted from that mapping
+        are **not** carried over from the previous version.
+
+        ``fields_with_values`` must map each field name to a
+        :class:`~opik.api_objects.agent_config.types.FieldValueSpec` that
+        declares both the Python type and the value.  For prompt fields the
+        value must be a :class:`~opik.api_objects.prompt.text.prompt.Prompt`
+        (or :class:`~opik.api_objects.prompt.chat.chat_prompt.ChatPrompt`)
+        instance::
+
+            config.update_blueprint(
+                fields_with_values={
+                    "system_prompt": types.FieldValueSpec(
+                        python_type=Prompt, value=my_prompt
+                    ),
+                    "temperature": types.FieldValueSpec(
+                        python_type=float, value=0.7
+                    ),
+                }
+            )
 
         Args:
-            fields_with_values: Explicit ``{field_name: types.FieldValueSpec(python_type, value)}``
-                mapping.
+            fields_with_values: ``{field_name: types.FieldValueSpec(python_type, value)}``
+                mapping.  Each entry overrides that field in the new blueprint.
             description: Human-readable description stored with the blueprint.
-            field_types: Mapping of a prefixed field key to a Python type used
+            field_types: Mapping of field name to Python type used
                 when fetching back the created blueprint.
         """
         resolved_fields_with_values = self._resolve_fields_with_values(

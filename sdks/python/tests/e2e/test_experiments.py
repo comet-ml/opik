@@ -6,7 +6,9 @@ from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
 
 from . import verifiers
-from ..testlib import assert_equal, ANY_BUT_NONE
+from ..testlib import assert_equal, ANY_BUT_NONE, generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def llm_task(item: Dict[str, Any]):
@@ -41,22 +43,17 @@ def equals_scoring_function(dataset_item: Dict[str, Any], task_outputs: Dict[str
 def test__find_experiment_items_for_dataset__happy_path(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    project_name = "test_project_find_experiment_items_for_dataset"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
 
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
-            },
-            {
-                "input": {"question": "What is the capital of Ukraine?"},
-                "expected_model_output": {"output": "Kyiv"},
             },
         ]
     )
@@ -72,7 +69,7 @@ def test__find_experiment_items_for_dataset__happy_path(
         scoring_key_mapping={
             "reference": lambda x: x["expected_model_output"]["output"],
         },
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     opik.flush_tracker()
@@ -83,14 +80,14 @@ def test__find_experiment_items_for_dataset__happy_path(
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # find experiment items for dataset
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
     experiments = opik_client.get_experiments_client()
     experiment_items_contents = experiments.find_experiment_items_for_dataset(
@@ -98,29 +95,10 @@ def test__find_experiment_items_for_dataset__happy_path(
         experiment_ids=[retrieved_experiment.id],
         project_name=opik_client.project_name,
     )
-    assert retrieved_experiment.project_name == project_name
-    assert len(experiment_items_contents) == 3
+    assert retrieved_experiment.project_name == PROJECT_NAME
+    assert len(experiment_items_contents) == 2
 
     EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
-        experiment_item.ExperimentItemContent(
-            id=ANY_BUT_NONE,
-            dataset_item_id=ANY_BUT_NONE,
-            trace_id=ANY_BUT_NONE,
-            dataset_item_data={
-                "expected_model_output": {"output": "Kyiv"},
-                "id": ANY_BUT_NONE,
-                "input": {"question": "What is the capital of Ukraine?"},
-            },
-            evaluation_task_output={"output": "Kyiv"},
-            feedback_scores=[
-                FeedbackScoreDict(
-                    category_name=None,
-                    name="equals_scoring_function",
-                    reason="Correct output value",
-                    value=1.0,
-                )
-            ],
-        ),
         experiment_item.ExperimentItemContent(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
@@ -145,11 +123,11 @@ def test__find_experiment_items_for_dataset__happy_path(
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
             dataset_item_data={
-                "expected_model_output": {"output": "Berlin"},
+                "expected_model_output": {"output": "Kyiv"},
                 "id": ANY_BUT_NONE,
-                "input": {"question": "What is the capital of Germany?"},
+                "input": {"question": "What is the capital of Ukraine?"},
             },
-            evaluation_task_output={"output": "Berlin"},
+            evaluation_task_output={"output": "Kyiv"},
             feedback_scores=[
                 FeedbackScoreDict(
                     category_name=None,
@@ -175,22 +153,17 @@ def test__find_experiment_items_for_dataset__happy_path(
 def test__find_experiment_items_for_dataset__filtered__happy_path(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    project_name = "test_project_find_experiment_items_for_dataset"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
 
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
-            },
-            {
-                "input": {"question": "What is the capital of Ukraine?"},
-                "expected_model_output": {"output": "Kyiv"},
             },
         ]
     )
@@ -206,7 +179,7 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
         scoring_key_mapping={
             "reference": lambda x: x["expected_model_output"]["output"],
         },
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     opik.flush_tracker()
@@ -217,23 +190,23 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # find experiment items for dataset
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
     experiments = opik_client.get_experiments_client()
     experiment_items_contents = experiments.find_experiment_items_for_dataset(
         dataset_name=dataset_name,
         experiment_ids=[retrieved_experiment.id],
         filter_string="feedback_scores.equals_scoring_function = 0.0",
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
-    assert retrieved_experiment.project_name == project_name
+    assert retrieved_experiment.project_name == PROJECT_NAME
 
     assert len(experiment_items_contents) == 1
 
@@ -300,22 +273,17 @@ def test__experiment_scores__happy_path(
             ),
         ]
 
-    project_name = "test_project_experiment_scores"
     # Create dataset
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
-            },
-            {
-                "input": {"question": "What is the capital of Ukraine?"},
-                "expected_model_output": {"output": "Kyiv"},
             },
         ]
     )
@@ -333,7 +301,7 @@ def test__experiment_scores__happy_path(
         scoring_key_mapping={
             "reference": lambda x: x["expected_model_output"]["output"],
         },
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     opik.flush_tracker()
@@ -344,9 +312,9 @@ def test__experiment_scores__happy_path(
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "test-model"},
-        traces_amount=3,
+        traces_amount=2,
         feedback_scores_amount=1,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify experiment scores are present in evaluation result
@@ -366,13 +334,13 @@ def test__experiment_scores__happy_path(
 
     # Verify experiment scores are retrievable via SDK API
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
     rest_client = opik_client._rest_client
     experiment_content = rest_client.experiments.get_experiment_by_id(
         retrieved_experiment.id
     )
-    assert retrieved_experiment.project_name == project_name
+    assert retrieved_experiment.project_name == PROJECT_NAME
 
     assert experiment_content.experiment_scores is not None, (
         "Experiment scores should be persisted in backend"

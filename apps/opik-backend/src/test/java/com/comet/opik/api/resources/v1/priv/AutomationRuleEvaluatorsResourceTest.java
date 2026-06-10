@@ -46,6 +46,7 @@ import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -653,6 +654,42 @@ class AutomationRuleEvaluatorsResourceTest {
                     }
                 }
             });
+        }
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Create evaluator returns 403 when permission is denied")
+        void createEvaluatorReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            try (var response = evaluatorsResourceClient.callCreateEvaluator(
+                    factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class), workspaceName, apiKey)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update evaluator returns 403 when permission is denied")
+        void updateEvaluatorReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(
+                    UUID.randomUUID(), workspaceName,
+                    factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class), apiKey)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
         }
     }
 
@@ -1633,13 +1670,21 @@ class AutomationRuleEvaluatorsResourceTest {
 
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
-                        "Scores for traceId '.*' stored successfully:\\n\\n.*"));
+                        "(?s)Scores for traceId '.*' stored successfully:\\n\\n.*"));
+        // Both scorer families now emit sanitized one-line summaries for user-facing logs:
+        // - LLM-as-Judge: summarizeRequest / summarizeResponse on OnlineScoringLlmAsJudgeScorer
+        // - Python user-defined-metric: summarizeEvaluatorInput on OnlineScoringEngine
+        // The "Received response" path on the Python side still emits the legacy multiline
+        // format, so both are accepted here.
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
-                        "Received response for traceId '.*':\\n\\n.*"));
+                        "Received response for traceId '.*': 'textChars=\\d+, toolCalls=\\d+, finishReason=.*'")
+                        || log.message().matches("(?s)Received response for traceId '.*':\\n\\n.*"));
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
-                        "(?s)Sending traceId '.*' to .* using the following input:\\n\\n.*"));
+                        "Sending traceId '.*' to LLM: model='.*', messages=\\d+, tools=\\d+, toolsEnabled=.*")
+                        || log.message().matches(
+                                "Sending traceId '.*' to Python evaluator: 'arguments=\\[.*\\]'"));
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "Evaluating traceId '.*' sampled by rule '.*'"));

@@ -36,10 +36,12 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -54,7 +56,7 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
         return {"output": "hello"}
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -103,10 +105,12 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -121,7 +125,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
         return {"output": "hello"}
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -144,7 +148,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="explicit-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -163,10 +167,12 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -181,7 +187,7 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
         return {"output": "hello"}
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -233,10 +239,12 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -249,6 +257,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "experiment-id"
     mock_experiment.name = None
     mock_create_experiment = mock.Mock()
@@ -273,7 +282,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name=None,
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -292,10 +301,12 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -305,9 +316,9 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
 
-    mock_experiment1 = mock.Mock()
+    mock_experiment1 = mock.Mock(prompts=None)
     mock_experiment1.id = "experiment-id-1"
-    mock_experiment2 = mock.Mock()
+    mock_experiment2 = mock.Mock(prompts=None)
     mock_experiment2.id = "experiment-id-2"
 
     mock_create_experiment = mock.Mock()
@@ -394,10 +405,12 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -405,7 +418,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -468,10 +481,12 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -479,7 +494,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -514,15 +529,22 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="explicit-prompt-experiment-name",
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": MODEL_NAME,
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
 
 
 def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_name(
@@ -538,10 +560,12 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -549,7 +573,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -615,10 +639,12 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -626,7 +652,7 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
     )
 
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock.Mock()
+    mock_create_experiment.return_value = mock.Mock(prompts=None)
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
@@ -659,15 +685,22 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name=None,
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": MODEL_NAME,
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
 
 
 def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_unique_names(
@@ -683,10 +716,12 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
             "name",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -730,7 +765,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
                     )
 
                     # First call
-                    mock_create_experiment.return_value = mock.Mock()
+                    mock_create_experiment.return_value = mock.Mock(prompts=None)
                     evaluation.evaluate_prompt(
                         dataset=mock_dataset,
                         messages=[
@@ -742,7 +777,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
                     )
 
                     # Second call
-                    mock_create_experiment.return_value = mock.Mock()
+                    mock_create_experiment.return_value = mock.Mock(prompts=None)
                     evaluation.evaluate_prompt(
                         dataset=mock_dataset,
                         messages=[

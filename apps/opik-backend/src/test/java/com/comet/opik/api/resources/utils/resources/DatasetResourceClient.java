@@ -10,6 +10,7 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRetrieveRequest;
@@ -90,6 +91,16 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(dataset));
+    }
+
+    public Response callUpdateDataset(UUID datasetId, DatasetUpdate update, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(update));
     }
 
     public UUID createDataset(Dataset dataset, String apiKey, String workspaceName) {

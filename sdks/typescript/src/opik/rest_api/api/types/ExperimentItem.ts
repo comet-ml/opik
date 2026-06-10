@@ -11,6 +11,7 @@ export interface ExperimentItem {
     projectName?: string;
     input?: OpikApi.JsonListString;
     output?: OpikApi.JsonListString;
+    traceMetadata?: OpikApi.JsonListString;
     feedbackScores?: OpikApi.FeedbackScore[];
     comments?: OpikApi.Comment[];
     totalEstimatedCost?: number;
@@ -22,6 +23,7 @@ export interface ExperimentItem {
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemTraceVisibilityMode;
     description?: string;
+    executionPolicy?: OpikApi.ExecutionPolicy;
     assertionResults?: OpikApi.AssertionResult[];
     status?: OpikApi.ExperimentItemStatus;
 }

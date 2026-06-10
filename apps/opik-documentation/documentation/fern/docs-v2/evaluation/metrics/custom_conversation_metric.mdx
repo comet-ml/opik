@@ -271,8 +271,9 @@ from opik.evaluation import evaluate_threads
 conversation_length_metric = ConversationLengthMetric()
 quality_metric = ConversationQualityMetric(model="gpt-4o")
 
-# Evaluate threads in your project
-# Note: SDK evaluation automatically filters for inactive threads
+# Evaluate threads in your project.
+# `evaluate_threads` runs against every thread matched by `filter_string`;
+# use the filter to scope to the threads you actually want to score.
 results = evaluate_threads(
     project_name="my_chatbot_project",
     filter_string='thread_id contains "user-session"',

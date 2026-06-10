@@ -11,8 +11,6 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw, Undo2, X } from "lucide-react";
-import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
@@ -29,6 +27,7 @@ import useTracesFeedbackScoresNames from "@/api/traces/useTracesFeedbackScoresNa
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_EXPERIMENT_ID,
+  COLUMN_EXPERIMENT_IDS,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_CUSTOM_ID,
@@ -53,12 +52,15 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
-import { Button } from "@/ui/button";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
@@ -76,22 +78,18 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
+import ExperimentsSelectBoxFilterWrapper from "@/v2/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBoxFilterWrapper";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import {
-  DetailsActionSectionParam,
-  DetailsActionSectionValue,
-} from "@/v2/pages-shared/traces/DetailsActionSection";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { Filter } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 
@@ -340,7 +338,7 @@ const FILTERS_COLUMN_DATA: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: COLUMN_EXPERIMENT_ID,
+    id: COLUMN_EXPERIMENT_IDS,
     label: "Experiment",
     type: COLUMN_TYPE.string,
   },
@@ -388,7 +386,6 @@ type TraceLogsSidebarProps = {
   projectName?: string;
   logsSource?: LOGS_SOURCE;
   title?: string;
-  backLabel?: string;
 };
 
 const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
@@ -398,7 +395,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   projectName = "",
   logsSource,
   title = "Logs",
-  backLabel = "Back",
 }) => {
   const type = TRACE_DATA_TYPE.traces;
   const truncationEnabled = useTruncationEnabled();
@@ -425,22 +421,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     null,
   );
 
-  const [traceId = "", setTraceId] = useQueryParam(
-    `${TLS_QUERY_PREFIX}trace`,
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
-  const [spanId = "", setSpanId] = useQueryParam(
-    `${TLS_QUERY_PREFIX}span`,
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
   const [page = 1, setPage] = useQueryParam(
     `${TLS_QUERY_PREFIX}page`,
     NumberParam,
@@ -458,14 +438,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     queryParamConfig: NumberParam,
     syncQueryWithLocalStorageOnInit: true,
   });
-
-  const [, setLastSection] = useQueryParam(
-    `${TLS_QUERY_PREFIX}lastSection`,
-    DetailsActionSectionParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
@@ -541,6 +513,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             type,
           },
         },
+        [COLUMN_EXPERIMENT_IDS]: {
+          keyComponent: ExperimentsSelectBoxFilterWrapper as never,
+          keyComponentProps: { projectId },
+          operators: [{ label: "is one of", value: "in" }],
+          defaultOperator: "in",
+        },
       },
     }),
     [projectId, type],
@@ -579,6 +557,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
         size: size as number,
         search: trimmedSearch,
         truncate: truncationEnabled,
+        stripAttachments: true,
         fromTime: intervalStart,
         toTime: intervalEnd,
         exclude: excludeFields,
@@ -637,7 +616,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const isTableLoading = isPending || isFeedbackScoresPending;
 
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no traces yet" : "No search results";
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setFilters([]);
+  }, [setSearch, setFilters]);
 
   const rows: Array<Trace> = useMemo(
     () => (data?.content as Trace[]) ?? [],
@@ -782,18 +765,23 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     return allRows.filter((row) => selectedIds.includes(row.id)) as Trace[];
   }, [refetchExportData, rowSelection]);
 
-  const handleRowClick = useCallback(
-    (row?: Trace, lastSection?: DetailsActionSectionValue) => {
-      if (!row) return;
-      setTraceId((state) => (row.id === state ? "" : row.id));
-      setSpanId("");
-
-      if (lastSection) {
-        setLastSection(lastSection);
-      }
+  const {
+    traceId,
+    handleRowClick,
+    handleClose: clearPanelsState,
+    panels,
+  } = useTraceThreadPanelsState<Trace>({
+    rows,
+    type: "trace",
+    queryPrefix: TLS_QUERY_PREFIX,
+    manageLastSection: true,
+    traceDetailsPanelProps: { projectId, container: sheetContentRef },
+    threadDetailsPanelProps: {
+      projectId,
+      projectName,
+      container: sheetContentRef,
     },
-    [setTraceId, setSpanId, setLastSection],
-  );
+  });
 
   const columns = useMemo(() => {
     return [
@@ -839,28 +827,15 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   }, [columns, selectedColumns]);
 
   const activeRowId = traceId;
-  const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
-
-  const hasNext = rowIndex >= 0 ? rowIndex < rows.length - 1 : false;
-  const hasPrevious = rowIndex >= 0 ? rowIndex > 0 : false;
-
-  const handleRowChange = useCallback(
-    (shift: number) => handleRowClick(rows[rowIndex + shift]),
-    [handleRowClick, rowIndex, rows],
-  );
-
-  const handleClose = useCallback(() => {
-    setTraceId("");
-    setSpanId("");
-  }, [setSpanId, setTraceId]);
 
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       if (!isOpen) {
+        clearPanelsState();
         onClose();
       }
     },
-    [onClose],
+    [clearPanelsState, onClose],
   );
 
   const sortConfig = useMemo(
@@ -920,27 +895,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setMetadataColumnsOrder,
   ]);
 
-  const sheetHeader = (
-    <>
-      <SheetTitle className="sr-only">{title}</SheetTitle>
-      <div className="flex items-center justify-between border-b px-5 py-3">
-        <Button variant="outline" size="2xs" onClick={onClose}>
-          <Undo2 className="mr-1 size-3" />
-          {backLabel}
-        </Button>
-        <Button variant="ghost" size="icon-sm" onClick={onClose}>
-          <X />
-        </Button>
-      </div>
-    </>
-  );
-
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         ref={setSheetContentRef}
         className="flex w-screen flex-col shadow-none sm:max-w-full"
-        header={sheetHeader}
+        header={<SheetTopBar variant="info" title={title} />}
         onEscapeKeyDown={(e) => {
           if (traceId) {
             e.preventDefault();
@@ -948,10 +908,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
         }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="px-6 pb-1 pt-4">
-            <h2 className="comet-title-xxs">{title}</h2>
-          </div>
-
           <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">
             <div className="flex items-center gap-2">
               <SearchInput
@@ -986,19 +942,14 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 minDate={minDate}
                 maxDate={maxDate}
               />
-              <TooltipWrapper content="Refresh traces list">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  className="shrink-0"
-                  onClick={() => {
-                    refetch();
-                    refetchStatistic();
-                  }}
-                >
-                  <RotateCw />
-                </Button>
-              </TooltipWrapper>
+              <RefreshButton
+                tooltip="Refresh traces list"
+                isFetching={isFetching}
+                onRefresh={() => {
+                  refetch();
+                  refetchStatistic();
+                }}
+              />
               <DataTableRowHeightSelector
                 type={height as ROW_HEIGHT}
                 setType={setHeight}
@@ -1023,7 +974,14 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             <DataTableStateHandler
               isLoading={isTableLoading}
               isEmpty={showEmptyState}
-              emptyState={<DataTableNoData title="There are no traces yet" />}
+              emptyState={
+                <DataTableEmptyContent
+                  title="There are no traces yet"
+                  description="Traces will appear here once your agent starts receiving requests."
+                  lightImageUrl={emptyLogsLightUrl}
+                  darkImageUrl={emptyLogsDarkUrl}
+                />
+              }
             >
               <DataTable
                 columns={columns}
@@ -1040,7 +998,15 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 getRowId={getRowId}
                 rowHeight={height as ROW_HEIGHT}
                 columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-                noData={<DataTableNoData title={noDataText} />}
+                noData={
+                  <DataTableNoMatchingData
+                    onClearFilters={
+                      search || filters.length > 0
+                        ? handleClearFilters
+                        : undefined
+                    }
+                  />
+                }
                 showLoadingOverlay={isPlaceholderData && isFetching}
               />
             </DataTableStateHandler>
@@ -1058,18 +1024,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             />
           </div>
         </div>
-        <TraceDetailsPanel
-          projectId={projectId}
-          traceId={traceId!}
-          spanId={spanId!}
-          setSpanId={setSpanId}
-          hasPreviousRow={hasPrevious}
-          hasNextRow={hasNext}
-          open={Boolean(traceId)}
-          onClose={handleClose}
-          onRowChange={handleRowChange}
-          container={sheetContentRef}
-        />
+        {panels}
       </SheetContent>
     </Sheet>
   );

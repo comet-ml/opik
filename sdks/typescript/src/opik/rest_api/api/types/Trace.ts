@@ -39,4 +39,5 @@ export interface Trace {
     providers?: string[];
     experiment?: OpikApi.ExperimentItemReference;
     source?: OpikApi.TraceSource;
+    environment?: string;
 }

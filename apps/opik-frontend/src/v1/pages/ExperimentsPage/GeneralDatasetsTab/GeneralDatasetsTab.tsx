@@ -73,16 +73,17 @@ import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v1/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import { usePermissions } from "@/contexts/PermissionsContext";
 const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
@@ -129,6 +130,10 @@ const GeneralDatasetsTab: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
 
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
+
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
   );
@@ -145,15 +150,7 @@ const GeneralDatasetsTab: React.FC = () => {
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
-    defaultValue: 100,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
-  });
+  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
@@ -716,14 +713,16 @@ const GeneralDatasetsTab: React.FC = () => {
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new experiment
-          </Button>
+          {canCreateExperiments && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewExperimentClick}
+            >
+              <Info className="mr-1.5 size-3.5" />
+              Create new experiment
+            </Button>
+          )}
         </div>
       </PageBodyStickyContainer>
       <DataTable
@@ -746,7 +745,7 @@ const GeneralDatasetsTab: React.FC = () => {
         columnPinning={columnPinningConfig}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateExperiments && (
               <Button variant="link" onClick={handleNewExperimentClick}>
                 Create new experiment
               </Button>

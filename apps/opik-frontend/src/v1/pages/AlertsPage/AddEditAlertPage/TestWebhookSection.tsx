@@ -16,7 +16,7 @@ import WebhookPayloadExample from "./WebhookPayloadExample";
 import useWebhookTestMutation from "@/api/alerts/useWebhookTestMutation";
 import { useToast } from "@/ui/use-toast";
 import { z } from "zod";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { ALERT_TYPE } from "@/types/alerts";
 
 type TestWebhookSectionProps = {

@@ -7,17 +7,18 @@ evaluate one or more assertions/criteria against the agent's output.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import tenacity
 
-from opik.evaluation.models import models_factory
+from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result
 from opik.exceptions import LLMJudgeParseError
 
 from opik.evaluation.suite_evaluators import base
 from . import config as llm_judge_config
 from . import parsers
+from . import strategy_selector as _strategy_selector
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,22 +70,24 @@ def _format_value(value: Any) -> str:
     return json.dumps(value, indent=2, default=str)
 
 
-def _generate_prompt(
+def _build_messages(
     input: Any,
     output: Any,
     assertions_text: str,
-) -> str:
-    """Generate the LLM query for evaluating assertions.
+) -> List[base_model.ConversationDict]:
+    """Build a [system, user] message pair for the judge call.
 
-    Combines the system prompt and user template into a single string
-    because the model's generate_string API accepts only one input string.
+    Keeping the system prompt stable across calls lets providers cache it.
     """
     user_content = LLM_JUDGE_USER_TEMPLATE.format(
         input=_format_value(input),
         output=_format_value(output),
         assertions=assertions_text,
     )
-    return LLM_JUDGE_SYSTEM_PROMPT + "\n" + user_content
+    return [
+        {"role": "system", "content": LLM_JUDGE_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
 
 
 class LLMJudge(base.BaseSuiteEvaluator):
@@ -111,6 +114,23 @@ class LLMJudge(base.BaseSuiteEvaluator):
         reasoning_effort: Optional reasoning effort level for the model.
             Supported values depend on the provider (e.g., "low", "medium", "high"
             for OpenAI reasoning models).
+        scoring_tool_strategy: Controls whether scoring uses the one-shot prompt
+            or the agentic tool-call loop when a ``trace_tool_context`` is
+            available. One of:
+
+            - ``"auto"`` (default): use the agentic loop whenever a
+              trace context is supplied, otherwise one-shot. The agentic
+              overview already subsumes the one-shot input/output, and
+              the model can answer from it without invoking any tools
+              when the trace is trivial.
+            - ``"always"``: always run the agentic loop (when a context
+              is available; otherwise falls back to one-shot).
+            - ``"never"``: always use the one-shot prompt, even if a
+              context is available. Useful to avoid the tool-schema
+              overhead on very cost-sensitive flows.
+
+            A custom ``ScoringToolStrategySelector`` instance may also be
+            passed for fine-grained control.
 
     Example:
         >>> from opik.evaluation.suite_evaluators import LLMJudge
@@ -129,6 +149,22 @@ class LLMJudge(base.BaseSuiteEvaluator):
         ... )
         >>> for result in results:
         ...     print(f"{result.name}: {result.value}")
+
+    Example (scoring strategy):
+        >>> from opik.evaluation.suite_evaluators import LLMJudge
+        >>>
+        >>> # Force the agentic tool loop whenever a trace context is supplied.
+        >>> always_agentic = LLMJudge(
+        ...     assertions=["Agent used the search tool before answering"],
+        ...     model="gpt-5",
+        ...     scoring_tool_strategy="always",
+        ... )
+        >>>
+        >>> # Force one-shot scoring, skipping the tool-schema overhead.
+        >>> never_agentic = LLMJudge(
+        ...     assertions=["Response is concise"],
+        ...     scoring_tool_strategy="never",
+        ... )
     """
 
     def __init__(
@@ -141,6 +177,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
         seed: Optional[int] = None,
         temperature: Optional[float] = None,
         reasoning_effort: Optional[str] = None,
+        scoring_tool_strategy: Union[
+            _strategy_selector.ScoringToolStrategyMode,
+            _strategy_selector.ScoringToolStrategySelector,
+        ] = "never",
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
@@ -153,12 +193,39 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self._reasoning_effort = (
             reasoning_effort or llm_judge_config.DEFAULT_REASONING_EFFORT
         )
+        self.set_scoring_tool_strategy(scoring_tool_strategy)
         self._init_model()
 
     @property
     def assertions(self) -> List[str]:
         """The assertions this evaluator checks (read-only copy)."""
         return list(self._assertions)
+
+    def set_scoring_tool_strategy(
+        self,
+        scoring_tool_strategy: Union[
+            _strategy_selector.ScoringToolStrategyMode,
+            _strategy_selector.ScoringToolStrategySelector,
+        ],
+    ) -> None:
+        """Replace the strategy selector. Used by `run_tests` to apply a
+        suite-wide override after the judge has been constructed."""
+        self._scoring_tool_strategy_input = scoring_tool_strategy
+        self._strategy_selector_instance = _strategy_selector.make_selector(
+            scoring_tool_strategy
+        )
+
+    def get_scoring_tool_strategy(
+        self,
+    ) -> _strategy_selector.ScoringToolStrategySelector:
+        """Return the resolved strategy selector currently in effect.
+
+        The result is the same object the judge consults in `score()` —
+        a `HeuristicSelector`, `AlwaysAgentic`, `NeverAgentic`, or a
+        custom subclass the caller injected. Use `isinstance` to
+        recognize the mode without reaching into the private state.
+        """
+        return self._strategy_selector_instance
 
     def _has_same_settings(self, other: "LLMJudge") -> bool:
         return (
@@ -167,6 +234,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
             and self._seed == other._seed
             and self._reasoning_effort == other._reasoning_effort
             and self.track == other.track
+            and self._scoring_tool_strategy_input == other._scoring_tool_strategy_input
         )
 
     @classmethod
@@ -202,6 +270,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
             seed=first._seed,
             temperature=first._temperature,
             reasoning_effort=first._reasoning_effort,
+            scoring_tool_strategy=first._scoring_tool_strategy_input,
         )
 
     def _init_model(self) -> None:
@@ -221,7 +290,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self,
         input: Any,
         output: Any,
-        **ignored_kwargs: Any,
+        **kwargs: Any,
     ) -> List[score_result.ScoreResult]:
         """
         Evaluate the output against all assertions.
@@ -231,7 +300,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 or any JSON-serializable structure containing the user query and metadata.
             output: All outputs from the agent. Can be a string, dict, list,
                 or any JSON-serializable structure containing the response and metadata.
-            **ignored_kwargs: Additional keyword arguments that are ignored.
+            **kwargs: Additional keyword arguments. ``trace_tool_context``
+                (when present) makes the agentic tool loop available; the
+                configured ``scoring_tool_strategy`` decides whether the call
+                takes the one-shot path or the agentic loop.
 
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
@@ -240,6 +312,21 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
         """
+        trace_tool_context = kwargs.get("trace_tool_context")
+        strategy = self._strategy_selector_instance.select(
+            trace_tool_context=trace_tool_context,
+            model_name=self._model_name,
+            assertions=self._assertions,
+        )
+        if strategy is _strategy_selector.ScoringToolStrategy.AGENTIC:
+            if trace_tool_context is None:
+                LOGGER.warning(
+                    "LLMJudge: scoring strategy selected AGENTIC but no trace_tool_context "
+                    "was provided; falling back to one-shot."
+                )
+            else:
+                return self._score_agentic(trace_tool_context)
+
         try:
             return self._generate_and_parse(input=input, output=output)
         except LLMJudgeParseError as e:
@@ -248,6 +335,16 @@ class LLMJudge(base.BaseSuiteEvaluator):
             )
             return e.results
 
+    def _score_agentic(self, ctx: Any) -> List[score_result.ScoreResult]:
+        # Import lazily so the agentic dependencies (tool registry, loop,
+        # prompt) don't load when the one-shot path is the only one used.
+        from opik.evaluation.suite_evaluators.agentic import judge as agentic_judge
+
+        judge = agentic_judge.AgenticLLMJudge(
+            assertions=self._assertions, model=self._model
+        )
+        return judge.score(ctx)
+
     @_RETRY_POLICY
     def _generate_and_parse(
         self,
@@ -255,15 +352,15 @@ class LLMJudge(base.BaseSuiteEvaluator):
         output: Any,
     ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
-        llm_query = _generate_prompt(
+        messages = _build_messages(
             input=input,
             output=output,
             assertions_text=schema.format_assertions(),
         )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=schema.response_format
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=schema.response_format
         )
-        return schema.parse(model_output)
+        return schema.parse(message["content"])
 
     async def ascore(
         self,
@@ -299,15 +396,15 @@ class LLMJudge(base.BaseSuiteEvaluator):
         output: Any,
     ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
-        llm_query = _generate_prompt(
+        messages = _build_messages(
             input=input,
             output=output,
             assertions_text=schema.format_assertions(),
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=schema.response_format
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=schema.response_format
         )
-        return schema.parse(model_output)
+        return schema.parse(message["content"])
 
     def to_config(self) -> llm_judge_config.LLMJudgeConfig:
         """
@@ -396,7 +493,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
             track: Whether to track the evaluator. Defaults to True.
             project_name: Optional project name for tracking.
             init_kwargs: Optional dictionary to override __init__ parameters.
-                Supported: 'model' to specify the model name.
+                Supported keys: 'model' to specify the model name and
+                'scoring_tool_strategy' (one of 'auto', 'always', 'never' or a
+                ScoringToolStrategySelector instance).
 
         Returns:
             LLMJudge: A new instance configured according to the provided config.
@@ -414,6 +513,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         init_kwargs = init_kwargs or {}
         model = init_kwargs.get("model")
+        scoring_tool_strategy = init_kwargs.get("scoring_tool_strategy", "auto")
 
         custom = config.model.custom_parameters or {}
         reasoning_effort = custom.get("reasoning_effort")
@@ -427,4 +527,5 @@ class LLMJudge(base.BaseSuiteEvaluator):
             seed=config.model.seed,
             temperature=config.model.temperature,
             reasoning_effort=reasoning_effort,
+            scoring_tool_strategy=scoring_tool_strategy,
         )

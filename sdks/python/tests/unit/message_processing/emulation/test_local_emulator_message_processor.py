@@ -521,7 +521,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             expected=EXCPECTED_TRACE_TREE, actual=trace_trees[0]
         )
 
-    def test_trace_trees__orphan_span_trace_link__is_skipped(self, capture_log):
+    def test_trace_trees__orphan_span_trace_link__is_skipped(self, capture_log_debug):
         trace_message = messages.CreateTraceMessage(
             trace_id="trace_1",
             project_name="test_project",
@@ -566,7 +566,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
 
         assert len(trace_trees) == 1
         assert trace_trees[0].id == "trace_1"
-        assert "orphan span-to-trace link" in capture_log.text
+        assert "orphan span-to-trace link" in capture_log_debug.text
 
     def test_trace_trees_with_nested_span_hierarchy(self):
         trace_message = messages.CreateTraceMessage(
@@ -1660,3 +1660,478 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             ),
         ]
         assert_helpers.assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees)
+
+
+class TestLocalEmulatorMessageProcessorDuplicateCreateMessages:
+    """Regression tests for OPIK-6372.
+
+    The streamer's batch / replay machinery can deliver the START and FULL
+    Create messages for the same trace/span out of order, including a START
+    arriving after the FULL one. The emulator must converge on a single
+    merged entity per id rather than producing duplicates with stale fields.
+    """
+
+    def setup_method(self):
+        self.processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
+        self.start_time = datetime_helpers.local_timestamp()
+        self.end_time = self.start_time + datetime.timedelta(seconds=1)
+
+    def _full_span_message(self):
+        return messages.CreateSpanMessage(
+            span_id="span_1",
+            trace_id="trace_1",
+            project_name="test_project",
+            parent_span_id=None,
+            name="foo",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input={"k": 1},
+            output={"is_error": False},
+            metadata=None,
+            tags=None,
+            type="tool",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+
+    def _start_span_message(self):
+        return messages.CreateSpanMessage(
+            span_id="span_1",
+            trace_id="trace_1",
+            project_name="test_project",
+            parent_span_id=None,
+            name="foo",
+            start_time=self.start_time,
+            end_time=None,
+            input={"k": 1},
+            output=None,
+            metadata=None,
+            tags=None,
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+    def _full_trace_message(self):
+        return messages.CreateTraceMessage(
+            trace_id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input=None,
+            output={"final": True},
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+
+    def _start_trace_message(self):
+        return messages.CreateTraceMessage(
+            trace_id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=None,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+    def test_start_span_arriving_after_full_span_keeps_full_fields(self):
+        # OPIK-6372: replay/race could deliver the START span after the FULL
+        # one. The emulator must keep the FULL fields (type=tool, output set).
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._full_span_message())
+        self.processor.process(self._start_span_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert len(trace_trees[0].spans) == 1
+        span = trace_trees[0].spans[0]
+        assert span.id == "span_1"
+        assert span.type == "tool"
+        assert span.output == {"is_error": False}
+        assert span.end_time == self.end_time
+
+    def test_full_span_arriving_after_start_span_keeps_full_fields(self):
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._start_span_message())
+        self.processor.process(self._full_span_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert len(trace_trees[0].spans) == 1
+        span = trace_trees[0].spans[0]
+        assert span.type == "tool"
+        assert span.output == {"is_error": False}
+        assert span.end_time == self.end_time
+
+    def test_start_trace_arriving_after_full_trace_keeps_full_output(self):
+        # OPIK-6372: same race for traces — START must not erase output set
+        # by the already-processed FULL message and must not produce a
+        # duplicate trace_trees entry.
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._start_trace_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert trace_trees[0].id == "trace_1"
+        assert trace_trees[0].output == {"final": True}
+        assert trace_trees[0].end_time == self.end_time
+
+    def test_full_after_start_does_not_produce_duplicate_trace_entries(self):
+        self.processor.process(self._start_trace_message())
+        self.processor.process(self._full_trace_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert trace_trees[0].output == {"final": True}
+        assert trace_trees[0].end_time == self.end_time
+
+    def test_full_then_start_via_batch_messages_keeps_full_fields(self):
+        # Full chain reproduction: batch messages are what the emulator
+        # actually receives in production after the streamer batches the
+        # individual create messages.
+        full_trace = trace_write.TraceWrite(
+            id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input=None,
+            output={"final": True},
+            metadata=None,
+            tags=None,
+            error_info=None,
+            last_updated_at=self.end_time,
+            thread_id=None,
+            source="sdk",
+        )
+        start_trace = trace_write.TraceWrite(
+            id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=None,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            error_info=None,
+            last_updated_at=None,
+            thread_id=None,
+            source="sdk",
+        )
+        full_span = span_write.SpanWrite(
+            id="span_1",
+            project_name="test_project",
+            trace_id="trace_1",
+            parent_span_id=None,
+            name="foo",
+            type="tool",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input={"k": 1},
+            output={"is_error": False},
+            metadata=None,
+            model=None,
+            provider=None,
+            tags=None,
+            usage=None,
+            error_info=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+        start_span = span_write.SpanWrite(
+            id="span_1",
+            project_name="test_project",
+            trace_id="trace_1",
+            parent_span_id=None,
+            name="foo",
+            type="general",
+            start_time=self.start_time,
+            end_time=None,
+            input={"k": 1},
+            output=None,
+            metadata=None,
+            model=None,
+            provider=None,
+            tags=None,
+            usage=None,
+            error_info=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+        self.processor.process(messages.CreateSpansBatchMessage(batch=[full_span]))
+        self.processor.process(messages.CreateTraceBatchMessage(batch=[full_trace]))
+        self.processor.process(messages.CreateTraceBatchMessage(batch=[start_trace]))
+        self.processor.process(messages.CreateSpansBatchMessage(batch=[start_span]))
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert trace_trees[0].output == {"final": True}
+        assert trace_trees[0].end_time == self.end_time
+        assert len(trace_trees[0].spans) == 1
+        span = trace_trees[0].spans[0]
+        assert span.type == "tool"
+        assert span.output == {"is_error": False}
+        assert span.end_time == self.end_time
+
+    def test_late_start_does_not_drop_attached_children(self):
+        # If a parent span has already had a child attached and then a stale
+        # start message for the parent arrives, the child must remain.
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._full_span_message())
+        child_message = messages.CreateSpanMessage(
+            span_id="child_1",
+            trace_id="trace_1",
+            project_name="test_project",
+            parent_span_id="span_1",
+            name="child",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+        self.processor.process(child_message)
+
+        # build the tree once so child gets attached to the parent's `.spans`
+        first_read = self.processor.trace_trees
+        assert len(first_read[0].spans) == 1
+        assert len(first_read[0].spans[0].spans) == 1
+
+        # late start arrives — must not reset the child link
+        self.processor.process(self._start_span_message())
+
+        trace_trees = self.processor.trace_trees
+        assert len(trace_trees) == 1
+        assert len(trace_trees[0].spans) == 1
+        parent = trace_trees[0].spans[0]
+        assert parent.type == "tool"
+        assert len(parent.spans) == 1
+        assert parent.spans[0].id == "child_1"
+
+    def test_merge_duplicates_false_preserves_old_append_behavior(self):
+        # Callers can still opt out of de-duplication; in that case duplicate
+        # Create messages are kept verbatim (used by some test fixtures).
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=False
+        )
+        processor.process(self._full_trace_message())
+        processor.process(self._start_trace_message())
+
+        assert len(processor.trace_trees) == 2
+
+
+class TestEmulatorMessageProcessorPublicReadAPI:
+    """Covers the flat-lookup contract: get_trace / get_span / spans_for_trace.
+
+    These methods are the public surface used by agentic-judge tooling
+    (suite_evaluators/agentic/context.py); they must keep working without
+    triggering `trace_trees`-style tree-building side effects.
+    """
+
+    def setup_method(self):
+        self.processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
+        self.start_time = datetime_helpers.local_timestamp()
+        self.later_time = self.start_time + datetime.timedelta(seconds=1)
+        self.latest_time = self.start_time + datetime.timedelta(seconds=2)
+
+    def _trace_message(self, trace_id: str, name: str = "t"):
+        return messages.CreateTraceMessage(
+            trace_id=trace_id,
+            project_name="test_project",
+            name=name,
+            start_time=self.start_time,
+            end_time=self.later_time,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=self.later_time,
+            source="sdk",
+        )
+
+    def _span_message(
+        self,
+        span_id: str,
+        trace_id: str,
+        parent_span_id=None,
+        start_time=None,
+    ):
+        return messages.CreateSpanMessage(
+            span_id=span_id,
+            trace_id=trace_id,
+            project_name="test_project",
+            parent_span_id=parent_span_id,
+            name=span_id,
+            start_time=start_time or self.start_time,
+            end_time=None,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+    def test_get_trace__trace_processed__returns_trace_model(self):
+        self.processor.process(self._trace_message("trace_1", name="hello"))
+
+        trace = self.processor.get_trace("trace_1")
+
+        assert trace is not None
+        assert trace.id == "trace_1"
+        assert trace.name == "hello"
+
+    def test_get_trace__unknown_id__returns_none(self):
+        assert self.processor.get_trace("missing") is None
+
+    def test_get_trace__does_not_trigger_tree_build_side_effects(self):
+        # Calling get_trace must not stitch children onto trace.spans the
+        # way `trace_trees` does. The caller depends on flat semantics.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        trace = self.processor.get_trace("trace_1")
+
+        assert trace is not None
+        assert trace.spans == []
+
+    def test_get_span__span_processed__returns_span_model(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        span = self.processor.get_span("span_1")
+
+        assert span is not None
+        assert span.id == "span_1"
+
+    def test_get_span__unknown_id__returns_none(self):
+        assert self.processor.get_span("missing") is None
+
+    def test_spans_for_trace__no_spans__returns_empty_list(self):
+        self.processor.process(self._trace_message("trace_1"))
+
+        assert self.processor.spans_for_trace("trace_1") == []
+
+    def test_spans_for_trace__unknown_trace_id__returns_empty_list(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        assert self.processor.spans_for_trace("other_trace") == []
+
+    def test_spans_for_trace__returns_flat_list_sorted_by_start_time(self):
+        # Both root and nested spans belong to the same trace. The returned
+        # list must be flat (parent + child as siblings), not nested, and
+        # ordered by start_time regardless of insertion order.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(
+            self._span_message(
+                "child", "trace_1", parent_span_id="parent", start_time=self.latest_time
+            )
+        )
+        self.processor.process(
+            self._span_message("parent", "trace_1", start_time=self.later_time)
+        )
+
+        spans = self.processor.spans_for_trace("trace_1")
+
+        assert [s.id for s in spans] == ["parent", "child"]
+
+    def test_spans_for_trace__filters_by_trace_id(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._trace_message("trace_2"))
+        self.processor.process(self._span_message("span_a", "trace_1"))
+        self.processor.process(self._span_message("span_b", "trace_2"))
+
+        spans_1 = self.processor.spans_for_trace("trace_1")
+        spans_2 = self.processor.spans_for_trace("trace_2")
+
+        assert [s.id for s in spans_1] == ["span_a"]
+        assert [s.id for s in spans_2] == ["span_b"]
+
+    def test_parent_span_ids_for_trace__resolves_parent_links_flat(self):
+        # Mapping must reflect the parent links set at message-process time,
+        # without depending on `_build_spans_tree` having run.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("root", "trace_1"))
+        self.processor.process(
+            self._span_message("child", "trace_1", parent_span_id="root")
+        )
+
+        mapping = self.processor.parent_span_ids_for_trace("trace_1")
+
+        assert mapping == {"root": None, "child": "root"}
+
+    def test_parent_span_ids_for_trace__filters_by_trace_id(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._trace_message("trace_2"))
+        self.processor.process(self._span_message("span_a", "trace_1"))
+        self.processor.process(self._span_message("span_b", "trace_2"))
+
+        assert self.processor.parent_span_ids_for_trace("trace_1") == {"span_a": None}
+        assert self.processor.parent_span_ids_for_trace("trace_2") == {"span_b": None}
+
+    def test_parent_span_ids_for_trace__unknown_trace_id__returns_empty(self):
+        assert self.processor.parent_span_ids_for_trace("missing") == {}
+
+    def test_spans_for_trace__does_not_mutate_trace_observation(self):
+        # `trace_trees` mutates trace.spans as a side effect; spans_for_trace
+        # must not. Otherwise, the caller can't rely on flat-vs-tree semantics
+        # depending on which access path was used.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("span_1", "trace_1"))
+
+        self.processor.spans_for_trace("trace_1")
+        trace = self.processor.get_trace("trace_1")
+
+        assert trace is not None
+        assert trace.spans == []

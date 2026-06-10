@@ -8,9 +8,9 @@ const hotkeyDisplayVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-[#FFFFFF33] dark:bg-[#FFFFFF80]",
+        default: "bg-white/20 dark:bg-white/25",
         outline:
-          "border border-input bg-background dark:border-border dark:bg-input dark:text-foreground-secondary dark:group-disabled:text-muted-gray",
+          "border border-input bg-background text-muted-foreground dark:border-border dark:bg-input dark:text-foreground-secondary dark:group-disabled:text-muted-gray",
       },
       size: {
         default: "h-8 min-w-8 px-2",

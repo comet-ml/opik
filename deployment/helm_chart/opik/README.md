@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.11.8](https://img.shields.io/badge/Version-1.11.8-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.11.8](https://img.shields.io/badge/AppVersion-1.11.8-informational?style=flat-square)
+![Version: 2.0.57](https://img.shields.io/badge/Version-2.0.57-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.57](https://img.shields.io/badge/AppVersion-2.0.57-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -14,7 +14,7 @@ A Helm chart for Comet Opik
 - kubectl - https://kubernetes.io/docs/tasks/tools/#kubectl
 
 - Helm - https://helm.sh/docs/intro/install/
-requires Helm 3.10+
+requires Helm 3.10+ or Helm 4.x
 
 - minikube - https://minikube.sigs.k8s.io/docs/start
 
@@ -228,6 +228,11 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_DEFAULT_RESOURCE | string | `"llm-models-default.yaml"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH | string | `""` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS | string | `"300"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_REMOTE_ENABLED | string | `"false"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_REMOTE_URL | string | `""` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
@@ -242,6 +247,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
+| component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |

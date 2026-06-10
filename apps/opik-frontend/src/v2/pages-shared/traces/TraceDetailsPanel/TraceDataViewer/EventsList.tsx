@@ -1,12 +1,8 @@
 import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import get from "lodash/get";
-import {
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/ui/accordion";
-import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
+import CollapsibleSection from "@/v2/pages-shared/traces/TraceDetailsPanel/CollapsibleSection";
+import CodeBlock from "./CodeBlock";
 import Loader from "@/shared/Loader/Loader";
 
 type EventsListProps = {
@@ -82,18 +78,15 @@ const EventsList: React.FC<EventsListProps> = ({ data, isLoading, search }) => {
     return null;
   }
 
-  return (
-    <AccordionItem value="events" disabled={isLoading}>
-      <AccordionTrigger>Events</AccordionTrigger>
-      <AccordionContent>
-        {isLoading ? (
-          <Loader />
-        ) : (
-          <SyntaxHighlighter data={events} search={search} withSearch />
-        )}
-      </AccordionContent>
-    </AccordionItem>
-  );
+  if (isLoading) {
+    return (
+      <CollapsibleSection title="Events" disabled bodyClassName="p-3">
+        <Loader />
+      </CollapsibleSection>
+    );
+  }
+
+  return <CodeBlock title="Events" data={events} search={search} withSearch />;
 };
 
 export default EventsList;

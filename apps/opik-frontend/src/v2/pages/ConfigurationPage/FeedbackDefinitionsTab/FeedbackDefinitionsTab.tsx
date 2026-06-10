@@ -14,7 +14,6 @@ import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyConten
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Button } from "@/ui/button";
 import useAppStore from "@/store/AppStore";
@@ -206,9 +205,8 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
       newFeedbackDefinitionDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading =
+    isPending || (isPlaceholderData && feedbackDefinitions.length === 0);
 
   return (
     <div>
@@ -271,7 +269,8 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
             <DataTableNoMatchingData />
           )
         }
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

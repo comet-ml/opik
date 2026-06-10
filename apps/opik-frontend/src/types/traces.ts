@@ -71,6 +71,7 @@ export interface BaseTraceData {
   feedback_scores?: TraceFeedbackScore[];
   comments: CommentItems;
   tags: string[];
+  environment?: string;
   usage?: UsageData;
   total_estimated_cost?: number;
   error_info?: BaseTraceDataErrorInfo;

@@ -15,22 +15,22 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v6
 
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '22'
 
     - name: Install dependencies
-      run: npm install
+      run: npm ci
 
     - name: Package Extension
       run: npm run build
 
     - name: Get Extension Filename
       id: get_filename
-      run: echo "filename=$(ls *.vsix)" >> $GITHUB_OUTPUT
+      run: echo "filename=$(ls ./*.vsix)" >> "$GITHUB_OUTPUT"
 
     - name: Publish Extension to Open VSX
       env:

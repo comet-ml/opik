@@ -79,6 +79,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -98,6 +99,7 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.common.collect.ImmutableMap;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -213,7 +215,7 @@ class DatasetsResourceTest {
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
 
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments", "projectName"};
+            "lastUpdatedBy", "comments", "projectName", "traceMetadata"};
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
             "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId", "runSummariesByExperiment"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
@@ -268,9 +270,10 @@ class DatasetsResourceTest {
     private TransactionTemplate mySqlTemplate;
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private ExperimentAggregatesService experimentAggregatesService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
@@ -287,6 +290,7 @@ class DatasetsResourceTest {
         spanResourceClient = new SpanResourceClient(this.client, baseURI);
         optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
+        experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
     }
 
     @AfterAll
@@ -433,6 +437,72 @@ class DatasetsResourceTest {
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.DATASET_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create dataset passes required permissions to auth endpoint")
+        void createDatasetPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callCreateDataset(buildDataset(), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create dataset returns 403 when permission is denied")
+        void createDatasetReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_CREATE.getValue());
+
+            try (var response = datasetResourceClient.callCreateDataset(buildDataset(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update dataset passes required permissions to auth endpoint")
+        void updateDatasetPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = datasetResourceClient.createDataset(buildDataset(), apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callUpdateDataset(id, factory.manufacturePojo(DatasetUpdate.class), apiKey,
+                    workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_EDIT.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update dataset returns 403 when permission is denied")
+        void updateDatasetReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_EDIT.getValue());
+
+            try (var response = datasetResourceClient.callUpdateDataset(UUID.randomUUID(),
+                    factory.manufacturePojo(DatasetUpdate.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
         }
     }
 
@@ -3116,6 +3186,7 @@ class DatasetsResourceTest {
                                                 .promptId(promptVersion.promptId())
                                                 .id(promptVersion.id())
                                                 .commit(promptVersion.commit())
+                                                .versionNumber(promptVersion.versionNumber())
                                                 .build())
                                 .build();
 
@@ -6440,6 +6511,7 @@ class DatasetsResourceTest {
                                             .toList())
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(datasetItem.description())
                                     .build()))
                     .collect(groupingBy(ExperimentItem::datasetItemId));
@@ -6459,6 +6531,7 @@ class DatasetsResourceTest {
                                     .feedbackScores(null)
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(2).description())
                                     .build()))
                     .toList());
@@ -6477,6 +6550,7 @@ class DatasetsResourceTest {
                                     .totalEstimatedCost(null)
                                     .duration(null)
                                     .traceVisibilityMode(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(3).description())
                                     .build()))
                     .toList());
@@ -6655,6 +6729,7 @@ class DatasetsResourceTest {
                             .datasetItemId(datasetItemBatch.items().get(i).id())
                             .comments(null)
                             .feedbackScores(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i).description())
                             .build())
                     .toList();
@@ -6673,6 +6748,7 @@ class DatasetsResourceTest {
                             .output(null)
                             .input(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i + 2).description())
                             .build())
                     .toList();
@@ -6857,6 +6933,7 @@ class DatasetsResourceTest {
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traces.get(i).startTime(), traces.get(i).endTime()))
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id())
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatchWithImage.items().get(i).description())
                             .build())
                     .toList();
@@ -7157,6 +7234,7 @@ class DatasetsResourceTest {
                     .traceId(trace.id())
                     .input(trace.input())
                     .output(trace.output())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var experimentItemsBatch = ExperimentItemsBatch.builder()
@@ -7228,6 +7306,7 @@ class DatasetsResourceTest {
                         .input(trace.input())
                         .output(trace.output())
                         .traceVisibilityMode(VisibilityMode.DEFAULT)
+                        .executionPolicy(ExecutionPolicy.DEFAULT)
                         .feedbackScores(score == null
                                 ? null
                                 : Stream.of(score)
@@ -7757,6 +7836,7 @@ class DatasetsResourceTest {
                             trace.startTime(), trace.endTime()))
                     .usage(null)
                     .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .description(null)
                     .build();
 
@@ -7836,6 +7916,7 @@ class DatasetsResourceTest {
                             trace.startTime(), trace.endTime()))
                     .usage(null)
                     .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .description(null)
                     .assertionResults(List.of(expectedAssertionResult))
                     .status(RunStatus.PASSED)
@@ -8355,6 +8436,199 @@ class DatasetsResourceTest {
             assertThat(summaryB.totalRuns()).isEqualTo(1);
             assertThat(summaryB.passedRuns()).isEqualTo(0);
             assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
+        }
+
+        @Test
+        @DisplayName("when comparing two experiments on different dataset versions, then return single row with merged experiment items")
+        void find__twoExperimentsOnDifferentDatasetVersions__thenSingleMergedRow() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItemV1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItemV1))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentA = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentIdA = experimentResourceClient.create(experimentA, apiKey, workspaceName);
+
+            var datasetItemV2 = datasetItemV1.toBuilder()
+                    .data(Map.of("query", new TextNode("v2-edited")))
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItemV2))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentB = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentIdB = experimentResourceClient.create(experimentB, apiKey, workspaceName);
+
+            var traceA = factory.manufacturePojo(Trace.class);
+            var traceB = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(traceA, traceB), apiKey, workspaceName);
+
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder().experimentId(experimentIdA)
+                            .datasetItemId(datasetItemV1.id()).traceId(traceA.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentIdB)
+                            .datasetItemId(datasetItemV1.id()).traceId(traceB.id()).build()),
+                    apiKey, workspaceName);
+
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(
+                    assertionScore(traceA, "check1", BigDecimal.ONE, "ok"))).build(), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(
+                    assertionScore(traceB, "check1", BigDecimal.ZERO, "failed"))).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentIdA, experimentIdB), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+            assertThat(actualDatasetItem.datasetItemId()).isEqualTo(datasetItemV1.id());
+            assertThat(actualDatasetItem.data()).isEqualTo(datasetItemV2.data());
+            assertThat(actualDatasetItem.experimentItems()).hasSize(2);
+
+            var itemA = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(experimentIdA))
+                    .findFirst().orElseThrow();
+            var itemB = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(experimentIdB))
+                    .findFirst().orElseThrow();
+
+            assertThat(itemA.assertionResults()).hasSize(1);
+            assertThat(itemA.assertionResults().getFirst().passed()).isTrue();
+            assertThat(itemA.status()).isEqualTo(RunStatus.PASSED);
+
+            assertThat(itemB.assertionResults()).hasSize(1);
+            assertThat(itemB.assertionResults().getFirst().passed()).isFalse();
+            assertThat(itemB.status()).isEqualTo(RunStatus.FAILED);
+
+            assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull().hasSize(2);
+
+            var summaryA = actualDatasetItem.runSummariesByExperiment().get(experimentIdA.toString());
+            assertThat(summaryA.totalRuns()).isEqualTo(1);
+            assertThat(summaryA.passedRuns()).isEqualTo(1);
+            assertThat(summaryA.status()).isEqualTo(RunStatus.PASSED);
+
+            var summaryB = actualDatasetItem.runSummariesByExperiment().get(experimentIdB.toString());
+            assertThat(summaryB.totalRuns()).isEqualTo(1);
+            assertThat(summaryB.passedRuns()).isEqualTo(0);
+            assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
+        }
+
+        @Test
+        @DisplayName("OPIK-6177: when one experiment is in experiment_aggregates and another is not, then return single row with merged experiment items")
+        void find__oneExperimentAggregatedOneRaw__thenSingleMergedRow() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            int sharedItemCount = 5;
+            var sharedItems = IntStream.range(0, sharedItemCount)
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                            .datasetId(datasetId)
+                            .build())
+                    .toList();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(sharedItems)
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentAggregated = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentAggregatedId = experimentResourceClient.create(experimentAggregated, apiKey, workspaceName);
+
+            var experimentRaw = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentRawId = experimentResourceClient.create(experimentRaw, apiKey, workspaceName);
+
+            var tracesAggregated = IntStream.range(0, sharedItemCount)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class))
+                    .toList();
+            var tracesRaw = IntStream.range(0, sharedItemCount)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class))
+                    .toList();
+            var allTraces = new ArrayList<Trace>();
+            allTraces.addAll(tracesAggregated);
+            allTraces.addAll(tracesRaw);
+            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+
+            var experimentItems = new HashSet<ExperimentItem>();
+            for (int i = 0; i < sharedItemCount; i++) {
+                experimentItems.add(ExperimentItem.builder()
+                        .experimentId(experimentAggregatedId)
+                        .datasetItemId(sharedItems.get(i).id())
+                        .traceId(tracesAggregated.get(i).id())
+                        .build());
+                experimentItems.add(ExperimentItem.builder()
+                        .experimentId(experimentRawId)
+                        .datasetItemId(sharedItems.get(i).id())
+                        .traceId(tracesRaw.get(i).id())
+                        .build());
+            }
+            experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
+
+            // Move ONLY experimentAggregated into experiment_aggregates; experimentRaw stays raw.
+            // This is the cross-branch state hasAggregated=true && hasRaw=true.
+            experimentAggregatesService.populateAggregations(experimentAggregatedId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentAggregatedId, experimentRawId), apiKey, workspaceName);
+
+            // Without the outer GROUP BY across UNION ALL, each shared id surfaces twice
+            // (once per branch with one experiment_item each) → 2 * sharedItemCount rows.
+            // With the fix: sharedItemCount rows, each carrying both experiments' items.
+            assertThat(actualPage.total()).isEqualTo(sharedItemCount);
+            assertThat(actualPage.content()).hasSize(sharedItemCount);
+
+            var expectedIds = sharedItems.stream().map(DatasetItem::id).collect(toSet());
+            assertThat(actualPage.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedIds);
+
+            for (var row : actualPage.content()) {
+                assertThat(row.experimentItems())
+                        .as("merged row should carry one item per experiment (aggregated + raw)")
+                        .hasSize(2)
+                        .extracting(ExperimentItem::experimentId)
+                        .containsExactlyInAnyOrder(experimentAggregatedId, experimentRawId);
+            }
         }
 
     }
@@ -10603,6 +10877,292 @@ class DatasetsResourceTest {
                 assertThat(actualPage.content()).hasSize(1);
                 assertThat(actualPage.content().getFirst().id()).isEqualTo(targetItemId);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("OPIK-6696: copy_from_dataset_id + copy_from_version_id on PUT /items and POST /items/changes")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CopyFromSourceVersion {
+
+        @Test
+        @DisplayName("createOrUpdateDatasetItems: when copy_from points at a separate source dataset's version, unchanged rows are copied from there (not destination)")
+        void createOrUpdate__copyFromSource__unchangedRowsCopiedFromSource() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Build the "source" dataset as a stable upstream (analog of source v_i in migrate replay)
+            var sourceDataset = buildDataset();
+            var sourceDatasetId = createAndAssert(sourceDataset, apiKey, workspaceName);
+
+            var sourceItemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(sourceDataset.name())
+                            .items(List.of(sourceItemA, sourceItemB, sourceItemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+            var sourceVersionId = datasetResourceClient.listVersions(sourceDatasetId, apiKey, workspaceName)
+                    .content().getFirst().id();
+
+            // Build the destination dataset and seed v1 with just one item (analog of dest v_(i-1)).
+            var destDataset = buildDataset();
+            var destDatasetId = createAndAssert(destDataset, apiKey, workspaceName);
+            var destSeedItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(destDataset.name())
+                            .items(List.of(destSeedItem))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            // OPIK-6696: submit a tiny "delta" payload to destination v_2, with copy_from pointing at
+            // the source dataset's version. The COPY of unchanged rows reads from the source, so the
+            // resulting destination v_2 should contain (delta) ∪ (source minus delta IDs).
+            var deltaItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(destDataset.name())
+                            .items(List.of(deltaItem))
+                            .batchGroupId(UUID.randomUUID())
+                            .copyFromDatasetId(sourceDatasetId)
+                            .copyFromVersionId(sourceVersionId)
+                            .build(),
+                    workspaceName, apiKey);
+
+            var destVersions = datasetResourceClient.listVersions(destDatasetId, apiKey, workspaceName);
+            assertThat(destVersions.content()).hasSize(2);
+
+            // newest-first → v2
+            var destV2 = destVersions.content().getFirst();
+            var destV2Items = datasetResourceClient.getDatasetItems(
+                    destDatasetId, 1, 100, destV2.versionHash(), apiKey, workspaceName);
+            assertThat(destV2Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(
+                            deltaItem.id(),
+                            sourceItemA.id(), sourceItemB.id(), sourceItemC.id());
+        }
+
+        @Test
+        @DisplayName("createOrUpdateDatasetItems: when copy_from is null, unchanged rows carry forward from destination prior version (regression)")
+        void createOrUpdate__noCopyFrom__carriesForwardFromDestination() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var itemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var itemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemA, itemB))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var itemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(itemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var v2 = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content().getFirst();
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, v2.versionHash(), apiKey, workspaceName);
+            assertThat(v2Items.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(itemA.id(), itemB.id(), itemC.id());
+        }
+
+        @Test
+        @DisplayName("applyDatasetItemChanges: when copy_from points at a source version, COPY + edit-via-SELECT-INSERT both read from there")
+        void applyChanges__copyFromSource__readsFromSource() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Source dataset: stable v1 with {A, B, C}.
+            var sourceDataset = buildDataset();
+            var sourceDatasetId = createAndAssert(sourceDataset, apiKey, workspaceName);
+            var sourceItemA = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemB = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            var sourceItemC = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(sourceDatasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(sourceDataset.name())
+                            .items(List.of(sourceItemA, sourceItemB, sourceItemC))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+            var sourceVersionId = datasetResourceClient.listVersions(sourceDatasetId, apiKey, workspaceName)
+                    .content().getFirst().id();
+
+            // Destination: empty (no prior version). First call mirrors source v1 via applyDatasetItemChanges,
+            // but with copy_from coords pointing at source. Result should be {A, B, C} in the destination.
+            var destDataset = buildDataset();
+            var destDatasetId = createAndAssert(destDataset, apiKey, workspaceName);
+
+            // Seed destination v1 with one row, so we have a base version on the destination side that
+            // applyDatasetItemChanges can chain onto.
+            var destSeed = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(destDataset.name())
+                            .items(List.of(destSeed))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+            var destV1Id = datasetResourceClient.listVersions(destDatasetId, apiKey, workspaceName)
+                    .content().getFirst().id();
+
+            // Apply delta: delete the seed item, add one new "delta" item, copy unchanged from source.
+            var deltaItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(destDatasetId)
+                    .build();
+            var changes = com.comet.opik.api.DatasetItemChanges.builder()
+                    .baseVersion(destV1Id)
+                    .addedItems(List.of(deltaItem))
+                    .deletedIds(Set.of(destSeed.id()))
+                    .copyFromDatasetId(sourceDatasetId)
+                    .copyFromVersionId(sourceVersionId)
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(destDatasetId, changes, false, apiKey, workspaceName);
+
+            var destV2 = datasetResourceClient.listVersions(destDatasetId, apiKey, workspaceName).content().getFirst();
+            var destV2Items = datasetResourceClient.getDatasetItems(
+                    destDatasetId, 1, 100, destV2.versionHash(), apiKey, workspaceName);
+
+            // applyDatasetItemChanges' prepareAddedItems regenerates the stable ID for added items, so
+            // we can't predict the delta item's final id. Assert: the destination contains source's
+            // three items (carry-forward from source COPY worked) plus exactly one extra (the new
+            // delta); destSeed was deleted; the COPY did NOT read from destination v_1 (it would have
+            // returned destSeed instead of source's items).
+            assertThat(destV2Items.content())
+                    .extracting(DatasetItem::id)
+                    .contains(sourceItemA.id(), sourceItemB.id(), sourceItemC.id())
+                    .doesNotContain(destSeed.id())
+                    .hasSize(4);
+        }
+
+        @Test
+        @DisplayName("createOrUpdateDatasetItems: when copy_from points at a non-existent version, returns 404 instead of silently writing an empty version")
+        void createOrUpdate__copyFromMissingVersion__returns404() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Seed v1 so the codepath reaches createVersionWithDelta (not createFirstVersion).
+            var seedItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(seedItem))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var deltaItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder().datasetId(datasetId).build();
+            var bogusVersionId = UUID.randomUUID();
+
+            try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .put(jakarta.ws.rs.client.Entity.json(
+                            DatasetItemBatch.builder()
+                                    .datasetName(dataset.name())
+                                    .items(List.of(deltaItem))
+                                    .batchGroupId(UUID.randomUUID())
+                                    .copyFromDatasetId(datasetId)
+                                    .copyFromVersionId(bogusVersionId)
+                                    .build()))) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("OPIK-5269: Trace metadata exposed on experiment-item compare")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceMetadataOnExperimentItemCompareTest {
+
+        Stream<Arguments> traceMetadataCases() {
+            // Value is opaque to the BE; the projection should pass it
+            // through verbatim, or surface ``null`` when the trace has none.
+            var populated = JsonUtils.readTree(
+                    Map.of("_opik_evaluation_pending", false, "other_key", "other_value"));
+            return Stream.of(
+                    arguments("populated metadata round-trips", populated, populated),
+                    arguments("null metadata stays null", null, null));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("traceMetadataCases")
+        @DisplayName("Trace.metadata projects onto ExperimentItem.traceMetadata via the compare endpoint")
+        void findDatasetItemsWithExperimentItems__projectsTraceMetadata(
+                String displayName, JsonNode traceMetadata, JsonNode expectedTraceMetadata) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory);
+            putAndAssert(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build(), workspaceName, apiKey);
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .metadata(traceMetadata)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build(), apiKey, workspaceName);
+
+            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(result.content()).hasSize(1);
+            var experimentItems = result.content().get(0).experimentItems();
+            assertThat(experimentItems).hasSize(1);
+            assertThat(experimentItems.get(0).traceMetadata()).isEqualTo(expectedTraceMetadata);
         }
     }
 

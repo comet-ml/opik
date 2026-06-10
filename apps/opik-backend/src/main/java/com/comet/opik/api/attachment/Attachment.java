@@ -23,14 +23,14 @@ public record Attachment(
 
     @Builder(toBuilder = true)
     public record AttachmentPage(
-            @JsonView( {
+            @JsonView({
                     Project.View.Public.class}) int page,
             @JsonView({ProviderApiKey.View.Public.class}) int size,
             @JsonView({ProviderApiKey.View.Public.class}) long total,
             @JsonView({ProviderApiKey.View.Public.class}) List<Attachment> content,
             @JsonView({ProviderApiKey.View.Public.class}) List<String> sortableBy)
             implements
-                Page<Attachment>{
+                Page<Attachment> {
 
         public static AttachmentPage empty(int page) {
             return new AttachmentPage(page, 0, 0, List.of(), List.of());

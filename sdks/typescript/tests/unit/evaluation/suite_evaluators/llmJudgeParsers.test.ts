@@ -170,13 +170,11 @@ describe("ResponseSchema", () => {
         name: "Output is relevant",
         value: 1,
         reason: "Matches the topic",
-        categoryName: "suite_assertion",
       });
       expect(results[1]).toEqual({
         name: "Output is concise",
         value: 0,
         reason: "Too verbose",
-        categoryName: "suite_assertion",
       });
     });
 
@@ -188,7 +186,7 @@ describe("ResponseSchema", () => {
 
       const results = schema.parse(response);
       expect(results[0].value).toBe(1);
-      expect(results[0].categoryName).toBe("suite_assertion");
+      expect(results[0].categoryName).toBeUndefined();
     });
 
     it("should convert boolean false to value 0", () => {
@@ -199,7 +197,7 @@ describe("ResponseSchema", () => {
 
       const results = schema.parse(response);
       expect(results[0].value).toBe(0);
-      expect(results[0].categoryName).toBe("suite_assertion");
+      expect(results[0].categoryName).toBeUndefined();
     });
 
     it("should return scoringFailed: true for missing fields", () => {
@@ -224,7 +222,6 @@ describe("ResponseSchema", () => {
         value: 0,
         reason: expect.stringContaining("missing"),
         scoringFailed: true,
-        categoryName: "suite_assertion",
       });
     });
 
@@ -241,7 +238,6 @@ describe("ResponseSchema", () => {
         value: 0,
         reason: expect.stringContaining("malformed"),
         scoringFailed: true,
-        categoryName: "suite_assertion",
       });
     });
 
@@ -305,7 +301,7 @@ describe("ResponseSchema", () => {
         expect(results[i].value).toBe((i + 1) % 2 === 0 ? 1 : 0);
         expect(results[i].reason).toBe(`Reason for assertion ${i + 1}`);
         expect(results[i].scoringFailed).toBeUndefined();
-        expect(results[i].categoryName).toBe("suite_assertion");
+        expect(results[i].categoryName).toBeUndefined();
       }
     });
 
@@ -326,7 +322,7 @@ describe("ResponseSchema", () => {
       expect(results).toHaveLength(1);
       expect(results[0].name).toBe(assertion);
       expect(results[0].value).toBe(1);
-      expect(results[0].categoryName).toBe("suite_assertion");
+      expect(results[0].categoryName).toBeUndefined();
     });
   });
 });

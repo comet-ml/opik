@@ -31,7 +31,7 @@ const PageEmptyState: React.FC<PageEmptyStateProps> = ({
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-7 py-10">
       <img src={imageUrl} alt={title} />
-      <div className="flex flex-col items-center gap-1.5">
+      <div className="flex flex-col items-center gap-2">
         <h2 className="comet-title-s text-foreground">{title}</h2>
         <p className="comet-body-s max-w-[570px] whitespace-pre-line text-center text-muted-slate">
           {description}

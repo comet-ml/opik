@@ -3,12 +3,14 @@
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
+import { AssertionResultsClient } from "./api/resources/assertionResults/client/Client.js";
 import { AttachmentsClient } from "./api/resources/attachments/client/Client.js";
 import { AutomationRuleEvaluatorsClient } from "./api/resources/automationRuleEvaluators/client/Client.js";
 import { ChatCompletionsClient } from "./api/resources/chatCompletions/client/Client.js";
 import { CheckClient } from "./api/resources/check/client/Client.js";
 import { DashboardsClient } from "./api/resources/dashboards/client/Client.js";
 import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
+import { EnvironmentsClient } from "./api/resources/environments/client/Client.js";
 import { ExperimentsClient } from "./api/resources/experiments/client/Client.js";
 import { FeedbackDefinitionsClient } from "./api/resources/feedbackDefinitions/client/Client.js";
 import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
@@ -53,12 +55,14 @@ export class OpikApiClient {
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _alerts: AlertsClient | undefined;
     protected _annotationQueues: AnnotationQueuesClient | undefined;
+    protected _assertionResults: AssertionResultsClient | undefined;
     protected _attachments: AttachmentsClient | undefined;
     protected _check: CheckClient | undefined;
     protected _automationRuleEvaluators: AutomationRuleEvaluatorsClient | undefined;
     protected _chatCompletions: ChatCompletionsClient | undefined;
     protected _dashboards: DashboardsClient | undefined;
     protected _datasets: DatasetsClient | undefined;
+    protected _environments: EnvironmentsClient | undefined;
     protected _experiments: ExperimentsClient | undefined;
     protected _feedbackDefinitions: FeedbackDefinitionsClient | undefined;
     protected _guardrails: GuardrailsClient | undefined;
@@ -103,6 +107,10 @@ export class OpikApiClient {
         return (this._annotationQueues ??= new AnnotationQueuesClient(this._options));
     }
 
+    public get assertionResults(): AssertionResultsClient {
+        return (this._assertionResults ??= new AssertionResultsClient(this._options));
+    }
+
     public get attachments(): AttachmentsClient {
         return (this._attachments ??= new AttachmentsClient(this._options));
     }
@@ -125,6 +133,10 @@ export class OpikApiClient {
 
     public get datasets(): DatasetsClient {
         return (this._datasets ??= new DatasetsClient(this._options));
+    }
+
+    public get environments(): EnvironmentsClient {
+        return (this._environments ??= new EnvironmentsClient(this._options));
     }
 
     public get experiments(): ExperimentsClient {

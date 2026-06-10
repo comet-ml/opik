@@ -15,18 +15,19 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v1/layout/SideBar/MenuItem/SidebarMenuItem";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const getMenuItems = ({
   canViewExperiments,
   canViewDashboards,
   canViewDatasets,
   canUsePlayground,
+  canViewOptimizationRuns,
 }: {
   canViewExperiments: boolean;
   canViewDashboards: boolean;
   canViewDatasets: boolean;
   canUsePlayground: boolean;
+  canViewOptimizationRuns: boolean;
 }): MenuItemGroup[] => {
   return [
     {
@@ -130,21 +131,25 @@ const getMenuItems = ({
           : []),
       ],
     },
-    {
-      id: "optimization",
-      label: "Optimization",
-      items: [
-        {
-          id: "optimizations",
-          path: "/$workspaceName/optimizations",
-          type: MENU_ITEM_TYPE.router,
-          icon: SparklesIcon,
-          label: "Optimization studio",
-          count: "optimizations",
-          showIndicator: "optimizations_running",
-        },
-      ],
-    },
+    ...(canViewOptimizationRuns
+      ? [
+          {
+            id: "optimization",
+            label: "Optimization",
+            items: [
+              {
+                id: "optimizations",
+                path: "/$workspaceName/optimizations",
+                type: MENU_ITEM_TYPE.router,
+                icon: SparklesIcon,
+                label: "Optimization studio",
+                count: "optimizations",
+                showIndicator: "optimizations_running",
+              },
+            ],
+          },
+        ]
+      : []),
     {
       id: "production",
       label: "Production",
@@ -164,7 +169,6 @@ const getMenuItems = ({
           icon: Bell,
           label: "Alerts",
           count: "alerts",
-          featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
         },
       ],
     },

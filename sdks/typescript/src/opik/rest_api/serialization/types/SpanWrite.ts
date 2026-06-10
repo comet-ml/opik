@@ -34,6 +34,7 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
         ),
         ttft: core.serialization.number().optional(),
         source: SpanWriteSource.optional(),
+        environment: core.serialization.string().optional(),
     });
 
 export declare namespace SpanWrite {
@@ -59,5 +60,6 @@ export declare namespace SpanWrite {
         total_estimated_cost_version?: string | null;
         ttft?: number | null;
         source?: SpanWriteSource.Raw | null;
+        environment?: string | null;
     }
 }

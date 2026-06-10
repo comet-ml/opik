@@ -1,6 +1,5 @@
 package com.comet.opik.api;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,7 +23,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ExperimentItem(
-        @JsonView( {
+        @JsonView({
                 ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) UUID id,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID experimentId,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID datasetItemId,
@@ -37,6 +36,8 @@ public record ExperimentItem(
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, implementation = JsonListString.class) JsonNode input,
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, implementation = JsonListString.class) JsonNode output,
+        @JsonView({
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, implementation = JsonListString.class) JsonNode traceMetadata,
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores,
         @JsonView({
@@ -59,11 +60,12 @@ public record ExperimentItem(
                 ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode traceVisibilityMode,
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String description,
-        @JsonIgnore ExecutionPolicy executionPolicy,
+        @JsonView({
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) ExecutionPolicy executionPolicy,
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<AssertionResult> assertionResults,
         @JsonView({
-                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) RunStatus status){
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) RunStatus status) {
 
     public static class View {
         public static class Write {

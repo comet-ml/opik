@@ -22,6 +22,7 @@ class Trace:
         url_override: str,
         source: TraceSource,
         config: opik_config.OpikConfig,
+        environment: Optional[str] = None,
     ):
         """
         A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
@@ -32,6 +33,7 @@ class Trace:
         self._url_override = url_override
         self.source = source
         self._config = config
+        self._environment = environment
 
     def end(
         self,
@@ -156,6 +158,7 @@ class Trace:
             error_info=error_info,
             thread_id=thread_id,
             source=self.source,
+            environment=self._environment,
         )
 
     def span(
@@ -229,6 +232,7 @@ class Trace:
             attachments=attachments,
             source=self.source,
             config=self._config,
+            environment=self._environment,
         )
 
     def log_feedback_score(
@@ -279,6 +283,7 @@ def update_trace(
     tags: Optional[List[Any]] = None,
     error_info: Optional[ErrorInfoDict] = None,
     thread_id: Optional[str] = None,
+    environment: Optional[str] = None,
 ) -> None:
     """
     Update an existing trace with new information.
@@ -316,5 +321,6 @@ def update_trace(
         error_info=error_info,
         thread_id=thread_id,
         source=source,
+        environment=environment,
     )
     message_streamer.put(update_trace_message)

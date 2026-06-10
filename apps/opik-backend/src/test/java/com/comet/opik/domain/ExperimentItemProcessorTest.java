@@ -3,8 +3,10 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.llm.ChatCompletionService;
@@ -19,6 +21,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.shared.Usage;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -133,6 +136,20 @@ class ExperimentItemProcessorTest {
             String projectName,
             String workspaceId,
             String userName) {
+        return buildMessage(prompt, datasetItem, experimentId, datasetId, versionHash, projectName, workspaceId,
+                userName, null);
+    }
+
+    private ExperimentItemToProcess buildMessage(
+            ExperimentExecutionRequest.PromptVariant prompt,
+            DatasetItem datasetItem,
+            UUID experimentId,
+            UUID datasetId,
+            String versionHash,
+            String projectName,
+            String workspaceId,
+            String userName,
+            List<OpikPromptEntry> opikPrompts) {
         when(datasetItemService.get(datasetItem.id())).thenReturn(Mono.just(datasetItem));
         return ExperimentItemToProcess.builder()
                 .batchId(UUID.randomUUID())
@@ -145,6 +162,7 @@ class ExperimentItemProcessorTest {
                 .workspaceId(workspaceId)
                 .userName(userName)
                 .allExperimentIds(List.of(experimentId))
+                .opikPrompts(opikPrompts)
                 .build();
     }
 
@@ -446,7 +464,7 @@ class ExperimentItemProcessorTest {
         }
 
         @Test
-        void processCreatesTraceWithEmptyOutputOnLlmFailure() {
+        void processCreatesTraceWithoutLlmOutputOnLlmFailure() {
             var prompt = buildPrompt("gpt-4", "user", "Hello");
             var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
             var experimentId = UUID.randomUUID();
@@ -464,6 +482,35 @@ class ExperimentItemProcessorTest {
 
             var output = captor.getValue().output();
             assertThat(output.has("output")).isFalse();
+        }
+
+        @Test
+        void processSurfacesAgentErrorInTraceOutputOnLlmFailure() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenThrow(new RuntimeException("rate limit exceeded"));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
+
+            var traceCaptor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(traceCaptor.capture());
+
+            var output = traceCaptor.getValue().output();
+            assertThat(output.has("error")).isTrue();
+            assertThat(output.get("error").get("type").asText()).isEqualTo("RuntimeException");
+            assertThat(output.get("error").get("message").asText()).isEqualTo("rate limit exceeded");
+
+            var spanCaptor = ArgumentCaptor.forClass(Span.class);
+            verify(spanService).create(spanCaptor.capture());
+            var spanOutput = spanCaptor.getValue().output();
+            assertThat(spanOutput.has("error")).isTrue();
+            assertThat(spanOutput.get("error").get("message").asText()).isEqualTo("rate limit exceeded");
         }
     }
 
@@ -575,6 +622,98 @@ class ExperimentItemProcessorTest {
             verify(chatCompletionService).create(captor.capture(), eq(WORKSPACE_ID));
 
             assertThat(captor.getValue().stream()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("opik_prompts metadata")
+    class OpikPromptsMetadata {
+
+        @Test
+        void processWritesOpikPromptsMetadataWhenProvidedInMessage() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            var promptId = UUID.randomUUID();
+            var versionId = UUID.randomUUID();
+            var name = RandomStringUtils.randomAlphanumeric(10);
+            var commit = RandomStringUtils.randomAlphanumeric(8);
+            var versionNumber = "v" + RandomStringUtils.randomNumeric(2);
+            var template = RandomStringUtils.randomAlphanumeric(20);
+            var entry = OpikPromptEntry.builder()
+                    .id(promptId)
+                    .name(name)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .version(OpikPromptEntry.Version.builder()
+                            .id(versionId)
+                            .template(new TextNode(template))
+                            .commit(commit)
+                            .versionNumber(versionNumber)
+                            .build())
+                    .build();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, List.of(entry))).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+
+            var metadata = captor.getValue().metadata();
+            assertThat(metadata.has("opik_prompts")).isTrue();
+            var actual = metadata.get("opik_prompts");
+            assertThat(actual.isArray()).isTrue();
+            assertThat(actual).hasSize(1);
+            assertThat(actual.get(0).get("id").asText()).isEqualTo(promptId.toString());
+            assertThat(actual.get(0).get("name").asText()).isEqualTo(name);
+            assertThat(actual.get(0).get("template_structure").asText()).isEqualTo("text");
+            assertThat(actual.get(0).get("version").get("id").asText()).isEqualTo(versionId.toString());
+            assertThat(actual.get(0).get("version").get("commit").asText()).isEqualTo(commit);
+            assertThat(actual.get(0).get("version").get("version_number").asText()).isEqualTo(versionNumber);
+            assertThat(actual.get(0).get("version").get("template").asText()).isEqualTo(template);
+        }
+
+        @Test
+        void processOmitsOpikPromptsMetadataWhenMessageHasNone() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+            assertThat(captor.getValue().metadata().has("opik_prompts")).isFalse();
+        }
+
+        @Test
+        void processOmitsOpikPromptsMetadataWhenListIsEmpty() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME, List.of())).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+            assertThat(captor.getValue().metadata().has("opik_prompts")).isFalse();
         }
     }
 

@@ -49,9 +49,9 @@ class Streamer:
     def use_batching(self) -> bool:
         return self._batch_preprocessor._batch_manager is not None
 
-    def put(self, message: messages.BaseMessage) -> None:
+    def put(self, message: messages.BaseMessage, force: bool = False) -> None:
         with self._lock:
-            if self._drain:
+            if self._drain and not force:
                 return
 
             self._idle = False
@@ -81,26 +81,90 @@ class Streamer:
                 )
             self._idle = True
 
-    def close(self, timeout: Optional[int]) -> bool:
+    def close(self, timeout: Optional[int] = None, *, flush: bool = True) -> bool:
         """
-        Stops data processing threads
+        Stops data processing threads.
+
+        Args:
+            timeout: Budget for draining the pipeline. Only meaningful when
+                ``flush`` is True; ignored otherwise.
+            flush: If True (default), wait for queued messages and file uploads
+                to reach the backend before closing — the historical
+                production-safe behaviour. Set False for fire-and-forget
+                teardowns where pending data can be dropped (e.g. per-test
+                cleanup in e2e tests where assertions already polled the
+                backend during the test body).
         """
         with self._lock:
-            synchronization.wait_for_done(
-                check_function=lambda: self._idle,
-                timeout=timeout,
-                sleep_time=0.1,
-            )
+            if self._drain:
+                # Already closed — make the call idempotent so atexit can fire
+                # safely after an explicit close (common in test teardown).
+                return self._message_queue.empty()
+            if flush:
+                synchronization.wait_for_done(
+                    check_function=lambda: self._idle,
+                    timeout=timeout,
+                    sleep_time=0.1,
+                )
             self._drain = True
 
-        self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
-        self._fallback_replay_manager.close()  # stopping can causes replaying of failed messages if connection is restored
-        self._fallback_replay_manager.join(timeout)
+        self._batch_preprocessor.stop(flush=flush)
+        self._fallback_replay_manager.close()
 
-        self.flush(timeout)
-        self._close_queue_consumers()
+        if flush:
+            # Wait for the replay thread, consumer queue, and file uploads to
+            # actually drain before releasing the caller. Consumers must keep
+            # running while the queue drains, so close them at the very end.
+            self._fallback_replay_manager.join(timeout)
+            self.flush(timeout)
+            self._close_queue_consumers()
+        else:
+            # Fire-and-forget: drop pending messages so the stop-signalled
+            # consumers see an empty queue and exit on their own. No joins —
+            # daemon threads can finish any in-flight HTTP request in the
+            # background without blocking teardown.
+            pending = self._message_queue.size()
+            if pending > 0:
+                LOGGER.warning(
+                    "Streamer.close(flush=False) discarding %d queued message(s) "
+                    "without flushing. Data that had not yet reached the backend "
+                    "will be lost. Use flush=True (the default) if you need "
+                    "durability — flush=False is intended for short-lived "
+                    "tests/teardowns, not production shutdown.",
+                    pending,
+                )
+            self._message_queue.clear()
+            self._close_queue_consumers()
 
         return self._message_queue.empty()
+
+    def drain_to_processors(self, timeout: Optional[float] = None) -> bool:
+        """Lightweight drain: ensure every message submitted so far has
+        been applied to in-process chained processors (notably the
+        `LocalEmulatorMessageProcessor`).
+
+        Differs from `flush(...)` by skipping the file-upload manager
+        and the fallback replay manager — both are concerned with
+        backend delivery, not local processor state. Designed to be
+        called frequently from the evaluation engine before invoking
+        the agentic LLM judge, which reads the emulator's view of
+        spans/error_info for the most-recently-run task. Without this
+        drain, the queue consumer may still be processing the batch
+        when scoring begins and the judge would see stale data.
+
+        Returns True if everything drained within `timeout`; False
+        if the timeout fired with messages still pending. The agentic
+        path treats False as "best-effort applied" and proceeds with
+        whatever state is currently in the emulator.
+        """
+        self._batch_preprocessor.flush()
+        synchronization.wait_for_done(
+            check_function=lambda: self._all_done(),
+            timeout=timeout,
+            sleep_time=0.05,
+            progress_callback=self._batch_preprocessor.flush,
+        )
+        return self._all_done()
 
     def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
         # wait for current pending messages processing to be completed
@@ -125,6 +189,7 @@ class Streamer:
             check_function=lambda: self._all_done(),
             timeout=timeout,
             sleep_time=0.1,
+            progress_callback=self._batch_preprocessor.flush,
         )
 
         elapsed_time = time.time() - start_time
@@ -144,18 +209,18 @@ class Streamer:
         return flushed
 
     def _all_done(self) -> bool:
+        # `all_tasks_done()` is True only when every message accepted by
+        # `put()` has been terminally handled by a consumer (its
+        # `message_processor.process(...)` returned or raised a non-rate-limit
+        # error). This closes the race where a message was popped off the
+        # queue but not yet processed.
         return (
-            self.workers_idling()
-            and self._message_queue.empty()
-            and self._batch_preprocessor.is_empty()
+            self._message_queue.all_tasks_done() and self._batch_preprocessor.is_empty()
         )
 
     def __internal_api__failed_uploads__(self, timeout: Optional[float]) -> int:
         """Returns the number of failed file uploads. Blocking - waits for all uploads to complete."""
         return self._file_upload_manager.failed_uploads(timeout=timeout)
-
-    def workers_idling(self) -> bool:
-        return all([consumer.idling for consumer in self._queue_consumers])
 
     def queue_size(self) -> int:
         return self._message_queue.size()

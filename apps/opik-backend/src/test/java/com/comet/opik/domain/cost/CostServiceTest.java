@@ -38,6 +38,23 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
+    @Test
+    void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 100,
+                "original_usage.prompt_token_count", 1000,
+                "original_usage.candidates_token_count", 100,
+                "original_usage.cached_content_token_count", 400);
+
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-flash", "google_vertexai", usage, null);
+
+        // gemini-2.5-flash: input 3e-7, output 2.5e-6, cache_read 3e-8
+        // non-cached input = 1000 - 400 = 600 -> 600*3e-7 + 100*2.5e-6 + 400*3e-8
+        // = 0.00018 + 0.00025 + 0.000012 = 0.000442
+        assertThat(cost).isEqualByComparingTo("0.000442");
+    }
+
     @ParameterizedTest
     @MethodSource("provideAudioSpeechModels")
     void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
@@ -180,6 +197,128 @@ class CostServiceTest {
                 Arguments.of("openai/gpt-4o-mini", "openai"),
                 Arguments.of("anthropic/claude-3-7-sonnet-20250219", "anthropic"),
                 Arguments.of("anthropic/claude-haiku-4-5-20251001", "anthropic"));
+    }
+
+    /**
+     * Overrides file: alias entries should resolve to the target's pricing.
+     */
+    @ParameterizedTest
+    @MethodSource("provideOverrideAliases")
+    void calculateCost_overrideAliasResolvesToTargetPricing(String aliasName, String targetName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal aliasCost = CostService.calculateCost(aliasName, provider, usage, null);
+        BigDecimal targetCost = CostService.calculateCost(targetName, provider, usage, null);
+
+        assertThat(aliasCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(aliasCost).isEqualByComparingTo(targetCost);
+    }
+
+    private static Stream<Arguments> provideOverrideAliases() {
+        return Stream.of(
+                Arguments.of("claude-4-5-haiku", "claude-haiku-4-5", "anthropic"),
+                Arguments.of("claude-4-5-opus", "claude-opus-4-5", "anthropic"),
+                Arguments.of("claude-4-5-sonnet", "claude-sonnet-4-5", "anthropic"),
+                Arguments.of("claude-4-6-opus", "claude-opus-4-6", "anthropic"),
+                Arguments.of("claude-4-6-sonnet", "claude-sonnet-4-6", "anthropic"),
+                Arguments.of("claude-4-7-opus", "claude-opus-4-7", "anthropic"));
+    }
+
+    /**
+     * Overrides file: aliases must be reachable via the existing dot→hyphen normalization,
+     * which is how EIS-style names like "claude-4.5-haiku" resolve to the alias key
+     * "claude-4-5-haiku" and from there to the target "claude-haiku-4-5".
+     */
+    @Test
+    void calculateCost_overrideAliasReachableViaDotNormalization() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal dotFormCost = CostService.calculateCost("claude-4.5-haiku", "anthropic", usage, null);
+        BigDecimal canonicalCost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+
+        assertThat(dotFormCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(dotFormCost).isEqualByComparingTo(canonicalCost);
+    }
+
+    /**
+     * Overrides file: brand-new entries (models absent from upstream LiteLLM) must produce non-zero cost.
+     */
+    @ParameterizedTest
+    @MethodSource("provideOverrideNewEntries")
+    void calculateCost_overrideNewEntry(String model, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideOverrideNewEntries() {
+        return Stream.of(
+                Arguments.of("gpt-oss-120b", "openai"),
+                Arguments.of("gpt-oss-20b", "openai"),
+                Arguments.of("jina-clip-v2", "jina_ai"),
+                Arguments.of("jina-embeddings-v3", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-omni-nano", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-omni-small", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-text-nano", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-text-small", "jina_ai"),
+                Arguments.of("elser_model_2", "elastic"),
+                Arguments.of("gemini-3-flash", "google_ai"),
+                Arguments.of("gemini-3.1-pro", "google_ai"),
+                Arguments.of("gemini-embedding-002", "google_ai"),
+                Arguments.of("mistral-medium-3-5", "mistral"),
+                Arguments.of("mistral-small-2603", "mistral"));
+    }
+
+    /**
+     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
+     * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
+     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
+     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     */
+    @ParameterizedTest
+    @MethodSource("provideMistralModels")
+    void calculateCostForMistralModels(String model, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1_000_000, "completion_tokens", 1_000_000);
+
+        BigDecimal cost = CostService.calculateCost(model, "mistral", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideMistralModels() {
+        return Stream.of(
+                // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
+                Arguments.of("mistral-small-latest", "0.24"),
+                // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
+                Arguments.of("mistral-large-3", "2.00"),
+                // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
+                Arguments.of("codestral-2508", "1.20"),
+                // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
+                Arguments.of("mistral-medium-3-5", "9.00"),
+                // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
+                Arguments.of("mistral-small-2603", "0.75"));
+    }
+
+    /**
+     * Overrides file: `litellm_provider: "microsoft"` is remapped to canonical `azure` via
+     * PROVIDERS_MAPPING. A span emitted with provider=`azure` and the model name must hit
+     * the override row for `azure/multilingual-e5-large`.
+     */
+    @Test
+    void calculateCost_overrideMicrosoftProviderMapsToAzure() {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000);
+
+        BigDecimal cost = CostService.calculateCost("multilingual-e5-large", "azure", usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
     }
 
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {

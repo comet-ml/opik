@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .assertion_result_compare import AssertionResultCompare
 from .comment_compare import CommentCompare
+from .execution_policy_compare import ExecutionPolicyCompare
 from .experiment_item_compare_status import ExperimentItemCompareStatus
 from .experiment_item_compare_trace_visibility_mode import ExperimentItemCompareTraceVisibilityMode
 from .feedback_score_compare import FeedbackScoreCompare
@@ -21,6 +22,7 @@ class ExperimentItemCompare(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     input: typing.Optional[JsonListStringCompare] = None
     output: typing.Optional[JsonListStringCompare] = None
+    trace_metadata: typing.Optional[JsonListStringCompare] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreCompare]] = None
     comments: typing.Optional[typing.List[CommentCompare]] = None
     total_estimated_cost: typing.Optional[float] = None
@@ -32,6 +34,7 @@ class ExperimentItemCompare(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     trace_visibility_mode: typing.Optional[ExperimentItemCompareTraceVisibilityMode] = None
     description: typing.Optional[str] = None
+    execution_policy: typing.Optional[ExecutionPolicyCompare] = None
     assertion_results: typing.Optional[typing.List[AssertionResultCompare]] = None
     status: typing.Optional[ExperimentItemCompareStatus] = None
 

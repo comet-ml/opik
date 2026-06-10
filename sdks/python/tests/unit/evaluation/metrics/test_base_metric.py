@@ -214,6 +214,198 @@ print("PATCH_OK")
         )
         assert "PATCH_OK" in result.stdout
 
+    def test_submodule_import_of_non_stubbed_opik_child_triggers_real_load(self):
+        """Verify the meta-path finder fallback resolves non-stubbed `opik.*` submodules.
+
+        The stubs installed in `sys.modules` for `opik`, `opik.evaluation`, and
+        `opik.evaluation.metrics` have `__path__ = []`. That stops `PathFinder`
+        from resolving submodules like `opik.evaluation.metrics.conversation`
+        that are not pre-registered — and Python's import machinery does not
+        consult `__getattr__` for dotted-path resolution, so the attribute
+        fallback never fires. `scoring_runner.py` installs a `find_spec`
+        hook on the stub so that any non-stubbed `opik.*` submodule import
+        triggers the real opik load and then resolves through the standard
+        finders.
+
+        HOW TO FIX if this fails: Check `_FallbackModule.find_spec` in
+        `apps/opik-sandbox-executor-python/scoring_runner.py` — it must
+        return a spec for `opik.*` names when `_stubs` is non-empty.
+        """
+        code = """
+import importlib.util
+import sys
+import types
+from typing import Any
+
+import _opik._base_metric
+import _opik._score_result
+
+_stubs = {}
+
+
+def _load_real_opik():
+    if not _stubs:
+        return
+    for name, stub in _stubs.items():
+        if sys.modules.get(name) is stub:
+            del sys.modules[name]
+        if stub in sys.meta_path:
+            sys.meta_path.remove(stub)
+    _stubs.clear()
+    import opik  # noqa: F401
+
+
+class _FallbackModule(types.ModuleType):
+    def __getattr__(self, name):
+        _load_real_opik()
+        return getattr(sys.modules[self.__name__], name)
+
+    def find_spec(self, fullname, path, target=None):
+        if not _stubs or not (fullname == "opik" or fullname.startswith("opik.")):
+            return None
+        _load_real_opik()
+        return importlib.util.find_spec(fullname)
+
+
+for _name in ["opik", "opik.evaluation", "opik.evaluation.metrics"]:
+    stub = _FallbackModule(_name)
+    stub.__path__ = []
+    sys.modules[_name] = stub
+    _stubs[_name] = stub
+
+sys.modules["opik.evaluation.metrics.base_metric"] = _opik._base_metric
+sys.modules["opik.evaluation.metrics.score_result"] = _opik._score_result
+sys.modules["opik.evaluation.metrics"].base_metric = _opik._base_metric
+sys.modules["opik.evaluation.metrics"].score_result = _opik._score_result
+
+sys.meta_path.insert(0, _stubs["opik"])
+
+# Before first real access, the stubs are in place.
+assert _stubs, "stubs should be installed before user code runs"
+
+# User code imports a non-stubbed submodule — this goes through find_spec.
+from opik.evaluation.metrics.conversation import conversation_thread_metric, types as conv_types
+
+# The finder should have triggered the real opik load.
+assert not _stubs, "real opik load should have cleared the stubs"
+assert "opik.evaluation.metrics.conversation" in sys.modules
+assert conversation_thread_metric.__file__.endswith(
+    "opik/evaluation/metrics/conversation/conversation_thread_metric.py"
+)
+assert conv_types.__file__.endswith("opik/evaluation/metrics/conversation/types.py")
+
+# The class is really usable.
+cls = conversation_thread_metric.ConversationThreadMetric
+assert callable(cls)
+
+print("SUBMODULE_OK")
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"Submodule import through fallback finder failed.\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        assert "SUBMODULE_OK" in result.stdout
+
+    def test_lightweight_path_stays_lightweight_with_finder_installed(self):
+        """Verify the finder doesn't disturb the fast path.
+
+        When user code uses only `BaseMetric` / `ScoreResult`, the finder
+        must stay out of the way — no real opik import should happen.
+
+        HOW TO FIX if this fails: The `find_spec` early-exit on missing
+        stubs (or on non-`opik.*` names) is likely broken — it's claiming
+        names it shouldn't.
+        """
+        code = """
+import importlib.util
+import sys
+import types
+from typing import Any
+
+import _opik._base_metric
+import _opik._score_result
+
+_stubs = {}
+
+
+def _load_real_opik():
+    if not _stubs:
+        return
+    for name, stub in _stubs.items():
+        if sys.modules.get(name) is stub:
+            del sys.modules[name]
+        if stub in sys.meta_path:
+            sys.meta_path.remove(stub)
+    _stubs.clear()
+    import opik  # noqa: F401
+
+
+class _FallbackModule(types.ModuleType):
+    def __getattr__(self, name):
+        _load_real_opik()
+        return getattr(sys.modules[self.__name__], name)
+
+    def find_spec(self, fullname, path, target=None):
+        if not _stubs or not (fullname == "opik" or fullname.startswith("opik.")):
+            return None
+        _load_real_opik()
+        return importlib.util.find_spec(fullname)
+
+
+for _name in ["opik", "opik.evaluation", "opik.evaluation.metrics"]:
+    stub = _FallbackModule(_name)
+    stub.__path__ = []
+    sys.modules[_name] = stub
+    _stubs[_name] = stub
+
+sys.modules["opik.evaluation.metrics.base_metric"] = _opik._base_metric
+sys.modules["opik.evaluation.metrics.score_result"] = _opik._score_result
+sys.modules["opik.evaluation.metrics"].base_metric = _opik._base_metric
+sys.modules["opik.evaluation.metrics"].score_result = _opik._score_result
+sys.modules["opik.evaluation.metrics"].BaseMetric = _opik._base_metric.BaseMetric
+sys.modules["opik.evaluation.metrics"].ScoreResult = _opik._score_result.ScoreResult
+
+sys.meta_path.insert(0, _stubs["opik"])
+
+# Simulate user code that only touches the lightweight path.
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class UserMetric(BaseMetric):
+    def score(self, **kwargs):
+        return ScoreResult(name="user", value=0.42)
+
+assert UserMetric().score().value == 0.42
+
+# Real opik must not have been loaded.
+heavy = [m for m in sys.modules if m.startswith("opik.") and m not in {
+    "opik.evaluation", "opik.evaluation.metrics",
+    "opik.evaluation.metrics.base_metric", "opik.evaluation.metrics.score_result",
+}]
+if heavy:
+    print("FAIL")
+    print(f"Lightweight path loaded unexpected modules: {heavy}")
+    sys.exit(1)
+assert _stubs, "stubs should still be in place — finder should not have triggered"
+
+print("LIGHT_PATH_OK")
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"Finder disturbed the lightweight path.\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        assert "LIGHT_PATH_OK" in result.stdout
+
     def test_opik_base_metric_is_subclass_of_lightweight(self):
         """Verify that opik.evaluation.metrics.BaseMetric subclasses _opik.BaseMetric.
 

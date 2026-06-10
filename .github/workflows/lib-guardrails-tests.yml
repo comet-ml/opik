@@ -27,13 +27,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: [
-          "3.10",
-          "3.11",
-          "3.12",
-          "3.13",
-          "3.14"
-        ]
+        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
 
     steps:
       - name: Check out code
@@ -59,7 +53,7 @@ jobs:
 
       - name: Install checks from guardrails hub
         run: |
-          guardrails configure --token $GUARDRAILS_API_KEY --disable-metrics --enable-remote-inferencing;
+          guardrails configure --token "$GUARDRAILS_API_KEY" --disable-metrics --enable-remote-inferencing;
           guardrails hub install hub://guardrails/politeness_check
 
       - name: Run tests

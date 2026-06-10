@@ -26,7 +26,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @MaxRequestSize // 4MB limit
 public record ExperimentItemBulkUpload(
-        @JsonView( {
+        @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotBlank String experimentName,
         @JsonView({View.ExperimentItemBulkWriteView.class}) @NotBlank String datasetName,
         @JsonView({View.ExperimentItemBulkWriteView.class}) @Schema(description = "Optional experiment ID. If " +
@@ -36,7 +36,7 @@ public record ExperimentItemBulkUpload(
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 1000, message = "Experiment items list size must be between 1 and 1000") @Valid List<ExperimentItemBulkRecord> items)
         implements
-            RateEventContainer{
+            RateEventContainer {
 
     public static class View {
         // Renaming this due to conflict with other views. OpenAPI only uses the last class name to qualify the view

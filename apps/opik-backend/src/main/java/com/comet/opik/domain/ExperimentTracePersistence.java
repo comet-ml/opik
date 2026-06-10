@@ -3,8 +3,10 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.utils.JsonUtils;
@@ -28,6 +30,7 @@ import java.util.UUID;
 class ExperimentTracePersistence {
 
     private static final String TRACE_SPAN_NAME = "chat_completion_create";
+    private static final String OPIK_PROMPTS_METADATA_KEY = "opik_prompts";
 
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
@@ -49,13 +52,14 @@ class ExperimentTracePersistence {
             @NonNull UUID experimentId,
             @NonNull UUID datasetId,
             String versionHash,
-            @NonNull UUID datasetItemId) {
+            @NonNull UUID datasetItemId,
+            List<OpikPromptEntry> opikPrompts) {
     }
 
     Mono<Void> persistTraceSpanAndItem(@NonNull PersistenceContext ctx) {
 
         ObjectNode input = buildMessagesInput(ctx.renderedMessages());
-        ObjectNode output = buildLlmOutput(ctx.llmResponse());
+        ObjectNode output = buildLlmOutput(ctx.llmResponse(), ctx.errorType(), ctx.errorMessage());
 
         return Mono.when(createTrace(ctx, input, output), createSpan(ctx, input, output))
                 .then(createExperimentItem(ctx.experimentId(), ctx.datasetItemId(), ctx.traceId(),
@@ -66,12 +70,16 @@ class ExperimentTracePersistence {
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
-        metadata.put("test_suite_dataset_id", ctx.datasetId().toString());
+        metadata.put(TestSuiteMetadataKeys.DATASET_ID, ctx.datasetId().toString());
         if (ctx.versionHash() != null) {
-            metadata.put("test_suite_dataset_version_hash", ctx.versionHash());
+            metadata.put(TestSuiteMetadataKeys.DATASET_VERSION_HASH, ctx.versionHash());
         }
-        metadata.put("test_suite_dataset_item_id", ctx.datasetItemId().toString());
-        metadata.put("test_suite_model", ctx.prompt().model());
+        metadata.put(TestSuiteMetadataKeys.DATASET_ITEM_ID, ctx.datasetItemId().toString());
+        metadata.put(TestSuiteMetadataKeys.MODEL, ctx.prompt().model());
+        metadata.put(TestSuiteMetadataKeys.EXPERIMENT_ID, ctx.experimentId().toString());
+        if (ctx.opikPrompts() != null && !ctx.opikPrompts().isEmpty()) {
+            metadata.set(OPIK_PROMPTS_METADATA_KEY, JsonUtils.getMapper().valueToTree(ctx.opikPrompts()));
+        }
 
         var traceBuilder = Trace.builder()
                 .id(ctx.traceId())
@@ -92,9 +100,7 @@ class ExperimentTracePersistence {
                     .build());
         }
 
-        var trace = traceBuilder.build();
-
-        return traceService.create(trace)
+        return traceService.create(traceBuilder.build())
                 .then();
     }
 
@@ -175,13 +181,25 @@ class ExperimentTracePersistence {
         return input;
     }
 
-    private ObjectNode buildLlmOutput(ChatCompletionResponse llmResponse) {
+    private ObjectNode buildLlmOutput(ChatCompletionResponse llmResponse, String errorType, String errorMessage) {
         ObjectNode output = JsonUtils.createObjectNode();
         if (llmResponse != null && llmResponse.choices() != null && !llmResponse.choices().isEmpty()) {
             var choice = llmResponse.choices().getFirst();
             if (choice.message() != null && choice.message().content() != null) {
                 output.put("output", choice.message().content());
             }
+        }
+        // When the agent LLM call failed, surface the error inside the persisted output so the
+        // assertion judge (which reads trace.output) can recognise the fault state instead of
+        // fabricating verdicts against an empty `{}`. The structured ErrorInfo on the trace itself
+        // is set separately in createTrace; the assertion path doesn't consume that field today.
+        if (errorMessage != null) {
+            ObjectNode errorNode = JsonUtils.createObjectNode();
+            if (errorType != null) {
+                errorNode.put("type", errorType);
+            }
+            errorNode.put("message", errorMessage);
+            output.set("error", errorNode);
         }
         return output;
     }

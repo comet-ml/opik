@@ -3,9 +3,15 @@ import get from "lodash/get";
 import { StringParam, useQueryParam } from "use-query-params";
 import { Brain, Calendar, MessageSquareMore, PenLine } from "lucide-react";
 
-import { AgentGraphData, Span, Trace } from "@/types/traces";
+import {
+  AgentGraphData,
+  BASE_TRACE_DATA_TYPE,
+  Span,
+  Trace,
+} from "@/types/traces";
 import {
   METADATA_AGENT_GRAPH_KEY,
+  TAG_VARIANT_BY_TRACE_TYPE,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -15,19 +21,18 @@ import TagList from "../TagList/TagList";
 import MessagesTab from "./MessagesTab";
 import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
-import AgentConfigurationTab, {
-  isAgentConfigurationMetadata,
-} from "./AgentConfigurationTab";
-import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
+import PromptsTab, { getRawPrompts } from "./PromptsTab";
+import ErrorCallout from "./ErrorCallout";
 import { formatDate } from "@/lib/date";
 import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
+import EnvironmentLabel from "@/shared/EnvironmentLabel/EnvironmentLabel";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,
 } from "@/v2/pages-shared/traces/DetailsActionSection";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
@@ -70,12 +75,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
-  const hasAgentConfiguration = useMemo(() => {
-    const config = (data.metadata as Record<string, unknown>)?.[
-      AGENT_CONFIGURATION_METADATA_KEY
-    ];
-    return isAgentConfigurationMetadata(config);
-  }, [data.metadata]);
+
+  const hasPrompts = Boolean(getRawPrompts(data));
 
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
@@ -107,24 +108,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     const legacyTabMap: Record<string, string> = {
       input: canShowMessagesTab ? "messages" : "details",
       metadata: "details",
-      prompts: "details",
+      configuration: hasPrompts ? "prompts" : "details",
     };
     const normalizedTab = legacyTabMap[tab] ?? tab;
 
     // Fall back when a tab is not available
     if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
     if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
-    if (normalizedTab === "configuration" && !hasAgentConfiguration)
-      return defaultTab;
+    if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
 
     return normalizedTab;
-  }, [
-    tab,
-    defaultTab,
-    canShowMessagesTab,
-    hasSpanAgentGraph,
-    hasAgentConfiguration,
-  ]);
+  }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph, hasPrompts]);
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
@@ -165,15 +159,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
         </div>
       )}
       <div className="min-w-[400px] max-w-full overflow-x-hidden p-4">
-        <div className="mb-6 flex flex-col gap-1">
-          <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
+        <div className="mb-4 flex flex-col gap-1">
+          <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-foreground">
             {created_at && (
               <TooltipWrapper content={`Created at: ${created_at}`}>
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-created-at"
                 >
-                  <Calendar className="size-3 shrink-0" /> {created_at}
+                  <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
+                  {created_at}
                 </div>
               </TooltipWrapper>
             )}
@@ -187,10 +182,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             {Boolean(data.feedback_scores?.length) && (
               <FeedbackScoreHoverCard scores={data.feedback_scores!}>
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-scores"
                 >
-                  <PenLine className="size-3 shrink-0" />{" "}
+                  <PenLine className="size-3.5 shrink-0 text-muted-slate" />{" "}
                   {data.feedback_scores!.length}
                 </div>
               </FeedbackScoreHoverCard>
@@ -202,10 +197,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   scores={traceData.span_feedback_scores!}
                 >
                   <div
-                    className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                    className="comet-body-s flex items-center gap-1 text-foreground"
                     data-testid="data-viewer-span-scores"
                   >
-                    <PenLine className="size-3 shrink-0" />{" "}
+                    <PenLine className="size-3.5 shrink-0 text-muted-slate" />{" "}
                     {traceData.span_feedback_scores!.length} span scores
                   </div>
                 </FeedbackScoreHoverCard>
@@ -213,10 +208,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-comments"
                 >
-                  <MessageSquareMore className="size-3 shrink-0" />{" "}
+                  <MessageSquareMore className="size-3.5 shrink-0 text-muted-slate" />{" "}
                   {data.comments.length}
                 </div>
               </UserCommentHoverList>
@@ -228,15 +223,21 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 }`}
               >
                 <div
-                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
+                  className="comet-body-s flex items-center gap-1 text-foreground"
                   data-testid="data-viewer-provider-model"
                 >
-                  <Brain className="size-3 shrink-0" />{" "}
+                  <Brain className="size-3.5 shrink-0 text-muted-slate" />{" "}
                   <div className="truncate">
                     {provider} {model}
                   </div>
                 </div>
               </TooltipWrapper>
+            )}
+            {data.environment && (
+              <EnvironmentLabel
+                name={data.environment}
+                className="comet-body-s text-foreground"
+              />
             )}
           </div>
           <TagList
@@ -246,39 +247,55 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             traceId={traceId}
             spanId={spanId}
             className="pl-1"
-            tagVariant="gray"
+            tagVariant={
+              TAG_VARIANT_BY_TRACE_TYPE[type as BASE_TRACE_DATA_TYPE] ?? "gray"
+            }
           />
         </div>
+
+        <ErrorCallout error={data.error_info} search={search} />
 
         <Tabs
           defaultValue={defaultTab}
           value={selectedTab!}
           onValueChange={setTab}
         >
-          <TabsList variant="underline">
+          <TabsList variant="segmented-primary">
             {canShowMessagesTab && (
-              <TabsTrigger variant="underline" value="messages">
+              <TabsTrigger
+                variant="segmented-primary"
+                size="sm"
+                value="messages"
+              >
                 Messages
               </TabsTrigger>
             )}
-            <TabsTrigger variant="underline" value="details">
+            <TabsTrigger variant="segmented-primary" size="sm" value="details">
               Details
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="feedback_scores">
+            <TabsTrigger
+              variant="segmented-primary"
+              size="sm"
+              value="feedback_scores"
+            >
               Feedback scores
               <ExplainerIcon
                 className="ml-1"
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
               />
             </TabsTrigger>
-            {hasSpanAgentGraph && (
-              <TabsTrigger variant="underline" value="graph">
-                Agent graph
+            {hasPrompts && (
+              <TabsTrigger
+                variant="segmented-primary"
+                size="sm"
+                value="prompts"
+              >
+                Prompts
               </TabsTrigger>
             )}
-            {hasAgentConfiguration && (
-              <TabsTrigger variant="underline" value="configuration">
-                Configuration
+            {hasSpanAgentGraph && (
+              <TabsTrigger variant="segmented-primary" size="sm" value="graph">
+                Agent graph
               </TabsTrigger>
             )}
           </TabsList>
@@ -301,7 +318,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
                 <ConfigurableFeedbackScoreTable
                   title={isTrace ? "Trace scores" : "Span scores"}
@@ -338,14 +355,14 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               )}
             </div>
           </TabsContent>
+          {hasPrompts && (
+            <TabsContent value="prompts">
+              <PromptsTab data={data} search={search} />
+            </TabsContent>
+          )}
           {hasSpanAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />
-            </TabsContent>
-          )}
-          {hasAgentConfiguration && (
-            <TabsContent value="configuration">
-              <AgentConfigurationTab data={data} projectId={projectId} />
             </TabsContent>
           )}
         </Tabs>

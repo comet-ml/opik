@@ -29,7 +29,7 @@ FAILED_TO_PARSE_OPENAI_STREAM_CONTENT = "Failed to parse openai Stream content. 
 
 FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER = "Failed to process %s. Error: %s"
 
-MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY = "This error may be due to incorrect configuration. For configuration help, see: https://www.comet.com/docs/opik/tracing/sdk_configuration"
+MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY = "This error may be due to incorrect configuration. For configuration help, see: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
 
 HALLUCINATION_DETECTION_FAILED = "Failed hallucination detection"
 
@@ -54,6 +54,11 @@ USEFULNESS_SCORE_CALC_FAILED = "Failed to calculate usefulness score"
 NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE = (
     'You are attempting to log data into a nested span under the project name "{}". '
     'However, the project name "{}" from parent span will be used instead.'
+)
+
+NESTED_SPAN_ENVIRONMENT_MISMATCH_WARNING_MESSAGE = (
+    'You are attempting to log data into a nested span under the environment "{}". '
+    'However, the environment "{}" from the parent trace will be used instead.'
 )
 
 PARSE_API_KEY_EMPTY_KEY = "Can not parse empty Opik API key"

@@ -13,6 +13,7 @@ from typing import Any, Callable, Optional
 from ..api_objects import type_helpers
 
 from ..api_objects.agent_config.context import agent_config_context
+from ..api_objects.prompt import mask_context as prompt_mask_context_module
 from .. import id_helpers
 
 from ..rest_api.client import OpikApi
@@ -85,12 +86,16 @@ class InProcessRunnerLoop:
         shutdown_event: threading.Event,
         heartbeat_interval_seconds: float = 5.0,
         backoff_cap_seconds: float = 30.0,
+        initial_backoff_seconds: float = 1.0,
+        poll_idle_interval_seconds: float = _POLL_IDLE_INTERVAL_SECONDS,
     ) -> None:
         self._api = api
         self._runner_id = runner_id
         self._shutdown_event = shutdown_event
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._backoff_cap_seconds = backoff_cap_seconds
+        self._initial_backoff_seconds = initial_backoff_seconds
+        self._poll_idle_interval_seconds = poll_idle_interval_seconds
         self._cancelled_jobs: collections.OrderedDict[str, float] = (
             collections.OrderedDict()
         )
@@ -115,7 +120,7 @@ class InProcessRunnerLoop:
         self._run_job_loop()
 
     def _poll_loop(self) -> None:
-        backoff = 1.0
+        backoff = self._initial_backoff_seconds
         _poll_failures = 0
 
         while not self._shutdown_event.is_set():
@@ -151,11 +156,11 @@ class InProcessRunnerLoop:
                 continue
 
             if job is None:
-                backoff = 1.0
-                self._shutdown_event.wait(_POLL_IDLE_INTERVAL_SECONDS)
+                backoff = self._initial_backoff_seconds
+                self._shutdown_event.wait(self._poll_idle_interval_seconds)
                 continue
 
-            backoff = 1.0
+            backoff = self._initial_backoff_seconds
             if self._loop is not None:
                 self._loop.call_soon_threadsafe(self._job_queue.put_nowait, job)
 
@@ -238,6 +243,7 @@ class InProcessRunnerLoop:
 
         func: Callable = entry["func"]
         mask_id = job.mask_id
+        masks = job.prompt_masks
         blueprint_name = job.blueprint_name
 
         trace_id = id_helpers.generate_id()
@@ -261,7 +267,10 @@ class InProcessRunnerLoop:
             _inject_trace_id(inputs, trace_id)
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
-                with agent_config_context(mask_id, blueprint_name):
+                with (
+                    agent_config_context(mask_id, blueprint_name),
+                    prompt_mask_context_module.prompt_mask_context(masks),
+                ):
                     coro = func(**inputs)
                     if timeout:
                         result = await asyncio.wait_for(coro, timeout=timeout)
@@ -269,20 +278,23 @@ class InProcessRunnerLoop:
                         result = await coro
             else:
 
-                def _run_with_mask() -> object:
-                    with agent_config_context(mask_id, blueprint_name):
+                def _run_sync() -> object:
+                    with (
+                        agent_config_context(mask_id, blueprint_name),
+                        prompt_mask_context_module.prompt_mask_context(masks),
+                    ):
                         return func(**inputs)
 
                 if timeout:
                     result = await asyncio.wait_for(
                         asyncio.get_running_loop().run_in_executor(
-                            None, ctx.run, _run_with_mask
+                            None, ctx.run, _run_sync
                         ),
                         timeout=timeout,
                     )
                 else:
                     result = await asyncio.get_running_loop().run_in_executor(
-                        None, ctx.run, _run_with_mask
+                        None, ctx.run, _run_sync
                     )
 
             if not isinstance(result, (dict, str, int, float, bool, list, type(None))):

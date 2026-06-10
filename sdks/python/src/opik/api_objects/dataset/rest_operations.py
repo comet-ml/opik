@@ -60,6 +60,7 @@ def stream_dataset_items(
     dataset_items_ids_left: Optional[Set[str]] = (
         set(dataset_item_ids) if dataset_item_ids else None
     )
+    _conflicting_keys_warned = False
 
     filters: Optional[str] = None
     if filter_string:
@@ -121,6 +122,25 @@ def stream_dataset_items(
                     pass_threshold=item.execution_policy.pass_threshold,
                 )
 
+            # Strip DatasetItem field names from user data before unpacking to avoid
+            # "multiple values for keyword argument" errors. This happens when user data
+            # contains a key that matches a DatasetItem field (e.g. 'id' in HotpotQA).
+            conflicting = (
+                item.data.keys() & dataset_item.DatasetItem.model_fields.keys()
+            )
+            if conflicting and not _conflicting_keys_warned:
+                _conflicting_keys_warned = True
+                LOGGER.warning(
+                    "Dataset item data contains keys that shadow DatasetItem fields and will be ignored: %s. "
+                    "Rename these keys in your dataset to preserve them.",
+                    sorted(conflicting),
+                )
+            extra_data = {
+                k: v
+                for k, v in item.data.items()
+                if k not in dataset_item.DatasetItem.model_fields
+            }
+
             reconstructed_item = dataset_item.DatasetItem(
                 id=item.id,
                 trace_id=item.trace_id,
@@ -129,7 +149,7 @@ def stream_dataset_items(
                 description=item.description,
                 evaluators=evaluators,
                 execution_policy=execution_policy,
-                **item.data,
+                **extra_data,
             )
 
             yield reconstructed_item
@@ -180,7 +200,7 @@ def get_datasets(
     project_name: Optional[str],
     rest_client: OpikApi,
     max_results: int = 1000,
-    sync_items: bool = True,
+    sync_items: bool = False,
 ) -> List[dataset.Dataset]:
     page_size = 100
     datasets: List[dataset.Dataset] = []
@@ -211,6 +231,11 @@ def get_datasets(
 
             if sync_items:
                 dataset_.__internal_api__sync_hashes__()
+            else:
+                # Backend holds items we haven't seen locally; defer the sync
+                # until the first `insert()` so dedup still works without
+                # paying an N+1 sync right now.
+                dataset_.__internal_api__hashes_synced__ = False
 
             datasets.append(dataset_)
 

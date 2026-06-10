@@ -12,5 +12,4 @@ public class AnalyticsConfig {
 
     @Valid @JsonProperty
     private String environment;
-
 }

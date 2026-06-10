@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .assertion_result import AssertionResult
 from .comment import Comment
+from .execution_policy import ExecutionPolicy
 from .experiment_item_status import ExperimentItemStatus
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .feedback_score import FeedbackScore
@@ -22,6 +23,7 @@ class ExperimentItem(UniversalBaseModel):
     project_name: typing.Optional[str] = None
     input: typing.Optional[JsonListString] = None
     output: typing.Optional[JsonListString] = None
+    trace_metadata: typing.Optional[JsonListString] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     total_estimated_cost: typing.Optional[float] = None
@@ -33,6 +35,7 @@ class ExperimentItem(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     trace_visibility_mode: typing.Optional[ExperimentItemTraceVisibilityMode] = None
     description: typing.Optional[str] = None
+    execution_policy: typing.Optional[ExecutionPolicy] = None
     assertion_results: typing.Optional[typing.List[AssertionResult]] = None
     status: typing.Optional[ExperimentItemStatus] = None
 

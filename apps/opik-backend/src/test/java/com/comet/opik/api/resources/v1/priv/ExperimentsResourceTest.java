@@ -168,6 +168,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
@@ -199,10 +200,6 @@ class ExperimentsResourceTest {
     private static final String ITEMS_PATH = "/items";
 
     private static final String API_KEY = UUID.randomUUID().toString();
-
-    private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
-            "id", "datasetId", "name", "feedbackScores", "assertionScores", "traceCount", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments", "projectName", "datasetItemCount"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -335,6 +332,41 @@ class ExperimentsResourceTest {
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.EXPERIMENT_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create experiment passes required permissions to auth endpoint")
+        void createExperimentPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.callCreate(experiment, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create experiment returns 403 when permission is denied")
+        void createExperimentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.EXPERIMENT_CREATE.getValue());
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+
+            try (var response = experimentResourceClient.callCreate(experiment, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
         }
     }
 
@@ -589,6 +621,7 @@ class ExperimentsResourceTest {
                             .input(null)
                             .output(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .sorted(Comparator.comparing(ExperimentItem::id).reversed())
                     .toList();
@@ -4026,6 +4059,7 @@ class ExperimentsResourceTest {
         return PromptVersionLink.builder()
                 .id(promptVersion.id())
                 .commit(promptVersion.commit())
+                .versionNumber(promptVersion.versionNumber())
                 .promptId(promptVersion.promptId())
                 .promptName(promptName)
                 .build();
@@ -4717,7 +4751,7 @@ class ExperimentsResourceTest {
             var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
             var versionLink = new PromptVersionLink(promptVersion.id(), promptVersion.commit(),
-                    promptVersion.promptId(), promptName);
+                    promptVersion.versionNumber(), promptVersion.promptId(), promptName);
 
             var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(versionLink)
@@ -4785,7 +4819,8 @@ class ExperimentsResourceTest {
         @Test
         void createWithInvalidPromptVersionId() {
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate(), null))
+                    .promptVersion(
+                            new PromptVersionLink(GENERATOR.generate(), null, null, GENERATOR.generate(), null))
                     .datasetVersionId(null)
                     .datasetVersionSummary(null)
                     .build();
@@ -5423,6 +5458,7 @@ class ExperimentsResourceTest {
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
@@ -5437,6 +5473,7 @@ class ExperimentsResourceTest {
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
@@ -5447,6 +5484,7 @@ class ExperimentsResourceTest {
                             .totalEstimatedCost(null)
                             .usage(null)
                             .duration(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest3 = ExperimentItemsBatch.builder().experimentItems(experimentItems3).build();
@@ -5603,6 +5641,7 @@ class ExperimentsResourceTest {
                     .feedbackScores(null)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -5620,6 +5659,7 @@ class ExperimentsResourceTest {
                     .feedbackScores(null)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(Set.of(experimentItem, experimentItem2))
@@ -5757,6 +5797,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject1.startTime(), traceProject1.endTime()))
                             .build())
@@ -5771,6 +5812,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject2.startTime(), traceProject2.endTime()))
                             .build())
@@ -5853,6 +5895,7 @@ class ExperimentsResourceTest {
                             .input(null)
                             .output(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .sorted(Comparator.comparing(ExperimentItem::id).reversed())
                     .toList();
@@ -6438,6 +6481,7 @@ class ExperimentsResourceTest {
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
                             .traceVisibilityMode(trace == null ? VisibilityMode.HIDDEN : VisibilityMode.DEFAULT)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build());
         }
 

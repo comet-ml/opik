@@ -9,7 +9,7 @@ from .json_node_public import JsonNodePublic
 
 class LlmAsJudgeModelParametersPublic(UniversalBaseModel):
     name: str
-    temperature: float
+    temperature: typing.Optional[float] = None
     seed: typing.Optional[int] = None
     custom_parameters: typing.Optional[JsonNodePublic] = None
 

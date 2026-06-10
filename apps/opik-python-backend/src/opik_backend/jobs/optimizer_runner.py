@@ -9,6 +9,7 @@ All stdout/stderr from this script is captured by the parent process and
 streamed to Redis for S3 sync.
 """
 
+import functools
 import json
 import logging
 import os
@@ -76,6 +77,13 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 logger = logging.getLogger(__name__)
 logger.debug(f"TERMINAL_WIDTH: {TERMINAL_WIDTH}")
 
+# Opik backend gateway base URL for LLM calls. optimizer.py sets this in the
+# subprocess environment before spawning this runner whenever Optimization
+# Studio routes completions through the backend gateway, so it is read once at
+# import (mirrors OPIK_URL handling in studio/config.py).
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE")
+logger.debug(f"OPENAI_API_BASE configured: {bool(OPENAI_API_BASE)}")
+
 
 def reconfigure_rich_console():
     """Reconfigure Rich console to output to stderr so we can capture it.
@@ -112,6 +120,73 @@ def reconfigure_rich_console():
         logger.warning("Rich not available, skipping console reconfiguration")
     except Exception as e:
         logger.warning(f"Failed to reconfigure Rich console: {e}")
+
+
+# Workspace the gateway wrappers inject into the Comet-Workspace header. Held in
+# a mutable container so the (single) set of wrappers always reflects the latest
+# workspace without needing to be torn down and rebuilt.
+_gateway_workspace = {"name": None}
+
+
+def route_litellm_calls_through_gateway(workspace_name):
+    """Attach the ``Comet-Workspace`` header to gateway LLM calls.
+
+    Optimization Studio routes every LiteLLM completion through the Opik
+    backend gateway (``OPENAI_API_BASE``, set in optimizer.py). The gateway
+    authenticates each request per workspace, reading the ``Comet-Workspace``
+    header — the same header the SDK and playground send. LiteLLM's
+    OpenAI-compatible path only forwards ``Authorization`` by default, so
+    without this header the gateway rejects every call with
+    403 "Workspace name should be provided", regardless of project name.
+
+    The header is injected via ``extra_headers`` (which LiteLLM merges with the
+    auth header) by wrapping ``litellm.completion``/``litellm.acompletion``.
+    Both call sites in opik_optimizer resolve these attributes at call time, so
+    patching them before the optimization runs is sufficient. Guarded on
+    ``OPENAI_API_BASE`` so direct-provider calls are never touched.
+
+    Idempotent: the wrappers are installed at most once. Calling again with a
+    different ``workspace_name`` updates the injected value in place rather than
+    stacking another wrapper.
+    """
+    if not workspace_name or not OPENAI_API_BASE:
+        return
+
+    import litellm
+
+    # Always reflect the latest workspace; the wrappers read this dynamically.
+    _gateway_workspace["name"] = workspace_name
+
+    # Install the wrappers only once — they pick up workspace changes via the
+    # shared container above.
+    if getattr(litellm.completion, "_opik_gateway_wrapped", False):
+        return
+
+    def _add_workspace_header(kwargs):
+        extra_headers = dict(kwargs.get("extra_headers") or {})
+        extra_headers.setdefault("Comet-Workspace", _gateway_workspace["name"])
+        kwargs["extra_headers"] = extra_headers
+        return kwargs
+
+    original_completion = litellm.completion
+    original_acompletion = litellm.acompletion
+
+    @functools.wraps(original_completion)
+    def completion_with_workspace(*args, **kwargs):
+        return original_completion(*args, **_add_workspace_header(kwargs))
+
+    @functools.wraps(original_acompletion)
+    async def acompletion_with_workspace(*args, **kwargs):
+        return await original_acompletion(*args, **_add_workspace_header(kwargs))
+
+    completion_with_workspace._opik_gateway_wrapped = True
+    acompletion_with_workspace._opik_gateway_wrapped = True
+
+    litellm.completion = completion_with_workspace
+    litellm.acompletion = acompletion_with_workspace
+    logger.debug(
+        "Routing LiteLLM calls through gateway with Comet-Workspace header"
+    )
 
 
 def main():
@@ -152,6 +227,25 @@ def main():
         # Parse job context and config
         context = OptimizationJobContext.from_job_message(job_message)
         config = OptimizationConfig.from_dict(job_message.get("config", {}))
+
+        # Ensure every gateway-routed LLM call carries the workspace header so
+        # the backend can authenticate it (see optimizer.py for OPENAI_API_BASE).
+        route_litellm_calls_through_gateway(context.workspace_name)
+
+        # Treat the Opik backend gateway as an OpenAI-compatible endpoint.
+        # The "openai/" prefix tells LiteLLM to use its OpenAI handler, which
+        # is the only handler that honors OPENAI_API_BASE (set to the gateway
+        # URL in optimizer.py). LiteLLM strips the prefix before the HTTP
+        # request, so the gateway still receives the original provider-
+        # qualified model string (e.g. "vertex_ai/gemini-2.5-flash") and
+        # dispatches to the correct provider on the Java backend side.
+        if not config.model.startswith("openai/"):
+            config.model = f"openai/{config.model}"
+
+        # The gateway requires an explicit stream field; LiteLLM omits it by
+        # default which causes an NPE in the Java backend's Anthropic mapper.
+        config.model_params = config.model_params or {}
+        config.model_params.setdefault("stream", False)
 
         # Ensure optimizer_params is a dict before mutating
         config.optimizer_params = config.optimizer_params or {}
@@ -199,6 +293,7 @@ def main():
                 prompt=prompt,
                 dataset=dataset,
                 metric_fn=metric_fn,
+                project_name=context.project_name,
             )
 
             # Build result dict

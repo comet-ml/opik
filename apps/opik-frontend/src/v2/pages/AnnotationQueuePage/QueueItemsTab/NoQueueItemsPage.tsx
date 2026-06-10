@@ -3,7 +3,7 @@ import { Book, ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import noData from "/images/no-data-annotation-queue.png";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   ANNOTATION_QUEUE_SCOPE,
   AnnotationQueue,
@@ -52,7 +52,7 @@ const NoQueueItemsPage: React.FC<NoQueueItemsPageProps> = ({
           <Button variant="secondary" asChild>
             <a
               href={buildDocsUrl(
-                "/evaluation/annotation_queues",
+                "/evaluation/advanced/annotation_queues",
                 "#adding-content-to-your-queue",
               )}
               target="_blank"

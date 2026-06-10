@@ -49,6 +49,9 @@ from .annotation_queue_scope import AnnotationQueueScope
 from .annotation_queue_write import AnnotationQueueWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
 from .assertion_result import AssertionResult
+from .assertion_result_batch_item import AssertionResultBatchItem
+from .assertion_result_batch_item_source import AssertionResultBatchItemSource
+from .assertion_result_batch_item_status import AssertionResultBatchItemStatus
 from .assertion_result_compare import AssertionResultCompare
 from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
@@ -267,6 +270,9 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
+from .environment import Environment
+from .environment_page_public import EnvironmentPagePublic
+from .environment_public import EnvironmentPublic
 from .error_count_with_deviation import ErrorCountWithDeviation
 from .error_count_with_deviation_detailed import ErrorCountWithDeviationDetailed
 from .error_info import ErrorInfo
@@ -443,6 +449,8 @@ from .local_runner_type import LocalRunnerType
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
+from .log_prob import LogProb
+from .log_probs import LogProbs
 from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
@@ -472,6 +480,7 @@ from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
 from .param import Param
+from .param_presence import ParamPresence
 from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
 from .percentage_values_detailed import PercentageValuesDetailed
@@ -512,6 +521,7 @@ from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
 from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
+from .prompt_version_detail_version_type import PromptVersionDetailVersionType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
@@ -519,14 +529,19 @@ from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
 from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_public_version_type import PromptVersionPublicVersionType
 from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
 from .prompt_version_update import PromptVersionUpdate
+from .prompt_version_version_type import PromptVersionVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
+from .recent_activity_item_public import RecentActivityItemPublic
+from .recent_activity_item_public_type import RecentActivityItemPublicType
+from .recent_activity_page_public import RecentActivityPagePublic
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -715,6 +730,9 @@ __all__ = [
     "AnnotationQueueWrite",
     "AnnotationQueueWriteScope",
     "AssertionResult",
+    "AssertionResultBatchItem",
+    "AssertionResultBatchItemSource",
+    "AssertionResultBatchItemStatus",
     "AssertionResultCompare",
     "AssertionScoreAverage",
     "AssertionScoreAveragePublic",
@@ -897,6 +915,9 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
+    "Environment",
+    "EnvironmentPagePublic",
+    "EnvironmentPublic",
     "ErrorCountWithDeviation",
     "ErrorCountWithDeviationDetailed",
     "ErrorInfo",
@@ -1066,6 +1087,8 @@ __all__ = [
     "LogItem",
     "LogItemLevel",
     "LogPage",
+    "LogProb",
+    "LogProbs",
     "ManualEvaluationRequest",
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
@@ -1095,6 +1118,7 @@ __all__ = [
     "OptimizationWriteStatus",
     "PageColumns",
     "Param",
+    "ParamPresence",
     "PercentageValueStatPublic",
     "PercentageValues",
     "PercentageValuesDetailed",
@@ -1133,6 +1157,7 @@ __all__ = [
     "PromptVersionDetail",
     "PromptVersionDetailTemplateStructure",
     "PromptVersionDetailType",
+    "PromptVersionDetailVersionType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
@@ -1140,14 +1165,19 @@ __all__ = [
     "PromptVersionPublic",
     "PromptVersionPublicTemplateStructure",
     "PromptVersionPublicType",
+    "PromptVersionPublicVersionType",
     "PromptVersionTemplateStructure",
     "PromptVersionType",
     "PromptVersionUpdate",
+    "PromptVersionVersionType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",
+    "RecentActivityItemPublic",
+    "RecentActivityItemPublicType",
+    "RecentActivityPagePublic",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",

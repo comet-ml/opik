@@ -22,12 +22,12 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
   }, [data?.stargazers_count]);
 
   const itemElement = (
-    <li className="mb-2">
+    <li className="mb-2 pl-0.5">
       <Button
         variant="outline"
         size="sm"
         className={cn(
-          expanded ? "ml-0.5 h-8 gap-1.5 px-2" : "size-8 p-0 max-w-full",
+          expanded ? "h-6 gap-1 pl-1.5 pr-1" : "size-6 p-0 max-w-full",
           "dark:bg-primary-foreground",
         )}
         asChild
@@ -37,11 +37,11 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
           target="_blank"
           rel="noreferrer"
         >
-          <GitHubIcon className="size-3.5" />
+          <GitHubIcon className="size-3" />
           {expanded && (
             <>
-              <span className="comet-body-s">Star</span>
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs dark:bg-secondary">
+              <span className="comet-body-xs-accented">Star</span>
+              <span className="rounded bg-chart-gray-light px-1 text-[10px] font-medium leading-4 text-chart-gray-dark">
                 {starCount}
               </span>
             </>

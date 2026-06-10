@@ -61,6 +61,7 @@ const ConfigurableFeedbackScoreTable: React.FunctionComponent<
       onSelectionChange={setSelectedColumns}
       order={columnsOrder}
       onOrderChange={setColumnsOrder}
+      layout="labeled"
     />
   );
 
@@ -68,7 +69,7 @@ const ConfigurableFeedbackScoreTable: React.FunctionComponent<
     <>
       {title ? (
         <div className="mb-2 flex items-center justify-between">
-          <div className="comet-body-s-accented">{title}</div>
+          <div className="comet-body-xs-accented">{title}</div>
           {columnsButton}
         </div>
       ) : (

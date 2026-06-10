@@ -23,6 +23,16 @@ if ($env:DEBUG_MODE -eq "true") {
     $script:DEBUG_MODE = $true
 }
 
+# Local dev defaults to version_2 (matches the bundled config.yml and
+# docker-compose defaults) so a fresh worktree's empty backend doesn't trip
+# the "Workspace upgrade required" pairing screen. Exported here so the
+# JAR-mode backend and docker-compose backend inherit the same value.
+# Override by setting `$env:TOGGLE_FORCE_WORKSPACE_VERSION = "disabled"`
+# before invoking.
+if (-not $env:TOGGLE_FORCE_WORKSPACE_VERSION) {
+    $env:TOGGLE_FORCE_WORKSPACE_VERSION = "version_2"
+}
+
 # Get the main action (first remaining option)
 $Action = if ($options.Count -gt 0) { $options[0] } else { '' }
 
@@ -894,7 +904,7 @@ function Show-AccessInformation {
     Write-Host "  • No API key required for local instances"
     Write-Host ""
     Write-Host "📖 For complete configuration documentation, visit:" -ForegroundColor Blue
-    Write-Host "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
+    Write-Host "   https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
 }
 
 function New-DemoData {

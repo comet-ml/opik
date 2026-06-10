@@ -1519,4 +1519,95 @@ export class ProjectsClient {
             "/v1/private/projects/retrieve",
         );
     }
+
+    /**
+     * Returns the most recent activity items across all entity types for a project, sorted by date descending.
+     *
+     * @param {string} projectId
+     * @param {OpikApi.GetRecentActivityRequest} request
+     * @param {ProjectsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.InternalServerError}
+     *
+     * @example
+     *     await client.projects.getRecentActivity("projectId")
+     */
+    public getRecentActivity(
+        projectId: string,
+        request: OpikApi.GetRecentActivityRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.RecentActivityPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getRecentActivity(projectId, request, requestOptions));
+    }
+
+    private async __getRecentActivity(
+        projectId: string,
+        request: OpikApi.GetRecentActivityRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.RecentActivityPagePublic>> {
+        const { page, size } = request;
+        const _queryParams: Record<string, unknown> = {
+            page,
+            size,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${core.url.encodePathParam(projectId)}/activities`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.RecentActivityPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 500:
+                    throw new OpikApi.InternalServerError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/projects/{projectId}/activities",
+        );
+    }
 }

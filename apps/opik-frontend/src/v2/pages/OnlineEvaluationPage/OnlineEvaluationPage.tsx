@@ -30,7 +30,6 @@ import {
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
@@ -45,7 +44,7 @@ import TagCell from "@/shared/DataTableCells/TagCell";
 import useRulesList from "@/api/automations/useRulesList";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOnlineEvalLightUrl from "/images/empty-online-eval-light.svg";
 import emptyOnlineEvalDarkUrl from "/images/empty-online-eval-dark.svg";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
@@ -357,11 +356,8 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId, setCloneRuleId],
   );
 
-  if (isPending) {
-    return <Loader />;
-  }
-
-  const isEmpty = noData && rows.length === 0 && page === 1;
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
+  const isEmpty = !isTableLoading && noData && rows.length === 0 && page === 1;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -370,7 +366,12 @@ export const OnlineEvaluationPage: React.FC = () => {
           Online evaluation
         </h1>
         {canUpdateOnlineEvaluationRules && (
-          <Button variant="default" size="xs" onClick={handleNewRuleClick}>
+          <Button
+            variant="default"
+            size="xs"
+            onClick={handleNewRuleClick}
+            data-testid="online-evaluation-create-rule-button"
+          >
             <Plus className="mr-1 size-4" />
             Create rule
           </Button>
@@ -386,7 +387,7 @@ export const OnlineEvaluationPage: React.FC = () => {
           }
           primaryActionLabel="Create your first rule"
           onPrimaryAction={handleNewRuleClick}
-          docsUrl={buildDocsUrl("/production/rules")}
+          docsUrl={buildDocsUrl("/production/online-evaluation/rules")}
         />
       ) : (
         <>
@@ -434,7 +435,10 @@ export const OnlineEvaluationPage: React.FC = () => {
             getRowId={getRowId}
             columnPinning={DEFAULT_COLUMN_PINNING}
             noData={<DataTableNoData title={noDataText} />}
-            showLoadingOverlay={isPlaceholderData && isFetching}
+            showSkeleton={isTableLoading}
+            showLoadingOverlay={
+              !isTableLoading && isPlaceholderData && isFetching
+            }
           />
           <div className="py-4">
             <DataTablePagination

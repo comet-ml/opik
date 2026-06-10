@@ -1,9 +1,10 @@
 package com.comet.opik;
 
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
+import com.comet.opik.api.resources.v1.events.tools.ToolsModule;
 import com.comet.opik.infrastructure.ConfigurationModule;
-import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
+import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.aws.AwsModule;
@@ -31,6 +32,7 @@ import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.infrastructure.web.InstantParamConverter;
+import com.comet.opik.infrastructure.web.JsonUploadFormatMessageBodyReader;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
@@ -82,7 +84,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         bootstrap.addBundle(LiquibaseBundle.builder()
                 .name(DB_APP_STATE_NAME)
                 .migrationsFileName(DB_APP_STATE_MIGRATIONS_FILE_NAME)
-                .dataSourceFactoryFunction(conf -> DatabaseUtils.filterProperties(conf.getDatabase()))
+                .dataSourceFactoryFunction(conf -> FilterUtils.filterProperties(conf.getDatabase()))
                 .build());
         bootstrap.addBundle(LiquibaseBundle.builder()
                 .name(DB_APP_ANALYTICS_NAME)
@@ -92,14 +94,14 @@ public class OpikApplication extends Application<OpikConfiguration> {
         bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle
                         .<OpikConfiguration>forDatabase(
-                                (conf, env) -> DatabaseUtils.filterProperties(conf.getDatabase()))
+                                (conf, env) -> FilterUtils.filterProperties(conf.getDatabase()))
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
                         new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
-                        new OllamaModule(), new FreeModelModule())
+                        new OllamaModule(), new FreeModelModule(), new ToolsModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()
@@ -143,5 +145,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
         jersey.register(JsonProcessingExceptionMapper.class);
         jersey.register(InstantParamConverter.class);
+        jersey.register(JsonUploadFormatMessageBodyReader.class);
     }
 }

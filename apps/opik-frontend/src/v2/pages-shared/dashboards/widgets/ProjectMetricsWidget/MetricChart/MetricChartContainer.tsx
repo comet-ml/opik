@@ -64,6 +64,10 @@ interface MetricContainerChartProps {
   colorMap?: Record<string, string>;
   tooltipPosition?: { x?: number; y?: number };
   targetTickCount?: number;
+  customXTickFormatter?: (value: string) => string;
+  xTickInterval?: number | "preserveStart" | "preserveEnd" | "preserveStartEnd";
+  hideXAxis?: boolean;
+  hideYAxis?: boolean;
 }
 
 const customColorMap = {
@@ -111,6 +115,10 @@ const MetricContainerChart = ({
   colorMap,
   tooltipPosition,
   targetTickCount,
+  customXTickFormatter,
+  xTickInterval,
+  hideXAxis,
+  hideYAxis,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -226,6 +234,7 @@ const MetricContainerChart = ({
         interval={interval}
         renderValue={renderValue}
         customYTickFormatter={customYTickFormatter}
+        customXTickFormatter={customXTickFormatter}
         chartId={chartId}
         isPending={isPending}
         data={data}
@@ -234,6 +243,9 @@ const MetricContainerChart = ({
         showLegend={showLegend}
         tooltipPosition={tooltipPosition}
         targetTickCount={targetTickCount}
+        xTickInterval={xTickInterval}
+        hideXAxis={hideXAxis}
+        hideYAxis={hideYAxis}
       />
     );
   };

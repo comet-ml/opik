@@ -64,6 +64,17 @@ def create_span_respecting_context(
             )
         start_span_arguments.project_name = context_project
 
+    # Mirror the project_name pattern: if a local parent span already carries an
+    # environment, that value wins (with a warning on mismatch); if there is no
+    # local context the caller-supplied environment passes through as-is.
+    local_parent = opik_context_storage.top_span_data()
+    if local_parent is not None:
+        start_span_arguments.environment = helpers.resolve_child_span_environment(
+            parent_environment=local_parent.environment,
+            child_environment=start_span_arguments.environment,
+            show_warning=True,
+        )
+
     if distributed_trace_headers:
         span_data = arguments_helpers.create_span_data(
             start_span_arguments=start_span_arguments,
@@ -96,6 +107,14 @@ def create_span_respecting_context(
 
         start_span_arguments.project_name = project_name
 
+        # A span inherits its parent's environment unconditionally — we warn (just
+        # like project_name) when a nested @track tries to override it.
+        start_span_arguments.environment = helpers.resolve_child_span_environment(
+            parent_environment=current_span_data.environment,
+            child_environment=start_span_arguments.environment,
+            show_warning=show_warning,
+        )
+
         span_data = arguments_helpers.create_span_data(
             start_span_arguments=start_span_arguments,
             parent_span_id=current_span_data.id,
@@ -119,6 +138,12 @@ def create_span_respecting_context(
 
         start_span_arguments.project_name = project_name
 
+        start_span_arguments.environment = helpers.resolve_child_span_environment(
+            parent_environment=current_trace_data.environment,
+            child_environment=start_span_arguments.environment,
+            show_warning=current_trace_data.created_by != "evaluation",
+        )
+
         span_data = arguments_helpers.create_span_data(
             start_span_arguments=start_span_arguments,
             parent_span_id=None,
@@ -141,6 +166,7 @@ def create_span_respecting_context(
             project_name=start_span_arguments.project_name,
             thread_id=start_span_arguments.thread_id,
             source=source if source is not None else "sdk",
+            environment=start_span_arguments.environment,
         )
 
         current_span_data = arguments_helpers.create_span_data(

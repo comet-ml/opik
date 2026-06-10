@@ -24,6 +24,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
@@ -33,6 +34,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.BatchResult;
+import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.fallbackLabelProjectId;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -69,49 +71,56 @@ public class ExperimentAggregatesService {
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            log.info("Starting aggregation population for experiment: '{}' in workspaceId: '{}', batchSize: '{}'",
+            log.info("Starting aggregation population, experimentId='{}', workspaceId='{}', batchSize='{}'",
                     experimentId, workspaceId, batchSize);
 
             return populateExperimentItemsInBatches(experimentId, batchSize)
                     .doOnSuccess(v -> log.info(
-                            "Experiment item aggregates populated for experiment: '{}' in workspaceId: '{}'",
+                            "Experiment item aggregates populated, experimentId='{}', workspaceId='{}'",
                             experimentId, workspaceId))
                     .then(Mono.defer(() -> experimentAggregatesDAO.populateExperimentAggregate(experimentId)))
                     .doOnSuccess(v -> log.info(
-                            "All aggregations populated successfully for experiment: '{}' in workspaceId: '{}'",
+                            "All aggregations populated successfully, experimentId='{}', workspaceId='{}'",
                             experimentId, workspaceId))
                     .doOnError(error -> log.error(
-                            "Failed to populate aggregations for experiment: '{}' in workspaceId: '{}'",
+                            "Failed to populate aggregations, experimentId='{}', workspaceId='{}'",
                             experimentId, workspaceId, error));
         });
     }
 
     /**
-     * Populate experiment item aggregates in batches using cursor pagination with {@code Mono.expand()}.
-     *
-     * @param experimentId the experiment ID
-     * @param batchSize the number of items to process per batch
-     * @return Mono that completes when all batches are processed
+     * Populate experiment_item_aggregates in cursor-paginated batches. Resolves a single
+     * {@code labelProjectId} once per population (see
+     * {@link ExperimentAggregatesUtils#resolveLabelProjectId}) and threads it through every
+     * batch. Short-circuits when no project_ids resolve — nothing to aggregate.
      */
     private Mono<Void> populateExperimentItemsInBatches(UUID experimentId, int batchSize) {
-        return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, null, batchSize)
-                .expand(result -> {
-                    log.info("Processed '{}' experiment items in this batch for experiment: '{}'",
-                            result.processedCount(), experimentId);
-                    if (result.lastCursor() == null) {
-                        return Mono.empty();
-                    }
-                    log.debug("Batch processed with cursor: '{}', continuing with next batch for experiment: '{}'",
-                            result.lastCursor(), experimentId);
-                    return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, result.lastCursor(),
-                            batchSize);
-                })
-                .map(BatchResult::processedCount)
-                .reduce(0L, Long::sum)
-                .doOnSuccess(total -> log.info(
-                        "Finished processing all experiment items. Total processed: '{}' for experiment: '{}'",
-                        total, experimentId))
-                .then();
+        return experimentAggregatesDAO.getProjectIds(experimentId)
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(projectIds -> experimentAggregatesDAO.getExperimentProjectId(experimentId)
+                        .switchIfEmpty(Mono.fromSupplier(() -> fallbackLabelProjectId(projectIds)))
+                        .flatMap(labelProjectId -> experimentAggregatesDAO
+                                .populateExperimentItemAggregates(
+                                        experimentId, projectIds, labelProjectId, null, batchSize)
+                                .expand(result -> {
+                                    log.info(
+                                            "Processed experiment items in this batch, experimentId='{}', batchSize='{}'",
+                                            experimentId, result.processedCount());
+                                    if (result.lastCursor() == null) {
+                                        return Mono.empty();
+                                    }
+                                    log.debug(
+                                            "Batch processed, continuing with next batch, experimentId='{}', cursor='{}'",
+                                            experimentId, result.lastCursor());
+                                    return experimentAggregatesDAO.populateExperimentItemAggregates(
+                                            experimentId, projectIds, labelProjectId, result.lastCursor(), batchSize);
+                                })
+                                .map(BatchResult::processedCount)
+                                .reduce(0L, Long::sum)
+                                .doOnSuccess(total -> log.info(
+                                        "Finished processing all experiment items, experimentId='{}', totalProcessed='{}'",
+                                        experimentId, total))
+                                .then()));
     }
 
     /**
@@ -276,5 +285,44 @@ public class ExperimentAggregatesService {
                             versionId, experimentIds, filters))
                     .orElse(Mono.just(new ProjectStats(List.of())));
         });
+    }
+
+    /**
+     * Delete rows from experiment_aggregates and experiment_item_aggregates for the given experiment IDs.
+     *
+     * @param experimentIds the set of experiment IDs whose aggregate rows should be removed
+     * @return Mono emitting the total number of rows deleted across both aggregate tables
+     */
+    public Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds) {
+        if (CollectionUtils.isEmpty(experimentIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Deleting aggregated experiments, size '{}'", experimentIds.size());
+
+        return experimentAggregatesDAO.deleteByExperimentIds(experimentIds)
+                .doOnNext(deleted -> log.info(
+                        "Deleted aggregated experiments, size '{}', rowsDeleted '{}'",
+                        experimentIds.size(), deleted))
+                .doOnError(error -> log.error(
+                        "Failed to delete aggregated experiments, size '{}'",
+                        experimentIds.size(), error));
+    }
+
+    public Mono<Long> deleteItemAggregatesByItemIds(@NonNull UUID experimentId, Set<UUID> itemIds) {
+        if (CollectionUtils.isEmpty(itemIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Deleting aggregated experiment items, experimentId '{}', size '{}'",
+                experimentId, itemIds.size());
+
+        return experimentAggregatesDAO.deleteItemAggregatesByItemIds(experimentId, itemIds)
+                .doOnNext(deleted -> log.info(
+                        "Deleted aggregated experiment items, experimentId '{}', size '{}', rowsDeleted '{}'",
+                        experimentId, itemIds.size(), deleted))
+                .doOnError(error -> log.error(
+                        "Failed to delete aggregated experiment items, experimentId '{}', size '{}'",
+                        experimentId, itemIds.size(), error));
     }
 }

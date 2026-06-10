@@ -29,3 +29,15 @@ export const parseDatasetVersionKey = (
   if (!datasetId || !versionId) return null;
   return { datasetId, versionId };
 };
+
+/**
+ * Returns the plain dataset ID from a value that may be either a plain
+ * dataset ID or a "datasetId::versionId" composite key. Passes through
+ * null/empty values unchanged.
+ */
+export function toPlainDatasetId(value: string): string;
+export function toPlainDatasetId(value: string | null): string | null;
+export function toPlainDatasetId(value: string | null): string | null {
+  if (!value) return value;
+  return parseDatasetVersionKey(value)?.datasetId ?? value;
+}

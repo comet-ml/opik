@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { Opik } from "@/index";
+import { track } from "@/decorators/track";
 import type { PromptInfoDict } from "@/tracer/types";
+import { getGlobalCache } from "@/prompt/promptCache";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -69,18 +71,24 @@ describe.skipIf(!shouldRunApiTests)("Trace Prompts Integration Tests", () => {
    */
   const verifyPromptInfoDict = (
     promptInfo: PromptInfoDict,
-    expectedName: string,
-    expectedTemplate: string
+    expected: {
+      name: string;
+      template: unknown;
+      templateStructure?: string;
+    }
   ) => {
-    expect(promptInfo.name).toBe(expectedName);
+    expect(promptInfo.name).toBe(expected.name);
     expect(promptInfo.id).toBeDefined();
     expect(typeof promptInfo.id).toBe("string");
     expect(promptInfo.version).toBeDefined();
-    expect(promptInfo.version.template).toBe(expectedTemplate);
+    expect(promptInfo.version.template).toEqual(expected.template);
     expect(promptInfo.version.id).toBeDefined();
     expect(typeof promptInfo.version.id).toBe("string");
     expect(promptInfo.version.commit).toBeDefined();
     expect(typeof promptInfo.version.commit).toBe("string");
+    if (expected.templateStructure) {
+      expect(promptInfo.template_structure).toBe(expected.templateStructure);
+    }
   };
 
   it(
@@ -126,7 +134,7 @@ describe.skipIf(!shouldRunApiTests)("Trace Prompts Integration Tests", () => {
 
       // Verify prompt structure
       const serializedPrompt = metadata.opik_prompts![0];
-      verifyPromptInfoDict(serializedPrompt, promptName, promptTemplate);
+      verifyPromptInfoDict(serializedPrompt, { name: promptName, template: promptTemplate });
     },
     TEST_TIMEOUT
   );
@@ -182,21 +190,18 @@ describe.skipIf(!shouldRunApiTests)("Trace Prompts Integration Tests", () => {
       expect(metadata.opik_prompts).toHaveLength(3);
 
       // Verify each prompt structure and order
-      verifyPromptInfoDict(
-        metadata.opik_prompts![0],
-        `prompt-1-${timestamp}`,
-        "First prompt: {{var1}}"
-      );
-      verifyPromptInfoDict(
-        metadata.opik_prompts![1],
-        `prompt-2-${timestamp}`,
-        "Second prompt: {{var2}}"
-      );
-      verifyPromptInfoDict(
-        metadata.opik_prompts![2],
-        `prompt-3-${timestamp}`,
-        "Third prompt: {{var3}}"
-      );
+      verifyPromptInfoDict(metadata.opik_prompts![0], {
+        name: `prompt-1-${timestamp}`,
+        template: "First prompt: {{var1}}",
+      });
+      verifyPromptInfoDict(metadata.opik_prompts![1], {
+        name: `prompt-2-${timestamp}`,
+        template: "Second prompt: {{var2}}",
+      });
+      verifyPromptInfoDict(metadata.opik_prompts![2], {
+        name: `prompt-3-${timestamp}`,
+        template: "Third prompt: {{var3}}",
+      });
     },
     TEST_TIMEOUT
   );
@@ -249,11 +254,74 @@ describe.skipIf(!shouldRunApiTests)("Trace Prompts Integration Tests", () => {
       // Prompts metadata
       expect(metadata.opik_prompts).toBeDefined();
       expect(metadata.opik_prompts).toHaveLength(1);
-      verifyPromptInfoDict(
-        metadata.opik_prompts![0],
-        promptName,
-        "Test: {{test}}"
-      );
+      verifyPromptInfoDict(metadata.opik_prompts![0], {
+        name: promptName,
+        template: "Test: {{test}}",
+      });
+    },
+    TEST_TIMEOUT
+  );
+
+  it(
+    "should auto-inject text and chat prompts into trace when fetched inside track()",
+    async () => {
+      const timestamp = Date.now();
+      const textPromptName = `auto-text-${timestamp}`;
+      const chatPromptName = `auto-chat-${timestamp}`;
+      const traceName = `trace-auto-inject-${timestamp}`;
+
+      // Create prompts on the server
+      const textPrompt = await client.createPrompt({
+        name: textPromptName,
+        prompt: "Summarize: {{text}}",
+      });
+      createdPromptIds.push(textPrompt.id!);
+
+      const chatPrompt = await client.createChatPrompt({
+        name: chatPromptName,
+        messages: [
+          { role: "system", content: "You are helpful" },
+          { role: "user", content: "Help with {{task}}" },
+        ],
+      });
+      createdPromptIds.push(chatPrompt.id!);
+
+      // Clear cache so getPrompt/getChatPrompt actually fetch
+      getGlobalCache().clear();
+
+      // Call getPrompt + getChatPrompt inside a tracked function
+      const trackedFn = track({ name: traceName, projectName: testProjectName }, async () => {
+        await client.getPrompt({ name: textPromptName });
+        await client.getChatPrompt({ name: chatPromptName });
+        return "done";
+      });
+      await trackedFn();
+      await client.flush();
+
+      // Verify the trace has opik_prompts with both prompts
+      const results = await searchWithWait(`name = "${traceName}"`, 1);
+      expect(results.length).toBeGreaterThanOrEqual(1);
+
+      const foundTrace = results.find((t) => t.name === traceName);
+      expect(foundTrace).toBeDefined();
+
+      const metadata = foundTrace?.metadata as TraceMetadata;
+      expect(metadata.opik_prompts).toBeDefined();
+      expect(metadata.opik_prompts).toHaveLength(2);
+
+      const textEntry = metadata.opik_prompts!.find((p) => p.name === textPromptName)!;
+      verifyPromptInfoDict(textEntry, {
+        name: textPromptName,
+        template: "Summarize: {{text}}",
+        templateStructure: "text",
+      });
+
+      const chatEntry = metadata.opik_prompts!.find((p) => p.name === chatPromptName)!;
+      verifyPromptInfoDict(chatEntry, {
+        name: chatPromptName,
+        template: expect.any(Array),
+        templateStructure: "chat",
+      });
     },
     TEST_TIMEOUT
   );

@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -15,8 +17,6 @@ import java.util.stream.Collectors;
 
 @Data
 public class ServiceTogglesConfig {
-
-    public static final String FORCE_WORKSPACE_VERSION_DISABLED = "disabled";
 
     @Valid @JsonProperty
     @NotNull boolean pythonEvaluatorEnabled;
@@ -35,8 +35,6 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean welcomeWizardEnabled;
     @JsonProperty
-    @NotNull boolean csvUploadEnabled;
-    @JsonProperty
     @NotNull boolean exportEnabled;
     @JsonProperty
     @NotNull boolean optimizationStudioEnabled;
@@ -44,6 +42,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
     @NotNull boolean datasetExportEnabled;
+    @JsonProperty
+    @NotNull boolean demoDataEnabled;
     // LLM Provider feature flags
     @JsonProperty
     @NotNull boolean openaiProviderEnabled;
@@ -62,20 +62,36 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean ollamaProviderEnabled;
     @JsonProperty
-    @NotNull boolean collaboratorsTabEnabled;
+    @NotNull boolean ollieEnabled;
+    @JsonProperty
+    @NotNull boolean agenticToolsEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
 
     @JsonSetter
     public void setV2WorkspaceAllowlist(String v2WorkspaceAllowlist) {
-        this.v2WorkspaceAllowlistIds = Optional.ofNullable(v2WorkspaceAllowlist)
+        this.v2WorkspaceAllowlistIds = parseAllowlist(v2WorkspaceAllowlist);
+    }
+
+    @NotNull Set<@NotBlank String> v1WorkspaceAllowlistIds = Set.of();
+
+    @JsonSetter
+    public void setV1WorkspaceAllowlist(String v1WorkspaceAllowlist) {
+        this.v1WorkspaceAllowlistIds = parseAllowlist(v1WorkspaceAllowlist);
+    }
+
+    private static Set<String> parseAllowlist(String commaSeparated) {
+        return Optional.ofNullable(commaSeparated)
                 .filter(StringUtils::isNotBlank)
-                .map(commaSeparated -> Arrays.stream(commaSeparated.split(","))
+                .map(value -> Arrays.stream(value.split(","))
                         .map(String::strip)
                         .filter(StringUtils::isNotBlank)
                         .collect(Collectors.toUnmodifiableSet()))
                 .orElse(Set.of());
     }
 
-    @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
+    @NotBlank String forceWorkspaceVersion;
+
+    @JsonProperty
+    @Min(5) @Max(100) int defaultPageSize;
 }

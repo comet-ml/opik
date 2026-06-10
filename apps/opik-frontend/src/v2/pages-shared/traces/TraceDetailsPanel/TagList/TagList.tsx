@@ -30,11 +30,10 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   const spanUpdateMutation = useSpanUpdateMutation();
 
   const {
-    permissions: { canTagTrace },
+    permissions: { canLogTraceSpanThread },
   } = usePermissions();
 
   const isSpan = !!spanId;
-  const isMutable = isSpan || canTagTrace;
 
   const mutateTags = (newTags: string[]) => {
     if (isSpan) {
@@ -72,7 +71,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
     mutateTags(tags.filter((t) => t !== tag));
   };
 
-  const tagsProps = isMutable
+  const tagsProps = canLogTraceSpanThread
     ? { tags }
     : {
         tags: [],
@@ -84,9 +83,9 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       {...tagsProps}
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
-      size="sm"
+      size="md"
       className={className}
-      canAdd={isMutable}
+      canAdd={canLogTraceSpanThread}
       tagVariant={tagVariant}
     />
   );

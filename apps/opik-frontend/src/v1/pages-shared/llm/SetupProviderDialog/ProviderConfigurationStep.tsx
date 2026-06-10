@@ -11,7 +11,7 @@ import VertexAIProviderDetails from "@/v1/pages-shared/llm/ManageAIProviderDialo
 import BedrockProviderDetails from "@/v1/pages-shared/llm/ManageAIProviderDialog/BedrockProviderDetails";
 import { AIProviderFormType } from "@/v1/pages-shared/llm/ManageAIProviderDialog/schema";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 
 interface ProviderConfigurationStepProps {
   selectedProviderType: PROVIDER_TYPE;

@@ -6,10 +6,12 @@ import { useToast } from "@/ui/use-toast";
 
 type ShareURLButtonProps = {
   message?: string;
+  size?: "sm" | "2xs";
 };
 
 const ShareURLButton: React.FunctionComponent<ShareURLButtonProps> = ({
   message = "URL successfully copied to clipboard",
+  size = "sm",
 }) => {
   const { toast } = useToast();
 
@@ -21,8 +23,8 @@ const ShareURLButton: React.FunctionComponent<ShareURLButtonProps> = ({
   }, [message, toast]);
 
   return (
-    <Button variant="outline" size="sm" onClick={shareClickHandler}>
-      <Share className="mr-2 size-4" />
+    <Button variant="outline" size={size} onClick={shareClickHandler}>
+      <Share className={size === "2xs" ? "mr-1 size-3.5" : "mr-2 size-4"} />
       Share
     </Button>
   );

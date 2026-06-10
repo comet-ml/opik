@@ -44,6 +44,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
             tags=track_options.tags,
             metadata=track_options.metadata,
             project_name=track_options.project_name,
+            environment=track_options.environment,
         )
 
         return result

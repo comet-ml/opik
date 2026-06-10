@@ -26,7 +26,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @UniqueKeysValidation
 public record AgentBlueprint(
-        @JsonView( {
+        @JsonView({
                 AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) UUID id,
         @Schema(hidden = true) UUID projectId,
@@ -47,19 +47,19 @@ public record AgentBlueprint(
         @JsonView({AgentConfig.View.Public.class,
                 AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
-                AgentConfig.View.Write.class}) @Valid @NotNull @Size(min = 1, max = 250, message = "blueprint must have between 1 and 250 values") List<@NotNull AgentConfigValue> values){
+                AgentConfig.View.Write.class}) @Valid @NotNull @Size(min = 1, max = 250, message = "blueprint must have between 1 and 250 values") List<@NotNull AgentConfigValue> values) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record BlueprintPage(
-            @JsonView( {
+            @JsonView({
                     AgentConfig.View.History.class}) int page,
             @JsonView({AgentConfig.View.History.class}) int size,
             @JsonView({AgentConfig.View.History.class}) long total,
             @JsonView({AgentConfig.View.History.class}) List<AgentBlueprint> content)
             implements
-                Page<AgentBlueprint>{
+                Page<AgentBlueprint> {
 
         public static BlueprintPage empty(int page) {
             return new BlueprintPage(page, 0, 0, List.of());

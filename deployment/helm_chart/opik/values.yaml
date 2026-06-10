@@ -179,6 +179,18 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      UI_DEFAULT_PAGE_SIZE: "100"
+      # LLM model registry (see apps/opik-backend/config.yml:1309-1317).
+      # Remote CDN fetch is opt-in: self-hosted / OSS deployments serve
+      # the classpath YAML shipped with the release by default, no
+      # outbound traffic. Operators who want fresh models between
+      # releases can set LLM_MODEL_REGISTRY_REMOTE_ENABLED: "true" and
+      # point LLM_MODEL_REGISTRY_REMOTE_URL at their preferred source.
+      LLM_MODEL_REGISTRY_DEFAULT_RESOURCE: "llm-models-default.yaml"
+      LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: ""
+      LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false"
+      LLM_MODEL_REGISTRY_REMOTE_URL: ""
+      LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -282,25 +294,26 @@ component:
       # TTL for failed RQ jobs in Redis in seconds (default: 86400 = 1 day)
       # RQ_WORKER_TTL_FAILURE: "86400"
     
-    # Optional: Reference external Kubernetes secrets for sensitive configuration
-    # Use this to inject LLM API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
-    # from external secret managers (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault)
-    # 
+    # LLM provider API keys are no longer injected via environment variables.
+    # Configure them per workspace in the Opik UI under "AI Providers" — the
+    # backend resolves the key from workspace settings when the Optimization
+    # Studio and Playground make LLM calls.
+    #
+    # Optional: Reference external Kubernetes secrets for other sensitive
+    # configuration (e.g. AWS credentials, DB credentials) from external secret
+    # managers (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault).
+    #
     # Customers can create secrets using:
     # - ExternalSecret Operator (recommended for production)
     # - Kubernetes Secrets CSI Driver
     # - Manual kubectl create secret
-    # 
+    #
     # Each secretRef will be added as an envFrom entry, making all key-value pairs
     # from the secret available as environment variables in the python-backend pod.
-    # 
+    #
     # Example configuration:
     # secretRefs:
-    #   - name: "opik-llm-api-keys"       # Contains OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
     #   - name: "opik-aws-credentials"    # Contains AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-    # 
-    # For detailed setup instructions, see:
-    # apps/opik-python-backend/docs/LLM_API_KEYS_CONFIGURATION.md
     secretRefs: []
     
     envFrom:

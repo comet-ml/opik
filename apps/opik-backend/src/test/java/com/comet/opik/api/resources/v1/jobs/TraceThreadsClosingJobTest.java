@@ -413,6 +413,8 @@ class TraceThreadsClosingJobTest {
                     .lastUpdatedAt(expectedLastUpdatedAt)
                     .lastUpdatedBy(lastUpdatedBy)
                     .totalEstimatedCost(null)
+                    .environment(expectedTraces.stream().min(Comparator.comparing(Trace::id)).orElseThrow()
+                            .environment())
                     .build();
         }
 

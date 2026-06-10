@@ -5,6 +5,7 @@ import uniq from "lodash/uniq";
 import first from "lodash/first";
 
 import CompareExperimentsButton from "@/v2/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
+import EvaluateExperimentTracesButton from "@/v2/pages/CompareExperimentsPage/EvaluateExperimentTracesButton/EvaluateExperimentTracesButton";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -106,6 +107,9 @@ const CompareExperimentsActionsPanel: React.FC<
   const disabled = !selectedRows?.length;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
+  const singleExperiment =
+    experiments?.length === 1 ? experiments[0] : undefined;
+
   const mapRowData = useCallback(async () => {
     if (!columnsToExport || !getDataForExport) return [];
 
@@ -191,6 +195,7 @@ const CompareExperimentsActionsPanel: React.FC<
   return (
     <div className="flex items-center gap-2">
       <CompareExperimentsButton />
+      <EvaluateExperimentTracesButton experiment={singleExperiment} />
       {columnsToExport && (
         <>
           <Separator orientation="vertical" className="mx-2 h-4" />

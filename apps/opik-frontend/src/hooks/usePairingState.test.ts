@@ -10,6 +10,7 @@ let mockRunnerData: { status: string; id: string } | null = null;
 vi.mock("@/api/agent-sandbox/useSandboxConnectionStatus", () => ({
   default: vi.fn(() => ({
     data: mockRunnerData,
+    isFetched: true,
   })),
 }));
 

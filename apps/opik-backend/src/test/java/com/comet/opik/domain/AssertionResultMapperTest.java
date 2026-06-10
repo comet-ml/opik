@@ -21,8 +21,7 @@ class AssertionResultMapperTest {
 
         var result = AssertionResultMapper.enrichWithAssertions(item, null);
 
-        assertThat(result.assertionResults()).isNull();
-        assertThat(result.status()).isNull();
+        assertThat(result).isEqualTo(item);
     }
 
     @Test
@@ -31,8 +30,16 @@ class AssertionResultMapperTest {
 
         var result = AssertionResultMapper.enrichWithAssertions(item, "  ");
 
-        assertThat(result.assertionResults()).isNull();
-        assertThat(result.status()).isNull();
+        assertThat(result).isEqualTo(item);
+    }
+
+    @Test
+    void enrichWithAssertions_emptyArray_returnsUnchanged() {
+        var item = baseItem().build();
+
+        var result = AssertionResultMapper.enrichWithAssertions(item, "[]");
+
+        assertThat(result).isEqualTo(item);
     }
 
     @Test
@@ -45,9 +52,15 @@ class AssertionResultMapperTest {
 
         var result = AssertionResultMapper.enrichWithAssertions(item, json);
 
-        assertThat(result.assertionResults()).hasSize(2);
-        assertThat(result.assertionResults()).allMatch(AssertionResult::passed);
-        assertThat(result.status()).isEqualTo(RunStatus.PASSED);
+        var expected = item.toBuilder()
+                .assertionResults(List.of(
+                        AssertionResult.builder().value("Should link to docs").passed(true).reason("Links found")
+                                .build(),
+                        AssertionResult.builder().value("Should be concise").passed(true).reason("Under 200 words")
+                                .build()))
+                .status(RunStatus.PASSED)
+                .build();
+        assertThat(result).isEqualTo(expected);
     }
 
     @Test
@@ -60,10 +73,14 @@ class AssertionResultMapperTest {
 
         var result = AssertionResultMapper.enrichWithAssertions(item, json);
 
-        assertThat(result.assertionResults()).hasSize(2);
-        assertThat(result.status()).isEqualTo(RunStatus.FAILED);
-        assertThat(result.assertionResults().get(0).passed()).isTrue();
-        assertThat(result.assertionResults().get(1).passed()).isFalse();
+        var expected = item.toBuilder()
+                .assertionResults(List.of(
+                        AssertionResult.builder().value("Should link to docs").passed(true).reason("Links found")
+                                .build(),
+                        AssertionResult.builder().value("Should be concise").passed(false).reason("Too long").build()))
+                .status(RunStatus.FAILED)
+                .build();
+        assertThat(result).isEqualTo(expected);
     }
 
     @Test
@@ -75,8 +92,13 @@ class AssertionResultMapperTest {
 
         var result = AssertionResultMapper.enrichWithAssertions(item, json);
 
-        assertThat(result.assertionResults()).hasSize(1);
-        assertThat(result.status()).isEqualTo(RunStatus.FAILED);
+        var expected = item.toBuilder()
+                .assertionResults(List.of(
+                        AssertionResult.builder().value("Should link to docs").passed(false).reason("No links found")
+                                .build()))
+                .status(RunStatus.FAILED)
+                .build();
+        assertThat(result).isEqualTo(expected);
     }
 
     @Test
@@ -88,11 +110,9 @@ class AssertionResultMapperTest {
 
         var result = AssertionResultMapper.computeRunSummaries(List.of(item));
 
-        assertThat(result).hasSize(1);
-        var summary = result.get(item.experimentId().toString());
-        assertThat(summary.passedRuns()).isEqualTo(1);
-        assertThat(summary.totalRuns()).isEqualTo(1);
-        assertThat(summary.status()).isEqualTo(RunStatus.PASSED);
+        assertThat(result).isEqualTo(Map.of(
+                item.experimentId().toString(),
+                new ExperimentRunSummary(1, 1, RunStatus.PASSED)));
     }
 
     @Test
@@ -114,11 +134,9 @@ class AssertionResultMapperTest {
 
         Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);
 
-        assertThat(result).hasSize(1);
-        var summary = result.get(experimentId.toString());
-        assertThat(summary.passedRuns()).isEqualTo(2);
-        assertThat(summary.totalRuns()).isEqualTo(3);
-        assertThat(summary.status()).isEqualTo(RunStatus.PASSED);
+        assertThat(result).isEqualTo(Map.of(
+                experimentId.toString(),
+                new ExperimentRunSummary(2, 3, RunStatus.PASSED)));
     }
 
     @Test
@@ -141,11 +159,9 @@ class AssertionResultMapperTest {
 
         Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);
 
-        assertThat(result).hasSize(1);
-        var summary = result.get(experimentId.toString());
-        assertThat(summary.passedRuns()).isEqualTo(2);
-        assertThat(summary.totalRuns()).isEqualTo(3);
-        assertThat(summary.status()).isEqualTo(RunStatus.FAILED);
+        assertThat(result).isEqualTo(Map.of(
+                experimentId.toString(),
+                new ExperimentRunSummary(2, 3, RunStatus.FAILED)));
     }
 
     @Test
@@ -168,15 +184,13 @@ class AssertionResultMapperTest {
 
         Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);
 
-        assertThat(result).hasSize(1);
-        var summary = result.get(experimentId.toString());
-        assertThat(summary.passedRuns()).isEqualTo(2);
-        assertThat(summary.totalRuns()).isEqualTo(3);
-        assertThat(summary.status()).isEqualTo(RunStatus.PASSED);
+        assertThat(result).isEqualTo(Map.of(
+                experimentId.toString(),
+                new ExperimentRunSummary(2, 3, RunStatus.PASSED)));
     }
 
     @Test
-    void computeRunSummaries_regularExperimentItems_returnsNull() {
+    void computeRunSummaries_noAssertionResults_returnsNull() {
         var items = List.of(
                 baseItem().build(),
                 baseItem().build());

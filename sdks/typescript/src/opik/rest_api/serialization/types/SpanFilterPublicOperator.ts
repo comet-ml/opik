@@ -20,6 +20,8 @@ export const SpanFilterPublicOperator: core.serialization.Schema<
     "<=",
     "is_empty",
     "is_not_empty",
+    "in",
+    "not_in",
 ]);
 
 export declare namespace SpanFilterPublicOperator {
@@ -35,5 +37,7 @@ export declare namespace SpanFilterPublicOperator {
         | "<"
         | "<="
         | "is_empty"
-        | "is_not_empty";
+        | "is_not_empty"
+        | "in"
+        | "not_in";
 }

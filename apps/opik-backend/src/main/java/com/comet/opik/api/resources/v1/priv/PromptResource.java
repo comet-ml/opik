@@ -3,12 +3,15 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
+import com.comet.opik.api.Environment;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionEnvironmentUpdate;
+import com.comet.opik.api.PromptVersionIdsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
@@ -40,6 +43,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -133,20 +137,25 @@ public class PromptResource {
 
     @GET
     @Path("{id}")
-    @Operation(operationId = "getPromptById", summary = "Get prompt by id", description = "Get prompt by id", responses = {
+    @Operation(operationId = "getPromptById", summary = "Get prompt by id", description = "Get prompt by id; when mask_id or environment is provided, requestedVersion is populated with the resolved version. mask_id and environment are mutually exclusive.", responses = {
             @ApiResponse(responseCode = "200", description = "Prompt resource", content = @Content(schema = @Schema(implementation = Prompt.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({Prompt.View.Detail.class})
-    public Response getPromptById(@PathParam("id") UUID id) {
+    public Response getPromptById(@PathParam("id") UUID id,
+            @Parameter(description = "Optional mask version id; when set, requestedVersion is the mask row for that id") @QueryParam("mask_id") UUID maskId,
+            @Parameter(description = "Optional environment name; when set, requestedVersion is the version mapped to that environment for the prompt") @QueryParam("environment") @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting prompt by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Getting prompt by id '{}', mask_id '{}', environment '{}' on workspace_id '{}'", id, maskId,
+                environment, workspaceId);
 
-        Prompt prompt = promptService.getById(id);
+        Prompt prompt = promptService.getById(id, maskId, environment);
 
-        log.info("Got prompt by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Got prompt by id '{}', mask_id '{}', environment '{}' on workspace_id '{}'", id, maskId,
+                environment, workspaceId);
 
         return Response.ok(prompt).build();
     }
@@ -204,6 +213,29 @@ public class PromptResource {
         promptService.delete(batchDelete.ids());
         log.info("Deleted prompts by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/versions/retrieve-by-ids")
+    @Operation(operationId = "retrievePromptVersionsByIds", summary = "Retrieve prompt versions by ids", description = "Retrieve a batch of prompt versions by their ids. Typically used by the UI to resolve mask overlays.", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersion.class)))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @JsonView({PromptVersion.View.Detail.class})
+    public Response retrievePromptVersionsByIds(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionIdsRequest.class))) @Valid PromptVersionIdsRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieving prompt versions by ids, count '{}', on workspace_id '{}'",
+                request.ids().size(), workspaceId);
+
+        List<PromptVersion> versions = promptService.retrieveVersionsByIds(request.ids());
+
+        log.info("Retrieved prompt versions by ids, requested '{}', returned '{}', on workspace_id '{}'",
+                request.ids().size(), versions.size(), workspaceId);
+
+        return Response.ok(versions).build();
     }
 
     @POST
@@ -322,6 +354,30 @@ public class PromptResource {
         return Response.ok(promptVersion).build();
     }
 
+    @GET
+    @Path("/{promptId}/versions/by-number/{versionNumber}")
+    @Operation(operationId = "getPromptVersionByNumber", summary = "Get prompt version by sequential number", description = "Get a prompt version by its sequential v<N> number for the given prompt.", responses = {
+            @ApiResponse(responseCode = "200", description = "Prompt version resource", content = @Content(schema = @Schema(implementation = PromptVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+    })
+    @JsonView({PromptVersion.View.Detail.class})
+    public Response getPromptVersionByNumber(@PathParam("promptId") UUID promptId,
+            @PathParam("versionNumber") @Pattern(regexp = "v\\d+", message = "must match v<N>") @Size(max = 10, message = "cannot exceed 10 characters") String versionNumber) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting prompt version by prompt_id '{}', version_number '{}' on workspace_id '{}'",
+                promptId, versionNumber, workspaceId);
+
+        PromptVersion promptVersion = promptService.getVersionByNumber(promptId, versionNumber);
+
+        log.info("Got prompt version by prompt_id '{}', version_number '{}' on workspace_id '{}'",
+                promptId, versionNumber, workspaceId);
+
+        return Response.ok(promptVersion).build();
+    }
+
     @PATCH
     @Path("/versions")
     @Operation(operationId = "updatePromptVersions", summary = "Update prompt versions", description = """
@@ -351,6 +407,31 @@ public class PromptResource {
         return Response.noContent().build();
     }
 
+    @PATCH
+    @Path("/versions/{versionId}/environments")
+    @Operation(operationId = "setPromptVersionEnvironment", summary = "Set prompt version environment", description = """
+            Set or clear the environment owned by a prompt version.
+            Setting a non-null environment moves ownership atomically: any previous owner of that
+            environment for the same prompt has its environment cleared in the same transaction.
+            Setting null clears the environment from the version.
+            The environment must already exist in the workspace registry; unknown names return 404.
+            """, responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response setPromptVersionEnvironment(@PathParam("versionId") UUID versionId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionEnvironmentUpdate.class))) @Valid @NotNull PromptVersionEnvironmentUpdate request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Setting environments '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environments(), versionId, workspaceId);
+        promptService.setVersionEnvironment(versionId, request.environments());
+        log.info("Successfully set environments '{}' on prompt version '{}' on workspace_id '{}'",
+                request.environments(), versionId, workspaceId);
+        return Response.noContent().build();
+    }
+
     @POST
     @Path("/versions/retrieve")
     @Operation(operationId = "retrievePromptVersion", summary = "Retrieve prompt version", description = "Retrieve prompt version", responses = {
@@ -365,14 +446,17 @@ public class PromptResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving prompt name '{}'  with commit '{}' on workspace_id '{}'",
-                request.name(), request.commit(), workspaceId);
+        log.info(
+                "Retrieving prompt name '{}' with commit '{}', environment '{}', version_number '{}' on workspace_id '{}'",
+                request.name(), request.commit(), request.environment(), request.versionNumber(), workspaceId);
 
         PromptVersion promptVersion = promptService.retrievePromptVersion(
-                request.name(), request.commit(), request.projectName());
+                request.name(), request.commit(), request.environment(), request.versionNumber(),
+                request.projectName());
 
-        log.info("Retrieved prompt name '{}'  with commit '{}' on workspace_id '{}'", request.name(),
-                request.commit(), workspaceId);
+        log.info(
+                "Retrieved prompt name '{}' with commit '{}', environment '{}', version_number '{}' on workspace_id '{}'",
+                request.name(), request.commit(), request.environment(), request.versionNumber(), workspaceId);
 
         var responseBuilder = Response.ok(promptVersion);
         String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();

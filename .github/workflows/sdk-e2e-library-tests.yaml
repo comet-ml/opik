@@ -15,6 +15,7 @@ on:
             - all
             - adk
             - litellm
+            - opentelemetry
     schedule:
       - cron: "0 0 */2 * *"
     pull_request:
@@ -48,7 +49,7 @@ jobs:
       - name: Print has secrets into output
         id: init
         run: |
-          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
 
   missed_api_key_warning:
     name: Missed OpenAI API Key Warning
@@ -69,18 +70,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: [
-          "3.10",
-          "3.11",
-          "3.12",
-          "3.13",
-          "3.14",
-        ]
+        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-          
+
       - name: Install uv and set the Python version ${{ matrix.python_version }}
         uses: astral-sh/setup-uv@v5
         with:
@@ -89,7 +84,7 @@ jobs:
       - name: Make LIBS variable global (workaround for cron)
         id: init
         run: |
-          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
+          echo "LIBS=${{ env.LIBS }}" >> "$GITHUB_OUTPUT"
 
       - name: Run latest Opik server
         env:
@@ -142,6 +137,13 @@ jobs:
         with:
           python_version: ${{ matrix.python_version }}
           library_name: litellm
+
+      - name: OpenTelemetry Tests Python ${{ matrix.python_version }}
+        if: contains(fromJSON('["opentelemetry", "all"]'), env.LIBS)
+        uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
+        with:
+          python_version: ${{ matrix.python_version }}
+          library_name: opentelemetry
 
       - name: Stop opik server
         run: |

@@ -23,7 +23,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @DatasetItemBatchValidation
 public record DatasetItemBatch(
-        @JsonView( {
+        @JsonView({
                 DatasetItem.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, dataset_id must be provided") String datasetName,
         @JsonView({
                 DatasetItem.View.Write.class}) @Schema(description = "If null, dataset_name must be provided") UUID datasetId,
@@ -33,9 +33,16 @@ public record DatasetItemBatch(
                 DatasetItem.View.Write.class}) @Schema(description = "Optional. Associates the batch with a project by ID. Takes precedence over project_name.") UUID projectId,
         @JsonView({DatasetItem.View.Write.class}) @NotNull @Size(min = 1, max = 1000) @Valid List<DatasetItem> items,
         @JsonView({
-                DatasetItem.View.Write.class}) @Schema(description = "Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.") UUID batchGroupId)
+                DatasetItem.View.Write.class}) @Schema(description = "Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.") UUID batchGroupId,
+        // OPIK-6696: when both copy_from_* coordinates are set, the INSERT FROM SELECT that copies
+        // unchanged rows reads from this (dataset, version) pair instead of the destination dataset's
+        // prior version, avoiding the multi-replica read-after-write window.
+        @JsonView({
+                DatasetItem.View.Write.class}) @Schema(description = "Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.") UUID copyFromDatasetId,
+        @JsonView({
+                DatasetItem.View.Write.class}) @Schema(description = "Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.") UUID copyFromVersionId)
         implements
-            RateEventContainer{
+            RateEventContainer {
 
     @Override
     public long eventCount() {

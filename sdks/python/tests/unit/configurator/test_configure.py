@@ -894,11 +894,11 @@ class TestGetApiKey:
             "smart-api-key"
         )  # called 2 times, one in OpikConfig, another in OpikConfigurator
         mock_is_api_key_correct.assert_called_once_with(
-            "smart-api-key", url=configurator.base_url
+            "smart-api-key", url="https://some-url-from-smart-api-key.com"
         )
 
         assert configurator.api_key == "smart-api-key"
-        assert configurator.base_url == "https://some-url-from-smart-api-key.com"
+        assert configurator.base_url == "https://some-url-from-smart-api-key.com/"
         assert needs_update is True
 
     @patch(
@@ -923,7 +923,7 @@ class TestGetApiKey:
             "smart-api-key"
         )  # called 2 times, one in OpikConfig, another in OpikConfigurator
         mock_is_api_key_correct.assert_called_once_with(
-            "smart-api-key", url=configurator.base_url
+            "smart-api-key", url="https://url-from-smart-api-key.com"
         )
         mock_logger_warning.assert_called_once_with(
             "The url provided in the configure (%s) method doesn't match the domain linked to the API key provided and will be ignored",
@@ -931,8 +931,44 @@ class TestGetApiKey:
         )
 
         assert configurator.api_key == "smart-api-key"
-        assert configurator.base_url == "https://url-from-smart-api-key.com"
+        assert configurator.base_url == "https://url-from-smart-api-key.com/"
         assert needs_update is True
+
+    @pytest.mark.parametrize(
+        "configured_url, api_key_url",
+        [
+            # trailing slash only on one side
+            ("https://same-url.com/", "https://same-url.com"),
+            ("https://same-url.com", "https://same-url.com/"),
+            # both normalised the same way
+            ("https://same-url.com/", "https://same-url.com/"),
+        ],
+    )
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.LOGGER.warning")
+    def test_try_set_url_from_api_key__same_url_with_different_slash_variants__no_warning(
+        self,
+        mock_logger_warning,
+        mock_is_api_key_correct,
+        configured_url,
+        api_key_url,
+    ):
+        with patch(
+            "opik.api_key.opik_api_key.parse_api_key",
+            return_value=SimpleNamespace(base_url=api_key_url),
+        ):
+            configurator = OpikConfigurator(
+                api_key="smart-api-key",
+                url=configured_url,
+                force=True,
+            )
+            configurator._set_api_key()
+
+        mock_logger_warning.assert_not_called()
+        assert configurator.base_url == "https://same-url.com/"
 
 
 class TestGetWorkspace:
@@ -1779,13 +1815,21 @@ class TestConfigureLocal:
         mock_update_session_config.assert_any_call("project_name", "my_project")
 
     @patch(
+        "opik.configurator.configure.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
+    @patch(
         "opik.configurator.configure.opik_rest_helpers.is_instance_active",
         return_value=True,
     )
     @patch("opik.configurator.configure.opik.config.update_session_config")
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     def test_configure_local__no_project_name__uses_default(
-        self, mock_opik_config, mock_update_session_config, mock_is_instance_active
+        self,
+        mock_opik_config,
+        mock_update_session_config,
+        mock_is_instance_active,
+        mock_get_most_recent_project_name,
     ):
         """
         Test that the default project name is used when none is provided and automatic_approvals is True.
@@ -2189,10 +2233,15 @@ class TestConfigure:
         "opik.configurator.configure.opik_rest_helpers.is_instance_active",
         return_value=True,
     )
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     def test_configure__force_enabled_local__no_approval_questions_asked(
         self,
         mock_ask_user_for_approval,
+        mock_get_most_recent_project_name,
         mock_is_instance_active,
         mock_opik_config,
         mock_update_session_config,
@@ -2411,3 +2460,56 @@ class TestConfigure:
             "workspace", OPIK_WORKSPACE_DEFAULT_NAME
         )
         mock_update_session_config.assert_any_call("project_name", "new_project")
+
+
+class TestShouldSetupMcpServer:
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__install_mcp_false__returns_false(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=False)
+        assert configurator._should_setup_mcp_server() is False
+
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    def test_should_setup_mcp_server__non_interactive__returns_false(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=True)
+        assert configurator._should_setup_mcp_server() is False
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__install_mcp_true__returns_true(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=True)
+        assert configurator._should_setup_mcp_server() is True
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__automatic_approvals__returns_false_without_prompt(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=True)
+        assert configurator._should_setup_mcp_server() is False
+
+    @patch(
+        "opik.configurator.configure.ask_user_for_approval_default_no",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__interactive_prompt_yes__returns_true(
+        self, mock_is_interactive, mock_prompt
+    ):
+        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
+        assert configurator._should_setup_mcp_server() is True
+        mock_prompt.assert_called_once()
+
+    @patch(
+        "opik.configurator.configure.ask_user_for_approval_default_no",
+        return_value=False,
+    )
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_should_setup_mcp_server__interactive_prompt_no__returns_false(
+        self, mock_is_interactive, mock_prompt
+    ):
+        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
+        assert configurator._should_setup_mcp_server() is False

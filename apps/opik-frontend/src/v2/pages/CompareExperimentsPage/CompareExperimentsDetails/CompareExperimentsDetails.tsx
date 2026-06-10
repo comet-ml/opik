@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isNumber from "lodash/isNumber";
-import { CircleCheck, Database } from "lucide-react";
+import { CircleCheck, Database, GitCommitVertical } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { Experiment } from "@/types/datasets";
@@ -19,7 +19,7 @@ import {
   SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
-import { generateExperimentIdFilter } from "@/lib/filters";
+import { generateExperimentIdsFilter } from "@/lib/filters";
 import { isTestSuiteExperiment } from "@/lib/experiments";
 import { LOGS_SOURCE } from "@/types/traces";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -49,7 +49,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
   }, [title, setBreadcrumbParam]);
 
   const experimentSourceFilters = useMemo(
-    () => generateExperimentIdFilter(experimentsIds[0]),
+    () => generateExperimentIdsFilter(experimentsIds),
     [experimentsIds],
   );
 
@@ -107,19 +107,36 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
         )}
         {experiment?.dataset_id && (
-          <Tag
-            size="md"
-            variant="transparent"
-            className="flex shrink-0 items-center gap-1"
+          <TooltipWrapper
+            content={[
+              isTestSuiteExperiment(experiment) ? "Test suite" : "Dataset",
+              ": ",
+              experiment.dataset_name || "Deleted",
+              experiment.dataset_version_summary?.version_name
+                ? ` ${experiment.dataset_version_summary.version_name}`
+                : "",
+            ].join("")}
           >
-            <Database
-              className="size-3 shrink-0"
-              style={{ color: "var(--color-yellow)" }}
-            />
-            <span className="comet-body-s-accented truncate text-muted-slate">
-              {experiment.dataset_name || "Deleted test suite"}
-            </span>
-          </Tag>
+            <Tag
+              size="md"
+              variant="transparent"
+              className="flex shrink-0 items-center gap-1"
+            >
+              <Database
+                className="size-3 shrink-0"
+                style={{ color: "var(--color-yellow)" }}
+              />
+              <span className="comet-body-s-accented truncate text-muted-slate">
+                {experiment.dataset_name || "Deleted test suite"}
+              </span>
+              {experiment.dataset_version_summary?.version_name && (
+                <span className="flex items-center gap-0 pt-px text-xs text-muted-slate">
+                  <GitCommitVertical className="size-[10px]" />
+                  {experiment.dataset_version_summary.version_name}
+                </span>
+              )}
+            </Tag>
+          </TooltipWrapper>
         )}
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
@@ -135,7 +152,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
             logsSource={LOGS_SOURCE.experiment}
             sourceFilters={experimentSourceFilters}
             title="Experiment logs"
-            backLabel={isCompare ? "Back to compare" : "Back to experiment"}
           />
         )}
         {!isCompare &&

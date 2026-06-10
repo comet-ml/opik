@@ -16,7 +16,7 @@ Generate self-contained HTML diagrams that visualize code changes, data flows, a
 
 ## Output
 
-- Self-contained HTML file at `diagrams/opik-{TICKET_NUMBER}-diagram.html`
+- Self-contained HTML file at `{MAIN_REPO_ROOT}/diagrams/opik-{TICKET_NUMBER}-diagram.html` — always resolved against the main repo root (via `git rev-parse --git-common-dir`), even when the session runs inside a worktree, so the file outlives the worktree
 - Includes "Copy as image" button for sharing in Slack, Jira, PR descriptions
 - Dark GitHub theme, semantic color coding, responsive layout
 

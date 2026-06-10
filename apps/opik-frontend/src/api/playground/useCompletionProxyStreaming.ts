@@ -13,6 +13,7 @@ import {
 } from "@/types/playground";
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
+import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 
@@ -82,16 +83,10 @@ const getCompletionProxyStream = async ({
   configs,
   workspaceName,
 }: GetCompletionProxyStreamParams) => {
-  const configsRecord = { ...configs } as Record<string, unknown>;
-
-  // Anthropic rejects requests containing both temperature and top_p
-  if (
-    model.includes("claude") &&
-    configsRecord.topP != null &&
-    configsRecord.temperature != null
-  ) {
-    delete configsRecord.topP;
-  }
+  const configsRecord = sanitizeConfigForRequest(
+    model,
+    configs as unknown as Record<string, unknown>,
+  );
 
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",

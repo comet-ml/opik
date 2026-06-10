@@ -13,9 +13,13 @@ import ExperimentsPageGuard from "@/v1/layout/ExperimentsPageGuard";
 import DatasetsPageGuard from "@/v1/layout/DatasetsPageGuard";
 import DashboardsPageGuard from "@/v1/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v1/layout/PlaygroundPageGuard";
+import OptimizationStudioPageGuard from "@/v1/layout/OptimizationStudioPageGuard";
+import OptimizationsPageGuard from "@/v1/layout/OptimizationsPageGuard";
 import SMEPageLayout from "@/v1/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v1/pages/ExperimentsPage/ExperimentsPage";
-import CompareExperimentsPage from "@/v1/pages/CompareExperimentsPage/CompareExperimentsPage";
+const CompareExperimentsPage = lazy(
+  () => import("@/v1/pages/CompareExperimentsPage/CompareExperimentsPage"),
+);
 import HomePage from "@/v1/pages/HomePage/HomePage";
 import OldHomePage from "@/v1/pages/HomePage/OldHomePage";
 import PartialPageLayout from "@/v1/layout/PartialPageLayout/PartialPageLayout";
@@ -25,10 +29,12 @@ import ProjectsPage from "@/v1/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/v1/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/v1/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/v1/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/v1/pages/PromptPage/PromptPage";
+const PromptPage = lazy(() => import("@/v1/pages/PromptPage/PromptPage"));
 import RedirectProjects from "@/v1/redirect/RedirectProjects";
 import RedirectDatasets from "@/v1/redirect/RedirectDatasets";
-import PlaygroundPage from "@/v1/pages/PlaygroundPage/PlaygroundPage";
+const PlaygroundPage = lazy(
+  () => import("@/v1/pages/PlaygroundPage/PlaygroundPage"),
+);
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/v1/pages/ConfigurationPage/ConfigurationPage";
 import GetStartedPage from "@/v1/pages/GetStartedPage/GetStartedPage";
@@ -41,7 +47,9 @@ import OptimizationsNewPage from "@/v1/pages/OptimizationsPage/OptimizationsNewP
 import OptimizationPage from "@/v1/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v1/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialPage from "@/v1/pages/TrialPage/TrialPage";
-import AlertsRouteWrapper from "@/v1/pages/AlertsPage/AlertsRouteWrapper";
+const AlertsRouteWrapper = lazy(
+  () => import("@/v1/pages/AlertsPage/AlertsRouteWrapper"),
+);
 import AlertEditPageGuard from "@/v1/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v1/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v1/pages/DashboardsPage/DashboardsPage";
@@ -49,6 +57,7 @@ import TestSuitesPage from "@/v1/pages/TestSuitesPage/TestSuitesPage";
 import TestSuitePage from "@/v1/pages/TestSuitePage/TestSuitePage";
 import TestSuiteItemsPage from "@/v1/pages/TestSuiteItemsPage/TestSuiteItemsPage";
 import PairV1Page from "@/v1/pages/PairV1Page/PairV1Page";
+import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -105,15 +114,20 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 // "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
 // TODO: make the Python SDK build basepath-aware pairing URLs and drop
 // this alias once shipped CLI versions roll over.
+const PairRouteComponent = () => (
+  <PairRouteVersionGuard>
+    <PairV1Page />
+  </PairRouteVersionGuard>
+);
 const pairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/pair/v1",
-  component: PairV1Page,
+  component: PairRouteComponent,
 });
 const pairingRouteOssAlias = createRoute({
   getParentRoute: () => rootRoute,
   path: "/opik/pair/v1",
-  component: PairV1Page,
+  component: PairRouteComponent,
 });
 
 const baseRoute = createRoute({
@@ -260,6 +274,7 @@ const compareExperimentsRoute = createRoute({
 const optimizationsRoute = createRoute({
   path: "/optimizations",
   getParentRoute: () => workspaceRoute,
+  component: OptimizationsPageGuard,
   staticData: {
     title: "Optimization studio",
   },
@@ -274,11 +289,17 @@ const optimizationsListRoute = createRoute({
 const optimizationsNewRoute = createRoute({
   path: "/new",
   getParentRoute: () => optimizationsRoute,
-  component: OptimizationsNewPage,
+  component: OptimizationStudioPageGuard,
   staticData: {
     param: "optimizationsNew",
     paramValue: "new",
   },
+});
+
+const optimizationsNewIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationsNewRoute,
+  component: OptimizationsNewPage,
 });
 
 const optimizationCompareRedirectRoute = createRoute({
@@ -579,7 +600,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
-        optimizationsNewRoute,
+        optimizationsNewRoute.addChildren([optimizationsNewIndexRoute]),
         optimizationCompareRedirectRoute,
         optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
       ]),

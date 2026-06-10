@@ -15,7 +15,6 @@ import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset, DATASET_TYPE, DatasetListType } from "@/types/datasets";
-import Loader from "@/shared/Loader/Loader";
 import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import CreateDatasetSidebar from "@/v2/pages-shared/datasets/CreateDatasetSidebar/CreateDatasetSidebar";
@@ -47,7 +46,7 @@ import ListCell from "@/shared/DataTableCells/ListCell";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { Filter } from "@/types/filters";
 import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
 import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
@@ -59,7 +58,7 @@ type DatasetListPageProps = {
 const TYPE_CONFIG = {
   dataset: {
     title: "Datasets",
-    docsUrl: "/evaluation/manage_datasets",
+    docsUrl: "/evaluation/advanced/manage_datasets",
     entityName: "datasets",
     createButtonText: "Create dataset",
     noDataText: "There are no datasets yet",
@@ -86,7 +85,7 @@ const TYPE_CONFIG = {
   test_suite: {
     title: "Test suites",
     // TODO: replace with test suites documentation URL once it exists
-    docsUrl: "/evaluation/manage_datasets",
+    docsUrl: "/evaluation/advanced/manage_datasets",
     entityName: "test suites",
     createButtonText: "Create test suite",
     noDataText: "There are no test suites yet",
@@ -304,7 +303,9 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
   );
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
-  const isEmpty = noData && datasets.length === 0;
+  const isTableLoading =
+    isPending || (isPlaceholderData && datasets.length === 0);
+  const isEmpty = !isTableLoading && noData && datasets.length === 0;
   const noDataText = noData ? config.noDataText : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -418,12 +419,8 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
     ],
   );
 
-  if (isPending) {
-    return <Loader />;
-  }
-
   return (
-    <div className="pt-4">
+    <div className="flex min-h-full flex-col pt-4">
       <div className="mb-4 flex min-h-7 items-center justify-between">
         <h1 className="comet-body-accented truncate break-words">
           {config.title}
@@ -505,7 +502,10 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
                 )}
               </DataTableNoData>
             }
-            showLoadingOverlay={isPlaceholderData && isFetching}
+            showSkeleton={isTableLoading}
+            showLoadingOverlay={
+              !isTableLoading && isPlaceholderData && isFetching
+            }
           />
           <div className="py-4">
             <DataTablePagination

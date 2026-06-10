@@ -10,10 +10,11 @@ import {
 } from "@/constants/llm";
 import {
   getDefaultTemperatureForModel,
-  isReasoningModel,
-  supportsGeminiThinkingLevel,
-  supportsVertexAIThinkingLevel,
   supportsAnthropicThinkingEffort,
+  supportsGeminiThinkingLevel,
+  supportsOpenAIReasoningEffort,
+  supportsSamplingParams,
+  supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
@@ -52,24 +53,25 @@ export const getDefaultConfigByProvider = (
       maxConcurrentRequests: DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add reasoningEffort default for reasoning models
-    if (isReasoningModel(model)) {
-      config.reasoningEffort = "medium";
+    if (supportsOpenAIReasoningEffort(model)) {
+      config.reasoningEffort = "high";
     }
 
     return config;
   }
 
   if (providerType === PROVIDER_TYPE.ANTHROPIC) {
+    const acceptsSamplingParams = supportsSamplingParams(model);
     const config: LLMAnthropicConfigsType = {
-      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+      temperature: acceptsSamplingParams
+        ? DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE
+        : undefined,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: undefined,
       throttling: DEFAULT_ANTHROPIC_CONFIGS.THROTTLING,
       maxConcurrentRequests: DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add thinkingEffort default for Anthropic thinking models (Opus 4.6)
     if (supportsAnthropicThinkingEffort(model)) {
       config.thinkingEffort = "high";
     }

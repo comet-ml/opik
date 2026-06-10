@@ -22,7 +22,7 @@ import {
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import { convertCustomProviderModels } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { ChevronLeft } from "lucide-react";
 

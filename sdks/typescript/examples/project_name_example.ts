@@ -9,7 +9,7 @@
  *
  * Requires a running Opik server. Set OPIK_URL_OVERRIDE in .env or env vars.
  */
-import { Opik } from "opik";
+import { Opik, Prompt } from "opik";
 
 async function main() {
   const timestamp = Date.now();
@@ -44,9 +44,10 @@ async function main() {
 
   // --- Prompts ---
   const promptName = `example-prompt-${timestamp}`;
-  const prompt = await client.createPrompt({
+  const prompt = new Prompt({
     name: promptName,
     prompt: "Answer concisely: {{question}}",
+    projectName: "my-project",
   });
   console.log(`\nCreated prompt "${prompt.name}" (commit: ${prompt.commit})`);
   console.log(`  Formatted: "${prompt.format({ question: "What is 2+2?" })}"`);

@@ -48,6 +48,19 @@ class LlmModelRegistryServiceTest {
     }
 
     @Test
+    void loadParsesLabelWhenPresentAndNullWhenAbsent() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+
+        var service = new LlmModelRegistryService(config);
+        var openai = service.getRegistry().get("openai");
+
+        assertThat(openai.get(0).id()).isEqualTo("gpt-4o");
+        assertThat(openai.get(0).label()).isEqualTo("GPT 4o");
+        assertThat(openai.get(1).label()).isNull();
+    }
+
+    @Test
     void loadWithQualifiedName() {
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
@@ -99,6 +112,22 @@ class LlmModelRegistryServiceTest {
         var service = new LlmModelRegistryService(config);
 
         assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
+    }
+
+    @Test
+    void malformedOverrideFileFallsBackToDefaults(@TempDir Path tempDir) throws IOException {
+        var overridePath = tempDir.resolve("malformed.yaml");
+        Files.writeString(overridePath, "not: valid: yaml: [[[");
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setLocalOverridePath(overridePath.toString());
+
+        // Service must not throw: bad override should log and fall back to defaults
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
+        assertThat(service.getRegistry().get("openai")).hasSize(3);
     }
 
     @Test

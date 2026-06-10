@@ -38,6 +38,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
+import { COLUMN_TYPE } from "@/types/shared";
 import { isFilterValid } from "@/lib/filters";
 import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
@@ -70,7 +71,7 @@ import {
 } from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Description } from "@/ui/description";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
@@ -402,8 +403,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    // Filter out empty/incomplete filters using the existing utility
-    const validFilters = formData.filters.filter(isFilterValid);
+    const validFilters = formData.filters
+      .filter((f) =>
+        isFilterValid(
+          (f.field === "input" || f.field === "output") && !f.key
+            ? { ...f, type: COLUMN_TYPE.string }
+            : f,
+        ),
+      )
+      .map((f) => {
+        if ((f.field === "input" || f.field === "output") && f.key) {
+          return { ...f, field: `${f.field}_json` };
+        }
+        return f;
+      });
 
     const ruleData = {
       name: formData.ruleName,
@@ -473,7 +486,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg sm:max-w-[790px]">
+        <DialogContent
+          className="max-w-lg sm:max-w-[790px]"
+          data-testid="add-edit-rule-dialog"
+        >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
@@ -607,6 +623,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                           <div className="flex">
                             <ToggleGroup
                               type="single"
+                              data-testid="add-edit-rule-dialog-type"
                               value={field.value}
                               onValueChange={(
                                 value: UI_EVALUATORS_RULE_TYPE,
@@ -699,7 +716,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 </span>
               </TooltipWrapper>
             ) : (
-              <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+              <Button
+                type="submit"
+                onClick={form.handleSubmit(onSubmit)}
+                data-testid="add-edit-rule-dialog-submit"
+              >
                 {submitText}
               </Button>
             )}

@@ -6,6 +6,7 @@ og:description: Trace Agent Spec workflows in Opik to debug and optimize agent e
 og:site_name: Opik Documentation
 og:title: Agent Spec - Opik
 title: Observability for Agent Spec with Opik
+canonical-url: https://www.comet.com/docs/opik/integrations/agentspec
 ---
 
 [Open Agent Specification](https://github.com/oracle/agent-spec) is a portable
@@ -78,6 +79,7 @@ Wrap your Agent Spec runtime execution in the instrumentor context to capture tr
 
 ```python
 import asyncio
+import uuid
 
 from pyagentspec.agent import Agent
 from pyagentspec.llms import OpenAiConfig
@@ -127,23 +129,28 @@ async def main():
 
     langgraph_agent = AgentSpecLoader(tool_registry=tool_registry).load_component(agent)
 
-    with AgentSpecInstrumentor().instrument_context(
-        project_name="agentspec-demo",
-        mask_sensitive_information=False,
-    ):
-        messages = []
-        while True:
-            user_input = input("USER  >>> ")
-            if user_input.lower() in ["exit", "quit"]:
-                break
-            messages.append({"role": "user", "content": user_input})
+    # Each conversation turn gets its own Opik trace; thread_id groups them into a session.
+    thread_id = str(uuid.uuid4())
+    messages = []
+    while True:
+        user_input = input("USER  >>> ")
+        if user_input.lower() in ["exit", "quit"]:
+            break
+        messages.append({"role": "user", "content": user_input})
+
+        with AgentSpecInstrumentor().instrument_context(
+            project_name="agentspec-demo",
+            mask_sensitive_information=False,
+            thread_id=thread_id,
+        ):
             response = langgraph_agent.invoke(
                 input={"messages": messages},
                 config={"configurable": {"thread_id": "1"}},
             )
-            agent_answer = response["messages"][-1].content.strip()
-            print("AGENT >>>", agent_answer)
-            messages.append({"role": "assistant", "content": agent_answer})
+
+        agent_answer = response["messages"][-1].content.strip()
+        print("AGENT >>>", agent_answer)
+        messages.append({"role": "assistant", "content": agent_answer})
 
 
 if __name__ == "__main__":

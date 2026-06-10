@@ -4,8 +4,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
 import usePluginsStore from "@/store/PluginsStore";
 import FeedbackDefinitionsTab from "@/v1/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
 
 enum CONFIGURATION_TABS {
@@ -19,10 +17,6 @@ const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
 
 const ConfigurationPage = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
-
-  const isCollaboratorsTabEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
-  );
 
   const CollaboratorsTabTrigger = usePluginsStore(
     (state) => state.CollaboratorsTabTrigger,
@@ -64,7 +58,7 @@ const ConfigurationPage = () => {
             >
               Workspace preferences
             </TabsTrigger>
-            {isCollaboratorsTabEnabled && CollaboratorsTabTrigger && (
+            {CollaboratorsTabTrigger && CollaboratorsTab && (
               <CollaboratorsTabTrigger value={CONFIGURATION_TABS.MEMBERS} />
             )}
           </TabsList>
@@ -81,7 +75,7 @@ const ConfigurationPage = () => {
             <WorkspacePreferencesTab />
           </TabsContent>
 
-          {isCollaboratorsTabEnabled && CollaboratorsTab && (
+          {CollaboratorsTabTrigger && CollaboratorsTab && (
             <TabsContent value={CONFIGURATION_TABS.MEMBERS}>
               <CollaboratorsTab />
             </TabsContent>

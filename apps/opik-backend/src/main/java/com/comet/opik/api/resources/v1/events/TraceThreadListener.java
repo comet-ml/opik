@@ -63,6 +63,7 @@ public class TraceThreadListener {
                                 .firstTraceId(traceId)
                                 .maxLastUpdatedAt(lastUpdatedAt)
                                 .firstTraceSource(trace.source())
+                                .firstTraceEnvironment(trace.environment())
                                 .build();
                     }
 
@@ -80,14 +81,15 @@ public class TraceThreadListener {
 
                     // Track the source from the chronologically earliest trace (matching firstTraceId).
                     // In practice traces in a thread originate from the same source, but this is not enforced.
-                    var earliestSource = traceId.compareTo(existing.firstTraceId()) < 0
-                            ? trace.source()
-                            : existing.firstTraceSource();
+                    boolean isEarlier = traceId.compareTo(existing.firstTraceId()) < 0;
+                    var earliestSource = isEarlier ? trace.source() : existing.firstTraceSource();
+                    var earliestEnvironment = isEarlier ? trace.environment() : existing.firstTraceEnvironment();
 
                     return existing.toBuilder()
                             .firstTraceId(minTraceId)
                             .maxLastUpdatedAt(maxLastUpdatedAt)
                             .firstTraceSource(earliestSource)
+                            .firstTraceEnvironment(earliestEnvironment)
                             .build();
                 });
             }

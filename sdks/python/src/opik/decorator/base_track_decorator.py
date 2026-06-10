@@ -72,6 +72,7 @@ class BaseTrackDecorator(abc.ABC):
         create_duplicate_root_span: bool = True,
         entrypoint: bool = False,
         source: Optional[TraceSource] = None,
+        environment: Optional[str] = None,
     ) -> Union[Callable, Callable[[Callable], Callable]]:
         """
         Decorator to track the execution of a function.
@@ -121,6 +122,7 @@ class BaseTrackDecorator(abc.ABC):
             project_name=project_name,
             create_duplicate_root_span=create_duplicate_root_span,
             source=source,
+            environment=environment,
         )
 
         if callable(name):

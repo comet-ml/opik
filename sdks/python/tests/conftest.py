@@ -97,7 +97,10 @@ def patch_streamer(
         yield streamer, fake_message_processor_
     finally:
         if streamer is not None:
-            streamer.close(timeout=5)
+            # Tests that rely on fake_backend already call `opik.flush_tracker()`
+            # (or access `.trace_trees` after the work is done) during the test
+            # body, so the teardown has nothing meaningful left to drain.
+            streamer.close(flush=False)
 
 
 @pytest.fixture
@@ -127,7 +130,7 @@ def patch_streamer_without_batching(
         yield streamer, fake_message_processor_
     finally:
         if streamer is not None:
-            streamer.close(timeout=5)
+            streamer.close(flush=False)
 
 
 @pytest.fixture

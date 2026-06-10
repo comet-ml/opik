@@ -1,0 +1,162 @@
+package com.comet.opik.infrastructure.bi;
+
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.resources.utils.AuthTestUtils;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.cache.CacheManager;
+import com.comet.opik.podam.PodamFactoryUtils;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
+import com.redis.testcontainers.RedisContainer;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
+import uk.co.jemos.podam.api.PodamUtils;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.bi.DailyUsageReportJobTest.SUCCESS_RESPONSE;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
+class BiEventListenerAnalyticsOnlyTest {
+
+    private static final String USER = UUID.randomUUID().toString();
+    private static final String VERSION = "%s.%s.%s".formatted(PodamUtils.getIntegerInRange(1, 99),
+            PodamUtils.getIntegerInRange(1, 99), PodamUtils.getIntegerInRange(1, 99));
+
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final Network network = Network.newNetwork();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
+            network);
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false, network,
+            ZOOKEEPER_CONTAINER);
+
+    private final WireMockUtils.WireMockRuntime wireMock;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
+
+    {
+        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
+
+        wireMock = WireMockUtils.startWireMock();
+
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                CLICKHOUSE, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
+        mockAnyEventResponse(wireMock.server());
+
+        // analytics.enabled=true, usageReport.enabled=false (default in config-test.yml).
+        // The StatsClient transport permits sending when either flag is true, so the
+        // analytics event should flow; the opik_os_* BI event must remain gated off.
+        app = newTestDropwizardAppExtension(
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .metadataVersion(VERSION)
+                        .customConfigs(List.of(
+                                new TestDropwizardAppExtensionUtils.CustomConfig(
+                                        "analytics.enabled", "true"),
+                                new TestDropwizardAppExtensionUtils.CustomConfig(
+                                        "usageReport.url",
+                                        "%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))))
+                        .build());
+    }
+
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
+    private TraceResourceClient traceResourceClient;
+
+    @BeforeAll
+    void setUpAll(ClientSupport client) {
+        var baseURI = TestUtils.getBaseUrl(client);
+
+        ClientSupportUtils.config(client);
+
+        traceResourceClient = new TraceResourceClient(client, baseURI);
+    }
+
+    @AfterAll
+    void tearDownAll() {
+        MYSQL.stop();
+        wireMock.server().stop();
+        CLICKHOUSE.stop();
+        ZOOKEEPER_CONTAINER.stop();
+        network.close();
+    }
+
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    }
+
+    private void mockAnyEventResponse(WireMockServer server) {
+        server.stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
+    }
+
+    @Test
+    void shouldSendAnalyticsEventButNotBiEventWhenOnlyAnalyticsEnabled(CacheManager cacheManager) {
+        var workspaceId = UUID.randomUUID().toString();
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        cacheManager.evict(Metadata.FIRST_TRACE_CREATED.getValue(), false).block();
+
+        var trace = factory.manufacturePojo(Trace.class);
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        var analyticsEventType = AnalyticsService.EVENT_PREFIX + "first_trace_created";
+
+        Awaitility
+                .await()
+                .atMost(60, TimeUnit.SECONDS)
+                .untilAsserted(() -> wireMock.server().verify(
+                        postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                                .withRequestBody(matchingJsonPath("$.event_type", equalTo(analyticsEventType)))
+                                .withRequestBody(matchingJsonPath("$.event_properties.workspace_id",
+                                        equalTo(workspaceId)))));
+
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                .withRequestBody(matchingJsonPath("$.event_type",
+                        equalTo(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT))));
+    }
+}

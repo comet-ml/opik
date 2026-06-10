@@ -23,9 +23,13 @@ public enum Operator {
     LESS_THAN_EQUAL("<="),
     IS_EMPTY("is_empty"),
     IS_NOT_EMPTY("is_not_empty"),
+    IN("in"),
+    NOT_IN("not_in"),
     ;
 
     public static final Set<Operator> NO_VALUE_OPERATORS = Set.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY);
+
+    public static final Set<Operator> MULTI_VALUE_OPERATORS = Set.of(Operator.IN, Operator.NOT_IN);
 
     @JsonValue
     private final String queryParamOperator;

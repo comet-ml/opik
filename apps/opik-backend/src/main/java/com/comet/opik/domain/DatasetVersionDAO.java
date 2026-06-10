@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.RecentActivity;
 import com.comet.opik.infrastructure.db.EvaluatorItemListColumnMapper;
 import com.comet.opik.infrastructure.db.ExecutionPolicyColumnMapper;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
@@ -198,6 +199,17 @@ public interface DatasetVersionDAO {
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
+            SELECT id
+            FROM dataset_versions
+            WHERE workspace_id = :workspace_id
+              AND dataset_id = :dataset_id
+              AND version_hash = :version_hash
+            """)
+    Optional<UUID> findVersionIdByHash(@Bind("dataset_id") UUID datasetId,
+            @Bind("version_hash") String versionHash,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
             WITH version_sequences AS (
                 SELECT
                     id,
@@ -306,6 +318,17 @@ public interface DatasetVersionDAO {
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
+            SELECT version_id
+            FROM dataset_version_tags
+            WHERE workspace_id = :workspace_id
+              AND dataset_id = :dataset_id
+              AND tag = :tag
+            """)
+    Optional<UUID> findVersionIdByTag(@Bind("dataset_id") UUID datasetId,
+            @Bind("tag") String tag,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
             WITH version_sequences AS (
                 SELECT
                     id,
@@ -357,19 +380,24 @@ public interface DatasetVersionDAO {
     int updateChangeDescription(@Bind("id") UUID id, @Bind("change_description") String changeDescription,
             @Bind("last_updated_by") String lastUpdatedBy, @Bind("workspace_id") String workspaceId);
 
+    /**
+     * Resolves the 'latest'-tagged version per dataset. The latest version is always the max-id row,
+     * so its version number equals the dataset's total version count: a correlated {@code COUNT(*)}
+     * served by the covering index {@code idx_dataset_versions_workspace_id_dataset_id_id} replaces a
+     * {@code ROW_NUMBER()} window over every version, which sorted the full version set into an
+     * on-disk temp table at scale. The subquery runs once per result row (one latest row per dataset).
+     */
     @SqlQuery("""
-            WITH version_sequences AS (
-                SELECT
-                    id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
-                FROM dataset_versions
-                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
-            )
             SELECT
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                CONCAT('v', vs.seq_num) AS version_name,
+                CONCAT('v', (
+                    SELECT COUNT(*)
+                    FROM dataset_versions c
+                    WHERE c.workspace_id = dv.workspace_id
+                        AND c.dataset_id = dv.dataset_id
+                )) AS version_name,
                 dv.items_total,
                 dv.items_added,
                 dv.items_modified,
@@ -385,12 +413,15 @@ public interface DatasetVersionDAO {
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 true AS is_latest
             FROM dataset_versions AS dv
-            INNER JOIN version_sequences vs ON dv.id = vs.id
-            INNER JOIN (
+            INNER JOIN dataset_version_tags dvt
+                ON dvt.workspace_id = dv.workspace_id
+                AND dvt.dataset_id = dv.dataset_id
+                AND dvt.version_id = dv.id
+                AND dvt.tag = 'latest'
+            LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
-                WHERE tag = 'latest'
-                AND version_id in (select id from version_sequences)
+                WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id IN (<dataset_ids>)
@@ -445,6 +476,35 @@ public interface DatasetVersionDAO {
             """)
     List<DatasetVersion> findByIds(@BindList("version_ids") Collection<UUID> versionIds,
             @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT dataset_id, dataset_name, dataset_type, created_at, created_by FROM (
+                SELECT id AS dataset_id, name AS dataset_name, type AS dataset_type, created_at, created_by
+                FROM datasets
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id >= :min_id
+
+                UNION ALL
+
+                SELECT d.id, d.name, d.type, dv.created_at, dv.created_by
+                FROM dataset_versions dv
+                INNER JOIN datasets d ON dv.dataset_id = d.id AND dv.workspace_id = d.workspace_id
+                WHERE d.workspace_id = :workspace_id
+                    AND d.project_id = :project_id
+                    AND dv.id >= :min_id
+                    AND dv.created_at > d.created_at
+                    AND dv.items_total > 0
+            ) combined
+            ORDER BY created_at DESC
+            LIMIT :limit
+            """)
+    @RegisterConstructorMapper(value = RecentActivity.RecentDatasetVersion.class)
+    List<RecentActivity.RecentDatasetVersion> findRecentActivityByProjectId(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @Bind("min_id") UUID minId,
+            @Bind("limit") int limit);
 
     @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id IN (<dataset_ids>) AND workspace_id = :workspace_id")
     void deleteAllTagsByDatasetIds(@BindList("dataset_ids") Collection<UUID> datasetIds,

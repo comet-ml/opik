@@ -6,4 +6,6 @@ export interface AlertTriggerConfigWrite {
     id?: string;
     type: OpikApi.AlertTriggerConfigWriteType;
     configValue?: Record<string, string>;
+    /** Groups configs within a trigger: same group_index means AND between configs, different group_index means OR between groups. Null means a legacy/singleton group of one config. Always null for scope:project configs. */
+    groupIndex?: number;
 }

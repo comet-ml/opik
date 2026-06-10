@@ -13,6 +13,7 @@ from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
+from ..errors.internal_server_error import InternalServerError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.alert_page_public import AlertPagePublic
@@ -29,6 +30,7 @@ from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
 from ..types.prompt_page_public import PromptPagePublic
+from ..types.recent_activity_page_public import RecentActivityPagePublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
@@ -1209,6 +1211,79 @@ class RawProjectsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_recent_activity(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[RecentActivityPagePublic]:
+        """
+        Returns the most recent activity items across all entity types for a project, sorted by date descending.
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[RecentActivityPagePublic]
+            Recent activity page
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/activities",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    RecentActivityPagePublic,
+                    parse_obj_as(
+                        type_=RecentActivityPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawProjectsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -2362,6 +2437,79 @@ class AsyncRawProjectsClient:
                 )
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_recent_activity(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[RecentActivityPagePublic]:
+        """
+        Returns the most recent activity items across all entity types for a project, sorted by date descending.
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[RecentActivityPagePublic]
+            Recent activity page
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/activities",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    RecentActivityPagePublic,
+                    parse_obj_as(
+                        type_=RecentActivityPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

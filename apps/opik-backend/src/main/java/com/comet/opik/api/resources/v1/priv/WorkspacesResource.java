@@ -173,7 +173,9 @@ public class WorkspacesResource {
         var authSuggestedVersion = requestContext.get().getOpikVersion();
         log.info("Determining workspace version, workspaceId '{}', authSuggestedVersion '{}'",
                 workspaceId, authSuggestedVersion);
-        var workspaceVersion = workspaceVersionService.getWorkspaceVersion(workspaceId, authSuggestedVersion).block();
+        var workspaceVersion = workspaceVersionService.getWorkspaceVersion(workspaceId, authSuggestedVersion)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
         log.info("Determined workspace, workspaceId '{}', authSuggestedVersion '{}', version '{}'",
                 workspaceId, authSuggestedVersion, workspaceVersion.opikVersion().getValue());
         return Response.ok().entity(workspaceVersion).build();

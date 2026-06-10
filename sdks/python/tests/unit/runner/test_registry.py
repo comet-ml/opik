@@ -1,5 +1,5 @@
 import logging
-
+from typing import Optional
 
 from opik.runner.registry import Param, extract_params, get_all, register
 
@@ -53,6 +53,36 @@ class TestExtractParams:
 
         assert extract_params(fn) == []
 
+    def test_extract_params__string_annotations__resolved_correctly(self, capture_log):
+        """Functions defined with `from __future__ import annotations` have string
+        annotations in their __annotations__ dict. extract_params must resolve them
+        to actual types so supported primitives don't trigger spurious warnings."""
+
+        # Simulate what `from __future__ import annotations` produces: all annotations
+        # are stored as strings rather than live type objects. Mix string-annotated
+        # and live-type-annotated params to verify both paths work.
+        async def handle_message(
+            session_id: str, user_message: str, max_tokens: int
+        ) -> str:
+            return ""
+
+        handle_message.__annotations__ = {
+            "session_id": "str",
+            "user_message": "str",
+            "max_tokens": "int",
+            "return": "str",
+        }
+
+        params = extract_params(handle_message)
+
+        assert [(p.name, p.type) for p in params] == [
+            ("session_id", "string"),
+            ("user_message", "string"),
+            ("max_tokens", "integer"),
+        ]
+        warnings = [r for r in capture_log.records if r.levelno == logging.WARNING]
+        assert warnings == [], "No warning expected for standard primitive annotations"
+
     def test_extract_params__unknown_type__defaults_to_string_and_warns(
         self, capture_log
     ):
@@ -74,3 +104,33 @@ class TestExtractParams:
         warning = warnings[0].getMessage()
         assert "first_custom" in warning
         assert "second_custom" in warning
+
+    def test_extract_params__no_default__required(self):
+        def fn(x: str) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].presence == "required"
+
+    def test_extract_params__with_default__optional(self):
+        def fn(x: str = "hi") -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].presence == "optional"
+
+    def test_extract_params__optional_with_none_default__optional(self):
+        def fn(x: Optional[str] = None) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].type == "string"
+        assert params[0].presence == "optional"
+
+    def test_extract_params__optional_no_default__required(self):
+        def fn(x: Optional[str]) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].type == "string"
+        assert params[0].presence == "required"

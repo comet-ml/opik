@@ -90,6 +90,25 @@ def resolve_child_span_project_name(
     return project_name
 
 
+def resolve_child_span_environment(
+    parent_environment: Optional[str],
+    child_environment: Optional[str],
+    show_warning: bool = True,
+) -> Optional[str]:
+    if (
+        show_warning
+        and child_environment is not None
+        and child_environment != parent_environment
+    ):
+        LOGGER.warning(
+            logging_messages.NESTED_SPAN_ENVIRONMENT_MISMATCH_WARNING_MESSAGE.format(
+                child_environment,
+                parent_environment if parent_environment is not None else "",
+            )
+        )
+    return parent_environment
+
+
 def add_usage_to_metadata(
     usage: Optional[Dict[str, Any]],
     metadata: Optional[Dict[str, Any]],
@@ -216,7 +235,7 @@ def resolve_project_name(
             message='No project name configured. Traces are being logged to "Default Project".\n'
             "Set OPIK_PROJECT_NAME environment variable or pass project_name to the Opik client\n"
             "to log to a specific project.\n"
-            "See https://www.comet.com/docs/opik/tracing/sdk_configuration",
+            "See https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration",
             logger=LOGGER,
         )
 

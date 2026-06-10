@@ -26,4 +26,5 @@ export interface SpanWrite {
     /** Time to first token in milliseconds */
     ttft?: number;
     source?: OpikApi.SpanWriteSource;
+    environment?: string;
 }

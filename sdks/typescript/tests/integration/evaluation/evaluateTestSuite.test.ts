@@ -104,6 +104,75 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
+  describe("getRawItems", () => {
+    it(
+      "should return raw items with un-decoded evaluators and un-merged executionPolicy",
+      async () => {
+        const suiteName = `test-suite-raw-items-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+
+        await suite.insert([
+          {
+            data: { input: "Explain gravity", expected: "A force" },
+            description: "physics question",
+            assertions: ["Response is concise"],
+            executionPolicy: { runsPerItem: 5, passThreshold: 3 },
+          },
+          { data: { input: "Plain item", expected: "plain answer" } },
+        ]);
+
+        await waitForSuiteItems(suite, 2);
+
+        const rawItems = await suite.getRawItems();
+        expect(rawItems).toHaveLength(2);
+
+        const rich = rawItems.find((i) => i.data.input === "Explain gravity")!;
+        expect(rich).toBeDefined();
+
+        // Raw evaluators are preserved as structured objects, NOT decoded into assertion strings.
+        expect(rich.evaluators).toBeDefined();
+        expect(rich.evaluators!.length).toBeGreaterThanOrEqual(1);
+        expect(rich.evaluators![0]).toHaveProperty("type");
+        expect(rich.evaluators![0]).toHaveProperty("config");
+
+        // Item-level execution policy returned verbatim — NOT merged with suite default.
+        expect(rich.executionPolicy).toEqual({
+          runsPerItem: 5,
+          passThreshold: 3,
+        });
+
+        // Description is lifted to top-level and also preserved in data.
+        expect(rich.description).toBe("physics question");
+        expect(rich.data.description).toBe("physics question");
+
+        const plain = rawItems.find((i) => i.data.input === "Plain item")!;
+        expect(plain).toBeDefined();
+
+        // Plain item has NO item-level metadata — contrast with getItems() which merges.
+        expect(plain.evaluators).toBeUndefined();
+        expect(plain.executionPolicy).toBeUndefined();
+        expect(plain.description).toBeUndefined();
+
+        // Sanity check: getItems() DOES merge the suite-level policy into the plain item.
+        const decodedItems = await suite.getItems();
+        const plainDecoded = decodedItems.find(
+          (i) => i.data.input === "Plain item",
+        )!;
+        expect(plainDecoded.executionPolicy).toEqual({
+          runsPerItem: 2,
+          passThreshold: 1,
+        });
+      },
+      60000,
+    );
+  });
+
   describe("Assertions Shorthand", () => {
     it(
       "should create suite with assertions shorthand and run evaluation",

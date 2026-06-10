@@ -1,5 +1,6 @@
 package com.comet.opik.api.events;
 
+import com.comet.opik.domain.ExperimentItemRef;
 import com.comet.opik.infrastructure.events.BaseEvent;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
@@ -9,17 +10,26 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Getter
 @Accessors(fluent = true)
 public class ExperimentItemsDeleted extends BaseEvent {
-    private final @NonNull Set<UUID> experimentIds;
+    private final Set<ExperimentItemRef> itemRefs;
 
-    public ExperimentItemsDeleted(@NonNull Set<UUID> experimentIds, @NonNull String workspaceId,
+    public ExperimentItemsDeleted(Set<ExperimentItemRef> itemRefs, @NonNull String workspaceId,
             @NonNull String userName) {
         super(workspaceId, userName);
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
-                "Argument 'experimentIds' must not be empty");
-        this.experimentIds = experimentIds;
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(itemRefs),
+                "Argument 'itemRefs' must not be empty");
+        this.itemRefs = itemRefs;
+    }
+
+    public Set<UUID> experimentIds() {
+        return itemRefs.stream().map(ExperimentItemRef::experimentId).collect(Collectors.toUnmodifiableSet());
+    }
+
+    public Set<UUID> itemIds() {
+        return itemRefs.stream().map(ExperimentItemRef::itemId).collect(Collectors.toUnmodifiableSet());
     }
 }

@@ -98,7 +98,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: pythonLogoUrl,
     code: functionDecoratorsCode,
     installCommand: "pip install -U opik",
-    docsLink: buildDocsUrl("/tracing/log_traces"),
+    docsLink: buildDocsUrl("/tracing/advanced/log_traces"),
   },
   {
     id: "openai",

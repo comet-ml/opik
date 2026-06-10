@@ -1,20 +1,26 @@
 import React, { useMemo, useState } from "react";
+import { GitCompareArrows } from "lucide-react";
 
-import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/ui/table";
 import { BlueprintValue, BlueprintValueType } from "@/types/agent-configs";
 import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
 import Loader from "@/shared/Loader/Loader";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { formatBlueprintValue } from "@/utils/agent-configurations";
-import { DiffCellBox } from "./BlueprintDiffCell";
 import BlueprintDiffRow, { type DiffPair } from "./BlueprintDiffRow";
 
 export type BlueprintVersionInfo = {
   label: string;
   blueprintId: string;
   values?: BlueprintValue[];
-  description?: string;
   promptTemplates?: Record<string, string>;
 };
 
@@ -40,26 +46,14 @@ const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
       blueprintId: diff.values ? "" : diff.blueprintId,
     });
 
-  const baseConfig = useMemo(
-    () =>
-      base.values
-        ? { values: base.values, description: base.description ?? "" }
-        : fetchedBaseConfig,
-    [base.values, base.description, fetchedBaseConfig],
-  );
-  const diffConfig = useMemo(
-    () =>
-      diff.values
-        ? { values: diff.values, description: diff.description ?? "" }
-        : fetchedDiffConfig,
-    [diff.values, diff.description, fetchedDiffConfig],
-  );
+  const baseValues = base.values ?? fetchedBaseConfig?.values;
+  const diffValues = diff.values ?? fetchedDiffConfig?.values;
 
   const pairs = useMemo<DiffPair[]>(() => {
-    if (!baseConfig || !diffConfig) return [];
+    if (!baseValues || !diffValues) return [];
 
-    const baseMap = new Map(baseConfig.values.map((v) => [v.key, v]));
-    const diffMap = new Map(diffConfig.values.map((v) => [v.key, v]));
+    const baseMap = new Map(baseValues.map((v) => [v.key, v]));
+    const diffMap = new Map(diffValues.map((v) => [v.key, v]));
     const allKeys = new Set([...baseMap.keys(), ...diffMap.keys()]);
 
     return Array.from(allKeys)
@@ -71,109 +65,97 @@ const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
         const isPrompt = type === BlueprintValueType.PROMPT;
         const basePromptTemplate = base.promptTemplates?.[key];
         const diffPromptTemplate = diff.promptTemplates?.[key];
-        const promptCommitsMatch =
-          bv?.value === dv?.value && !basePromptTemplate && !diffPromptTemplate;
 
-        const changed = isPrompt
-          ? promptCommitsMatch
-            ? false
-            : undefined
-          : (bv ? formatBlueprintValue(bv) : undefined) !==
+        let mode: DiffPair["mode"];
+        if (!bv && dv) {
+          mode = "added";
+        } else if (bv && !dv) {
+          mode = "removed";
+        } else if (isPrompt) {
+          const sameCommit =
+            bv?.value === dv?.value &&
+            !basePromptTemplate &&
+            !diffPromptTemplate;
+          mode = sameCommit ? "unchanged" : "changed";
+        } else {
+          const sameValue =
+            (bv ? formatBlueprintValue(bv) : undefined) ===
             (dv ? formatBlueprintValue(dv) : undefined);
+          mode = sameValue ? "unchanged" : "changed";
+        }
+
         return {
           key,
           type,
-          description: dv?.description ?? bv?.description,
+          mode,
           baseValue: bv,
           diffValue: dv,
-          changed,
           basePromptTemplate,
           diffPromptTemplate,
         };
       });
-  }, [baseConfig, diffConfig, base.promptTemplates, diff.promptTemplates]);
+  }, [baseValues, diffValues, base.promptTemplates, diff.promptTemplates]);
 
   if ((!base.values && baseLoading) || (!diff.values && diffLoading))
     return <Loader />;
 
-  const descChanged =
-    (baseConfig?.description ?? "") !== (diffConfig?.description ?? "");
-  const hasDifferences = descChanged || pairs.some((p) => p.changed !== false);
   const visiblePairs = onlyDiff
-    ? pairs.filter((p) => p.changed !== false)
+    ? pairs.filter((p) => p.mode !== "unchanged")
     : pairs;
 
-  if (!hasDifferences) {
-    return (
-      <p className="comet-body-s py-8 text-center text-muted-slate">
-        No differences between {base.label} and {diff.label}
-      </p>
-    );
-  }
-
   return (
-    <div>
-      <div className="mb-3 flex justify-end gap-2">
-        <Label htmlFor="only-diff" className="comet-body-xs cursor-pointer">
-          Show differences only
-        </Label>
-        <Switch
-          id="only-diff"
-          checked={onlyDiff}
-          onCheckedChange={setOnlyDiff}
-          size="xs"
-        />
-      </div>
-      <div className="max-h-[60vh] overflow-y-auto">
-        <div className="mb-4 grid grid-cols-2 gap-4">
-          <div>
-            <p className="comet-body-xs-accented mb-1 text-muted-slate">
-              Description {base.label}
-            </p>
-            <DiffCellBox
-              text={baseConfig?.description ?? ""}
-              changed={descChanged}
-              side="base"
-            />
-          </div>
-          <div>
-            <p className="comet-body-xs-accented mb-1 text-muted-slate">
-              Description {diff.label}
-            </p>
-            <DiffCellBox
-              text={diffConfig?.description ?? ""}
-              changed={descChanged}
-              side="diff"
-            />
-          </div>
-        </div>
-        <Table>
-          <TableHeader>
+    <div className="max-h-[60vh] overflow-auto rounded-md border border-border">
+      <Table>
+        <TableHeader className="sticky top-0 z-10 bg-soft-background [&_tr]:border-b">
+          <TableRow className="hover:bg-soft-background">
+            <TableHead className="h-8 w-[240px] border-r border-border px-2 py-0">
+              <span className="comet-body-xs-accented text-light-slate">
+                Key
+              </span>
+            </TableHead>
+            <TableHead className="h-8 px-2 py-0">
+              <div className="flex items-center justify-between gap-3">
+                <span className="comet-body-xs-accented text-light-slate">
+                  {base.label} → {diff.label}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <Label
+                    htmlFor="only-diff"
+                    className="comet-body-xs cursor-pointer text-light-slate"
+                  >
+                    Show differences only
+                  </Label>
+                  <Switch
+                    id="only-diff"
+                    checked={onlyDiff}
+                    onCheckedChange={setOnlyDiff}
+                    size="xs"
+                  />
+                </div>
+              </div>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {visiblePairs.length === 0 ? (
             <TableRow>
-              <TableHead className="w-[240px] pb-2 pr-3">
-                <span className="comet-body-xs-accented text-muted-slate">
-                  Key
-                </span>
-              </TableHead>
-              <TableHead className="w-1/2 pb-2 pr-2">
-                <span className="comet-body-xs-accented text-muted-slate">
-                  {base.label}
-                </span>
-              </TableHead>
-              <TableHead className="w-1/2 pb-2 pl-2">
-                <span className="comet-body-xs-accented text-muted-slate">
-                  {diff.label}
-                </span>
-              </TableHead>
+              <TableCell colSpan={2} className="bg-background p-0">
+                <div className="flex h-60 flex-col items-center justify-center gap-1 text-muted-slate">
+                  <GitCompareArrows className="size-4" />
+                  <span className="comet-body-s">
+                    There are no differences between {base.label} and{" "}
+                    {diff.label}
+                  </span>
+                </div>
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visiblePairs.map((pair) => (
+          ) : (
+            visiblePairs.map((pair) => (
               <BlueprintDiffRow key={pair.key} pair={pair} />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 };

@@ -7,7 +7,7 @@ import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.DatabaseUtils;
+import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
@@ -71,7 +71,16 @@ public interface OptimizationDAO {
 
     Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
 
-    Mono<Boolean> hasVersion1Optimizations(String workspaceId);
+    Mono<Boolean> hasVersion1Optimizations(String workspaceId, List<String> demoOptimizationNames);
+
+    Flux<EligibleOptimizationWorkspace> findEligibleOptimizationWorkspaces(
+            Set<String> excludedWorkspaceIds, int limit);
+
+    Flux<OrphanOptimization> findOrphanOptimizationsInWorkspace(String workspaceId);
+
+    Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(Set<UUID> optimizationIds);
+
+    Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, UUID projectId);
 }
 
 @Singleton
@@ -82,8 +91,138 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String HAS_VERSION1_OPTIMIZATIONS = """
             SELECT 1 FROM optimizations
             WHERE workspace_id = :workspace_id AND project_id = ''
+            AND name NOT IN :demo_optimization_names
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'""";
+
+    /**
+     * Returns workspaces with at least one orphan optimization, ordered by smallest count first.
+     * An optimization is orphan when its latest row has {@code project_id = ''} — dedup against the
+     * {@code ReplacingMergeTree} versions via {@code GROUP BY id + argMax(project_id, last_updated_at)}.
+     * Demo names and the env-excluded workspaces are filtered out at the DB so the service only
+     * iterates workspaces it can actually migrate. Mirrors D1's
+     * {@code FIND_ELIGIBLE_EXPERIMENT_WORKSPACES} shape.
+     */
+    private static final String FIND_ELIGIBLE_OPTIMIZATION_WORKSPACES = """
+            SELECT
+                workspace_id,
+                count(DISTINCT id) AS optimizations_count
+            FROM (
+                SELECT
+                    o.workspace_id AS workspace_id,
+                    o.id AS id
+                FROM optimizations o
+                WHERE o.name NOT IN :demo_optimization_names
+                <if(excluded_workspace_ids)>
+                AND o.workspace_id NOT IN :excluded_workspace_ids
+                <endif>
+                GROUP BY o.workspace_id, o.id
+                HAVING argMax(o.project_id, o.last_updated_at) = ''
+            )
+            GROUP BY workspace_id
+            ORDER BY optimizations_count ASC
+            LIMIT :limit
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * V1 optimization (id, dataset_id) pairs in the workspace, demo-excluded. The service needs
+     * the {@code dataset_id} so it can run Path B (cross-DB dataset lookup) for optimizations that
+     * Path A (experiments) does not classify, without an extra ClickHouse round-trip. Dedups
+     * ReplacingMergeTree versions via {@code argMax} so an in-flight write does not double-count.
+     */
+    private static final String FIND_ORPHAN_OPTIMIZATIONS_IN_WORKSPACE = """
+            SELECT
+                id AS optimization_id,
+                argMax(dataset_id, last_updated_at) AS dataset_id
+            FROM optimizations
+            WHERE workspace_id = :workspace_id
+            AND name NOT IN :demo_optimization_names
+            GROUP BY id
+            HAVING argMax(project_id, last_updated_at) = ''
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Path A inference: for each orphan optimization in {@code :optimization_ids}, returns the
+     * inferred {@code project_id}, the {@code distinct_project_count} of referencing projects, and a
+     * sorted {@code project_breakdown} ({@code projectId=count,...}) included in the log entry for
+     * each assignment.
+     *
+     * <p>Inference reads {@code experiments.project_id} (set by D1's experiment-project migration);
+     * experiments still at {@code project_id = ''} are excluded, so an optimization whose
+     * experiments are all unmigrated does not appear in the result and the service treats it as
+     * no-inference (falling through to Path B and ultimately to the workspace's Default Project).
+     * With one referencing project the choice is unambiguous; with several, the dominant project
+     * wins, ordered by {@code (count DESC, last_activity DESC, project_id ASC)} so repeated runs
+     * produce the same result — mirroring the dataset migration (OPIK-6701).
+     *
+     * <p>The inner {@code argMax(project_id, last_updated_at) GROUP BY id} removes duplicate
+     * ReplacingMergeTree row versions: while a migration is in progress the table can briefly hold
+     * both the previous and the updated row for an experiment, and taking the latest keeps the
+     * outer aggregates from counting it twice.
+     */
+    private static final String COMPUTE_OPTIMIZATION_PROJECT_MAPPING_VIA_EXPERIMENTS = """
+            WITH arraySort(proj -> (-proj.1, -proj.2, proj.3),
+                    groupArray((per_proj_count, per_proj_last_activity_nanos, experiment_project_id))) AS ranked
+            SELECT
+                optimization_id AS optimization_id,
+                length(ranked) AS distinct_project_count,
+                ranked[1].3 AS project_id,
+                arrayStringConcat(
+                    arrayMap(proj -> concat(proj.3, '=', toString(proj.1)), ranked), ','
+                ) AS project_breakdown
+            FROM (
+                SELECT
+                    optimization_id,
+                    experiment_project_id,
+                    count() AS per_proj_count,
+                    toUnixTimestamp64Nano(max(experiment_last_updated_at)) AS per_proj_last_activity_nanos
+                FROM (
+                    SELECT
+                        optimization_id,
+                        argMax(project_id, last_updated_at) AS experiment_project_id,
+                        max(last_updated_at) AS experiment_last_updated_at
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND optimization_id IN :optimization_ids
+                    AND name NOT IN :demo_experiment_names
+                    GROUP BY id, optimization_id
+                    HAVING experiment_project_id != ''
+                )
+                GROUP BY optimization_id, experiment_project_id
+            )
+            GROUP BY optimization_id
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Re-INSERT the latest row per id with overridden {@code project_id}, {@code last_updated_by}
+     * and {@code last_updated_at}. Uses {@code SELECT * REPLACE} so any future column added to
+     * {@code optimizations} is automatically copied without a schema-drift fix to this query —
+     * mirrors D1's {@code ExperimentDAO.BATCH_SET_PROJECT_ID}.
+     *
+     * <p>The outer {@code WHERE project_id = ''} guards idempotency: an optimization that already
+     * has a non-empty {@code project_id} is skipped, so re-running the migration is safe.
+     */
+    private static final String BATCH_SET_PROJECT_ID = """
+            INSERT INTO optimizations
+            SELECT * REPLACE (
+                :user_name AS last_updated_by,
+                now64(9) AS last_updated_at,
+                :project_id AS project_id
+            )
+            FROM (
+                SELECT *
+                FROM optimizations
+                WHERE workspace_id = :workspace_id
+                AND id IN :optimization_ids
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            WHERE project_id = ''
+            SETTINGS log_comment = '<log_comment>'
+            """;
 
     private static final String UPSERT = """
             INSERT INTO optimizations (
@@ -873,15 +1012,122 @@ class OptimizationDAOImpl implements OptimizationDAO {
         return statement;
     }
 
+    /**
+     * Checks for V1 (workspace-scoped) optimizations excluding known demo names.
+     * ClickHouse string comparison is case-sensitive — every known casing of a demo name
+     * must be listed explicitly in {@link DemoData#OPTIMIZATIONS}.
+     */
     @Override
-    public Mono<Boolean> hasVersion1Optimizations(@NonNull String workspaceId) {
-        var template = DatabaseUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
-                "has_version1_optimizations", workspaceId, "", "");
+    public Mono<Boolean> hasVersion1Optimizations(
+            @NonNull String workspaceId, @NonNull List<String> demoOptimizationNames) {
+        var template = FilterUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
+                "has_version1_optimizations", workspaceId, "", demoOptimizationNames);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
+                        .bind("demo_optimization_names", demoOptimizationNames.toArray(String[]::new))
                         .execute())
                         .flatMap(result -> Flux.from(result.map((row, metadata) -> true))))
                 .hasElements();
+    }
+
+    @Override
+    public Flux<EligibleOptimizationWorkspace> findEligibleOptimizationWorkspaces(
+            Set<String> excludedWorkspaceIds, int limit) {
+        var details = "excludedWorkspacesCount=%d, limit=%d"
+                .formatted(CollectionUtils.size(excludedWorkspaceIds), limit);
+        var template = FilterUtils.getSTWithLogComment(FIND_ELIGIBLE_OPTIMIZATION_WORKSPACES,
+                "find_eligible_optimization_workspaces", "", "", details);
+        if (CollectionUtils.isNotEmpty(excludedWorkspaceIds)) {
+            template.add("excluded_workspace_ids", true);
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("demo_optimization_names", DemoData.OPTIMIZATIONS.toArray(String[]::new))
+                            .bind("limit", limit);
+                    if (CollectionUtils.isNotEmpty(excludedWorkspaceIds)) {
+                        statement.bind("excluded_workspace_ids", excludedWorkspaceIds.toArray(String[]::new));
+                    }
+                    return Flux.from(statement.execute());
+                })
+                .flatMap(result -> result.map((row, metadata) -> EligibleOptimizationWorkspace.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .optimizationsCount(row.get("optimizations_count", Long.class))
+                        .build()));
+    }
+
+    @Override
+    public Flux<OrphanOptimization> findOrphanOptimizationsInWorkspace(@NonNull String workspaceId) {
+        var template = FilterUtils.getSTWithLogComment(FIND_ORPHAN_OPTIMIZATIONS_IN_WORKSPACE,
+                "find_orphan_optimizations_in_workspace", workspaceId, "", "");
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("demo_optimization_names", DemoData.OPTIMIZATIONS.toArray(String[]::new))
+                        .execute()))
+                .flatMap(result -> result.map((row, metadata) -> OrphanOptimization.builder()
+                        .optimizationId(UUID.fromString(row.get("optimization_id", String.class)))
+                        .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
+                        .build()));
+    }
+
+    /**
+     * Path A inference row mapper. The SQL filters out experiments with
+     * {@code experiment_project_id = ''} via {@code HAVING}, so under normal conditions every row
+     * carries a non-blank project_id. The defensive {@code Optional.ofNullable(...).filter(...)}
+     * guards a narrow concurrency window: a writer that flips the only matching experiment's
+     * {@code project_id} to {@code ''} between the {@code HAVING} evaluation and the row
+     * materialisation could leave the column blank in the result. In that case we drop the row
+     * (via {@code Mono::justOrEmpty}), and the service treats the optimization as no-inference —
+     * it falls through to Path B (dataset lookup) and ultimately to the workspace's Default
+     * Project. Callers therefore must tolerate an optimization being absent from the Flux even
+     * when its id was in the input set.
+     */
+    @Override
+    public Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(Set<UUID> optimizationIds) {
+        if (CollectionUtils.isEmpty(optimizationIds)) {
+            return Flux.empty();
+        }
+        var optimizationIdsAsStrings = optimizationIds.stream().map(UUID::toString).toArray(String[]::new);
+        var details = "optimizationCount=%d".formatted(optimizationIds.size());
+        var template = FilterUtils.getSTWithLogComment(COMPUTE_OPTIMIZATION_PROJECT_MAPPING_VIA_EXPERIMENTS,
+                "compute_optimization_project_mapping_via_experiments", null, null, details);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("optimization_ids", optimizationIdsAsStrings)
+                            .bind("demo_experiment_names", DemoData.EXPERIMENTS.toArray(new String[0]));
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, metadata) -> Optional
+                        .ofNullable(row.get("project_id", String.class))
+                        .filter(StringUtils::isNotBlank)
+                        .map(projectId -> OptimizationProjectMapping.builder()
+                                .optimizationId(UUID.fromString(row.get("optimization_id", String.class)))
+                                .projectId(UUID.fromString(projectId))
+                                .distinctProjectCount(row.get("distinct_project_count", Long.class))
+                                .projectBreakdown(row.get("project_breakdown", String.class))
+                                .build())))
+                .flatMap(Mono::justOrEmpty);
+    }
+
+    @Override
+    public Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, @NonNull UUID projectId) {
+        if (CollectionUtils.isEmpty(optimizationIds)) {
+            return Mono.just(0L);
+        }
+        var details = "optimizationCount=%d, projectId=%s".formatted(optimizationIds.size(), projectId);
+        var template = FilterUtils.getSTWithLogComment(BATCH_SET_PROJECT_ID,
+                "batch_set_optimization_project_id", null, null, details);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("optimization_ids", optimizationIds.toArray(UUID[]::new))
+                            .bind("project_id", projectId);
+                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+                })
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
     }
 }

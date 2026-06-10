@@ -32,6 +32,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
       canViewDashboards,
       canViewDatasets,
       canUsePlayground,
+      canViewOptimizationRuns,
     },
   } = usePermissions();
 
@@ -40,6 +41,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     canViewDashboards,
     canViewDatasets,
     canUsePlayground,
+    canViewOptimizationRuns,
   });
 
   const { data: projectData } = useProjectsList(
@@ -110,7 +112,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewOptimizationRuns,
     },
   );
 
@@ -124,7 +126,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     {
       placeholderData: keepPreviousData,
       refetchInterval: RUNNING_OPTIMIZATION_REFETCH_INTERVAL,
-      enabled: !!workspaceName,
+      enabled: !!workspaceName && canViewOptimizationRuns,
     },
   );
 

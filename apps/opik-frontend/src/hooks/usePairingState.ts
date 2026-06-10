@@ -10,13 +10,14 @@ export interface PairingState {
   status: RunnerConnectionStatus;
   runnerId: string | null;
   runner: LocalRunner | null;
+  isInitialLoading: boolean;
 }
 
 export default function usePairingState(
   projectId: string,
   runnerType?: LocalRunnerType,
 ): PairingState {
-  const { data: runnerData } = useSandboxConnectionStatus({
+  const { data: runnerData, isFetched } = useSandboxConnectionStatus({
     projectId,
     runnerType,
   });
@@ -39,5 +40,6 @@ export default function usePairingState(
     status,
     runnerId: runnerData?.id ?? null,
     runner: runnerData ?? null,
+    isInitialLoading: !isFetched,
   };
 }

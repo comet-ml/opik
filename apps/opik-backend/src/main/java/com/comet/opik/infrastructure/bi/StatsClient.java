@@ -34,10 +34,15 @@ import java.util.concurrent.CompletableFuture;
  * with synchronous HTTP calls. Guard all code paths against exceptions, including non-obvious ones
  * such as Lombok {@code @NonNull} null-checks that fire before user code.
  *
+ * <p><strong>Transport gate:</strong> {@link #sendEvent} sends to the stats endpoint when
+ * <em>either</em> {@code usageReport.enabled=true} (self-hosted BI stream) or
+ * {@code analytics.enabled=true} (product analytics stream) is set. When both are disabled,
+ * returns {@code completedFuture(false)} immediately. Per-stream gates in upstream listeners
+ * still decide which events are produced in the first place — this is purely a transport-level
+ * permission check for events that have already been constructed.
+ *
  * <p><strong>Current limitations:</strong>
  * <ul>
- *   <li>Requires {@code usageReport.enabled=true} to send. When disabled, returns
- *       {@code completedFuture(false)} immediately.</li>
  *   <li>Connect and read timeouts are configurable via {@code UsageReportConfig} and applied
  *       as per-request Jersey properties ({@link org.glassfish.jersey.client.ClientProperties}).
  *       Shared across all event types (BI and analytics).</li>
@@ -69,8 +74,9 @@ class StatsClientImpl implements StatsClient {
         var eventType = Optional.ofNullable(event).map(BiEvent::eventType).orElse(null);
         try {
             var usageReport = config.getUsageReport();
-            if (!usageReport.isEnabled()) {
-                log.info("Usage reporting is disabled — skipping event '{}'", eventType);
+            var analytics = config.getAnalytics();
+            if (!usageReport.isEnabled() && !analytics.isEnabled()) {
+                log.info("Both usage reporting and analytics are disabled — skipping event '{}'", eventType);
                 return CompletableFuture.completedFuture(false);
             }
             if (event == null) {

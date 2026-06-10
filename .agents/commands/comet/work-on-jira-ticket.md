@@ -19,6 +19,7 @@ This workflow will:
 ## Inputs
 
 - **Jira link (required)**: e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`
+- **Worktree (optional)**: Pass `worktree` to work in an isolated git worktree. Defaults to no worktree when the argument is omitted — the command never prompts about worktrees.
 
 ---
 
@@ -55,9 +56,10 @@ This workflow will:
 ### 3. Build Jira Context
 
 - **Key, Title, Type, Status, Priority, Assignee, Labels**
-- **Description**: verbatim if short, otherwise concise summary + key quotes.
+- **Description**: verbatim if short, otherwise concise summary + key quotes. The description contains the **WHY** (motivation) and **WHAT** (high-level scope + acceptance criteria); implementation details ("HOW") live in a separate comment — see below.
 - **If no description**: Note this and suggest adding context for better implementation planning.
 - **Comments**: newest → oldest, `[author @ date] summary` with important snippets.
+- **HOW comment**: scan comments for the most recent one whose body matches `^#\s*HOW\b` (case-insensitive). If found, surface it as the **implementation suggestion** — clearly framed as a note from when the ticket was filed, not a plan of record. The current code state is authoritative; the HOW is one input. If no HOW comment exists, proceed without one — many tickets won't have one, and that's fine (older tickets predate the convention; some tickets have nothing worth adding beyond the WHAT).
 - **Epic/Story context**: Include parent issue information if available.
 
 ---
@@ -79,6 +81,7 @@ This workflow will:
 
 - **Bugfix**: repro steps, root cause hypothesis, affected files, fix approach, risks, tests, verification.
 - **Feature**: user story recap, acceptance criteria, implementation plan, tests, rollout notes.
+- **HOW comment, if one exists**: weave its suggestions into the plan **after** independently reading the current code state. If the HOW conflicts with what the code looks like today, trust the code and note the divergence in your plan. The HOW is a hint from when the ticket was filed, not a contract.
 - **Always reference shared + domain guidance in the right place**:
   - **Global policy**: `.agents/rules/*` (git workflow, security, code style, routing)
   - **Backend guidance**: `.agents/skills/opik-backend/*`
@@ -91,19 +94,42 @@ This workflow will:
 ### 6. Git & Branch Setup
 
 - Repo: Opik repository (current workspace)
-- **CRITICAL**: Handle working directory state BEFORE branching:
+- **NEVER commit directly to main** (following Opik git workflow)
+
+#### 6a. Worktree Decision
+
+Worktree usage is strictly opt-in:
+
+- **If `worktree` was passed as an argument**: Use a worktree (continue to 6b).
+- **Otherwise (default)**: Skip 6b and go straight to 6c (normal path). Do not prompt the user.
+
+If the `EnterWorktree` tool is not available (e.g., running in Cursor or another editor) even when `worktree` was passed, fall back to 6c without prompting.
+
+#### 6b. Worktree Path (if using worktree)
+
+1. Slugify `{TICKET-SUMMARY}` for the worktree name: replace any character not in `[A-Za-z0-9._-]` with `-`, collapse consecutive `-` into one, and trim leading/trailing `-`. Then call `EnterWorktree` with name `{USERNAME}-OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}`.
+2. Inside the worktree, fetch the latest remote state and create the properly named branch based on `origin/main` (using the same slugified summary):
+   ```bash
+   git fetch origin
+   git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY} origin/main
+   ```
+   The worktree intentionally branches off `origin/main` regardless of the parent checkout's current branch or local `main` state, and skips the rebase-strategy prompt — isolation is the whole point of the worktree.
+
+   Do not inspect or prompt about the parent checkout's working tree (staged, unstaged, or untracked files; current branch). Worktrees are physically isolated, so parent state has no effect on the worktree and is not the agent's concern in this path.
+3. Continue with implementation in the worktree directory.
+
+#### 6c. Normal Path (if not using worktree)
+
+- **Handle working directory state BEFORE branching**:
   - If working directory has changes:
     - **Option 1**: Stash changes: `git stash push -m "WIP: before OPIK-{TICKET-NUMBER}"`
     - **Option 2**: Ask user what to do with uncommitted changes
-  - **NEVER commit directly to main** (following Opik git workflow)
+- Slugify `{TICKET-SUMMARY}` the same way as step 6b: replace any character not in `[A-Za-z0-9._-]` with `-`, collapse consecutive `-` into one, and trim leading/trailing `-`.
 - If on `main`, create branch following Opik conventions:
   ```bash
-  # Ensure you're on main and pull latest
   git checkout main
   git pull origin main
-  
-  # Create task-specific branch
-  git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{TICKET-SUMMARY}
+  git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}
   ```
 - **After branch creation**: Apply stashed changes if any: `git stash pop`
 - **Verify branch creation**: Confirm new branch is active and clean.
@@ -185,6 +211,7 @@ This workflow will:
   - Apply code changes according to the plan
   - Run quality checks and tests
   - Commit changes with proper ticket number prefix
+- **Post-push PR description sync**: Whenever this skill (or any follow-up step the user runs from this conversation) invokes `git push` or `git push --force-with-lease` to a branch with an open PR in `comet-ml/opik`, invoke the `_pr-description-sync` sub-skill (`.agents/commands/comet/_pr-description-sync.md`) immediately after the push completes. The sub-skill is a no-op when no PR exists, when the description is already in sync, or when the user has opted out of refreshes for this repo. This keeps the PR description aligned with what was actually shipped instead of what was claimed when the PR was opened.
 - **If user declined**: Provide manual implementation guidance and stop
 
 ---

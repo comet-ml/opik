@@ -2,7 +2,7 @@ import React from "react";
 import { Book, GraduationCap } from "lucide-react";
 import noDataThreadsImageUrl from "/images/no-data-threads.png";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { useOpenQuickStartDialog } from "@/v1/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import NoDataPage from "@/shared/NoDataPage/NoDataPage";
 

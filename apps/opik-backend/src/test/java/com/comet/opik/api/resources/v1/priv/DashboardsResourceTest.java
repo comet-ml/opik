@@ -145,6 +145,148 @@ class DashboardsResourceTest {
     }
 
     @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Create dashboard passes required permissions to auth endpoint")
+        void createDashboardPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboard = dashboardResourceClient.createPartialDashboard().build();
+
+            wireMock.server().resetRequests();
+            dashboardResourceClient.callCreate(dashboard, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DASHBOARD_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create dashboard returns 403 when permission is denied")
+        void createDashboardReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DASHBOARD_CREATE.getValue());
+
+            var dashboard = dashboardResourceClient.createPartialDashboard().build();
+
+            try (var response = dashboardResourceClient.callCreate(dashboard, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update dashboard passes required permissions to auth endpoint")
+        void updateDashboardPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = dashboardResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            dashboardResourceClient.callUpdate(id, DashboardUpdate.builder().description("updated").build(), apiKey,
+                    workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DASHBOARD_EDIT.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update dashboard returns 403 when permission is denied")
+        void updateDashboardReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DASHBOARD_EDIT.getValue());
+
+            try (var response = dashboardResourceClient.callUpdate(UUID.randomUUID(),
+                    DashboardUpdate.builder().description("updated").build(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Delete dashboard passes required permissions to auth endpoint")
+        void deleteDashboardPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = dashboardResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            dashboardResourceClient.callDelete(id, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DASHBOARD_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Delete dashboard returns 403 when permission is denied")
+        void deleteDashboardReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DASHBOARD_DELETE.getValue());
+
+            try (var response = dashboardResourceClient.callDelete(UUID.randomUUID(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Delete dashboards batch passes required permissions to auth endpoint")
+        void deleteDashboardsBatchPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = dashboardResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            dashboardResourceClient.callBatchDelete(Set.of(id), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DASHBOARD_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Delete dashboards batch returns 403 when permission is denied")
+        void deleteDashboardsBatchReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DASHBOARD_DELETE.getValue());
+
+            try (var response = dashboardResourceClient.callBatchDelete(Set.of(UUID.randomUUID()), apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Create dashboard")
     class CreateDashboard {
 

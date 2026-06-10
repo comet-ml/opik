@@ -1,19 +1,24 @@
 import React from "react";
-import { AlertCircle, FileText } from "lucide-react";
+import { AlertCircle, FileText, RefreshCw } from "lucide-react";
 import { Card } from "@/ui/card";
 import { Alert, AlertDescription } from "@/ui/alert";
+import { Button } from "@/ui/button";
 import SMEFlowLayout from "./SMEFlowLayout";
 
+type NoDataViewVariant = "no-queue" | "queue-error" | "items-error";
+
 interface NoDataViewProps {
-  hasQueueId: boolean;
+  variant: NoDataViewVariant;
+  onRetry?: () => void;
 }
 
 const NoDataView: React.FunctionComponent<NoDataViewProps> = ({
-  hasQueueId,
+  variant,
+  onRetry,
 }) => {
   return (
     <SMEFlowLayout header={<h1 className="comet-title-xl">Error</h1>}>
-      {hasQueueId ? (
+      {variant === "queue-error" && (
         <div className="space-y-6">
           <Alert variant="destructive">
             <AlertCircle className="size-4" />
@@ -32,7 +37,36 @@ const NoDataView: React.FunctionComponent<NoDataViewProps> = ({
             </p>
           </Card>
         </div>
-      ) : (
+      )}
+
+      {variant === "items-error" && (
+        <div className="space-y-6">
+          <Alert variant="destructive">
+            <AlertCircle className="size-4" />
+            <AlertDescription>
+              Unable to load items in this annotation queue. This is usually a
+              temporary issue.
+            </AlertDescription>
+          </Alert>
+
+          <Card className="p-8 text-center">
+            <FileText className="mx-auto mb-4 size-12 text-muted-slate" />
+            <h3 className="comet-title-m mb-2">Items failed to load</h3>
+            <p className="comet-body-s mb-6 text-muted-slate">
+              Please try again. If the problem persists, contact your
+              administrator.
+            </p>
+            {onRetry && (
+              <Button onClick={onRetry} variant="outline">
+                <RefreshCw className="mr-2 size-4" />
+                Retry
+              </Button>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {variant === "no-queue" && (
         <Card className="p-8 text-center">
           <FileText className="mx-auto mb-4 size-12 text-muted-slate" />
           <h3 className="comet-title-m mb-2">No annotation queue selected</h3>

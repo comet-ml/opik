@@ -3,10 +3,37 @@ import { Search, X } from "lucide-react";
 
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
 import { InputProps } from "@/ui/input";
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import { cn } from "@/lib/utils";
 
 const SEARCH_TEXT_DELAY = 300;
+
+type SearchInputDimension = NonNullable<InputProps["dimension"]>;
+
+type SearchInputStyle = {
+  iconWrapper: string;
+  icon: string;
+  input: string;
+  clearButton: ButtonProps["size"];
+};
+
+const DEFAULT_SEARCH_STYLE: SearchInputStyle = {
+  iconWrapper: "left-2.5",
+  icon: "size-3.5",
+  input: "px-8",
+  clearButton: "icon-xs",
+};
+
+const SEARCH_STYLE_BY_DIMENSION: Partial<
+  Record<SearchInputDimension, SearchInputStyle>
+> = {
+  xs: {
+    iconWrapper: "left-2",
+    icon: "size-3",
+    input: "rounded-sm pl-7 pr-7",
+    clearButton: "icon-2xs",
+  },
+};
 
 export type SearchInputProps = {
   searchText?: string;
@@ -16,7 +43,6 @@ export type SearchInputProps = {
   className?: string;
   dimension?: InputProps["dimension"];
   variant?: "default" | "ghost";
-  size?: "sm" | "md";
 };
 
 export const SearchInput = ({
@@ -27,15 +53,18 @@ export const SearchInput = ({
   className,
   dimension,
   variant = "default",
-  size = "md",
 }: SearchInputProps) => {
+  const style =
+    (dimension && SEARCH_STYLE_BY_DIMENSION[dimension]) ?? DEFAULT_SEARCH_STYLE;
   return (
     <div className={cn("relative w-full", className)}>
-      <div className="absolute left-2.5 top-1/2 -translate-y-1/2">
-        <Search className="size-3.5 text-muted-slate" />
+      <div
+        className={cn("absolute top-1/2 -translate-y-1/2", style.iconWrapper)}
+      >
+        <Search className={cn("text-light-slate", style.icon)} />
       </div>
       <DebounceInput
-        className={cn("px-8", size === "sm" && "h-8")}
+        className={style.input}
         delay={SEARCH_TEXT_DELAY}
         onValueChange={setSearchText as (value: unknown) => void}
         placeholder={placeholder}
@@ -49,7 +78,7 @@ export const SearchInput = ({
         <div className="absolute right-1 top-1/2 -translate-y-1/2">
           <Button
             variant="minimal"
-            size="icon-xs"
+            size={style.clearButton}
             onClick={() => setSearchText("")}
           >
             <X />

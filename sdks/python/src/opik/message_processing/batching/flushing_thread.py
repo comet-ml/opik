@@ -1,18 +1,25 @@
+import logging
 import threading
 import time
-from typing import List
+from typing import Callable
 
-from . import base_batcher
+LOGGER = logging.getLogger(__name__)
 
 
 class FlushingThread(threading.Thread):
+    """Periodically invokes ``flush_callable`` until ``close()`` is called.
+
+    Knows nothing about batchers or locks — those are the responsibility of
+    whoever supplies the callable (e.g. ``BatchManager.flush_ready``).
+    """
+
     def __init__(
         self,
-        batchers: List[base_batcher.BaseBatcher],
+        flush_callable: Callable[[], None],
         probe_interval_seconds: float = 0.1,
     ) -> None:
         threading.Thread.__init__(self, daemon=True)
-        self._batchers = batchers
+        self._flush_callable = flush_callable
         self._probe_interval_seconds = probe_interval_seconds
         self._closed = False
 
@@ -21,7 +28,8 @@ class FlushingThread(threading.Thread):
 
     def run(self) -> None:
         while not self._closed:
-            for batcher in self._batchers:
-                if batcher.is_ready_to_flush():
-                    batcher.flush()
+            try:
+                self._flush_callable()
+            except Exception:
+                LOGGER.exception("FlushingThread tick failed; thread will continue.")
             time.sleep(self._probe_interval_seconds)

@@ -1,8 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Pause, Play, RotateCcw, Unplug } from "lucide-react";
+import { MoreHorizontal, Pause, Play, RotateCcw, Unplug } from "lucide-react";
 
 import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
+import { Skeleton } from "@/ui/skeleton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   ResizableHandle,
@@ -20,11 +27,45 @@ import useTraceById from "@/api/traces/useTraceById";
 import usePairingState from "@/hooks/usePairingState";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
 import AgentRunnerResult from "./AgentRunnerResult";
 
 const TRACE_POLL_INTERVAL = 1000;
+
+const renderAgentRunnerLoadingSkeleton = () => (
+  <ResizablePanelGroup
+    direction="vertical"
+    autoSaveId="agent-sandbox-layout"
+    className="min-h-0 flex-1"
+  >
+    <ResizablePanel id="agent-input" defaultSize={50} minSize={20}>
+      <div className="flex h-full flex-col">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-soft-background px-4">
+          <Skeleton className="h-4 w-[40px]" />
+          <Skeleton className="h-4 w-[80px]" />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 bg-soft-background p-4">
+          <Skeleton className="h-[116px] w-full" />
+          <Skeleton className="h-[62px] w-full" />
+        </div>
+      </div>
+    </ResizablePanel>
+    <ResizableHandle />
+    <ResizablePanel id="agent-result" defaultSize={50} minSize={15}>
+      <div className="flex h-full flex-col">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-soft-background px-4">
+          <Skeleton className="size-3 rounded-sm" />
+          <Skeleton className="h-4 w-[40px]" />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col bg-background p-4">
+          <Skeleton className="h-[213px] w-full" />
+        </div>
+      </div>
+    </ResizablePanel>
+  </ResizablePanelGroup>
+);
 
 type AgentRunnerContentProps = {
   projectId: string;
@@ -35,6 +76,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
+  const [hasAllRequiredParams, setHasAllRequiredParams] = useState(false);
   const [tracePanelSpanId, setTracePanelSpanId] = useState<
     string | null | undefined
   >("");
@@ -68,6 +110,15 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     jobData?.status === SandboxJobStatus.RUNNING ||
     jobData?.status === SandboxJobStatus.PENDING;
 
+  const { DialogComponent: navigationBlockerDialog } = useNavigationBlocker({
+    condition: isJobRunning || createJobMutation.isPending,
+    title: "Agent execution in progress",
+    description:
+      "Your agent is currently running. Leaving now will interrupt the execution and may result in an incomplete trace. Are you sure you want to leave?",
+    confirmText: "Leave anyway",
+    cancelText: "Stay and wait",
+  });
+
   const { data: traceData } = useTraceById(
     { traceId, stripAttachments: true },
     {
@@ -78,8 +129,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 
   const handleRun = (
     inputs: Record<string, unknown>,
-    blueprintName?: string,
-    maskId?: string,
+    promptMasks: Record<string, string>,
   ) => {
     if (!agentName) {
       return;
@@ -90,8 +140,9 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
         agent_name: agentName,
         project_id: projectId,
         inputs,
-        mask_id: maskId,
-        blueprint_name: blueprintName,
+        ...(Object.keys(promptMasks).length > 0 && {
+          prompt_masks: promptMasks,
+        }),
       },
       {
         onSuccess: (data) => {
@@ -147,9 +198,9 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
       <div className="flex items-center gap-3 border-b bg-gray-100 px-4 py-3">
         <h1 className="comet-title-xs">Agent playground</h1>
 
-        {isConnected ? (
+        {pairing.isInitialLoading ? null : isConnected ? (
           <TooltipWrapper content="Your agent is connected to Opik">
-            <span className="comet-body-xs flex items-center gap-1.5 text-emerald-600">
+            <span className="comet-body-xs flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-0.5 text-foreground">
               <span className="size-1.5 rounded-full bg-emerald-500" />
               Connected
             </span>
@@ -170,44 +221,75 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
                   Stop run
                 </Button>
               ) : (
-                <Button
-                  size="2xs"
-                  onClick={handleSubmitForm}
-                  disabled={createJobMutation.isPending || !isReady}
+                <TooltipWrapper
+                  content={
+                    !hasAllRequiredParams
+                      ? "Some required parameters are missing"
+                      : undefined
+                  }
                 >
-                  <Play className="mr-1 size-3.5" />
-                  Run
-                  <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
-                  <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
-                </Button>
-              )}
-              <Button variant="ghost" size="2xs" onClick={handleReset}>
-                <RotateCcw className="mr-1 size-3.5" />
-                Reset
-              </Button>
-              {canConfigureWorkspaceSettings && (
-                <TooltipWrapper content="Disconnect agent">
-                  <Button
-                    variant="outline"
-                    size="2xs"
-                    disabled={disconnectMutation.isPending}
-                    onClick={() => {
-                      if (pairing.runnerId) {
-                        disconnectMutation.mutate(pairing.runnerId);
+                  <span>
+                    <Button
+                      size="2xs"
+                      onClick={handleSubmitForm}
+                      disabled={
+                        createJobMutation.isPending ||
+                        !isReady ||
+                        !hasAllRequiredParams
                       }
-                    }}
-                  >
-                    <Unplug className="mr-1 size-3.5" />
-                    Disconnect
-                  </Button>
+                    >
+                      <Play className="mr-1 size-3.5" />
+                      Run
+                      <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+                      <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
+                    </Button>
+                  </span>
                 </TooltipWrapper>
+              )}
+              <TooltipWrapper content="Reset">
+                <Button
+                  variant="ghost"
+                  size="icon-2xs"
+                  onClick={handleReset}
+                  aria-label="Reset"
+                >
+                  <RotateCcw />
+                </Button>
+              </TooltipWrapper>
+              {canConfigureWorkspaceSettings && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-2xs"
+                      aria-label="More actions"
+                    >
+                      <MoreHorizontal />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={disconnectMutation.isPending}
+                      onClick={() => {
+                        if (pairing.runnerId) {
+                          disconnectMutation.mutate(pairing.runnerId);
+                        }
+                      }}
+                    >
+                      <Unplug className="mr-2 size-3.5" />
+                      Disconnect
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </>
           )}
         </div>
       </div>
 
-      {isConnected && pairing.runner ? (
+      {pairing.isInitialLoading ? (
+        renderAgentRunnerLoadingSkeleton()
+      ) : isConnected && pairing.runner ? (
         <ResizablePanelGroup
           direction="vertical"
           autoSaveId="agent-sandbox-layout"
@@ -225,6 +307,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
               onRun={handleRun}
               isRunning={createJobMutation.isPending}
               resetKey={resetKey}
+              onValidityChange={setHasAllRequiredParams}
             />
           </ResizablePanel>
 
@@ -261,6 +344,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           refetchInterval={TRACE_POLL_INTERVAL}
         />
       )}
+      {navigationBlockerDialog}
     </div>
   );
 };

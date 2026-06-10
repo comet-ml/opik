@@ -8,6 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node_public import JsonNodePublic
 from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_public_version_type import PromptVersionPublicVersionType
 
 
 class PromptVersionPublic(UniversalBaseModel):
@@ -22,9 +23,25 @@ class PromptVersionPublic(UniversalBaseModel):
     version short unique identifier, generated if absent. it must be 8 characters long
     """
 
+    version_number: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    sequential version number in the format v<N>; null for masks
+    """
+
     template: str
     metadata: typing.Optional[JsonNodePublic] = None
     type: typing.Optional[PromptVersionPublicType] = None
+    version_type: typing.Optional[PromptVersionPublicVersionType] = pydantic.Field(default=None)
+    """
+    version type discriminator; defaults to prompt_version
+    """
+
+    environment: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Deprecated: use 'environments' instead
+    """
+
+    environments: typing.Optional[typing.List[str]] = None
     change_description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     template_structure: typing.Optional[PromptVersionPublicTemplateStructure] = None

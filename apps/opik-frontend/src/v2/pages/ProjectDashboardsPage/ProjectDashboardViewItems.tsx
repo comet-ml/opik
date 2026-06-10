@@ -17,6 +17,7 @@ export type ProjectDashboardViewOption = DropdownOption<string> & {
 export interface BuiltInViewItemProps {
   option: ProjectDashboardViewOption;
   isSelected: boolean;
+  canCreate: boolean;
   onSelect: (id: string) => void;
   onDuplicate: () => void;
 }
@@ -24,6 +25,7 @@ export interface BuiltInViewItemProps {
 export const BuiltInViewItem: React.FC<BuiltInViewItemProps> = ({
   option,
   isSelected,
+  canCreate,
   onSelect,
   onDuplicate,
 }) => {
@@ -48,21 +50,23 @@ export const BuiltInViewItem: React.FC<BuiltInViewItemProps> = ({
               Built-in
             </Tag>
           </div>
-          <div className="shrink-0 opacity-0 group-hover:opacity-100">
-            <TooltipWrapper content="Duplicate">
-              <Button
-                variant="minimal"
-                size="icon-xs"
-                className="text-muted-slate hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDuplicate();
-                }}
-              >
-                <CopyPlus className="size-3.5" />
-              </Button>
-            </TooltipWrapper>
-          </div>
+          {canCreate && (
+            <div className="shrink-0 opacity-0 group-hover:opacity-100">
+              <TooltipWrapper content="Duplicate">
+                <Button
+                  variant="minimal"
+                  size="icon-xs"
+                  className="text-muted-slate hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDuplicate();
+                  }}
+                >
+                  <CopyPlus className="size-3.5" />
+                </Button>
+              </TooltipWrapper>
+            </div>
+          )}
         </div>
         <div className="comet-body-s text-light-slate">
           {option.description}
@@ -75,6 +79,9 @@ export const BuiltInViewItem: React.FC<BuiltInViewItemProps> = ({
 export interface CustomViewItemProps {
   option: ProjectDashboardViewOption;
   isSelected: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   onSelect: (id: string) => void;
   onEdit: () => void;
   onDuplicate: () => void;
@@ -84,12 +91,17 @@ export interface CustomViewItemProps {
 export const CustomViewItem: React.FC<CustomViewItemProps> = ({
   option,
   isSelected,
+  canCreate,
+  canEdit,
+  canDelete,
   onSelect,
   onEdit,
   onDuplicate,
   onDelete,
 }) => {
   const Icon = option.icon;
+  const showActions = canCreate || canEdit || canDelete;
+  const showSecondarySeparator = (canEdit || canCreate) && canDelete;
 
   return (
     <div
@@ -107,48 +119,58 @@ export const CustomViewItem: React.FC<CustomViewItemProps> = ({
               {option.label}
             </span>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 rounded-sm p-0.5 opacity-0 group-hover:opacity-100">
-            <TooltipWrapper content="Edit">
-              <Button
-                variant="minimal"
-                size="icon-xs"
-                className="text-muted-slate hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-            </TooltipWrapper>
-            <TooltipWrapper content="Duplicate">
-              <Button
-                variant="minimal"
-                size="icon-xs"
-                className="text-muted-slate hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDuplicate();
-                }}
-              >
-                <CopyPlus className="size-3.5" />
-              </Button>
-            </TooltipWrapper>
-            <Separator orientation="vertical" className="h-2.5" />
-            <TooltipWrapper content="Delete">
-              <Button
-                variant="minimal"
-                size="icon-xs"
-                className="text-muted-slate hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-              >
-                <Trash className="size-3.5" />
-              </Button>
-            </TooltipWrapper>
-          </div>
+          {showActions && (
+            <div className="flex shrink-0 items-center gap-1.5 rounded-sm p-0.5 opacity-0 group-hover:opacity-100">
+              {canEdit && (
+                <TooltipWrapper content="Edit">
+                  <Button
+                    variant="minimal"
+                    size="icon-xs"
+                    className="text-muted-slate hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit();
+                    }}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                </TooltipWrapper>
+              )}
+              {canCreate && (
+                <TooltipWrapper content="Duplicate">
+                  <Button
+                    variant="minimal"
+                    size="icon-xs"
+                    className="text-muted-slate hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDuplicate();
+                    }}
+                  >
+                    <CopyPlus className="size-3.5" />
+                  </Button>
+                </TooltipWrapper>
+              )}
+              {showSecondarySeparator && (
+                <Separator orientation="vertical" className="h-2.5" />
+              )}
+              {canDelete && (
+                <TooltipWrapper content="Delete">
+                  <Button
+                    variant="minimal"
+                    size="icon-xs"
+                    className="text-muted-slate hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash className="size-3.5" />
+                  </Button>
+                </TooltipWrapper>
+              )}
+            </div>
+          )}
         </div>
         <div className="comet-body-s truncate text-light-slate">
           {option.description}

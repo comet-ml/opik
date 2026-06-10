@@ -1,27 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import ReturnToAnnotationQueueButton from "./ReturnToAnnotationQueueButton";
 import { ReactNode } from "react";
 
+const mockFlushPendingChanges = vi.fn();
 const mockUseSMEFlow = vi.fn();
 
 vi.mock("./SMEFlowContext", () => ({
   useSMEFlow: () => mockUseSMEFlow(),
-}));
-
-interface NavigationBlockerOptions {
-  condition: boolean;
-  title: string;
-  description: string;
-  confirmText: string;
-  cancelText: string;
-}
-
-const mockUseNavigationBlocker = vi.fn();
-
-vi.mock("@/hooks/useNavigationBlocker", () => ({
-  default: (options: NavigationBlockerOptions) =>
-    mockUseNavigationBlocker(options),
 }));
 
 interface AppStoreState {
@@ -40,14 +26,20 @@ vi.mock("@/store/AppStore", () => ({
 interface MockLinkProps {
   children: ReactNode;
   to: string;
+  onClick?: () => void;
   params: {
     workspaceName: string;
     annotationQueueId: string;
   };
 }
 
-const mockLink = vi.fn(({ children, to, params }: MockLinkProps) => (
-  <div data-testid="link" data-to={to} data-params={JSON.stringify(params)}>
+const mockLink = vi.fn(({ children, to, params, onClick }: MockLinkProps) => (
+  <div
+    data-testid="link"
+    data-to={to}
+    data-params={JSON.stringify(params)}
+    onClick={onClick}
+  >
     {children}
   </div>
 ));
@@ -59,16 +51,12 @@ vi.mock("@tanstack/react-router", () => ({
 describe("ReturnToAnnotationQueueButton", () => {
   const defaultContextValue = {
     annotationQueue: { id: "queue-123", project_id: "test-project-id" },
-    hasAnyUnsavedChanges: false,
+    flushPendingChanges: mockFlushPendingChanges,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseSMEFlow.mockReturnValue(defaultContextValue);
-    mockUseNavigationBlocker.mockReturnValue({
-      DialogComponent: <div data-testid="navigation-blocker-dialog" />,
-    });
-    mockLink.mockClear();
   });
 
   it("should navigate to the specific annotation queue page", () => {
@@ -86,45 +74,13 @@ describe("ReturnToAnnotationQueueButton", () => {
     );
   });
 
-  it("should render the navigation blocker dialog", () => {
+  it("should flush pending changes on click", () => {
     render(<ReturnToAnnotationQueueButton />);
 
-    expect(screen.getByTestId("navigation-blocker-dialog")).toBeInTheDocument();
-  });
-
-  it("should call useNavigationBlocker with hasAnyUnsavedChanges condition", () => {
-    // Test without unsaved changes
-    mockUseSMEFlow.mockReturnValue({
-      ...defaultContextValue,
-      hasAnyUnsavedChanges: false,
-    });
-
-    const { rerender } = render(<ReturnToAnnotationQueueButton />);
-
-    expect(mockUseNavigationBlocker).toHaveBeenCalledWith({
-      condition: false,
-      title: "Unsaved changes",
-      description:
-        "You have unsaved changes to your annotations. If you leave now, your changes will be lost.",
-      confirmText: "Leave without saving",
-      cancelText: "Stay on page",
-    });
-
-    // Test with unsaved changes
-    mockUseSMEFlow.mockReturnValue({
-      ...defaultContextValue,
-      hasAnyUnsavedChanges: true,
-    });
-
-    rerender(<ReturnToAnnotationQueueButton />);
-
-    expect(mockUseNavigationBlocker).toHaveBeenCalledWith({
-      condition: true,
-      title: "Unsaved changes",
-      description:
-        "You have unsaved changes to your annotations. If you leave now, your changes will be lost.",
-      confirmText: "Leave without saving",
-      cancelText: "Stay on page",
-    });
+    expect(mockLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onClick: mockFlushPendingChanges,
+      }),
+    );
   });
 });

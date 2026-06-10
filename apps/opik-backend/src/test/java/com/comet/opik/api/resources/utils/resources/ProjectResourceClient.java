@@ -61,6 +61,16 @@ public class ProjectResourceClient {
         }
     }
 
+    public void deleteProject(UUID projectId, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .delete()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
     public Project getProject(UUID projectId, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId)
@@ -141,6 +151,30 @@ public class ProjectResourceClient {
 
             return null;
         }
+    }
+
+    public Response callCreateProject(Project project, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(project));
+    }
+
+    public Response callFindProjects(String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetProjectById(UUID id, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + id)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 
     public KpiCardResponse getKpiCards(UUID projectId, KpiCardRequest request, String apiKey, String workspaceName) {

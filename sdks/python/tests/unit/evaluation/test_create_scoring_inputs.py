@@ -42,9 +42,15 @@ def test_create_scoring_inputs_callable_mapping():
         "input": {"message": "hello"},
         "expected_output": {"message": "world"},
     }
-    task_output = {"result": "hello world"}
+    task_output = {
+        "result": "hello world",
+        "actual_output": {"message": "foo"},
+    }
 
-    mapping = {"reference": lambda x: x["expected_output"]["message"]}
+    mapping = {
+        "reference": lambda x: x["expected_output"]["message"],
+        "from_output": lambda x: x["actual_output"]["message"],
+    }
 
     result = create_scoring_inputs(
         dataset_item=dataset_item, task_output=task_output, scoring_key_mapping=mapping
@@ -54,7 +60,9 @@ def test_create_scoring_inputs_callable_mapping():
         "input": {"message": "hello"},
         "expected_output": {"message": "world"},
         "result": "hello world",
+        "actual_output": {"message": "foo"},
         "reference": "world",
+        "from_output": "foo",
     }
     assert_dicts_equal(result, expected)
 

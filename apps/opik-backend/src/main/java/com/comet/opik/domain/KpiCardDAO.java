@@ -28,7 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -187,8 +187,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SELECT
                 COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_count,
                 COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_count,
-                COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_errors,
-                COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_errors,
+                if(COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end) = 0,
+                    0,
+                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start AND tf.id \\<= :id_end) * 100.0
+                    / COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end)) AS current_error_rate,
+                if(COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) = 0,
+                    0,
+                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) * 100.0
+                    / COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start)) AS previous_error_rate,
                 AVGIf(tf.duration, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_duration,
                 AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
                 SUMIf(tc.cost, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_total_cost,
@@ -307,8 +313,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SELECT
                 COUNTIf(id >= :id_current_start AND id \\<= :id_end) AS current_count,
                 COUNTIf(id >= :id_prior_start AND id \\< :id_current_start) AS previous_count,
-                COUNTIf(length(error_info) > 0 AND id >= :id_current_start AND id \\<= :id_end) AS current_errors,
-                COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start) AS previous_errors,
+                if(COUNTIf(id >= :id_current_start AND id \\<= :id_end) = 0,
+                    0,
+                    COUNTIf(length(error_info) > 0 AND id >= :id_current_start AND id \\<= :id_end) * 100.0
+                    / COUNTIf(id >= :id_current_start AND id \\<= :id_end)) AS current_error_rate,
+                if(COUNTIf(id >= :id_prior_start AND id \\< :id_current_start) = 0,
+                    0,
+                    COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start) * 100.0
+                    / COUNTIf(id >= :id_prior_start AND id \\< :id_current_start)) AS previous_error_rate,
                 AVGIf(duration, id >= :id_current_start AND id \\<= :id_end) AS current_avg_duration,
                 AVGIf(duration, id >= :id_prior_start AND id \\< :id_current_start) AS previous_avg_duration,
                 SUMIf(total_estimated_cost, id >= :id_current_start AND id \\<= :id_end) AS current_total_cost,
@@ -634,8 +646,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
             if (entityType != EntityType.THREADS) {
                 stats.add(KpiMetric.builder()
                         .type(KpiMetricType.ERRORS)
-                        .currentValue(filterNan(row.get("current_errors", Double.class)))
-                        .previousValue(filterNan(row.get("previous_errors", Double.class)))
+                        .currentValue(filterNan(row.get("current_error_rate", Double.class)))
+                        .previousValue(filterNan(row.get("previous_error_rate", Double.class)))
                         .build());
             }
 

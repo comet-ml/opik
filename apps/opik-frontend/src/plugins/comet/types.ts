@@ -76,18 +76,19 @@ export enum ManagementPermissionsNames {
   ANNOTATION_QUEUE_CREATE = "annotation_queue_create",
   ANNOTATION_QUEUE_EDIT = "annotation_queue_edit",
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
-  TRACE_TAG = "trace_tag",
   TRACE_DELETE = "trace_delete",
   TRACE_SPAN_THREAD_ANNOTATE = "trace_span_thread_annotate",
+  TRACE_SPAN_THREAD_LOG = "trace_span_thread_log",
   PROMPT_CREATE = "prompt_create",
   PROMPT_DELETE = "prompt_delete",
+  OPTIMIZATION_RUN_VIEW = "optimization_run_view",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
   WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
   AI_PROVIDER_UPDATE = "ai_provider_update",
-  COMMENT_WRITE = "comment_write",
   ONLINE_EVALUATION_RULE_UPDATE = "online_evaluation_rule_update",
   ALERT_UPDATE = "alert_update",
   PLAYGROUND_USE = "playground_use",
+  OPTIMIZATION_STUDIO_USE = "optimization_studio_use",
 }
 
 export interface UserPermission {
@@ -96,14 +97,14 @@ export interface UserPermission {
 }
 
 export interface Workspace {
-  createdAt: number;
   workspaceId: string;
   workspaceName: string;
-  workspaceOwner: string;
-  workspaceCreator: string;
   organizationId: string;
-  collaborationFeaturesDisabled: boolean;
   default: boolean;
+  createdAt?: number;
+  workspaceOwner?: string;
+  workspaceCreator?: string;
+  collaborationFeaturesDisabled?: boolean;
 }
 
 export interface OrganizationMember {

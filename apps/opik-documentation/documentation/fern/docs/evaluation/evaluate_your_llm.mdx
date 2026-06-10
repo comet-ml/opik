@@ -6,6 +6,7 @@ og:site_name: Opik Documentation
 og:title: Evaluate Your Agent with Opik
 subtitle: Step by step guide on how to evaluate your LLM application
 title: Evaluate your agent
+canonical-url: https://www.comet.com/docs/opik/evaluation/advanced/evaluate_your_llm
 ---
 
 <Tip>
@@ -371,13 +372,11 @@ When creating an Experiment, you can link the Experiment to a specific prompt ve
 
 <CodeBlocks>
     ```typescript title="TypeScript" language="typescript"
-    import { Opik, evaluate, evaluatePrompt } from 'opik';
+    import { Opik, Prompt, evaluate, evaluatePrompt } from 'opik';
     import { Hallucination } from 'opik';
 
-    const client = new Opik();
-
     // Create a prompt
-    const prompt = await client.createPrompt({
+    const prompt = new Prompt({
         name: "My prompt",
         prompt: "Translate to French: {{input}}",
         projectName: "my-project",

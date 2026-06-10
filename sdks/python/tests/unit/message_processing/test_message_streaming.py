@@ -1,3 +1,4 @@
+import threading
 from unittest import mock
 from unittest.mock import sentinel
 
@@ -30,7 +31,56 @@ def batched_streamer_and_mock_message_processor(
         yield tested, mock_message_processor
     finally:
         if tested is not None:
-            tested.close(timeout=5)
+            tested.close(flush=False)
+
+
+def test_streamer__drain_to_processors__waits_until_slow_process_returns(
+    fake_file_upload_manager, fake_replay_manager
+):
+    # Regression: previously `_all_done()` checked `workers_idling and queue.empty`
+    # — both could flip True in the gap between the consumer popping a message
+    # and entering `message_processor.process(...)`. With the unfinished-task
+    # counter, drain_to_processors must block until `process` actually returns.
+    process_started = threading.Event()
+    release_process = threading.Event()
+    process_returned = threading.Event()
+
+    def slow_process(message):
+        process_started.set()
+        release_process.wait(timeout=5.0)
+        process_returned.set()
+
+    mock_message_processor = mock.Mock()
+    mock_message_processor.process.side_effect = slow_process
+
+    tested = streamer_constructors.construct_streamer(
+        message_processor=mock_message_processor,
+        n_consumers=1,
+        use_batching=False,
+        use_attachment_extraction=False,
+        file_uploader=fake_file_upload_manager,
+        max_queue_size=None,
+        fallback_replay_manager=fake_replay_manager,
+    )
+    try:
+        tested.put(messages.BaseMessage())
+
+        # Wait until the consumer has popped the message and is inside
+        # `process` — i.e. queue is empty but a task is in flight.
+        assert process_started.wait(timeout=2.0) is True
+
+        # A very short drain budget should NOT report success: process is
+        # still running, so the queue is not quiescent.
+        assert tested.drain_to_processors(timeout=0.1) is False
+        assert process_returned.is_set() is False
+
+        # Release the processor; the next drain must wait for it to finish
+        # and then return True.
+        release_process.set()
+        assert tested.drain_to_processors(timeout=2.0) is True
+        assert process_returned.is_set() is True
+    finally:
+        tested.close(flush=False)
 
 
 def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
@@ -86,7 +136,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
         )
     finally:
         if tested is not None:
-            tested.close(timeout=1)
+            tested.close(flush=False)
 
 
 def test_streamer__span__batching_enabled__messages_that_support_batching_are_processed_in_batch(

@@ -2,10 +2,12 @@ import logging
 from typing import List, Optional
 
 from opik.api_objects import dataset, experiment, opik_client
-from opik.types import BatchFeedbackScoreDict
+from opik.types import BatchAssertionResultDict, BatchFeedbackScoreDict
 from . import test_case
 from .metrics import score_result
 from .types import ScoringKeyMappingType
+
+SUITE_ASSERTION_CATEGORY = "suite_assertion"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,8 +61,14 @@ def get_experiment_test_cases(
             continue
 
         if item.evaluation_task_output is None:
-            LOGGER.error(
-                f"Unexpected error: Evaluation task output is None for experiment item {item.id}, skipping experiment item"
+            # Trial did not finish its happy path (task failed or
+            # scoring crashed). Stored output was stripped — nothing to
+            # re-score against. ``evaluate_resume`` would re-run such
+            # trials end-to-end; ``evaluate_experiment`` skips them.
+            LOGGER.debug(
+                "Skipping experiment item %s during re-scoring: trial did "
+                "not complete (no task output stored).",
+                item.id,
             )
             continue
 
@@ -83,9 +91,21 @@ def log_test_result_feedback_scores(
     project_name: Optional[str],
 ) -> None:
     all_trace_scores: List[BatchFeedbackScoreDict] = []
+    assertion_results: List[BatchAssertionResultDict] = []
 
     for score_result_ in score_results:
         if score_result_.scoring_failed:
+            continue
+
+        if score_result_.category_name == SUITE_ASSERTION_CATEGORY:
+            assertion_results.append(
+                BatchAssertionResultDict(
+                    id=trace_id,
+                    name=score_result_.name,
+                    status="passed" if score_result_.value else "failed",
+                    reason=score_result_.reason,
+                )
+            )
             continue
 
         trace_score = BatchFeedbackScoreDict(
@@ -100,4 +120,9 @@ def log_test_result_feedback_scores(
     if len(all_trace_scores) > 0:
         client.log_traces_feedback_scores(
             scores=all_trace_scores, project_name=project_name
+        )
+
+    if len(assertion_results) > 0:
+        client.log_assertion_results(
+            assertion_results=assertion_results, project_name=project_name
         )

@@ -1,0 +1,78 @@
+name: "Guardrails Backend Unit Tests"
+run-name: "Guardrails Backend Unit Tests on ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/opik-guardrails-backend/**'
+      - '.github/workflows/guardrails_unit_tests.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'apps/opik-guardrails-backend/**'
+      - '.github/workflows/guardrails_unit_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit-tests:
+    name: Guardrails Backend Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/opik-guardrails-backend/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r tests/test_requirements.txt
+
+      - name: Run unit tests
+        run: |
+          cd tests && pytest unit -v --junitxml=../test-results.xml
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          comment_mode: failures
+          check_name: Guardrails Backend Unit Tests Results
+          files: apps/opik-guardrails-backend/test-results.xml
+
+  notify-slack:
+    name: "📢 Slack Notification"
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: always() && needs.unit-tests.result == 'failure' && github.event_name != 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Send Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: .github/scripts/notify-slack-test-failure.sh "Guardrails Backend Unit Tests"

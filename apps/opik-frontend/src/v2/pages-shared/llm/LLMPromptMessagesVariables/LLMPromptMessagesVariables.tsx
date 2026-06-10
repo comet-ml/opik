@@ -5,7 +5,7 @@ import { Alert, AlertTitle } from "@/ui/alert";
 import LLMPromptMessagesVariable from "@/v2/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariable";
 import { Description } from "@/ui/description";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINERS_MAP, EXPLAINER_ID } from "@/constants/explainers";
+import { EXPLAINERS_MAP, EXPLAINER_ID } from "@/v2/constants/explainers";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const DEFAULT_DESCRIPTION =
@@ -31,6 +31,14 @@ interface LLMPromptMessagesVariablesProps {
   datasetColumnNames?: string[];
   type?: TRACE_DATA_TYPE;
   includeIntermediateNodes?: boolean;
+  /**
+   * Variable-name → sentinel-value map. A row is hidden from the rendered list
+   * only when the variable's *current value* equals the sentinel for that name
+   * — so the default `spans → "spans"` auto-fill is hidden, but a custom
+   * override (e.g. `spans → "input.spans"` set via the API) stays visible and
+   * editable. Hiding purely by name would make user-set values write-only.
+   */
+  reservedSentinels?: Readonly<Record<string, string>>;
 }
 
 const LLMPromptMessagesVariables = ({
@@ -44,15 +52,17 @@ const LLMPromptMessagesVariables = ({
   datasetColumnNames,
   type = TRACE_DATA_TYPE.traces,
   includeIntermediateNodes = false,
+  reservedSentinels,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     if (!variables || typeof variables !== "object") {
       return [];
     }
     return Object.entries(variables)
+      .filter(([name, value]) => reservedSentinels?.[name] !== value)
       .map((e) => ({ label: e[0], value: e[1] }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [variables]);
+  }, [variables, reservedSentinels]);
 
   const handleChangeVariables = useCallback(
     (changes: DropdownOption<string>) => {

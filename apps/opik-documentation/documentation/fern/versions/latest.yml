@@ -33,6 +33,10 @@ navigation:
             path: ../docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
+          - page: MCP Server
+            path: ../docs-v2/prompt_engineering/mcp-server.mdx
+            slug: mcp-server
+            icon: fa-regular fa-network-wired
           - page: Ollie Agent
             path: ../docs-v2/ollie.mdx
             slug: ollie
@@ -45,6 +49,10 @@ navigation:
             title: Changelog
             slug: changelog
             icon: fa-regular fa-calendar
+          - page: Upgrading to Opik 2.0
+            path: ../docs-v2/opik_v2_upgrade.mdx
+            slug: /opik-v2-upgrade
+            icon: fa-regular fa-circle-up
       - section: Observability
         slug: /tracing
         contents:
@@ -57,7 +65,7 @@ navigation:
           - page: Concepts
             path: ../docs-v2/tracing/concepts.mdx
             slug: concepts
-          - page: Debugging agents with Ollie
+          - page: Debugging agents with Ollie and Opik Connect
             path: ../docs-v2/observability/debug_agents.mdx
             slug: debug-agents
           - section: Advanced
@@ -87,6 +95,9 @@ navigation:
               - page: Export data
                 path: ../docs-v2/observability/export_data.mdx
                 slug: export-data
+              - page: Migrate data
+                path: ../docs-v2/observability/migrate_data.mdx
+                slug: migrate-data
               - page: SDK configuration
                 path: ../docs-v2/tracing/advanced/sdk_configuration.mdx
                 slug: sdk_configuration
@@ -108,14 +119,14 @@ navigation:
           - page: Overview
             path: ../docs-v2/development/overview.mdx
             slug: overview
-          - page: Agent sandbox
+          - page: Agent playground
             path: ../docs-v2/observability/agent_sandbox.mdx
-            slug: agent-sandbox
+            slug: agent-playground
           - page: Prompt playground
-            path: ../docs-v2/prompt_engineering/advanced/playground.mdx
-            slug: playground
-          - section: Agent configuration
-            slug: /agent-configuration
+            path: ../docs-v2/prompt_engineering/playground.mdx
+            slug: prompt-playground
+          - section: Prompt library
+            slug: /prompt-library
             contents:
               - page: Overview
                 path: ../docs-v2/prompt_engineering/overview.mdx
@@ -123,15 +134,12 @@ navigation:
               - page: Getting started
                 path: ../docs-v2/prompt_engineering/getting-started.mdx
                 slug: getting-started
-              - page: Concepts
-                path: ../docs-v2/prompt_engineering/concepts.mdx
-                slug: concepts
+              - page: Text and chat prompts
+                path: ../docs-v2/prompt_engineering/prompt-types.mdx
+                slug: prompt-types
               - page: Version control
-                path: ../docs-v2/prompt_engineering/advanced/version_control.mdx
+                path: ../docs-v2/prompt_engineering/version-control.mdx
                 slug: version-control
-              - page: Guaranteed availability
-                path: ../docs-v2/prompt_engineering/advanced/guaranted_availability.mdx
-                slug: guaranteed-availability
           - section: Optimization runs
             slug: /optimization-runs
             contents:
@@ -312,6 +320,9 @@ navigation:
               - page: Datasets & Experiments
                 path: ../docs-v2/evaluation/advanced/evaluate_your_llm.mdx
                 slug: evaluate_your_llm
+              - page: Resume an interrupted evaluation
+                path: ../docs-v2/evaluation/advanced/resume_evaluations.mdx
+                slug: resume_evaluations
               - page: Manage datasets
                 path: ../docs-v2/evaluation/advanced/manage_datasets.mdx
                 slug: manage_datasets
@@ -345,6 +356,9 @@ navigation:
               - page: G-Eval
                 path: ../docs-v2/evaluation/metrics/g_eval.mdx
                 slug: g_eval
+              - page: Conversation-level GEval
+                path: ../docs-v2/evaluation/metrics/g_eval_conversation_metrics.mdx
+                slug: g_eval_conversation_metrics
               - page: Compliance risk
                 path: ../docs-v2/evaluation/metrics/compliance_risk.mdx
                 slug: compliance_risk
@@ -402,6 +416,9 @@ navigation:
               - page: Custom conversation metric
                 path: ../docs-v2/evaluation/metrics/custom_conversation_metric.mdx
                 slug: custom_conversation_metric
+              - page: Structured Output Compliance
+                path: ../docs-v2/evaluation/metrics/structure_output_compliance.mdx
+                slug: structure_output_compliance
               - page: Task span metrics
                 path: ../docs-v2/evaluation/metrics/task_span_metrics.mdx
                 slug: task_span_metrics
@@ -558,6 +575,13 @@ navigation:
       - page: Overview
         path: ../docs-v2/integrations/overview.mdx
         slug: overview
+      - section: AI Coding Assistants
+        skip-slug: true
+        icon: fa-regular fa-robot
+        contents:
+          - page: MCP Server
+            path: ../docs-v2/prompt_engineering/mcp-server.mdx
+            slug: mcp-server
       - section: TypeScript
         skip-slug: true
         icon: fa-brands fa-js
@@ -716,6 +740,9 @@ navigation:
               - page: OpenAI
                 path: ../docs-v2/integrations/openai.mdx
                 slug: openai
+              - page: Qianfan
+                path: ../docs-v2/integrations/qianfan.mdx
+                slug: qianfan
               - page: Predibase
                 path: ../docs-v2/integrations/predibase.mdx
                 slug: predibase
@@ -731,9 +758,6 @@ navigation:
           - section: Dataset Management
             skip-slug: true
             contents:
-              - page: Gretel
-                path: ../docs-v2/integrations/gretel.mdx
-                slug: gretel
               - page: Hugging Face Datasets
                 path: ../docs-v2/integrations/huggingface-datasets.mdx
                 slug: huggingface-datasets
@@ -866,6 +890,9 @@ navigation:
       - page: Overview
         path: ../docs-v2/self-host/overview.mdx
         slug: overview
+      - page: Migrating to Opik 2.0
+        path: ../docs-v2/self-host/v1_to_v2_migration.mdx
+        slug: v1-to-v2-migration
       - page: Local deployment
         path: ../docs-v2/self-host/local_deployment.mdx
         slug: local_deployment
@@ -899,6 +926,9 @@ navigation:
           - page: Dataset versioning migration
             path: ../docs-v2/self-host/configure/dataset_versioning_migration.mdx
             slug: dataset_versioning_migration
+          - page: LLM model registry
+            path: ../docs-v2/self-host/configure/llm-model-registry.mdx
+            slug: llm-model-registry
   - tab: reference
     layout:
       - page: Overview

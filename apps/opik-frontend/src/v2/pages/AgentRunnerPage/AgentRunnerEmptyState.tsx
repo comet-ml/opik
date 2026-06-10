@@ -1,22 +1,46 @@
 import React from "react";
 import { ExternalLink } from "lucide-react";
 
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 import AgentSandboxFlowDiagram from "./AgentSandboxFlowDiagram";
-import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
+import ProjectAvatar from "@/shared/ProjectIcon/ProjectAvatar";
 import useActiveProjectName from "@/hooks/useActiveProjectName";
+import { useActiveProjectId } from "@/store/AppStore";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
+
+const ENTRYPOINT_SNIPPET_PYTHON = `import opik
+
+@opik.track(entrypoint=True, project_name="my-agent")
+def my_agent(query: str) -> str:
+    # Your agent logic here
+    return result`;
+
+const ENTRYPOINT_SNIPPET_TYPESCRIPT = `import { track } from "opik";
+
+const myAgent = track(
+  {
+    entrypoint: true,
+    name: "my-agent",
+    params: [{ name: "query", type: "string" }],
+  },
+  async (query: string): Promise<string> => {
+    // Your agent logic here
+    return result;
+  }
+);`;
 
 const AgentRunnerEmptyState: React.FC = () => {
   const projectName = useActiveProjectName();
+  const activeProjectId = useActiveProjectId();
   const command = `opik endpoint --project "${projectName}" -- <your app start command>`;
 
   return (
-    <div className="flex flex-1 justify-center gap-16 px-10 pt-[15.69rem]">
+    <div className="flex flex-1 justify-center gap-16 px-10 pt-16">
       <div className="w-full max-w-lg">
         <div className="mb-1 flex items-center gap-2">
-          <ProjectIcon index={0} size="lg" />
+          <ProjectAvatar projectId={activeProjectId} size="lg" />
           <h2 className="comet-title-m">Connect your agent</h2>
         </div>
         <p className="comet-body-s mb-8 text-muted-slate">
@@ -26,6 +50,44 @@ const AgentRunnerEmptyState: React.FC = () => {
 
         <div className="flex flex-col">
           <TimelineStep number={1}>
+            <div className="flex flex-col gap-2.5">
+              <h4 className="comet-body-s-accented">
+                Mark your agent as an entrypoint
+              </h4>
+              <p className="comet-body-xs text-muted-slate">
+                Add{" "}
+                <code className="font-code">@opik.track(entrypoint=True)</code>{" "}
+                to your agent&apos;s main function so Opik can detect and
+                register it. You can also run{" "}
+                <code className="font-code">/instrument</code> in the Ollie
+                sidebar to auto-instrument your agent.
+              </p>
+              <Tabs defaultValue="python">
+                <TabsList variant="underline">
+                  <TabsTrigger value="python" variant="underline">
+                    Python
+                  </TabsTrigger>
+                  <TabsTrigger value="typescript" variant="underline">
+                    TypeScript
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="python">
+                  <CodeSnippet
+                    title="Python"
+                    code={ENTRYPOINT_SNIPPET_PYTHON}
+                  />
+                </TabsContent>
+                <TabsContent value="typescript">
+                  <CodeSnippet
+                    title="TypeScript"
+                    code={ENTRYPOINT_SNIPPET_TYPESCRIPT}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          </TimelineStep>
+
+          <TimelineStep number={2}>
             <div className="flex flex-col gap-2.5">
               <h4 className="comet-body-s-accented">
                 Run the connection command
@@ -50,7 +112,10 @@ const AgentRunnerEmptyState: React.FC = () => {
               <p className="comet-body-xs text-muted-slate">
                 Trouble connecting?{" "}
                 <a
-                  href={buildDocsUrl("/faq#troubleshooting")}
+                  href={buildDocsUrl(
+                    "/development/agent-playground",
+                    "#troubleshooting",
+                  )}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 underline hover:text-foreground"

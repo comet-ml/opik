@@ -85,7 +85,7 @@ const Menu: React.FC<MenuProps> = ({ children }) => {
   const { isEditMode, userName, comment } = useUserCommentContext();
 
   const {
-    permissions: { canWriteComments },
+    permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
   const isUserOwner =
@@ -93,7 +93,7 @@ const Menu: React.FC<MenuProps> = ({ children }) => {
     isUndefined(comment.created_by) ||
     userName === comment.created_by;
 
-  if (!isUserOwner || !canWriteComments) return;
+  if (!isUserOwner || !canAnnotateTraceSpanThread) return;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

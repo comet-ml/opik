@@ -22,7 +22,7 @@ import { Alert, AlertDescription } from "@/ui/alert";
 import { cn } from "@/lib/utils";
 import AddEditAnnotationQueueDialog from "@/v2/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { createFilter } from "@/lib/filters";
 import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
 import { isObjectThread } from "@/lib/traces";

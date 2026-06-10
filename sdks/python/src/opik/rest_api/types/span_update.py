@@ -52,6 +52,7 @@ class SpanUpdate(UniversalBaseModel):
     error_info: typing.Optional[ErrorInfo] = None
     ttft: typing.Optional[float] = None
     source: typing.Optional[SpanUpdateSource] = None
+    environment: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

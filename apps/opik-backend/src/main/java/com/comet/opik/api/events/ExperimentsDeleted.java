@@ -7,16 +7,20 @@ import lombok.NonNull;
 import lombok.experimental.Accessors;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @Getter
 @Accessors(fluent = true)
 public class ExperimentsDeleted extends BaseEvent {
 
     private final @NonNull List<DatasetEventInfoHolder> datasetInfo;
+    private final @NonNull Set<UUID> experimentIds;
 
-    public ExperimentsDeleted(@NonNull List<DatasetEventInfoHolder> datasetInfo, @NonNull String workspaceId,
-            @NonNull String userName) {
+    public ExperimentsDeleted(@NonNull List<DatasetEventInfoHolder> datasetInfo, @NonNull Set<UUID> experimentIds,
+            @NonNull String workspaceId, @NonNull String userName) {
         super(workspaceId, userName);
         this.datasetInfo = datasetInfo;
+        this.experimentIds = experimentIds;
     }
 }

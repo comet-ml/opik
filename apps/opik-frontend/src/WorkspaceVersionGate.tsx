@@ -8,64 +8,36 @@
  * We break the circle with two levels of checks:
  *
  * Level 1 — WorkspaceVersionGate (this component, BEFORE the router):
- *   1. Check localStorage override ("opik-version-override") → use immediately
- *   2. Else parse the workspace name from window.location
- *      (path segment for normal URLs, ?workspace= query for pair links)
- *   3. If found → fetch version from API with per-request Comet-Workspace header
- *   4. If not found (e.g. root "/") → default to v1 optimistically
- *
- * Steps 1 and 4 are synchronous and run at module load, so the first paint
- * already knows which App to render — no Loader flash in the common cases.
- * Only step 3 (workspace in URL, version unknown) falls back to a Loader.
+ *   resolveSyncWorkspaceVersion() always returns a version synchronously
+ *   from: override > per-workspace cache > DEFAULT_WORKSPACE_VERSION.
+ *   First paint renders the chosen App immediately — no Loader, no API
+ *   call at this stage.
  *
  * Level 2 — WorkspaceVersionResolver (INSIDE the router, after WorkspacePreloader):
  *   1. Workspace is now fully resolved (auth, access, header set)
  *   2. Fetch version via React Query (reuses existing providers)
- *   3. If version matches what the gate picked → continue
- *   4. If mismatch → hard reload (URL now contains workspace → Level 1 gets it right)
+ *   3. Write the resolved version to the localStorage cache
+ *   4. If it disagrees with what the gate picked → hard reload so the next
+ *      module load picks the correct App synchronously from the cache.
  *
- * This ensures the correct router loads on first paint when workspace is in
- * the URL, and self-corrects via reload in the rare optimistic-default case.
+ * Reload is required because each App instantiates its own TanStack Router
+ * at module scope. Swapping apps in place leaves the inactive router's URL
+ * state stale and causes the two WorkspacePreloaders to disagree on the
+ * active workspace. A full reload re-evaluates modules with the current
+ * browser URL and resets both routers to a consistent initial state.
  */
-import React, { Suspense, useEffect } from "react";
+import React, { Suspense } from "react";
 import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
-import { fetchWorkspaceVersion } from "@/api/workspaces/useWorkspaceVersion";
-import {
-  getWorkspaceNameFromUrl,
-  resolveSyncWorkspaceVersion,
-} from "@/lib/workspaceVersion";
+import { resolveSyncWorkspaceVersion } from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
 const V1App = React.lazy(() => import("@/v1/App"));
 const V2App = React.lazy(() => import("@/v2/App"));
 
-const initialVersion = resolveSyncWorkspaceVersion();
-if (initialVersion) {
-  useAppStore.getState().setWorkspaceVersion(initialVersion);
-}
+useAppStore.getState().setWorkspaceVersion(resolveSyncWorkspaceVersion());
 
 const WorkspaceVersionGate = () => {
   const version = useWorkspaceVersion();
-
-  useEffect(() => {
-    if (useAppStore.getState().workspaceVersion) return;
-    const workspaceName = getWorkspaceNameFromUrl();
-    if (!workspaceName) return;
-
-    let cancelled = false;
-    fetchWorkspaceVersion({ workspaceName }).then((resolved) => {
-      if (!cancelled) {
-        useAppStore.getState().setWorkspaceVersion(resolved);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!version) {
-    return <Loader />;
-  }
 
   return (
     <Suspense fallback={<Loader />}>

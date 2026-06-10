@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from ..cli.pairing import RunnerType
+from ..cli.local_runner.pairing import RunnerType
 from .bridge_handlers import CommandError, common
 
 LOGGER = logging.getLogger(__name__)
@@ -35,14 +35,18 @@ _ENTRYPOINT_PATTERNS = [
     re.compile(r"entrypoint:\s*true"),
 ]
 
-_CONFIGURATION_PATTERNS = [
-    re.compile(r"get_or_create_config\("),
-    re.compile(r"create_config\("),
-    re.compile(r"getOrCreateConfig\("),
-    re.compile(r"createConfig\("),
+_PROMPT_PATTERNS = [
+    re.compile(r"\.get_prompt\("),
+    re.compile(r"\.create_prompt\("),
+    re.compile(r"\.get_chat_prompt\("),
+    re.compile(r"\.create_chat_prompt\("),
+    re.compile(r"\.getPrompt\("),
+    re.compile(r"\.createPrompt\("),
+    re.compile(r"\.getChatPrompt\("),
+    re.compile(r"\.createChatPrompt\("),
 ]
 
-_ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTERNS
+_ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _PROMPT_PATTERNS
 
 
 def _git_files(repo_root: Path) -> Optional[Set[str]]:
@@ -71,6 +75,7 @@ def build_checklist(
         "runner_type": runner_type,
         "command": " ".join(command) if command else None,
         "platform": platform.system().lower(),
+        "project_root": str(repo_root),
         "python_executable": sys.executable,
         "file_tree": file_tree,
         "instrumentation": {
@@ -78,9 +83,7 @@ def build_checklist(
             "entrypoint": any(
                 _matches_any(line, _ENTRYPOINT_PATTERNS) for line in matches
             ),
-            "configuration": any(
-                _matches_any(line, _CONFIGURATION_PATTERNS) for line in matches
-            ),
+            "prompts": any(_matches_any(line, _PROMPT_PATTERNS) for line in matches),
         },
         "instrumentation_matches": matches,
     }

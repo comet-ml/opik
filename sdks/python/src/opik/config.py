@@ -286,12 +286,26 @@ class OpikConfig(pydantic_settings.BaseSettings):
     This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
     """
 
+    environment: Optional[str] = None
+    """
+    Default environment name applied to traces and spans when no explicit
+    ``environment=`` argument is provided.
+    Env var: OPIK_ENVIRONMENT
+    """
+
     suppress_batching_update_warning: bool = False
     """
     Suppress the warning about potential data loss when calling .end() or .update()
     on spans/traces with batching enabled. Set to True if your updates happen well
     after creation and the warning is not relevant.
     Env var: OPIK_SUPPRESS_BATCHING_UPDATE_WARNING
+    """
+
+    prompt_cache_ttl_seconds: pydantic.PositiveInt = 300
+    """
+    TTL in seconds for cached prompts. Controls how long unpinned prompts are kept
+    before being refreshed from the backend. Minimum value is 1.
+    Env var: OPIK_PROMPT_CACHE_TTL_SECONDS
     """
 
     @property
@@ -459,7 +473,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
             error_message = (
                 "The API key must be specified to log data to https://www.comet.com/opik.\n"
                 "You can use `opik configure` CLI command to configure your environment for logging.\n"
-                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
+                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration.\n"
             )
             return True, error_message
 
@@ -485,7 +499,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         ):
             error_message = (
                 "Open source installations do not support workspace specification. Only `default` is available.\n"
-                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"
+                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration\n"
                 "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
                 "or contact our team for purchasing and setting up a self-hosted installation.\n"
             )

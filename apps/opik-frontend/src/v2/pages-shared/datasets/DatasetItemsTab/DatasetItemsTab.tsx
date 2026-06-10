@@ -52,7 +52,6 @@ import {
   migrateSelectedColumns,
 } from "@/lib/table";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
-import Loader from "@/shared/Loader/Loader";
 import {
   buildDatasetFilterColumns,
   mapDynamicColumnTypesToColumnType,
@@ -476,6 +475,7 @@ function DatasetItemsTab({
         ? [
             generateActionsColumDef({
               cell: DatasetItemRowActionsCell,
+              customMeta: { setActiveRowId },
             }),
           ]
         : []),
@@ -487,6 +487,7 @@ function DatasetItemsTab({
     canEditDatasets,
     getDraftStatusBorderClass,
     handleRowClick,
+    setActiveRowId,
   ]);
 
   const columnsToExport = useMemo(
@@ -533,13 +534,7 @@ function DatasetItemsTab({
     selectedRows.length === rows.length &&
     selectedRows.length < totalCount;
 
-  if (isPending) {
-    return (
-      <div className="flex items-center justify-center pt-12">
-        <Loader />
-      </div>
-    );
-  }
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
 
   return (
     <>
@@ -627,6 +622,7 @@ function DatasetItemsTab({
                 variant="default"
                 size={isCompactToolbar ? "icon-sm" : "sm"}
                 onClick={handleNewDatasetItemClick}
+                data-testid="dataset-items-add-button"
               >
                 {isCompactToolbar ? <Plus /> : "Add item"}
               </Button>
@@ -665,7 +661,8 @@ function DatasetItemsTab({
         onRowClick={canEditDatasets ? handleRowClick : undefined}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
         selectionConfig={{
           rowSelection,
           setRowSelection: handleRowSelectionChange,

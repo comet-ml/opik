@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.infrastructure.llm.LlmProviderError;
+import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.validation.constraints.NotBlank;
@@ -30,14 +31,6 @@ public record OpenAiErrorMessage(OpenAiError error) implements LlmProviderError<
     }
 
     private Integer getCode(OpenAiError error) {
-        return switch (error.code) {
-            case "invalid_api_key" -> 401;
-            case "internal_error" -> 500;
-            case "invalid_request_error" -> 400;
-            case "rate_limit_exceeded" -> 429;
-            case "insufficient_quota" -> 402;
-            case "model_not_found" -> 404;
-            default -> null;
-        };
+        return OpenAiCompatStatusCodes.fromCode(error.code);
     }
 }

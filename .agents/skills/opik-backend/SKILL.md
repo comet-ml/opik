@@ -50,11 +50,12 @@ public class TracesService { }
 
 ### Records and DTOs
 - Always annotate records/DTOs with `@Builder(toBuilder = true)`
-- Add `@NonNull` on all non-optional fields
 - Use builders (not constructors) when instantiating records
+- For **internal records** (built programmatically, never validated by Bean Validation), use Lombok `@NonNull` on required fields — it generates a runtime null check at construction
+- For **request-body DTOs** validated via `@Valid` cascade (Jakarta validators like `@NotNull`/`@NotBlank`/`@Size`), use Jakarta annotations only — do **not** stack `@NonNull` on top. Bean Validation already enforces the contract at the API boundary; doubling up is redundant noise
 
 ```java
-// ✅ GOOD
+// ✅ GOOD - internal record, Lombok @NonNull
 @Builder(toBuilder = true)
 record MyData(@NonNull UUID id, @NonNull String name, String description) {}
 
@@ -63,12 +64,22 @@ MyData data = MyData.builder()
         .name(name)
         .build();
 
+// ✅ GOOD - request-body DTO, Jakarta validators only
+@Builder(toBuilder = true)
+public record MyRequest(
+        @NotNull UUID id,
+        @NotBlank String name,
+        @NotNull @Size(min = 1, max = 1000) @Valid List<MyItem> items) {}
+
 // ❌ BAD - plain constructor (positional mistakes, less readable)
 new MyData(id, name, null);
 
 // ❌ BAD - @Builder without toBuilder
 @Builder
 record MyData(UUID id, String name) {}
+
+// ❌ BAD - stacking @NonNull and @NotNull on the same field
+public record MyRequest(@NonNull @NotNull UUID id) {}
 ```
 
 ### Dependency Injection

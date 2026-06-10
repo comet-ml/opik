@@ -30,6 +30,7 @@ export interface AlertTriggerConfig {
   alert_trigger_id?: string;
   type: ALERT_TRIGGER_CONFIG_TYPE;
   config_value: Record<string, string>;
+  group_index?: number | null;
   created_at?: string;
   created_by?: string;
   last_updated_at?: string;

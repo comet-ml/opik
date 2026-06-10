@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.log;
 
 import lombok.AccessLevel;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.UtilityClass;
 import org.slf4j.MDC;
@@ -62,5 +63,18 @@ public class LogContextAware {
                 .toList();
 
         return new Closable(context);
+    }
+
+    /**
+     * Wrap a {@link Consumer} so it executes with the supplied MDC context applied. Useful for
+     * {@code doOnNext}, {@code doOnError}, etc. in reactive pipelines where the executing thread is not
+     * guaranteed to carry the caller's MDC.
+     */
+    public static <T> Consumer<T> withMdc(@NonNull Map<String, String> contextMap, @NonNull Consumer<T> consumer) {
+        return task -> {
+            try (var logContext = wrapWithMdc(contextMap)) {
+                consumer.accept(task);
+            }
+        };
     }
 }

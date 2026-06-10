@@ -4,6 +4,7 @@ import {
   Bot,
   ChartLine,
   Database,
+  FileTerminal,
   FlaskConical,
   LayoutDashboard,
   ListChecks,
@@ -13,24 +14,29 @@ import {
   UserPen,
   Brain,
   GitBranch,
-  Workflow,
 } from "lucide-react";
+import OllieOwl from "@/icons/ollie-owl.svg?react";
 import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const getMenuItems = ({
   projectId,
   canViewExperiments,
   canViewDatasets,
+  canViewDashboards,
   canUsePlayground,
+  canViewOptimizationRuns,
+  showOlliePage,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
   canViewDatasets: boolean;
+  canViewDashboards: boolean;
   canUsePlayground: boolean;
+  canViewOptimizationRuns: boolean;
+  showOlliePage: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -40,6 +46,24 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
+    // TODO: OPIK-6260 - Restore Home page item and separate Ollie route once home page redesign is complete
+    ...(showOlliePage
+      ? [
+          {
+            id: "home_group",
+            items: [
+              {
+                id: "ollie",
+                path: projectPath("/home"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: OllieOwl,
+                label: "Opik Connect",
+                disabled: !projectPrefix,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       id: "observability",
       label: "Observability",
@@ -52,14 +76,18 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
-        {
-          id: "dashboards",
-          path: projectPath("/dashboards"),
-          type: MENU_ITEM_TYPE.router,
-          icon: ChartLine,
-          label: "Dashboards",
-          disabled: !projectPrefix,
-        },
+        ...(canViewDashboards
+          ? [
+              {
+                id: "dashboards",
+                path: projectPath("/dashboards"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: ChartLine,
+                label: "Dashboards",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -67,8 +95,16 @@ const getMenuItems = ({
       label: "Development",
       items: [
         {
+          id: "prompts",
+          path: projectPath("/prompts"),
+          type: MENU_ITEM_TYPE.router,
+          icon: FileTerminal,
+          label: "Prompt library",
+          disabled: !projectPrefix,
+        },
+        {
           id: "agent_runner",
-          path: projectPath("/agent-runner"),
+          path: projectPath("/agent-playground"),
           type: MENU_ITEM_TYPE.router,
           icon: GitBranch,
           label: "Agent playground",
@@ -86,22 +122,18 @@ const getMenuItems = ({
               },
             ]
           : []),
-        {
-          id: "agent_configuration",
-          path: projectPath("/agent-configuration"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Workflow,
-          label: "Agent configuration",
-          disabled: !projectPrefix,
-        },
-        {
-          id: "optimizations",
-          path: projectPath("/optimizations"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Sparkles,
-          label: "Optimization runs",
-          disabled: !projectPrefix,
-        },
+        ...(canViewOptimizationRuns
+          ? [
+              {
+                id: "optimizations",
+                path: projectPath("/optimizations"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Sparkles,
+                label: "Optimization runs",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -169,7 +201,6 @@ const getMenuItems = ({
           icon: Bell,
           label: "Alerts",
           disabled: !projectPrefix,
-          featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
         },
       ],
     },
@@ -188,6 +219,7 @@ export const getWorkspaceMenuItems = (): MenuItemGroup[] => {
           icon: LayoutDashboard,
           label: "Workspace",
           muted: true,
+          exact: true,
         },
         {
           id: "configuration",

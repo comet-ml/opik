@@ -10,7 +10,11 @@ import {
   PythonCodeDetailsTraceForm,
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  AnthropicThinkingEffort,
+  PROVIDER_MODEL_TYPE,
+  ReasoningEffort,
+} from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
@@ -32,6 +36,28 @@ export const LLM_MESSAGE_ROLE_NAME_MAP = {
   [LLM_MESSAGE_ROLE.ai]: "AI",
   [LLM_MESSAGE_ROLE.tool_execution_result]: "Tool execution result",
 };
+
+/**
+ * Trace-scope online-evaluator variables whose source path is a reserved sentinel
+ * rather than a JSONPath against the trace. Applies to BOTH rule types:
+ *
+ * - LLM-as-judge: `{{spans}}` in a trace prompt auto-maps to `spans → spans`;
+ *   the backend's OnlineScoringEngine substitutes the JSON-serialized spans
+ *   list at render time.
+ * - Python metric: a `score(self, spans, ...)` parameter named `spans`
+ *   auto-maps to `spans → spans`; the backend opts into a SpanService fetch
+ *   when `arguments.containsKey("spans")` and injects a `List<Span>` as the
+ *   `spans` kwarg at evaluation time.
+ *
+ * Trace-scope only. Span scope doesn't have sub-spans to inject; thread scope
+ * uses `{{context}}` for the traces list and would need a different design for
+ * spans (whose spans?).
+ */
+export const RESERVED_TRACE_EVALUATOR_VARIABLES: Readonly<
+  Record<string, string>
+> = Object.freeze({
+  spans: "spans",
+});
 
 export const DEFAULT_OPEN_AI_CONFIGS = {
   TEMPERATURE: 0,
@@ -92,12 +118,115 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// Anthropic models that support adaptive thinking with effort parameter
-// Claude Opus 4.6 uses adaptive thinking with effort levels: low, medium (default), high, max
-export const ANTHROPIC_THINKING_MODELS = [
-  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-  PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
-] as const;
+// Per-model Anthropic quirks. Add a row when a model deviates from defaults
+// (sampling params allowed, no thinking-effort UI).
+export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
+  Record<
+    PROVIDER_MODEL_TYPE,
+    {
+      supportsSamplingParams?: boolean;
+      thinkingEffortOptions?: AnthropicThinkingEffort[];
+    }
+  >
+> = {
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
+    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
+    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+  },
+};
+
+// Per-model OpenAI quirks. Add a row when a model deviates from defaults
+// (sampling params allowed, no reasoning-effort UI). Reasoning models must
+// specify the exact set of effort values they accept — OpenAI families
+// differ: o-series → low/medium/high; gpt-5 → minimal/low/medium/high;
+// gpt-5.1+ → none/low/medium/high. Sending an unsupported value 400s.
+export const OPENAI_MODEL_CAPABILITIES: Partial<
+  Record<
+    PROVIDER_MODEL_TYPE,
+    {
+      reasoning?: boolean;
+      reasoningEffortOptions?: ReasoningEffort[];
+    }
+  >
+> = {
+  // o-series — no minimal, no xhigh
+  [PROVIDER_MODEL_TYPE.GPT_O1]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+  // o1-mini API rejects reasoning_effort entirely; reasoning model with no dropdown.
+  [PROVIDER_MODEL_TYPE.GPT_O1_MINI]: { reasoning: true },
+  [PROVIDER_MODEL_TYPE.GPT_O3]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_O3_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_O4_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+
+  // Original gpt-5 family — minimal added
+  [PROVIDER_MODEL_TYPE.GPT_5]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_NANO]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+
+  // gpt-5.1+ — none replaces minimal
+  [PROVIDER_MODEL_TYPE.GPT_5_1]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_2]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4_NANO]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_5]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+  },
+};
 
 // Reasoning models that require temperature = 1.0
 // These models do not support temperature = 0 and will fail if used
@@ -146,19 +275,6 @@ export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
 // Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
 /** @deprecated Use THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH instead. */
 export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
-
-// Thinking effort options for Anthropic Opus 4.6 with adaptive thinking
-// Effort levels: adaptive, low, medium, high, max (default is high)
-export const ANTHROPIC_THINKING_EFFORT_OPTIONS: Array<{
-  label: string;
-  value: "adaptive" | "low" | "medium" | "high" | "max";
-}> = [
-  { label: "Adaptive", value: "adaptive" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High (Default)", value: "high" },
-  { label: "Max", value: "max" },
-];
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

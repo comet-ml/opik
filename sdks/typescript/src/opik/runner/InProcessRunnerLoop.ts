@@ -6,11 +6,12 @@ import type { LocalRunnerJobResultRequest } from "@/rest_api/api/resources/runne
 import { OpikApiError } from "@/rest_api/errors/OpikApiError";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
 import { agentConfigContext } from "@/agent-config/configContext";
+import { promptMaskContext } from "@/prompt/maskContext";
 import { deserializeValue } from "@/typeHelpers";
 import { flushAll } from "@/utils/flushAll";
 import { logger } from "@/utils/logger";
 import { generateId } from "@/utils/generateId";
-import { getAll } from "./registry";
+import { getAll, ParamPresence } from "./registry";
 import { runWithJobContext } from "./context";
 import { getAndClearJobLogs } from "./prefixedOutput";
 
@@ -223,17 +224,28 @@ export class InProcessRunnerLoop {
     const inputs = (job.inputs as Record<string, any>) ?? {};
     const maskId = job.maskId;
     const blueprintName = job.blueprintName;
+    const promptMasks = job.promptMasks;
 
     const entry = getAll().get(agentName)!;
-    const args = entry.params.map((p) => castInputValue(inputs[p.name], p.type));
+    const args = entry.params.map((p) => {
+      const value = inputs[p.name];
+      if (p.presence === ParamPresence.Optional && value === undefined && !(p.name in inputs)) {
+        return undefined;
+      }
+      return castInputValue(value, p.type);
+    });
 
     const run = () =>
-      runWithJobContext({ traceId, jobId }, () => {
-        if (maskId || blueprintName) {
-          return agentConfigContext({ blueprintName, maskId }, () => entry.func(...args));
-        }
-        return entry.func(...args);
-      });
+      runWithJobContext({ traceId, jobId }, () =>
+        promptMaskContext(promptMasks, () => {
+          if (maskId || blueprintName) {
+            return agentConfigContext({ blueprintName, maskId }, () =>
+              entry.func(...args)
+            );
+          }
+          return entry.func(...args);
+        })
+      );
 
     const resultPromise = Promise.resolve(run());
 

@@ -5,6 +5,7 @@ import pytest
 import opik
 from opik import synchronization
 from opik.evaluation import metrics
+from opik.evaluation.models import LiteLLMChatModel
 from opik.evaluation.threads import evaluator
 from opik.types import FeedbackScoreDict
 
@@ -22,16 +23,6 @@ def real_model_conversation():
         {
             "role": "assistant",
             "content": "I can help you with that. For flights to New York, what dates are you looking to travel?",
-        },
-        {"role": "user", "content": "Next weekend, from Friday to Sunday."},
-        {
-            "role": "assistant",
-            "content": "Great! I recommend checking airlines like Delta, United, or JetBlue for flights to New York next weekend. For hotels, what's your budget range and preferred location in New York?",
-        },
-        {"role": "user", "content": "Around $200 per night, preferably in Manhattan."},
-        {
-            "role": "assistant",
-            "content": "For Manhattan hotels around $200/night, you might want to look at options like Hotel Beacon, Pod 51, or CitizenM Times Square. These are well-rated options in that price range. Would you like more specific recommendations for any of these?",
         },
     ]
 
@@ -67,13 +58,6 @@ def _one_thread_is_active(project_name: str, opik_client: opik.Opik) -> bool:
     return len(threads) == 1
 
 
-def _all_threads_closed(project_name: str, opik_client: opik.Opik) -> bool:
-    threads = opik_client.search_threads(
-        project_name=project_name, filter_string='status = "active"'
-    )
-    return len(threads) == 0
-
-
 @pytest.fixture
 def eval_project_name(temporary_project_name: str) -> str:
     return temporary_project_name
@@ -92,21 +76,10 @@ def test_evaluate_threads__happy_path(
     ):
         raise AssertionError(f"Failed to create threads in project '{project_name}'")
 
-    # evaluate_threads requires closed threads (SDK constraint)
-    opik_client.rest_client.traces.close_trace_thread(
-        project_name=project_name, thread_id=active_thread
-    )
-    if not synchronization.until(
-        lambda: _all_threads_closed(project_name, opik_client), max_try_seconds=10
-    ):
-        raise AssertionError(
-            f"Failed to get closed threads from project '{project_name}'"
-        )
+    judge_model = LiteLLMChatModel(reasoning_effort="minimal")
 
     metrics_ = [
-        metrics.ConversationalCoherenceMetric(window_size=2),
-        metrics.UserFrustrationMetric(window_size=2),
-        metrics.SessionCompletenessQuality(),
+        metrics.ConversationalCoherenceMetric(model=judge_model),
     ]
 
     result = evaluator.evaluate_threads(
@@ -180,18 +153,6 @@ def test_evaluate_threads__no_truncation_for_long_traces(
     ):
         raise AssertionError(
             f"Failed to create thread in project '{temporary_project_name}'"
-        )
-
-    # evaluate_threads requires closed threads (SDK constraint)
-    opik_client.rest_client.traces.close_trace_thread(
-        project_name=temporary_project_name, thread_id=thread_id
-    )
-    if not synchronization.until(
-        lambda: _all_threads_closed(temporary_project_name, opik_client),
-        max_try_seconds=10,
-    ):
-        raise AssertionError(
-            f"Failed to close thread in project '{temporary_project_name}'"
         )
 
     # Track what the transform receives

@@ -8,6 +8,8 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.OptimizationSearchCriteria;
 import com.comet.opik.domain.OptimizationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
@@ -55,6 +57,7 @@ public class ProjectOptimizationsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @JsonView(Optimization.View.Public.class)
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW)
     public Response find(
             @PathParam("projectId") UUID projectId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,

@@ -306,14 +306,12 @@ const AgentConfigurationEditView = React.forwardRef<
               label: `${item.name} (original)`,
               blueprintId: item.id,
               values: agentConfig?.values,
-              description: item.description,
             }}
             diff={{
               label: "Current changes",
               blueprintId: item.id,
               values: currentValues,
               promptTemplates: diffPromptTemplates,
-              description,
             }}
             defaultOnlyDiff
           />

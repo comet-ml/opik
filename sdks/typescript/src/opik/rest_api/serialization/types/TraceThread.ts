@@ -32,6 +32,7 @@ export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThrea
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
+        environment: core.serialization.string().optional(),
     });
 
 export declare namespace TraceThread {
@@ -55,5 +56,6 @@ export declare namespace TraceThread {
         last_updated_by?: string | null;
         created_by?: string | null;
         created_at?: string | null;
+        environment?: string | null;
     }
 }

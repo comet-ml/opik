@@ -14,12 +14,11 @@ import { PROVIDERS, LEGACY_CUSTOM_PROVIDER_NAME } from "@/constants/providers";
 import AIProviderCell from "@/v2/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
 import AIProvidersRowActionsCell from "@/v2/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
-import Loader from "@/shared/Loader/Loader";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Button } from "@/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DEFAULT_COLUMNS: ColumnData<ProviderObject>[] = [
@@ -121,12 +120,10 @@ const AIProvidersTab = () => {
     setOpenDialog(true);
   };
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending;
 
   return (
-    <div>
+    <div data-testid="ai-providers-tabpanel">
       <ExplainerCallout
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
@@ -150,6 +147,7 @@ const AIProvidersTab = () => {
         columns={columns}
         data={filteredProviderKeys}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        showSkeleton={isTableLoading}
         noData={
           search === "" ? (
             <DataTableEmptyContent

@@ -1,6 +1,10 @@
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
 import { Prompt, PromptType } from "@/prompt";
+import {
+  EnvironmentNotFoundError,
+  PromptNotFoundError,
+} from "@/prompt/errors";
 import { OpikApiError } from "@/rest_api";
 import { logger } from "@/utils/logger";
 import {
@@ -9,6 +13,12 @@ import {
 } from "../../mockUtils";
 import * as OpikApi from "@/rest_api/api";
 import { PromptTemplateStructure } from "@/prompt/types";
+import { buildCacheKey, getGlobalCache, getOrFetch } from "@/prompt/promptCache";
+import type { BasePrompt } from "@/prompt/BasePrompt";
+import { trackStorage } from "@/decorators/track";
+import { Trace } from "@/tracer/Trace";
+import { Span } from "@/tracer/Span";
+import type { PromptInfoDict } from "@/tracer/types";
 
 describe("Opik prompt operations", () => {
   let client: Opik;
@@ -23,16 +33,25 @@ describe("Opik prompt operations", () => {
   let deletePromptsBatchSpy: MockInstance<
     typeof client.api.prompts.deletePromptsBatch
   >;
+  let retrieveProjectSpy: MockInstance<
+    typeof client.api.projects.retrieveProject
+  >;
   let loggerErrorSpy: MockInstance<typeof logger.error>;
   let loggerInfoSpy: MockInstance<typeof logger.info>;
   let loggerDebugSpy: MockInstance<typeof logger.debug>;
 
   beforeEach(() => {
+    getGlobalCache().clear();
+
     client = new Opik({
       projectName: "opik-sdk-typescript",
     });
 
     // Mock API methods
+    retrieveProjectSpy = vi
+      .spyOn(client.api.projects, "retrieveProject")
+      .mockRejectedValue(new Error("Project not found"));
+
     retrievePromptVersionSpy = vi
       .spyOn(client.api.prompts, "retrievePromptVersion")
       .mockImplementation(mockAPIFunction);
@@ -60,6 +79,7 @@ describe("Opik prompt operations", () => {
   });
 
   afterEach(() => {
+    retrieveProjectSpy.mockRestore();
     retrievePromptVersionSpy.mockRestore();
     getPromptsSpy.mockRestore();
     getPromptByIdSpy.mockRestore();
@@ -497,6 +517,19 @@ describe("Opik prompt operations", () => {
       expect(result?.prompt).toBe("Specific version");
     });
 
+    it("should reject when both commit and environment are provided", async () => {
+      await expect(
+        client.getPrompt({
+          name: "test-prompt",
+          commit: "abc12345",
+          environment: "staging",
+        })
+      ).rejects.toThrow(/mutually exclusive/);
+
+      expect(getPromptsSpy).not.toHaveBeenCalled();
+      expect(retrievePromptVersionSpy).not.toHaveBeenCalled();
+    });
+
     it("should return null when prompt doesn't exist", async () => {
       const mockSearchResponse = {
         content: [],
@@ -546,6 +579,122 @@ describe("Opik prompt operations", () => {
       );
 
       expect(loggerErrorSpy).toHaveBeenCalled();
+    });
+
+    it("should retrieve prompt by sequential version number", async () => {
+      const mockSearchResponse = {
+        content: [
+          {
+            id: "prompt-id",
+            name: "test-prompt",
+          },
+        ],
+      };
+
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        versionNumber: "v3",
+        template: "Version 3 content",
+        type: "mustache",
+        createdAt: new Date("2024-01-03"),
+      };
+
+      getPromptsSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockSearchResponse)
+      );
+
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      const result = await client.getPrompt({
+        name: "test-prompt",
+        version: "v3",
+      });
+
+      expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
+        {
+          name: "test-prompt",
+          projectName: "opik-sdk-typescript",
+          versionNumber: "v3",
+        },
+        client.api.requestOptions
+      );
+      expect(result).toBeInstanceOf(Prompt);
+      expect(result?.version).toBe("v3");
+      expect(result?.commit).toBe("abc123de");
+      expect(result?.prompt).toBe("Version 3 content");
+    });
+
+    it("should not leak the `version` SDK-only field into the REST request body", async () => {
+      const mockSearchResponse = {
+        content: [{ id: "prompt-id", name: "test-prompt" }],
+      };
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        versionNumber: "v1",
+        template: "Hello",
+        type: "mustache",
+      };
+
+      getPromptsSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockSearchResponse)
+      );
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      await client.getPrompt({ name: "test-prompt", version: "v1" });
+
+      const callArgs = retrievePromptVersionSpy.mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(callArgs).toBeDefined();
+      expect(callArgs.version).toBeUndefined();
+      expect(callArgs.versionNumber).toBe("v1");
+    });
+
+    it("should reject without hitting the network when both commit and version are provided", async () => {
+      await expect(
+        client.getPrompt({
+          name: "test-prompt",
+          commit: "abc123de",
+          version: "v3",
+        })
+      ).rejects.toThrow(/Provide either `commit` or `version`/);
+
+      // Validation must short-circuit before any REST traffic
+      expect(getPromptsSpy).not.toHaveBeenCalled();
+      expect(retrievePromptVersionSpy).not.toHaveBeenCalled();
+    });
+
+    it("should populate prompt.version from the API response versionNumber field", async () => {
+      const mockSearchResponse = {
+        content: [{ id: "prompt-id", name: "test-prompt" }],
+      };
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        versionNumber: "v7",
+        template: "Hi",
+        type: "mustache",
+      };
+
+      getPromptsSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockSearchResponse)
+      );
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      const result = await client.getPrompt({ name: "test-prompt" });
+      expect(result?.version).toBe("v7");
     });
   });
 
@@ -1034,6 +1183,345 @@ describe("Opik prompt operations", () => {
     });
   });
 
+  describe("setPromptEnvironments error mapping", () => {
+    const versionResponse: OpikApi.PromptVersionDetail = {
+      id: "version-id",
+      promptId: "prompt-id",
+      commit: "abc123de",
+      template: "Hello",
+      type: "mustache",
+      createdAt: new Date("2024-01-01"),
+    };
+
+    it("maps 404 on retrieve_prompt_version (no version) to PromptNotFoundError", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+
+      await expect(
+        client.setPromptEnvironments({
+          promptName: "missing-prompt",
+          environments: ["staging"],
+        })
+      ).rejects.toMatchObject({
+        name: "PromptNotFoundError",
+        message: expect.stringContaining("missing-prompt"),
+      });
+    });
+
+    it("maps 404 on retrieve_prompt_version (with version) to PromptNotFoundError mentioning the version", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+
+      await expect(
+        client.setPromptEnvironments({
+          promptName: "env-prompt",
+          environments: ["staging"],
+          version: "v7",
+        })
+      ).rejects.toMatchObject({
+        name: "PromptNotFoundError",
+        message: expect.stringContaining("v7"),
+      });
+    });
+
+    it.each([
+      ["404", 404],
+      // The backend reports an unknown environment as 409 from the workspace-
+      // registry check; the SDK must surface it as EnvironmentNotFoundError too.
+      ["409", 409],
+    ])(
+      "maps %s on set_prompt_version_environment to EnvironmentNotFoundError",
+      async (_label, statusCode) => {
+        retrievePromptVersionSpy.mockImplementation(() =>
+          createMockHttpResponsePromise(versionResponse)
+        );
+        const setEnvSpy = vi
+          .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+          .mockImplementation(() => {
+            throw new OpikApiError({ message: "Not found", statusCode });
+          });
+
+        try {
+          await expect(
+            client.setPromptEnvironments({
+              promptName: "env-prompt",
+              environments: ["unknown-env"],
+            })
+          ).rejects.toThrow(EnvironmentNotFoundError);
+          await expect(
+            client.setPromptEnvironments({
+              promptName: "env-prompt",
+              environments: ["unknown-env"],
+            })
+          ).rejects.toMatchObject({
+            message: expect.stringContaining("unknown-env"),
+          });
+        } finally {
+          setEnvSpy.mockRestore();
+        }
+      }
+    );
+
+    it("rethrows non-mapped errors unchanged", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const apiError = new OpikApiError({
+        message: "Boom",
+        statusCode: 500,
+      });
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementationOnce(() => {
+          throw apiError;
+        });
+
+      try {
+        await expect(
+          client.setPromptEnvironments({
+            promptName: "env-prompt",
+            environments: ["staging"],
+          })
+        ).rejects.toBe(apiError);
+        expect(setEnvSpy).toHaveBeenCalledOnce();
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("dedupes environments and forwards the resolved version id", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(undefined as unknown as void)
+        );
+
+      try {
+        await client.setPromptEnvironments({
+          promptName: "env-prompt",
+          // Duplicates in the input must collapse before reaching the API —
+          // the backend uses REPLACE semantics on the resolved set.
+          environments: ["staging", "production", "staging"],
+        });
+
+        expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: "env-prompt",
+            projectName: "opik-sdk-typescript",
+            // setPromptEnvironments wires its public `version` field through
+            // to the REST `versionNumber` field; `commit` is not part of the
+            // surface, so omitting it here yields `versionNumber: undefined`.
+            versionNumber: undefined,
+          }),
+          client.api.requestOptions
+        );
+        expect(setEnvSpy).toHaveBeenCalledTimes(1);
+        expect(setEnvSpy).toHaveBeenCalledWith(
+          "version-id",
+          { environments: ["staging", "production"] },
+          client.api.requestOptions
+        );
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("forwards an explicit version selector as the REST versionNumber", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(undefined as unknown as void)
+        );
+
+      try {
+        await client.setPromptEnvironments({
+          promptName: "env-prompt",
+          environments: ["staging"],
+          version: "v3",
+        });
+
+        // The public ``version`` is the sequential selector (``v<N>``) and must
+        // be sent as the REST ``versionNumber`` — never as ``commit``.
+        const args = retrievePromptVersionSpy.mock.calls[0]?.[0] as unknown as Record<
+          string,
+          unknown
+        >;
+        expect(args).toBeDefined();
+        expect(args.versionNumber).toBe("v3");
+        expect(args.commit).toBeUndefined();
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("invalidates cached entries for the same prompt + project scope on success", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(undefined as unknown as void)
+        );
+
+      // Pre-seed the cache: one entry for the prompt we're updating (must be
+      // evicted) and one for an unrelated prompt in the same project (must be
+      // preserved).
+      const project = "opik-sdk-typescript";
+      const targetPrompt = {
+        name: "env-prompt",
+        commit: "abc12345",
+        id: "prompt-id",
+      } as unknown as BasePrompt;
+      const otherPrompt = {
+        name: "other-prompt",
+        commit: "def67890",
+        id: "other-id",
+      } as unknown as BasePrompt;
+
+      try {
+        await getOrFetch(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          async () => targetPrompt,
+          300,
+          undefined,
+          undefined,
+          "staging"
+        );
+        await getOrFetch(
+          "other-prompt",
+          undefined,
+          project,
+          "text",
+          async () => otherPrompt,
+          300,
+          undefined,
+          undefined,
+          "staging"
+        );
+
+        const targetKey = buildCacheKey(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          undefined,
+          undefined,
+          "staging"
+        );
+        const otherKey = buildCacheKey(
+          "other-prompt",
+          undefined,
+          project,
+          "text",
+          undefined,
+          undefined,
+          "staging"
+        );
+        expect(getGlobalCache().get(targetKey)).toBe(targetPrompt);
+        expect(getGlobalCache().get(otherKey)).toBe(otherPrompt);
+
+        await client.setPromptEnvironments({
+          promptName: "env-prompt",
+          environments: ["production"],
+        });
+
+        expect(getGlobalCache().get(targetKey)).toBeNull();
+        // Unrelated prompts in the same project must not be touched.
+        expect(getGlobalCache().get(otherKey)).toBe(otherPrompt);
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("does not invalidate the cache when the API call fails", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(versionResponse)
+      );
+      const setEnvSpy = vi
+        .spyOn(client.api.prompts, "setPromptVersionEnvironment")
+        .mockImplementationOnce(() => {
+          throw new OpikApiError({ message: "Boom", statusCode: 500 });
+        });
+
+      const project = "opik-sdk-typescript";
+      const cached = {
+        name: "env-prompt",
+        commit: "abc12345",
+        id: "prompt-id",
+      } as unknown as BasePrompt;
+
+      try {
+        await getOrFetch(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          async () => cached,
+          300,
+          undefined,
+          undefined,
+          "staging"
+        );
+        const key = buildCacheKey(
+          "env-prompt",
+          undefined,
+          project,
+          "text",
+          undefined,
+          undefined,
+          "staging"
+        );
+
+        await expect(
+          client.setPromptEnvironments({
+            promptName: "env-prompt",
+            environments: ["production"],
+          })
+        ).rejects.toThrow();
+
+        // A failed write must leave the cache untouched — invalidation only
+        // runs after a successful PATCH.
+        expect(getGlobalCache().get(key)).toBe(cached);
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+
+    it("does not call set_prompt_version_environment when the prompt is not found", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+      const setEnvSpy = vi.spyOn(
+        client.api.prompts,
+        "setPromptVersionEnvironment"
+      );
+
+      try {
+        await expect(
+          client.setPromptEnvironments({
+            promptName: "missing-prompt",
+            environments: ["staging"],
+          })
+        ).rejects.toThrow(PromptNotFoundError);
+        expect(setEnvSpy).not.toHaveBeenCalled();
+      } finally {
+        setEnvSpy.mockRestore();
+      }
+    });
+  });
+
   describe("flush integration", () => {
     it("should flush all batch queues (prompts are synchronous)", async () => {
       const traceBatchQueueFlushSpy = vi.spyOn(client.traceBatchQueue, "flush");
@@ -1058,6 +1546,107 @@ describe("Opik prompt operations", () => {
       await client.flush();
 
       expect(loggerErrorSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("getPrompt — auto-injection deduplication", () => {
+    const mockPromptPublic = {
+      id: "prompt-id",
+      name: "my-prompt",
+    };
+    const mockVersionDetail: OpikApi.PromptVersionDetail = {
+      id: "version-id",
+      promptId: "prompt-id",
+      commit: "abc123",
+      template: "Hello!",
+      type: "mustache",
+      createdAt: new Date("2024-01-01"),
+      createdBy: "test-user",
+      templateStructure: PromptTemplateStructure.Text,
+    };
+
+    function setupPromptMocks() {
+      getPromptsSpy.mockResolvedValue({ content: [mockPromptPublic] } as never);
+      retrievePromptVersionSpy.mockResolvedValue(mockVersionDetail as never);
+    }
+
+    function makeTrackContext() {
+      vi.spyOn(client.traceBatchQueue, "update").mockReturnValue(undefined as never);
+      vi.spyOn(client.spanBatchQueue, "update").mockReturnValue(undefined as never);
+      const trace = new Trace({ id: "trace-id", projectName: "opik-sdk-typescript" } as never, client);
+      const span = new Span({ id: "span-id", traceId: "trace-id", projectName: "opik-sdk-typescript" } as never, client);
+      return { trace, span };
+    }
+
+    it("injects prompt into trace and span when inside a track context", async () => {
+      setupPromptMocks();
+      const { trace, span } = makeTrackContext();
+
+      await trackStorage.run(
+        { trace, span } as never,
+        () => client.getPrompt({ name: "my-prompt" })
+      );
+
+      expect((trace.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+      expect((span.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+    });
+
+    it("does not inject the same prompt twice when called twice inside a track context", async () => {
+      setupPromptMocks();
+      const { trace, span } = makeTrackContext();
+
+      await trackStorage.run(
+        { trace, span } as never,
+        async () => {
+          await client.getPrompt({ name: "my-prompt" });
+          await client.getPrompt({ name: "my-prompt" });
+        }
+      );
+
+      expect((trace.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+      expect((span.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+    });
+
+    it("injects two different prompts, both appear exactly once", async () => {
+      const mockPromptB = { id: "prompt-id-b", name: "other-prompt" };
+      const mockVersionDetailB: OpikApi.PromptVersionDetail = {
+        id: "version-id-b",
+        promptId: "prompt-id-b",
+        commit: "def456",
+        template: "World!",
+        type: "mustache",
+        createdAt: new Date("2024-01-01"),
+        createdBy: "test-user",
+        templateStructure: PromptTemplateStructure.Text,
+      };
+
+      const { trace, span } = makeTrackContext();
+
+      await trackStorage.run(
+        { trace, span } as never,
+        async () => {
+          getPromptsSpy.mockResolvedValueOnce({ content: [mockPromptPublic] } as never);
+          retrievePromptVersionSpy.mockResolvedValueOnce(mockVersionDetail as never);
+          await client.getPrompt({ name: "my-prompt" });
+
+          getPromptsSpy.mockResolvedValueOnce({ content: [mockPromptB] } as never);
+          retrievePromptVersionSpy.mockResolvedValueOnce(mockVersionDetailB as never);
+          await client.getPrompt({ name: "other-prompt" });
+        }
+      );
+
+      const injected = (trace.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[];
+      expect(injected).toHaveLength(2);
+      const ids = injected.map((p) => p.id);
+      expect(ids).toContain("prompt-id");
+      expect(ids).toContain("prompt-id-b");
+    });
+
+    it("does not inject when outside a track context", async () => {
+      setupPromptMocks();
+      // Should not throw and should return the prompt normally
+      const result = await client.getPrompt({ name: "my-prompt" });
+      expect(result).toBeInstanceOf(Prompt);
     });
   });
 });

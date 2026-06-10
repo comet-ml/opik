@@ -10,7 +10,7 @@ import ViewDetailsButton from "@/v1/pages/HomePage/ViewDetailsButton";
 import Loader from "@/shared/Loader/Loader";
 import HomePageChart from "@/v1/pages/HomePage/HomePageChart";
 import { Project } from "@/types/projects";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import PercentageTrend from "@/shared/PercentageTrend/PercentageTrend";
 import { formatCost } from "@/lib/money";

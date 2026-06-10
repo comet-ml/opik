@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { AssertionResultCompare } from "./AssertionResultCompare.js";
 import { CommentCompare } from "./CommentCompare.js";
+import { ExecutionPolicyCompare } from "./ExecutionPolicyCompare.js";
 import { ExperimentItemCompareStatus } from "./ExperimentItemCompareStatus.js";
 import { ExperimentItemCompareTraceVisibilityMode } from "./ExperimentItemCompareTraceVisibilityMode.js";
 import { FeedbackScoreCompare } from "./FeedbackScoreCompare.js";
@@ -21,6 +22,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     input: JsonListStringCompare.optional(),
     output: JsonListStringCompare.optional(),
+    traceMetadata: core.serialization.property("trace_metadata", JsonListStringCompare.optional()),
     feedbackScores: core.serialization.property(
         "feedback_scores",
         core.serialization.list(FeedbackScoreCompare).optional(),
@@ -38,6 +40,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         ExperimentItemCompareTraceVisibilityMode.optional(),
     ),
     description: core.serialization.string().optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyCompare.optional()),
     assertionResults: core.serialization.property(
         "assertion_results",
         core.serialization.list(AssertionResultCompare).optional(),
@@ -54,6 +57,7 @@ export declare namespace ExperimentItemCompare {
         project_id?: string | null;
         input?: JsonListStringCompare.Raw | null;
         output?: JsonListStringCompare.Raw | null;
+        trace_metadata?: JsonListStringCompare.Raw | null;
         feedback_scores?: FeedbackScoreCompare.Raw[] | null;
         comments?: CommentCompare.Raw[] | null;
         total_estimated_cost?: number | null;
@@ -65,6 +69,7 @@ export declare namespace ExperimentItemCompare {
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemCompareTraceVisibilityMode.Raw | null;
         description?: string | null;
+        execution_policy?: ExecutionPolicyCompare.Raw | null;
         assertion_results?: AssertionResultCompare.Raw[] | null;
         status?: ExperimentItemCompareStatus.Raw | null;
     }

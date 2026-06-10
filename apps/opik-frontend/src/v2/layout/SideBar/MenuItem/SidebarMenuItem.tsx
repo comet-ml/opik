@@ -1,6 +1,5 @@
 import React, { MouseEventHandler } from "react";
 import { Link } from "@tanstack/react-router";
-import { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -18,10 +17,11 @@ export type MenuItem = {
   id: string;
   path?: string;
   type: MENU_ITEM_TYPE;
-  icon: LucideIcon;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   disabled?: boolean;
   muted?: boolean;
+  exact?: boolean;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
@@ -51,15 +51,26 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
 
   const content = (
     <>
-      <item.icon className="size-3.5 shrink-0" />
+      <item.icon
+        className={cn(
+          "size-3.5 shrink-0 group-data-[status=active]:text-primary",
+          expanded
+            ? item.muted
+              ? "text-muted-slate"
+              : "text-light-slate"
+            : item.muted
+              ? "text-light-slate"
+              : "text-foreground",
+        )}
+      />
       {expanded && <div className="grow truncate">{item.label}</div>}
     </>
   );
 
   const linkClasses = cn(
-    "comet-body-s relative flex w-full items-center gap-2 rounded-md h-7 hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary py-1",
+    "comet-body-s group relative flex items-center gap-2 rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
     item.muted ? "text-muted-slate" : "text-foreground",
-    expanded ? "px-2" : "w-7 justify-center",
+    expanded ? "h-7 w-full px-2 py-1" : "size-6 justify-center",
   );
 
   if (item.disabled) {
@@ -84,7 +95,12 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
     }
     itemElement = (
       <li className="flex">
-        <Link to={item.path} params={params} className={linkClasses}>
+        <Link
+          to={item.path}
+          params={params}
+          activeOptions={{ exact: item.exact ?? false }}
+          className={linkClasses}
+        >
           {content}
         </Link>
       </li>

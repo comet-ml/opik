@@ -12,13 +12,15 @@ import {
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
 export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Test suite",
+    label: ITEM_SOURCE_LABEL,
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -82,6 +84,11 @@ export const useExperimentsGroupsAndFilters = ({
             filters,
           },
         },
+        ...getTagsFilterConfig({
+          projectId: projectId ?? "",
+          entityType: "experiments",
+          promptId,
+        }),
       },
     }),
     [filters, sortedColumns, promptId, projectId],

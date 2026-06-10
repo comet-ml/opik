@@ -2,6 +2,7 @@ import { RunnerConnectionStatus } from "@/types/agent-sandbox";
 
 export type BridgeTheme = "light" | "dark";
 export type BridgeSurface = "sidebar" | "page";
+export type AssistantSurfaceVariant = "page" | "sidebar" | "collapsed";
 export type NotificationType = "success" | "error" | "info";
 
 export interface ProjectStats {

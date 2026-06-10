@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
+import com.comet.opik.domain.mapping.otel.ElasticInferenceServiceResolver;
+import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.KeyValue;
@@ -25,6 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractCost;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
@@ -53,16 +56,42 @@ public class OpenTelemetryMapper {
         var endTimeMs = Duration.ofNanos(otelSpan.getEndTimeUnixNano()).toMillis();
 
         var otelSpanId = otelSpan.getSpanId();
-        var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), traceTimestamp);
 
-        var otelParentSpanId = otelSpan.getParentSpanId();
-        var opikParentSpanId = otelParentSpanId.isEmpty()
-                ? null
-                : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
+        // Check for opik.trace_id, opik.span_id, and opik.parent_span_id override attributes.
+        // When present, these connect the span to an existing OPIK trace/span as-is (no ID conversion).
+        // opik.span_id is typically set by the SDK's OpikSpanProcessor, which mints a UUIDv7 per span and
+        // chains it via opik.parent_span_id so descendants of an attached subtree stay properly linked.
+        var opikSpanIdOverride = extractOpikSpanId(otelSpan);
+        var opikTraceIdOverride = extractOpikTraceId(otelSpan);
+        var opikParentSpanIdOverride = extractOpikParentSpanId(otelSpan);
+
+        var opikSpanId = opikSpanIdOverride
+                .orElseGet(() -> convertOtelIdToUUIDv7(otelSpanId.toByteArray(), traceTimestamp));
+
+        UUID effectiveTraceId;
+        UUID opikParentSpanId;
+
+        if (opikTraceIdOverride.isPresent()) {
+            effectiveTraceId = opikTraceIdOverride.get();
+            // When opik.trace_id is set, use opik.parent_span_id if available, otherwise null
+            // (span connects directly to the trace as a root span)
+            opikParentSpanId = opikParentSpanIdOverride.orElse(null);
+        } else {
+            if (opikParentSpanIdOverride.isPresent()) {
+                log.warn("Span '{}' has '{}' without '{}', ignoring parent span ID override",
+                        otelSpan.getName(), GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR,
+                        GeneralMappingRules.OPIK_TRACE_ID_ATTR);
+            }
+            effectiveTraceId = opikTraceId;
+            var otelParentSpanId = otelSpan.getParentSpanId();
+            opikParentSpanId = otelParentSpanId.isEmpty()
+                    ? null
+                    : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
+        }
 
         var spanBuilder = com.comet.opik.api.Span.builder()
                 .id(opikSpanId)
-                .traceId(opikTraceId)
+                .traceId(effectiveTraceId)
                 .parentSpanId(opikParentSpanId)
                 .name(otelSpan.getName())
                 .type(SpanType.general)
@@ -91,73 +120,97 @@ public class OpenTelemetryMapper {
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
         Set<String> tags = new HashSet<>();
+        // Hold model and provider until the attribute loop completes so we can apply
+        // post-processing (e.g. Elastic Inference Service routing) that needs both values.
+        String model = null;
+        String provider = null;
 
         if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
         }
 
         // Iterate over each attribute key-value pair
-        attributes.forEach(attribute -> {
+        for (KeyValue attribute : attributes) {
             var key = attribute.getKey();
             var value = attribute.getValue();
+            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key);
 
-            OpenTelemetryMappingRuleFactory.findRule(key).ifPresentOrElse(rule -> {
-                Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
-
-                switch (rule.getOutcome()) {
-                    case MODEL :
-                        spanBuilder.model(value.getStringValue());
-                        break;
-
-                    case PROVIDER :
-                        spanBuilder.provider(value.getStringValue());
-                        break;
-
-                    case USAGE :
-                        extractUsageField(usage, rule, key, value);
-                        break;
-
-                    case INPUT :
-                    case OUTPUT :
-                    case METADATA :
-                        ObjectNode node;
-                        node = switch (rule.getOutcome()) {
-                            case INPUT -> input;
-                            case OUTPUT -> output;
-                            default -> metadata;
-                        };
-
-                        extractToJsonColumn(node, key, value);
-                        break;
-
-                    case TAGS :
-                        List<String> span_tags = extractTags(value);
-                        if (CollectionUtils.isNotEmpty(span_tags)) {
-                            tags.addAll(span_tags);
-                        }
-                        break;
-
-                    case THREAD_ID :
-                        // Store as 'thread_id' in metadata for trace grouping
-                        // First value wins if multiple attributes map to THREAD_ID
-                        if (!metadata.has("thread_id")) {
-                            extractToJsonColumn(metadata, "thread_id", value);
-                        }
-                        break;
-
-                    case DROP :
-                        // Explicitly drop this attribute
-                        break;
-                }
-            }, () -> {
+            if (ruleOpt.isEmpty()) {
                 // if it's not explicitly request to drop, we keep it in input
                 log.debug("No rule found for kv {} -> {}. Using for Input.", key, attribute.getValue());
                 extractToJsonColumn(input, key, value);
-            });
-        });
+                continue;
+            }
+
+            var rule = ruleOpt.get();
+            Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
+
+            switch (rule.getOutcome()) {
+                case MODEL :
+                    model = value.getStringValue();
+                    break;
+
+                case PROVIDER :
+                    provider = value.getStringValue();
+                    break;
+
+                case USAGE :
+                    extractUsageField(usage, rule, key, value);
+                    break;
+
+                case COST :
+                    extractCost(value).ifPresent(spanBuilder::totalEstimatedCost);
+                    break;
+
+                case INPUT :
+                case OUTPUT :
+                case METADATA :
+                    ObjectNode node = switch (rule.getOutcome()) {
+                        case INPUT -> input;
+                        case OUTPUT -> output;
+                        default -> metadata;
+                    };
+
+                    extractToJsonColumn(node, key, value);
+                    break;
+
+                case TAGS :
+                    List<String> span_tags = extractTags(value);
+                    if (CollectionUtils.isNotEmpty(span_tags)) {
+                        tags.addAll(span_tags);
+                    }
+                    break;
+
+                case THREAD_ID :
+                    // Store as 'thread_id' in metadata for trace grouping
+                    // First value wins if multiple attributes map to THREAD_ID
+                    if (!metadata.has("thread_id")) {
+                        extractToJsonColumn(metadata, "thread_id", value);
+                    }
+                    break;
+
+                case DROP :
+                    // Explicitly drop this attribute
+                    break;
+            }
+        }
 
         // Process events and add them to metadata
         processEvents(events, metadata);
+
+        // Rewrite Elastic Inference Service model/provider into the underlying provider so
+        // that cost lookup and provider-based filtering see the real upstream. Records the
+        // original values in metadata for traceability. Returns the (possibly unchanged) pair.
+        var resolved = ElasticInferenceServiceResolver.resolve(model, provider, metadata);
+        model = resolved.model();
+        provider = resolved.provider();
+
+        if (model != null) {
+            spanBuilder.model(model);
+        }
+        if (provider != null) {
+            spanBuilder.provider(provider);
+        }
 
         if (!metadata.isEmpty()) {
             spanBuilder.metadata(metadata);
@@ -236,5 +289,68 @@ public class OpenTelemetryMapper {
      */
     private long extractTimestampFromUUIDv7(UUID uuid) {
         return IdGenerator.extractTimestampFromUUIDv7(uuid).toEpochMilli();
+    }
+
+    /**
+     * Extracts the opik.trace_id attribute from an OTEL span, if present.
+     * This attribute allows connecting an OTEL span to an existing OPIK trace.
+     *
+     * @param otelSpan the OTEL span to extract from
+     * @return the OPIK trace UUID if the attribute is present and valid
+     */
+    public static Optional<UUID> extractOpikTraceId(Span otelSpan) {
+        return extractStringAttribute(otelSpan, GeneralMappingRules.OPIK_TRACE_ID_ATTR)
+                .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_TRACE_ID_ATTR));
+    }
+
+    /**
+     * Extracts the opik.parent_span_id attribute from an OTEL span, if present.
+     * This attribute allows connecting an OTEL span to an existing OPIK span as its parent.
+     * Only meaningful when opik.trace_id is also present.
+     *
+     * @param otelSpan the OTEL span to extract from
+     * @return the OPIK parent span UUID if the attribute is present and valid
+     */
+    public static Optional<UUID> extractOpikParentSpanId(Span otelSpan) {
+        return extractStringAttribute(otelSpan, GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR)
+                .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR));
+    }
+
+    /**
+     * Extracts the opik.span_id attribute from an OTEL span, if present.
+     * When set, the value is used verbatim as the Opik span id, bypassing the SHA-256
+     * conversion of the OTEL span id. The SDK's OpikSpanProcessor mints this per span
+     * and threads it as opik.parent_span_id on each child, so descendants of an attached
+     * OTEL subtree stay linked across batch boundaries without relying on Redis.
+     *
+     * @param otelSpan the OTEL span to extract from
+     * @return the OPIK span UUID if the attribute is present and valid
+     */
+    public static Optional<UUID> extractOpikSpanId(Span otelSpan) {
+        return extractStringAttribute(otelSpan, GeneralMappingRules.OPIK_SPAN_ID_ATTR)
+                .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_SPAN_ID_ATTR));
+    }
+
+    private static Optional<String> extractStringAttribute(Span otelSpan, String key) {
+        return otelSpan.getAttributesList().stream()
+                .filter(attr -> key.equals(attr.getKey()))
+                .map(attr -> attr.getValue().getStringValue())
+                .filter(StringUtils::isNotBlank)
+                .findFirst();
+    }
+
+    private static Optional<UUID> parseUUIDv7(String value, String attributeName) {
+        try {
+            var uuid = UUID.fromString(value);
+            if (uuid.version() != 7) {
+                log.warn("Attribute '{}' value '{}' is not a UUIDv7 (version {}), ignoring",
+                        attributeName, value, uuid.version());
+                return Optional.empty();
+            }
+            return Optional.of(uuid);
+        } catch (IllegalArgumentException e) {
+            log.warn("Attribute '{}' value '{}' is not a valid UUIDv7, ignoring", attributeName, value);
+            return Optional.empty();
+        }
     }
 }

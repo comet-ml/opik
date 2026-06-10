@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -23,7 +25,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AnnotationQueue(
-        @JsonView( {
+        @JsonView({
                 AnnotationQueue.View.Public.class, AnnotationQueue.View.Write.class}) @Nullable UUID id,
         @JsonView({AnnotationQueue.View.Public.class, AnnotationQueue.View.Write.class}) @NotNull UUID projectId,
         @JsonView({
@@ -38,6 +40,8 @@ public record AnnotationQueue(
                 AnnotationQueue.View.Write.class}) @Nullable Boolean commentsEnabled,
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable List<String> feedbackDefinitionNames,
+        @JsonView({AnnotationQueue.View.Public.class,
+                AnnotationQueue.View.Write.class}) @Nullable @Min(1) @Max(1000) Integer annotatorsPerItem,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<AnnotationQueueReviewer> reviewers,
         @JsonView({
@@ -51,7 +55,7 @@ public record AnnotationQueue(
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({
-                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
     @Getter
     @RequiredArgsConstructor
@@ -81,12 +85,12 @@ public record AnnotationQueue(
 
     @Builder(toBuilder = true)
     public record AnnotationQueuePage(
-            @JsonView( {
+            @JsonView({
                     View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
             @JsonView({View.Public.class}) List<AnnotationQueue> content,
-            @JsonView({View.Public.class}) List<String> sortableBy) implements Page<AnnotationQueue>{
+            @JsonView({View.Public.class}) List<String> sortableBy) implements Page<AnnotationQueue> {
 
         public static AnnotationQueuePage empty(int page, List<String> sortableBy) {
             return new AnnotationQueuePage(page, 0, 0, List.of(), sortableBy);

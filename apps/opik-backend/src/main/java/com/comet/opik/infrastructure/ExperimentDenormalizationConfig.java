@@ -61,7 +61,19 @@ public class ExperimentDenormalizationConfig implements StreamConfiguration {
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration aggregationLockTime = Duration.minutes(1);
+    private Duration aggregationLockTime = Duration.minutes(10);
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
+    private Duration lockAcquireWait = Duration.milliseconds(500);
+
+    @Valid @JsonProperty
+    @Min(1) @Max(10) private int maxLockExpiryRetries = 3;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration retryCounterTtl = Duration.hours(2);
 
     @JsonProperty
     @Min(1000) @Max(10_000_000) private int streamMaxLen = 10_000;

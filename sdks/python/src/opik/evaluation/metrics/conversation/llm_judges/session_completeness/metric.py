@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Any, Union, List
+from typing import Optional, Any, Dict, Union, List
 import pydantic
 
 from opik.evaluation.metrics.conversation import types as conversation_types
@@ -38,6 +38,10 @@ class SessionCompletenessQuality(ConversationThreadMetric):
         track: Whether to track the metric. Default is True.
         project_name: The project name to track the metric in.
         temperature: The temperature to use for the model. Defaults to 1e-8.
+        reasoning_effort: Optional reasoning effort level for the model. Applies to
+            providers/models that expose a reasoning_effort parameter (e.g. OpenAI
+            gpt-5 family). Supported values typically include "minimal", "low",
+            "medium", "high". Defaults to None (provider default applies — typically "medium" for OpenAI reasoning models). Pass explicitly if you want to cut token spend on reasoning.
 
     Example:
         >>> from opik.evaluation.metrics import SessionCompletenessQuality
@@ -64,6 +68,7 @@ class SessionCompletenessQuality(ConversationThreadMetric):
         track: bool = True,
         project_name: Optional[str] = None,
         temperature: float = 1e-8,
+        reasoning_effort: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -72,16 +77,24 @@ class SessionCompletenessQuality(ConversationThreadMetric):
         )
         self._include_reason = include_reason
 
-        self._init_model(model, temperature=temperature)
+        self._init_model(
+            model, temperature=temperature, reasoning_effort=reasoning_effort
+        )
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]],
+        temperature: float,
+        reasoning_effort: Optional[str],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
+            model_kwargs: Dict[str, Any] = {"temperature": temperature}
+            if reasoning_effort is not None:
+                model_kwargs["reasoning_effort"] = reasoning_effort
             self._model = models_factory.get(
-                model_name=model, track=self.track, temperature=temperature
+                model_name=model, track=self.track, **model_kwargs
             )
 
     def score(
@@ -102,22 +115,22 @@ class SessionCompletenessQuality(ConversationThreadMetric):
         self,
         conversation: conversation_types.Conversation,
     ) -> List[str]:
-        llm_query = templates.extract_user_goals(conversation)
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=schema.UserGoalsResponse
+        messages = templates.build_extract_user_goals_messages(conversation)
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=schema.UserGoalsResponse
         )
-        return _extract_user_goals_from_model_output(model_output=model_output)
+        return _extract_user_goals_from_model_output(model_output=message["content"])
 
     def _evaluate_user_goal(
         self, conversation: conversation_types.Conversation, user_goal: str
     ) -> schema.EvaluateUserGoalResponse:
-        llm_query = templates.evaluate_user_goal(
+        messages = templates.build_evaluate_user_goal_messages(
             conversation=conversation, user_goal=user_goal
         )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=schema.EvaluateUserGoalResponse
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=schema.EvaluateUserGoalResponse
         )
-        return _evaluate_user_goal_from_model_output(model_output=model_output)
+        return _evaluate_user_goal_from_model_output(model_output=message["content"])
 
     def _generate_reason(
         self,
@@ -130,13 +143,13 @@ class SessionCompletenessQuality(ConversationThreadMetric):
 
         negative_verdicts = _extract_negative_verdicts(verdicts)
 
-        llm_query = templates.generate_reason(
+        messages = templates.build_generate_reason_messages(
             score=score, negative_verdicts=negative_verdicts, user_goals=user_goals
         )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=schema.ScoreReasonResponse
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=schema.ScoreReasonResponse
         )
-        return _generate_reason_from_model_output(model_output=model_output)
+        return _generate_reason_from_model_output(model_output=message["content"])
 
     def _calculate_score(
         self,
@@ -168,22 +181,22 @@ class SessionCompletenessQuality(ConversationThreadMetric):
         self,
         conversation: conversation_types.Conversation,
     ) -> List[str]:
-        llm_query = templates.extract_user_goals(conversation)
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=schema.UserGoalsResponse
+        messages = templates.build_extract_user_goals_messages(conversation)
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=schema.UserGoalsResponse
         )
-        return _extract_user_goals_from_model_output(model_output=model_output)
+        return _extract_user_goals_from_model_output(model_output=message["content"])
 
     async def _a_evaluate_user_goal(
         self, conversation: conversation_types.Conversation, user_goal: str
     ) -> schema.EvaluateUserGoalResponse:
-        llm_query = templates.evaluate_user_goal(
+        messages = templates.build_evaluate_user_goal_messages(
             conversation=conversation, user_goal=user_goal
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=schema.EvaluateUserGoalResponse
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=schema.EvaluateUserGoalResponse
         )
-        return _evaluate_user_goal_from_model_output(model_output=model_output)
+        return _evaluate_user_goal_from_model_output(model_output=message["content"])
 
     async def _a_generate_reason(
         self,
@@ -196,13 +209,13 @@ class SessionCompletenessQuality(ConversationThreadMetric):
 
         negative_verdicts = _extract_negative_verdicts(verdicts)
 
-        llm_query = templates.generate_reason(
+        messages = templates.build_generate_reason_messages(
             score=score, negative_verdicts=negative_verdicts, user_goals=user_goals
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=schema.ScoreReasonResponse
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=schema.ScoreReasonResponse
         )
-        return _generate_reason_from_model_output(model_output=model_output)
+        return _generate_reason_from_model_output(model_output=message["content"])
 
     async def _a_calculate_score(
         self,

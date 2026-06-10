@@ -1,9 +1,11 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
+import compact from "lodash/compact";
 import { Filter, Filters } from "@/types/filters";
 import { DatasetItemColumn } from "@/types/datasets";
 import {
   COLUMN_DATA_ID,
+  COLUMN_EXPERIMENT_IDS,
   COLUMN_TYPE,
   DYNAMIC_COLUMN_TYPE,
 } from "@/types/shared";
@@ -91,6 +93,38 @@ export const generateLogsSourceFilter = (source: LOGS_SOURCE) => {
   ] as Filter[];
 };
 
+export const ENVIRONMENT_UNTAGGED_VALUE = "__untagged__";
+
+export const generateEnvironmentFilter = (
+  environment?: string | null,
+): Filter[] => {
+  if (!environment) return [];
+
+  if (environment === ENVIRONMENT_UNTAGGED_VALUE) {
+    return [
+      {
+        id: "environment_filter",
+        field: "environment",
+        type: COLUMN_TYPE.string,
+        operator: "is_empty",
+        key: "",
+        value: "",
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "environment_filter",
+      field: "environment",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: environment,
+    },
+  ];
+};
+
 export const generatePromptFilters = (promptId?: string) => {
   if (!promptId) return undefined;
 
@@ -130,6 +164,20 @@ export const generateExperimentIdFilter = (experimentId?: string) => {
       type: COLUMN_TYPE.string,
       operator: "=",
       value: experimentId,
+    }),
+  ];
+};
+
+export const generateExperimentIdsFilter = (experimentIds: string[] = []) => {
+  const ids = compact(experimentIds);
+  if (!ids.length) return [];
+
+  return [
+    createFilter({
+      field: COLUMN_EXPERIMENT_IDS,
+      type: COLUMN_TYPE.string,
+      operator: "in",
+      value: ids.join(","),
     }),
   ];
 };
@@ -201,23 +249,9 @@ const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
   value: secondsToMilliseconds(Number(filter.value)).toString(),
 });
 
-const CONFIGURATION_VERSION_FIELD = "configuration_version";
-
-const processConfigurationVersionFilter: (filter: Filter) => Filter = (
-  filter,
-) => ({
-  ...filter,
-  field: "metadata",
-  type: COLUMN_TYPE.dictionary,
-  key: "agent_configuration.blueprint_version",
-});
-
 export const processFiltersArray = (filters: Filter[]) => {
   return flatten(
     filters.map((filter) => {
-      if (filter.field === CONFIGURATION_VERSION_FIELD) {
-        return processConfigurationVersionFilter(filter);
-      }
       switch (filter.type) {
         case COLUMN_TYPE.time:
           return processTimeFilter(filter);

@@ -2,10 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -30,7 +29,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OllamaServiceTest {
 
     private static WireMockServer wireMockServer;
-    private static Client httpClient;
     private static OllamaService ollamaService;
     private static String baseUrl;
 
@@ -41,16 +39,13 @@ class OllamaServiceTest {
         WireMock.configureFor("localhost", wireMockServer.port());
 
         baseUrl = "http://localhost:" + wireMockServer.port();
-        httpClient = ClientBuilder.newClient();
+        var httpClient = TestHttpClientUtils.client();
 
         ollamaService = new OllamaService(httpClient);
     }
 
     @AfterAll
     static void afterAll() {
-        if (httpClient != null) {
-            httpClient.close();
-        }
         if (wireMockServer != null) {
             wireMockServer.stop();
         }

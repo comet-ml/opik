@@ -39,7 +39,7 @@ def test__session_completeness_quality__with_real_model__happy_path(
 ):
     """Integration test with a real model."""
     metric = session_completeness.SessionCompletenessQuality(
-        track=False
+        track=False, reasoning_effort="minimal"
     )  # Uses default model
     result = metric.score(real_model_conversation)
 
@@ -55,7 +55,7 @@ async def test__session_completeness_quality__with_real_model_async__happy_path(
 
     """Integration test with a real model asyncio mode."""
     metric = session_completeness.SessionCompletenessQuality(
-        track=False
+        track=False, reasoning_effort="minimal"
     )  # Uses default model
     result = await metric.ascore(real_model_conversation)
 

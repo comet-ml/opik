@@ -21,7 +21,7 @@ import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutat
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 const DATA_PREFILLED_CONTENT = `{
   "input": "<user question>",

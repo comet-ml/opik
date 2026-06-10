@@ -19,6 +19,7 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -70,6 +71,9 @@ class TestSuiteAssertionSamplerTest {
         @Mock
         LlmProviderApiKeyService llmProviderApiKeyService;
 
+        @Mock
+        TestSuiteAssertionCounterService testSuiteAssertionCounterService;
+
         private TestSuiteAssertionSampler sampler;
 
         @org.junit.jupiter.api.BeforeEach
@@ -83,7 +87,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
             sampler = new TestSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService);
+                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, testSuiteAssertionCounterService);
         }
 
         @Test
@@ -106,7 +110,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(any(UUID.class)))
+            when(datasetItemService.get(any(UUID.class), eq(versionId)))
                     .thenReturn(Mono.just(DatasetItem.builder().id(UUID.randomUUID()).build()));
 
             var datasetItemId = Generators.timeBasedEpochGenerator().generate();
@@ -143,7 +147,7 @@ class TestSuiteAssertionSamplerTest {
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -172,7 +176,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(datasetItemId)
                             .evaluators(List.of(itemEvaluator))
@@ -208,7 +212,7 @@ class TestSuiteAssertionSamplerTest {
             assertThat(message.categoryName()).isEqualTo("suite_assertion");
             assertThat(message.trace().id()).isEqualTo(trace.id());
             assertThat(message.ruleName()).isEqualTo("item-evaluator");
-            assertThat(message.llmAsJudgeCode().model().name()).isEqualTo("gpt-5-nano");
+            assertThat(message.llmAsJudgeCode().model().name()).isEqualTo("gpt-4o-mini");
             assertThat(message.llmAsJudgeCode().schema()).hasSize(1);
             // Schema names are renamed to stable assertion_N keys
             assertThat(message.llmAsJudgeCode().schema().getFirst().name()).isEqualTo("assertion_1");
@@ -237,7 +241,7 @@ class TestSuiteAssertionSamplerTest {
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -272,7 +276,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(datasetItemId)
                             .evaluators(List.of(itemEvaluator))
@@ -306,6 +310,37 @@ class TestSuiteAssertionSamplerTest {
         }
 
         @Test
+        @DisplayName("decrements counter when test_suite_dataset_id is missing from metadata")
+        void decrementsCounterWhenDatasetIdMissing() {
+            UUID experimentId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any()))
+                    .thenReturn(Mono.empty());
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"test_suite_experiment_id\": \"%s\"}".formatted(experimentId));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(workspaceId, experimentId);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
         @DisplayName("skips trace when test_suite_dataset_item_id is missing from metadata")
         void skipsTraceWhenDatasetItemIdMissing() {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
@@ -317,7 +352,7 @@ class TestSuiteAssertionSamplerTest {
             // Version has evaluators — if the skip check is removed, messages would be
             // enqueued and the never() assertion below would catch the regression.
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -342,11 +377,6 @@ class TestSuiteAssertionSamplerTest {
                     .evaluators(List.of(datasetEvaluator))
                     .build();
 
-            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
-                    .thenReturn(versionId);
-            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
-                    .thenReturn(datasetVersion);
-
             var metadata = JsonUtils.getJsonNodeFromString(
                     "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\"}"
                             .formatted(datasetId, versionHash));
@@ -366,7 +396,7 @@ class TestSuiteAssertionSamplerTest {
             sampler.onTracesCreated(event);
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
-            verify(datasetItemService, never()).get(any(UUID.class));
+            verify(datasetItemService, never()).get(any(UUID.class), any());
         }
 
         @Test
@@ -383,7 +413,7 @@ class TestSuiteAssertionSamplerTest {
 
             // Item 1 evaluator: 2 assertions (grammar, spelling)
             var item1EvalConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate: {assertions}")
@@ -403,7 +433,7 @@ class TestSuiteAssertionSamplerTest {
 
             // Item 2 evaluator: 3 different assertions (tone, length, clarity)
             var item2EvalConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate: {assertions}")
@@ -438,7 +468,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(itemId1))
+            when(datasetItemService.get(itemId1, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(itemId1)
                             .evaluators(List.of(EvaluatorItem.builder()
@@ -448,7 +478,7 @@ class TestSuiteAssertionSamplerTest {
                                             JsonUtils.writeValueAsString(item1EvalConfig)))
                                     .build()))
                             .build()));
-            when(datasetItemService.get(itemId2))
+            when(datasetItemService.get(itemId2, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(itemId2)
                             .evaluators(List.of(EvaluatorItem.builder()
@@ -532,7 +562,7 @@ class TestSuiteAssertionSamplerTest {
 
             // Dataset-level evaluator with 2 assertions
             var datasetEvalConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate: {assertions}")
@@ -567,9 +597,9 @@ class TestSuiteAssertionSamplerTest {
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
             // Items with no evaluators
-            when(datasetItemService.get(itemId1))
+            when(datasetItemService.get(itemId1, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(itemId1).build()));
-            when(datasetItemService.get(itemId2))
+            when(datasetItemService.get(itemId2, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(itemId2).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 
@@ -602,6 +632,91 @@ class TestSuiteAssertionSamplerTest {
             }
         }
 
+        @Test
+        @DisplayName("fetches item evaluators from requested version, not latest")
+        void fetchesItemEvaluatorsFromRequestedVersionNotLatest() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID v2VersionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            UUID ruleId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String v2VersionHash = "version2hash";
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("v2_check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("V2 assertion")
+                            .build()));
+
+            var v2Evaluator = EvaluatorItem.builder()
+                    .name("v2-evaluator")
+                    .type(EvaluatorType.LLM_JUDGE)
+                    .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                    .build();
+
+            var v2Version = DatasetVersion.builder()
+                    .id(v2VersionId)
+                    .datasetId(datasetId)
+                    .versionHash(v2VersionHash)
+                    .evaluators(List.of())
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, v2VersionHash))
+                    .thenReturn(v2VersionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, v2VersionId))
+                    .thenReturn(v2Version);
+
+            // Mock only the two-arg call with v2VersionId — if the code calls
+            // the single-arg get() or passes the wrong versionId, the mock won't
+            // match and the test will fail (Mono.empty → no messages enqueued).
+            when(datasetItemService.get(datasetItemId, v2VersionId))
+                    .thenReturn(Mono.just(DatasetItem.builder()
+                            .id(datasetItemId)
+                            .evaluators(List.of(v2Evaluator))
+                            .build()));
+            when(idGenerator.generateId()).thenReturn(ruleId);
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
+                            .formatted(datasetId, v2VersionHash, datasetItemId));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            // Verify the version-aware get was called with the correct versionId
+            verify(datasetItemService).get(datasetItemId, v2VersionId);
+            verify(datasetItemService, never()).get(any(UUID.class));
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            List<TraceToScoreLlmAsJudge> messages = captor.getValue();
+            assertThat(messages).hasSize(1);
+            assertThat(messages.getFirst().ruleName()).isEqualTo("v2-evaluator");
+            assertThat(messages.getFirst().scoreNameMapping()).containsEntry("assertion_1", "v2_check");
+        }
+
         private Trace buildTrace(UUID datasetId, String versionHash, UUID datasetItemId) {
             var metadata = JsonUtils.getJsonNodeFromString(
                     "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
@@ -619,6 +734,180 @@ class TestSuiteAssertionSamplerTest {
         }
 
         @Test
+        @DisplayName("incomplete trace decrements counter immediately, complete trace proceeds to scoring")
+        void incompleteTraceDecrementsCounterCompleteProceedsToScoring() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID versionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            UUID experimentId = Generators.timeBasedEpochGenerator().generate();
+            UUID ruleId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String versionHash = "abc123";
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("Is it correct?")
+                            .build()));
+
+            var datasetVersion = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .evaluators(List.of(EvaluatorItem.builder()
+                            .name("test-evaluator")
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                            .build()))
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
+                    .thenReturn(datasetVersion);
+            when(datasetItemService.get(datasetItemId, versionId))
+                    .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
+            when(idGenerator.generateId()).thenReturn(ruleId);
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any()))
+                    .thenReturn(Mono.empty());
+
+            var metadataWithExperiment = JsonUtils.getJsonNodeFromString(
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\", \"test_suite_experiment_id\": \"%s\"}"
+                            .formatted(datasetId, versionHash, datasetItemId, experimentId));
+
+            var incompleteTrace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("incomplete-trace")
+                    .startTime(Instant.now())
+                    .endTime(null)
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadataWithExperiment)
+                    .build();
+
+            var completeTrace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("complete-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadataWithExperiment)
+                    .build();
+
+            var event = new TracesCreated(List.of(incompleteTrace, completeTrace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            // Incomplete trace should trigger immediate counter decrement
+            verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(workspaceId, experimentId);
+
+            // Complete trace should proceed to scoring
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            List<TraceToScoreLlmAsJudge> messages = captor.getValue();
+            assertThat(messages).hasSize(1);
+            assertThat(messages.getFirst().trace().id()).isEqualTo(completeTrace.id());
+        }
+
+        @Test
+        @DisplayName("TracesCreated fires only on insert so a trace is processed exactly once — no double-decrement")
+        void traceProcessedExactlyOncePerEvent() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID versionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            UUID experimentId = Generators.timeBasedEpochGenerator().generate();
+            UUID traceId = Generators.timeBasedEpochGenerator().generate();
+            UUID projectId = Generators.timeBasedEpochGenerator().generate();
+            UUID ruleId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String versionHash = "abc123";
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("Is it correct?")
+                            .build()));
+
+            var datasetVersion = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .evaluators(List.of(EvaluatorItem.builder()
+                            .name("test-evaluator")
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                            .build()))
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
+                    .thenReturn(datasetVersion);
+            when(datasetItemService.get(datasetItemId, versionId))
+                    .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
+            when(idGenerator.generateId()).thenReturn(ruleId);
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any()))
+                    .thenReturn(Mono.empty());
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\", \"test_suite_experiment_id\": \"%s\"}"
+                            .formatted(datasetId, versionHash, datasetItemId, experimentId));
+
+            // In production, TracesCreated fires only on insert (updates fire TracesUpdated),
+            // so a trace appears here exactly once. This test verifies the partition logic:
+            // incomplete traces decrement immediately, complete traces proceed to scoring.
+            var incompleteTrace = Trace.builder()
+                    .id(traceId)
+                    .projectId(projectId)
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(null)
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            sampler.onTracesCreated(new TracesCreated(List.of(incompleteTrace), workspaceId, userName));
+
+            verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(workspaceId, experimentId);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+
+            // Same trace arriving complete in a separate event — verifies scoring path
+            var completeTrace = incompleteTrace.toBuilder()
+                    .endTime(Instant.now())
+                    .build();
+
+            sampler.onTracesCreated(new TracesCreated(List.of(completeTrace), workspaceId, userName));
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            assertThat(captor.getValue()).hasSize(1);
+            assertThat(captor.getValue().getFirst().trace().id()).isEqualTo(traceId);
+        }
+
+        @Test
         @DisplayName("falls back to latest version when test_suite_dataset_version_hash is missing")
         void fallsBackToLatestVersionWhenVersionHashMissing() {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
@@ -629,7 +918,7 @@ class TestSuiteAssertionSamplerTest {
             String userName = "test-user";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -655,7 +944,7 @@ class TestSuiteAssertionSamplerTest {
 
             when(datasetVersionService.getLatestVersion(datasetId, workspaceId))
                     .thenReturn(Optional.of(datasetVersion));
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 
@@ -733,7 +1022,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 

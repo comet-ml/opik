@@ -9,11 +9,11 @@ export interface ServiceTogglesConfig {
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
-    csvUploadEnabled: boolean;
     exportEnabled: boolean;
     optimizationStudioEnabled: boolean;
     datasetVersioningEnabled: boolean;
     datasetExportEnabled: boolean;
+    demoDataEnabled: boolean;
     openaiProviderEnabled: boolean;
     anthropicProviderEnabled: boolean;
     geminiProviderEnabled: boolean;
@@ -22,8 +22,12 @@ export interface ServiceTogglesConfig {
     bedrockProviderEnabled: boolean;
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
-    collaboratorsTabEnabled: boolean;
+    ollieEnabled: boolean;
+    agenticToolsEnabled: boolean;
     v2WorkspaceAllowlistIds: string[];
+    v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
+    defaultPageSize?: number;
     v2WorkspaceAllowlist?: string;
+    v1WorkspaceAllowlist?: string;
 }

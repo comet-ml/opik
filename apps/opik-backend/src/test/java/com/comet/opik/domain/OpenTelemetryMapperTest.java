@@ -1,19 +1,31 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
+import com.google.protobuf.ByteString;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OpenTelemetryMapperTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Test
     void testThreadIdMappingRule() {
@@ -210,6 +222,73 @@ class OpenTelemetryMapperTest {
         assertThat(span.metadata().has("gen_ai.cost.input_cost")).isTrue();
         assertThat(span.metadata().has("gen_ai.cost.output_cost")).isTrue();
         assertThat(span.input()).isNull();
+    }
+
+    @ParameterizedTest(name = "gen_ai.usage.cost as {0} -> {2}")
+    @MethodSource("genAiUsageCostCases")
+    void genAiUsageCostExtractedIntoTotalEstimatedCost(String label, AnyValue costValue, BigDecimal expected) {
+        // Pre-computed cost from gen_ai.usage.cost lands on the span's totalEstimatedCost for every
+        // supported value shape. Malformed values (non-finite doubles, unparseable strings) are
+        // skipped so they never abort span enrichment. Sibling token attributes still populate the
+        // integer-only usage map without a 'cost' key — guarding against the original bug where the
+        // double cost was routed there and silently dropped.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.cost")
+                        .setValue(costValue)
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.prompt_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(100))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.completion_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(50))
+                        .build());
+
+        var spanBuilder = newSpanBuilder();
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        if (expected == null) {
+            assertThat(span.totalEstimatedCost()).isNull();
+        } else {
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(expected);
+        }
+        assertThat(span.usage()).doesNotContainKey("cost");
+        assertThat(span.usage().get("prompt_tokens")).isEqualTo(100);
+        assertThat(span.usage().get("completion_tokens")).isEqualTo(50);
+    }
+
+    static Stream<Arguments> genAiUsageCostCases() {
+        return Stream.of(
+                Arguments.of("double", AnyValue.newBuilder().setDoubleValue(0.001234).build(),
+                        new BigDecimal("0.001234")),
+                Arguments.of("int", AnyValue.newBuilder().setIntValue(1).build(),
+                        new BigDecimal("1")),
+                Arguments.of("numeric string", AnyValue.newBuilder().setStringValue("0.005").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("numeric string with whitespace",
+                        AnyValue.newBuilder().setStringValue("  0.005  ").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("non-numeric string",
+                        AnyValue.newBuilder().setStringValue("not a number").build(), null),
+                Arguments.of("NaN", AnyValue.newBuilder().setDoubleValue(Double.NaN).build(), null),
+                Arguments.of("positive infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.POSITIVE_INFINITY).build(), null),
+                Arguments.of("negative infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
+    }
+
+    private Span.SpanBuilder newSpanBuilder() {
+        // PODAM fills in id / traceId / projectId / startTime and every other field with random
+        // values; null out totalEstimatedCost because enrich only sets it on successful extraction,
+        // so the malformed/non-finite cost cases would otherwise inherit PODAM's random BigDecimal.
+        return podamFactory.manufacturePojo(Span.class)
+                .toBuilder()
+                .totalEstimatedCost(null);
     }
 
     @Test
@@ -532,5 +611,609 @@ class OpenTelemetryMapperTest {
 
         assertThat(span.usage()).isNotNull();
         assertThat(span.usage().containsKey("total_tokens")).isFalse();
+    }
+
+    @Nested
+    class OpikTraceIdAndParentSpanIdOverride {
+
+        private final TimeBasedEpochGenerator uuidV7Generator = Generators.timeBasedEpochGenerator();
+
+        private io.opentelemetry.proto.trace.v1.Span buildOtelSpan(byte[] traceId, byte[] spanId,
+                byte[] parentSpanId, List<KeyValue> attributes) {
+            var builder = io.opentelemetry.proto.trace.v1.Span.newBuilder()
+                    .setName("test span")
+                    .setTraceId(ByteString.copyFrom(traceId))
+                    .setSpanId(ByteString.copyFrom(spanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L);
+            if (parentSpanId != null) {
+                builder.setParentSpanId(ByteString.copyFrom(parentSpanId));
+            }
+            attributes.forEach(builder::addAttributes);
+            return builder.build();
+        }
+
+        @Test
+        void toOpikSpan_withOpikTraceIdOnly_usesOverrideTraceIdAndNullParent() {
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+            var otelParentSpanId = UUID.randomUUID().toString().getBytes();
+
+            var overrideTraceId = uuidV7Generator.generate();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, otelParentSpanId, List.of(
+                    KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideTraceId.toString()))
+                            .build()));
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            // trace ID should be the override, not the mapped one
+            assertThat(opikSpan.traceId()).isEqualTo(overrideTraceId);
+            // parent span ID should be null (no opik.parent_span_id provided)
+            assertThat(opikSpan.parentSpanId()).isNull();
+        }
+
+        @Test
+        void toOpikSpan_withBothOpikTraceIdAndParentSpanId_usesBothOverrides() {
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+
+            var overrideTraceId = uuidV7Generator.generate();
+            var overrideParentSpanId = uuidV7Generator.generate();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, null, List.of(
+                    KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideTraceId.toString()))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideParentSpanId.toString()))
+                            .build()));
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            assertThat(opikSpan.traceId()).isEqualTo(overrideTraceId);
+            assertThat(opikSpan.parentSpanId()).isEqualTo(overrideParentSpanId);
+        }
+
+        @Test
+        void toOpikSpan_withoutOverrides_usesNormalMappingBehavior() {
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+            var otelParentSpanId = UUID.randomUUID().toString().getBytes();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, otelParentSpanId, List.of());
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            // should use the mapped trace ID (not overridden)
+            assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
+            // should have a converted parent span ID (not null)
+            assertThat(opikSpan.parentSpanId()).isNotNull();
+        }
+
+        @Test
+        void toOpikSpan_withoutOverrides_rootSpanHasNullParent() {
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, null, List.of());
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
+            assertThat(opikSpan.parentSpanId()).isNull();
+        }
+
+        @Test
+        void toOpikSpan_opikTraceIdAndParentSpanId_areDroppedFromAttributes() {
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+
+            var overrideTraceId = uuidV7Generator.generate();
+            var overrideParentSpanId = uuidV7Generator.generate();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, null, List.of(
+                    KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideTraceId.toString()))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideParentSpanId.toString()))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.request.model")
+                            .setValue(AnyValue.newBuilder().setStringValue("gpt-4"))
+                            .build()));
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            // opik.trace_id and opik.parent_span_id should NOT appear in input, output, or metadata
+            if (opikSpan.input() != null) {
+                assertThat(opikSpan.input().has("opik.trace_id")).isFalse();
+                assertThat(opikSpan.input().has("opik.parent_span_id")).isFalse();
+            }
+            if (opikSpan.output() != null) {
+                assertThat(opikSpan.output().has("opik.trace_id")).isFalse();
+                assertThat(opikSpan.output().has("opik.parent_span_id")).isFalse();
+            }
+            if (opikSpan.metadata() != null) {
+                assertThat(opikSpan.metadata().has("opik.trace_id")).isFalse();
+                assertThat(opikSpan.metadata().has("opik.parent_span_id")).isFalse();
+            }
+            // other attributes should still be processed normally
+            assertThat(opikSpan.model()).isEqualTo("gpt-4");
+        }
+
+        @Test
+        void extractOpikTraceId_returnsUUID_whenAttributePresent() {
+            var expectedId = uuidV7Generator.generate();
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of(KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(expectedId.toString()))
+                            .build()));
+
+            var result = OpenTelemetryMapper.extractOpikTraceId(otelSpan);
+            assertThat(result).isPresent().contains(expectedId);
+        }
+
+        @Test
+        void extractOpikTraceId_returnsEmpty_whenAttributeAbsent() {
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of());
+
+            var result = OpenTelemetryMapper.extractOpikTraceId(otelSpan);
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        void extractOpikParentSpanId_returnsUUID_whenAttributePresent() {
+            var expectedId = uuidV7Generator.generate();
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of(KeyValue.newBuilder()
+                            .setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(expectedId.toString()))
+                            .build()));
+
+            var result = OpenTelemetryMapper.extractOpikParentSpanId(otelSpan);
+            assertThat(result).isPresent().contains(expectedId);
+        }
+
+        @Test
+        void extractOpikParentSpanId_returnsEmpty_whenAttributeAbsent() {
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of());
+
+            var result = OpenTelemetryMapper.extractOpikParentSpanId(otelSpan);
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        void extractOpikTraceId_returnsEmpty_whenNotUUIDv7() {
+            // UUID v4 should be rejected
+            var v4Uuid = UUID.randomUUID();
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of(KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(v4Uuid.toString()))
+                            .build()));
+
+            var result = OpenTelemetryMapper.extractOpikTraceId(otelSpan);
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        void extractOpikTraceId_returnsEmpty_whenInvalidUUIDString() {
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of(KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue("not-a-uuid"))
+                            .build()));
+
+            var result = OpenTelemetryMapper.extractOpikTraceId(otelSpan);
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        void extractOpikTraceId_returnsEmpty_whenAttributeBlank() {
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of(KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(""))
+                            .build()));
+
+            var result = OpenTelemetryMapper.extractOpikTraceId(otelSpan);
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        void toOpikSpan_opikParentSpanIdWithoutTraceId_isIgnored() {
+            // opik.parent_span_id without opik.trace_id should be ignored (normal flow)
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+            var otelParentSpanId = UUID.randomUUID().toString().getBytes();
+
+            var overrideParentSpanId = uuidV7Generator.generate();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, otelParentSpanId, List.of(
+                    KeyValue.newBuilder()
+                            .setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideParentSpanId.toString()))
+                            .build()));
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            // trace ID should use normal mapping (no override)
+            assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
+            // parent span ID should use normal OTEL conversion (override ignored)
+            assertThat(opikSpan.parentSpanId()).isNotNull();
+            assertThat(opikSpan.parentSpanId()).isNotEqualTo(overrideParentSpanId);
+        }
+    }
+
+    @Nested
+    class OpikSpanIdOverride {
+
+        private final TimeBasedEpochGenerator uuidV7Generator = Generators.timeBasedEpochGenerator();
+
+        private io.opentelemetry.proto.trace.v1.Span buildOtelSpan(byte[] traceId, byte[] spanId,
+                byte[] parentSpanId, List<KeyValue> attributes) {
+            var builder = io.opentelemetry.proto.trace.v1.Span.newBuilder()
+                    .setName("test span")
+                    .setTraceId(ByteString.copyFrom(traceId))
+                    .setSpanId(ByteString.copyFrom(spanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L);
+            if (parentSpanId != null) {
+                builder.setParentSpanId(ByteString.copyFrom(parentSpanId));
+            }
+            attributes.forEach(builder::addAttributes);
+            return builder.build();
+        }
+
+        @Test
+        void extractOpikSpanId_returnsUUID_whenAttributePresent() {
+            var expectedId = uuidV7Generator.generate();
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of(KeyValue.newBuilder()
+                            .setKey("opik.span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(expectedId.toString()))
+                            .build()));
+
+            var result = OpenTelemetryMapper.extractOpikSpanId(otelSpan);
+            assertThat(result).isPresent().contains(expectedId);
+        }
+
+        @Test
+        void extractOpikSpanId_returnsEmpty_whenAttributeAbsent() {
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of());
+
+            assertThat(OpenTelemetryMapper.extractOpikSpanId(otelSpan)).isEmpty();
+        }
+
+        @Test
+        void extractOpikSpanId_returnsEmpty_whenNotUUIDv7() {
+            var v4 = UUID.randomUUID();
+            var otelSpan = buildOtelSpan(
+                    UUID.randomUUID().toString().getBytes(),
+                    UUID.randomUUID().toString().getBytes(),
+                    null,
+                    List.of(KeyValue.newBuilder()
+                            .setKey("opik.span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(v4.toString()))
+                            .build()));
+
+            assertThat(OpenTelemetryMapper.extractOpikSpanId(otelSpan)).isEmpty();
+        }
+
+        @Test
+        void toOpikSpan_withOpikSpanIdOnly_usesOverrideForIdAndConvertsParentNormally() {
+            // opik.span_id alone (no trace_id) is honored for the span id; trace/parent flow is unchanged.
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+            var otelParentSpanId = UUID.randomUUID().toString().getBytes();
+
+            var overrideSpanId = uuidV7Generator.generate();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, otelParentSpanId, List.of(
+                    KeyValue.newBuilder()
+                            .setKey("opik.span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideSpanId.toString()))
+                            .build()));
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            assertThat(opikSpan.id()).isEqualTo(overrideSpanId);
+            assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
+            assertThat(opikSpan.parentSpanId()).isNotNull();
+        }
+
+        @Test
+        void toOpikSpan_withFullTriple_usesAllOverridesVerbatim() {
+            // SDK OpikSpanProcessor case: trace_id, span_id, parent_span_id all set.
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+            var otelParentSpanId = UUID.randomUUID().toString().getBytes();
+
+            var overrideTraceId = uuidV7Generator.generate();
+            var overrideSpanId = uuidV7Generator.generate();
+            var overrideParentSpanId = uuidV7Generator.generate();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, otelParentSpanId, List.of(
+                    KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideTraceId.toString()))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("opik.span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideSpanId.toString()))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideParentSpanId.toString()))
+                            .build()));
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            assertThat(opikSpan.id()).isEqualTo(overrideSpanId);
+            assertThat(opikSpan.traceId()).isEqualTo(overrideTraceId);
+            assertThat(opikSpan.parentSpanId()).isEqualTo(overrideParentSpanId);
+        }
+
+        @Test
+        void toOpikSpan_processorChain_childParentSpanIdMatchesParentOverrideSpanId() {
+            // Simulates the SDK processor chaining behavior: parent's opik.span_id is
+            // threaded into each child's opik.parent_span_id. Child should land at
+            // parentSpanId == parent.id even though OTEL ids and the batch's mapped trace id differ.
+            var otelTraceIdA = UUID.randomUUID().toString().getBytes();
+            var otelTraceIdB = UUID.randomUUID().toString().getBytes(); // simulates a different OTEL trace
+            var otelParentSpanId = UUID.randomUUID().toString().getBytes();
+            var otelChildSpanId = UUID.randomUUID().toString().getBytes();
+
+            var overrideTraceId = uuidV7Generator.generate();
+            var parentOpikSpanId = uuidV7Generator.generate();
+            var childOpikSpanId = uuidV7Generator.generate();
+            var attachedToOpikParentId = uuidV7Generator.generate();
+
+            // Parent OTEL span carries trace_id + span_id + (attached) parent_span_id
+            var parentSpan = buildOtelSpan(otelTraceIdA, otelParentSpanId, null, List.of(
+                    KeyValue.newBuilder().setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideTraceId.toString())).build(),
+                    KeyValue.newBuilder().setKey("opik.span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(parentOpikSpanId.toString())).build(),
+                    KeyValue.newBuilder().setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(attachedToOpikParentId.toString()))
+                            .build()));
+
+            // Child OTEL span carries trace_id + span_id + parent_span_id pointing at parent's opik.span_id
+            var childSpan = buildOtelSpan(otelTraceIdB, otelChildSpanId, otelParentSpanId, List.of(
+                    KeyValue.newBuilder().setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideTraceId.toString())).build(),
+                    KeyValue.newBuilder().setKey("opik.span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(childOpikSpanId.toString())).build(),
+                    KeyValue.newBuilder().setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(parentOpikSpanId.toString())).build()));
+
+            var mappedTraceIdA = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceIdA,
+                    System.currentTimeMillis());
+            var mappedTraceIdB = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceIdB,
+                    System.currentTimeMillis());
+
+            var opikParent = OpenTelemetryMapper.toOpikSpan(parentSpan, mappedTraceIdA, null);
+            var opikChild = OpenTelemetryMapper.toOpikSpan(childSpan, mappedTraceIdB, null);
+
+            // Both spans land in the override trace, regardless of which OTEL trace they came from.
+            assertThat(opikParent.traceId()).isEqualTo(overrideTraceId);
+            assertThat(opikChild.traceId()).isEqualTo(overrideTraceId);
+
+            // Parent-child link is preserved verbatim through the chain.
+            assertThat(opikParent.id()).isEqualTo(parentOpikSpanId);
+            assertThat(opikChild.id()).isEqualTo(childOpikSpanId);
+            assertThat(opikChild.parentSpanId()).isEqualTo(parentOpikSpanId);
+        }
+
+        @Test
+        void toOpikSpan_opikSpanId_isDroppedFromAttributes() {
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+            var overrideSpanId = uuidV7Generator.generate();
+
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, null, List.of(
+                    KeyValue.newBuilder().setKey("opik.span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(overrideSpanId.toString())).build()));
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            if (opikSpan.input() != null) {
+                assertThat(opikSpan.input().has("opik.span_id")).isFalse();
+            }
+            if (opikSpan.metadata() != null) {
+                assertThat(opikSpan.metadata().has("opik.span_id")).isFalse();
+            }
+        }
+    }
+
+    /**
+     * Verifies the Elastic Inference Service integration: when an OTel span emits
+     * {@code gen_ai.system = "elastic"} and a routed model ID, the mapper rewrites
+     * model/provider to the underlying provider so cost lookup and provider-based
+     * filtering downstream see the real upstream. Original values are kept in metadata.
+     */
+    @Nested
+    class ElasticInferenceService {
+
+        private Span mapEis(String modelId) {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("elastic"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.request.model")
+                            .setValue(AnyValue.newBuilder().setStringValue(modelId))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(100))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(50))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+            return spanBuilder.build();
+        }
+
+        // Jina row keeps the "jina-" prefix in the model key, so the resolver must not strip it.
+        @ParameterizedTest(name = "EIS prefix ''{0}'' -> provider=''{1}'', model=''{2}''")
+        @CsvSource({
+                "anthropic-claude-4.5-sonnet, anthropic,  claude-4.5-sonnet",
+                "openai-gpt-oss-120b,         openai,     gpt-oss-120b",
+                "jina-embeddings-v3,          jina_ai,    jina-embeddings-v3",
+                "google-gemini-3-flash,       google_ai,  gemini-3-flash",
+                "microsoft-multilingual-e5-large, azure,  multilingual-e5-large",
+        })
+        void prefixStripsAndRewritesProvider(String modelId, String expectedProvider, String expectedModel) {
+            var span = mapEis(modelId);
+
+            assertThat(span.provider()).isEqualTo(expectedProvider);
+            assertThat(span.model()).isEqualTo(expectedModel);
+        }
+
+        @Test
+        void elasticOwnModelWithoutDashIsLeftUnchanged() {
+            var span = mapEis("elser_model_2");
+
+            // No '-' in the model ID → resolver no-op; span retains the original gen_ai.system attribution.
+            // Metadata may be null when nothing else added attributes — that's also fine.
+            assertThat(span.provider()).isEqualTo("elastic");
+            assertThat(span.model()).isEqualTo("elser_model_2");
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_system")).isTrue();
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_model")).isTrue();
+        }
+
+        @Test
+        void rewriteRecordsOriginalsInMetadata() {
+            var span = mapEis("anthropic-claude-4.5-sonnet");
+
+            assertThat(span.metadata().get("eis_original_system").asText()).isEqualTo("elastic");
+            assertThat(span.metadata().get("eis_original_model").asText()).isEqualTo("anthropic-claude-4.5-sonnet");
+        }
+
+        @Test
+        void nonElasticProviderIsNotRewritten() {
+            // gen_ai.system other than "elastic" must leave the resolver inert, even for hyphenated IDs
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.request.model")
+                            .setValue(AnyValue.newBuilder().setStringValue("anthropic-claude-4.5-sonnet"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+            var span = spanBuilder.build();
+
+            assertThat(span.provider()).isEqualTo("openai");
+            assertThat(span.model()).isEqualTo("anthropic-claude-4.5-sonnet");
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_system")).isTrue();
+        }
+
+        @Test
+        void elasticSystemWithoutModelIsNoop() {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("elastic"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+            var span = spanBuilder.build();
+
+            assertThat(span.provider()).isEqualTo("elastic");
+            assertThat(span.model()).isNull();
+        }
     }
 }

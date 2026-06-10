@@ -22,6 +22,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -43,13 +44,17 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -90,6 +95,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -296,6 +302,64 @@ class ProjectsResourceTest {
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.PROJECT_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create project returns 403 when permission is denied")
+        void createProjectReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_CREATE.getValue());
+
+            try (var response = projectResourceClient.callCreateProject(
+                    factory.manufacturePojo(Project.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Find projects falls back to public visibility when PROJECT_DATA_VIEW permission is denied")
+        void findProjectsFallsBackToPublicVisibilityWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            try (var response = projectResourceClient.callFindProjects(apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get project KPI cards returns 403 when permission is denied")
+        void getProjectKpiCardsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
+
+            var request = KpiCardRequest.builder()
+                    .entityType(KpiCardRequest.EntityType.TRACES)
+                    .intervalStart(Instant.now().minus(Duration.ofDays(1)))
+                    .intervalEnd(Instant.now())
+                    .build();
+
+            try (var response = projectResourceClient.getKpiCardsRaw(UUID.randomUUID(), request, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
         }
     }
 
@@ -1328,6 +1392,99 @@ class ProjectsResourceTest {
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                     .isEqualTo(expectedProjectStats);
+        }
+
+        @Test
+        @DisplayName("when has_legacy_scores is flipped, stats endpoint stays consistent")
+        void getProjects__whenHasLegacyScoresFlipped__thenStatsStayConsistent(WorkspacesService workspacesService) {
+            // Test infra writes feedback scores through the authenticated path, so data lands in
+            // authored_feedback_scores (not the legacy feedback_scores table). This test can't
+            // observe the legacy-UNION gate directly — that surface is covered by the existing
+            // FilterTest variants and by manual benchmarking against real legacy data. What this
+            // test does verify: flipping the workspace flag does not break the endpoint and the
+            // response stays correct for data that lives in authored_feedback_scores.
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
+            var expectedStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
+
+            workspacesService.upsertHasLegacyScores(workspaceId, false, USER);
+
+            var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/stats")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+            var actual = response.readEntity(ProjectStatsSummary.class);
+
+            assertThat(actual.content())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(expectedStats);
+        }
+
+        @Test
+        @DisplayName("when the legacy feedback_scores table has rows for the workspace, the project stats UNION surfaces them")
+        void getProjects__whenLegacyScoresHasData__thenStatsIncludeThem(FeedbackScoreDAO feedbackScoreDAO) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+            var seeded = buildProjectStats(project.toBuilder().id(projectId).build(), apiKey, workspaceName);
+
+            // Write directly into the legacy `feedback_scores` table via the author=null DAO
+            // path — the public API always routes to authored_feedback_scores, so this is the
+            // only way to exercise the legacy-UNION branch from a backend test.
+            var traces = traceResourceClient.getTraces(project.name(), null, apiKey, workspaceName, null, null, 1,
+                    Map.of());
+            UUID traceId = traces.content().getFirst().id();
+            var legacyScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .name("legacy-" + UUID.randomUUID())
+                    .build();
+            feedbackScoreDAO.scoreEntity(EntityType.TRACE, traceId, legacyScore, projectId, null)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            var expectedFeedback = new ArrayList<>(seeded.feedbackScores());
+            expectedFeedback.add(FeedbackScoreAverage.builder()
+                    .name(legacyScore.name())
+                    .value(legacyScore.value())
+                    .build());
+            var expected = mapFromProjectToSummary(
+                    seeded.toBuilder().feedbackScores(expectedFeedback).build());
+
+            var actual = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/stats")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get(ProjectStatsSummary.class)
+                    .content().stream()
+                    .filter(item -> projectId.equals(item.projectId()))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertThat(actual)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(expected);
         }
 
         @Test

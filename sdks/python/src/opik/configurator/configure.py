@@ -8,7 +8,12 @@ import opik.config
 import urllib.parse
 from opik.api_objects.opik_client import get_current_client_raw
 from opik import config
-from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
+from opik.configurator.interactive_helpers import (
+    ask_user_for_approval,
+    ask_user_for_approval_default_no,
+    is_interactive,
+)
+from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
@@ -32,6 +37,7 @@ class OpikConfigurator:
         self_hosted_comet: bool = False,
         automatic_approvals: bool = False,
         project_name: Optional[str] = None,
+        install_mcp: Optional[bool] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -41,6 +47,7 @@ class OpikConfigurator:
         self.self_hosted_comet = self_hosted_comet
         self.automatic_approvals = automatic_approvals
         self.project_name = project_name
+        self.install_mcp = install_mcp
 
         # Handle URL
         #
@@ -76,6 +83,47 @@ class OpikConfigurator:
         else:
             # LOCAL OPIK DEPLOYMENT
             self._configure_local()
+
+        self._maybe_setup_mcp_server()
+
+    def _maybe_setup_mcp_server(self) -> None:
+        if not self._should_setup_mcp_server():
+            return
+
+        mcp.setup_mcp_server(
+            api_key=self.api_key,
+            workspace=self.workspace,
+            base_url=self.base_url,
+            api_url=self.api_url,
+            use_local=self.use_local,
+            self_hosted_comet=self.self_hosted_comet,
+        )
+
+    def _should_setup_mcp_server(self) -> bool:
+        """Decide whether to offer registering the Opik MCP server.
+
+        - ``install_mcp is False`` or a non-interactive session: skip.
+        - ``install_mcp is True``: proceed without asking.
+        - ``automatic_approvals`` (the ``-y`` / preflight path): skip, since this
+          mutates configuration files owned by external tools.
+        - Otherwise: ask the user, defaulting to "no".
+        """
+        if self.install_mcp is False:
+            return False
+
+        if not is_interactive():
+            return False
+
+        if self.install_mcp is True:
+            return True
+
+        if self.automatic_approvals:
+            return False
+
+        return ask_user_for_approval_default_no(
+            "Set up the Opik MCP server for an AI assistant "
+            "(Claude Code, Cursor, VS Code)? (y/N) "
+        )
 
     def _configure_cloud(self) -> None:
         """
@@ -148,7 +196,7 @@ class OpikConfigurator:
             # Step 3: Ask user if they want to use the found local instance
             if not is_interactive() and not self.automatic_approvals:
                 raise ConfigurationError(
-                    f"Opik URL is not specified - A local Opik instance was detected at {OPIK_BASE_URL_LOCAL}, to use it set your URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                    f"Opik URL is not specified - A local Opik instance was detected at {OPIK_BASE_URL_LOCAL}, to use it set your URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
                 )
 
             use_url = (
@@ -167,7 +215,7 @@ class OpikConfigurator:
         # Step 4: Ask user for URL if no valid local instance is found or approved
         if not is_interactive():
             raise ConfigurationError(
-                "Opik URL is not specified - Please set your Opik instance URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "Opik URL is not specified - Please set your Opik instance URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
         self._ask_for_url()
         self._update_config_local_mode(save_to_file=True)
@@ -269,7 +317,7 @@ class OpikConfigurator:
 
         if not is_interactive():
             raise ConfigurationError(
-                "API key missing - Please set your API key using the environment variable OPIK_API_KEY or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "API key missing - Please set your API key using the environment variable OPIK_API_KEY or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
 
         while retries > 0:
@@ -392,7 +440,7 @@ class OpikConfigurator:
 
         if not is_interactive():
             raise ConfigurationError(
-                "Workspace name missing - Please set your workspace name using the environment variable OPIK_WORKSPACE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "Workspace name missing - Please set your workspace name using the environment variable OPIK_WORKSPACE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
 
         while retries > 0:
@@ -481,7 +529,7 @@ class OpikConfigurator:
         user_input_project_name = input("Please enter the project name: ")
         if user_input_project_name == "":
             raise ConfigurationError(
-                "The project name cannot be empty. Please enter a valid project name. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "The project name cannot be empty. Please enter a valid project name. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
         self.project_name = user_input_project_name
 
@@ -543,7 +591,7 @@ class OpikConfigurator:
 
             if user_input_opik_url == "":
                 raise ConfigurationError(
-                    "URL cannot be empty. Please enter a valid URL. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                    "URL cannot be empty. Please enter a valid URL. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
                 )
 
             user_input_opik_url = url_helpers.get_base_url(user_input_opik_url)
@@ -568,8 +616,9 @@ class OpikConfigurator:
         if extracted_base_url is None:
             return
 
+        normalized_extracted = url_helpers.get_base_url(extracted_base_url)
         if (
-            extracted_base_url != url_helpers.get_base_url(self.base_url)
+            normalized_extracted != url_helpers.get_base_url(self.base_url)
             and self.base_url != OPIK_BASE_URL_CLOUD
         ):
             LOGGER.warning(
@@ -577,7 +626,7 @@ class OpikConfigurator:
                 self.base_url,
             )
 
-        self.base_url = extracted_base_url
+        self.base_url = normalized_extracted
 
 
 def _set_environment_variables_for_integrations(
@@ -615,6 +664,7 @@ def configure(
     automatic_approvals: Optional[bool] = None,
     url_override: Optional[str] = None,
     project_name: Optional[str] = None,
+    install_mcp: Optional[bool] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -631,6 +681,8 @@ def configure(
                without user confirmation if `automatic_approvals` is not set to `False`.
         automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
         project_name: The name of the project to configure. If not provided, the default project will be used.
+        install_mcp: If True, register the Opik MCP server with detected AI hosts; if False, skip the step.
+            If None, the user is prompted in interactive sessions.
 
     Raises:
         ConfigurationError
@@ -652,5 +704,6 @@ def configure(
         if automatic_approvals is not None
         else force,
         project_name=project_name,
+        install_mcp=install_mcp,
     )
     client.configure()

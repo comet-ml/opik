@@ -12,20 +12,20 @@ import {
   ExperimentItem,
   ExperimentsCompare,
 } from "@/types/datasets";
-import { ExperimentItemStatus } from "@/types/test-suites";
+import { RunStatus } from "@/types/test-suites";
 import { isAggregatedItem } from "@/lib/trials";
 
 const STATUS_DISPLAY: Record<
-  ExperimentItemStatus,
+  RunStatus,
   { label: string; variant: TagProps["variant"] }
 > = {
-  [ExperimentItemStatus.PASSED]: { label: "Passed", variant: "green" },
-  [ExperimentItemStatus.FAILED]: { label: "Failed", variant: "pink" },
-  [ExperimentItemStatus.SKIPPED]: { label: "Skipped", variant: "gray" },
+  [RunStatus.PASSED]: { label: "Passed", variant: "green" },
+  [RunStatus.FAILED]: { label: "Failed", variant: "pink" },
+  [RunStatus.SKIPPED]: { label: "Skipped", variant: "gray" },
 };
 
 type StatusInfo = {
-  status: ExperimentItemStatus | undefined;
+  status: RunStatus | undefined;
   assertionsByRun: AssertionResult[][];
   passedCount: number;
   totalCount: number;
@@ -44,21 +44,22 @@ function getStatusFromExperimentItems(row: ExperimentsCompare): StatusInfo {
 
   const assertionsByRun = items.map((item) => item.assertion_results ?? []);
   const passedCount = items.filter(
-    (item) => item.status === ExperimentItemStatus.PASSED,
+    (item) => item.status === RunStatus.PASSED,
   ).length;
 
+  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
   const summaryValues = Object.values(row.run_summaries_by_experiment ?? {});
-  let status: ExperimentItemStatus | undefined;
+  let status: RunStatus | undefined;
 
   if (summaryValues.length > 0) {
-    const allPassed = summaryValues.every(
-      (s) => s.status === ExperimentItemStatus.PASSED,
-    );
-    status = allPassed
-      ? ExperimentItemStatus.PASSED
-      : ExperimentItemStatus.FAILED;
+    const allPassed = summaryValues.every((s) => s.status === RunStatus.PASSED);
+    status = allPassed ? RunStatus.PASSED : RunStatus.FAILED;
   } else {
     status = items[0].status;
+  }
+
+  if (status === RunStatus.SKIPPED && hasEvaluators) {
+    status = undefined;
   }
 
   return {
@@ -91,16 +92,21 @@ function getStatusInfoForExperiment(
 
   const assertionsByRun = expItems.map((item) => item.assertion_results ?? []);
   const passedCount = expItems.filter(
-    (item) => item.status === ExperimentItemStatus.PASSED,
+    (item) => item.status === RunStatus.PASSED,
   ).length;
 
+  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
   const summary = row.run_summaries_by_experiment?.[experimentId];
-  let status: ExperimentItemStatus | undefined;
+  let status: RunStatus | undefined;
 
   if (summary) {
     status = summary.status;
   } else {
     status = expItems[0].status;
+  }
+
+  if (status === RunStatus.SKIPPED && hasEvaluators) {
+    status = undefined;
   }
 
   return {

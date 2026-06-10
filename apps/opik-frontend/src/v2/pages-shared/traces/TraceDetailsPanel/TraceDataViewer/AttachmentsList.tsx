@@ -1,11 +1,7 @@
 import React, { useMemo, useState } from "react";
 import uniqBy from "lodash/uniqBy";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
-import {
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/ui/accordion";
+import CollapsibleSection from "@/v2/pages-shared/traces/TraceDetailsPanel/CollapsibleSection";
 import AttachmentThumbnail from "@/shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
 import AttachmentPreviewDialog from "@/shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
 import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
@@ -35,27 +31,28 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({ media }) => {
 
   const hasAttachments = previewDataArray.length > 0;
   return hasAttachments ? (
-    <AccordionItem value="attachments">
-      <AccordionTrigger>Attachments</AccordionTrigger>
-      <AccordionContent>
-        <div className="flex flex-wrap gap-2">
-          {previewDataArray.map((data) => (
-            <AttachmentThumbnail
-              key={data.url}
-              previewData={data}
-              onExpand={setPreviewData}
-            />
-          ))}
-        </div>
-        <AttachmentPreviewDialog
-          open={Boolean(previewData)}
-          setOpen={() => setPreviewData(null)}
-          type={previewData?.type ?? ATTACHMENT_TYPE.IMAGE}
-          name={previewData?.name ?? ""}
-          url={previewData?.url ?? ""}
-        ></AttachmentPreviewDialog>
-      </AccordionContent>
-    </AccordionItem>
+    <CollapsibleSection
+      title="Attachments"
+      forceMount={false}
+      bodyClassName="p-3"
+    >
+      <div className="flex flex-wrap gap-2">
+        {previewDataArray.map((data) => (
+          <AttachmentThumbnail
+            key={data.url}
+            previewData={data}
+            onExpand={setPreviewData}
+          />
+        ))}
+      </div>
+      <AttachmentPreviewDialog
+        open={Boolean(previewData)}
+        setOpen={() => setPreviewData(null)}
+        type={previewData?.type ?? ATTACHMENT_TYPE.IMAGE}
+        name={previewData?.name ?? ""}
+        url={previewData?.url ?? ""}
+      ></AttachmentPreviewDialog>
+    </CollapsibleSection>
   ) : null;
 };
 

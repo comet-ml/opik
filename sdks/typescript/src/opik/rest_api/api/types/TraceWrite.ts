@@ -19,4 +19,5 @@ export interface TraceWrite {
     ttft?: number;
     threadId?: string;
     source?: OpikApi.TraceWriteSource;
+    environment?: string;
 }

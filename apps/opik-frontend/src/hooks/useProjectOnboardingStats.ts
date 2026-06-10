@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import api, {
   TRACES_KEY,
   TRACES_REST_ENDPOINT,
@@ -24,11 +25,18 @@ function useOnboardingCountQuery(
   return useQuery({
     queryKey: [key, "onboarding-count", endpoint, params],
     queryFn: async ({ signal }) => {
-      const { data } = await api.get(endpoint, {
-        signal,
-        params: { size: 1, page: 1, ...params },
-      });
-      return (data.total as number) ?? 0;
+      try {
+        const { data } = await api.get(endpoint, {
+          signal,
+          params: { size: 1, page: 1, ...params },
+        });
+        return (data.total as number) ?? 0;
+      } catch (error) {
+        if (error instanceof AxiosError && error.response?.status === 404) {
+          return 0;
+        }
+        throw error;
+      }
     },
     enabled,
     staleTime: 1_000,

@@ -10,8 +10,9 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from ..cli.pairing import RunnerType
+from ..cli.local_runner.pairing import RunnerType
 from ..rest_api.core.api_error import ApiError
+from . import pid_file
 from .bridge_handlers import FileLockRegistry
 from .bridge_handlers.edit_file import EditFileHandler
 from .bridge_handlers.exec_command import BackgroundProcessTracker, ExecHandler
@@ -27,7 +28,10 @@ from .stability_guard import StabilityGuard
 LOGGER = logging.getLogger(__name__)
 
 _HEARTBEAT_INTERVAL_SECONDS = 5.0
-_GRACEFUL_TIMEOUT_SECONDS = 10
+# Bounded so Ctrl+C feels responsive. The child has already received SIGINT via the
+# foreground process group, so this is purely a backstop for slow-cleaning children
+# before we escalate to SIGKILL.
+_GRACEFUL_TIMEOUT_SECONDS = 5
 _RESTART_DEBOUNCE_SECONDS = 1.0
 _STDERR_MAX_LINES = 500
 
@@ -62,6 +66,10 @@ class Supervisor:
         repo_root: Path,
         runner_id: str,
         api: Any,
+        *,
+        runner_type: RunnerType,
+        project_name: str,
+        workspace: Optional[str],
         on_child_output: Optional[Callable[[str, str], None]] = None,
         on_child_restart: Optional[Callable[[str], None]] = None,
         on_error: Optional[Callable[[str], None]] = None,
@@ -69,13 +77,17 @@ class Supervisor:
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
         bridge_key: Optional[bytes] = None,
-        runner_type: RunnerType = RunnerType.ENDPOINT,
+        heartbeat_interval_seconds: float = _HEARTBEAT_INTERVAL_SECONDS,
+        graceful_timeout_seconds: float = _GRACEFUL_TIMEOUT_SECONDS,
+        main_loop_tick_seconds: float = 0.5,
     ) -> None:
         self._command = command
         self._env = env
         self._repo_root = repo_root
         self._runner_id = runner_id
         self._api = api
+        self._project_name = project_name
+        self._workspace = workspace
         self._on_child_output = on_child_output or self._default_output_callback
         self._on_child_restart = on_child_restart
         self._on_error = on_error
@@ -83,6 +95,9 @@ class Supervisor:
         self._on_command_end = on_command_end
         self._bridge_key = bridge_key
         self._runner_type = runner_type
+        self._heartbeat_interval_seconds = heartbeat_interval_seconds
+        self._graceful_timeout_seconds = graceful_timeout_seconds
+        self._main_loop_tick_seconds = main_loop_tick_seconds
         if command is None:
             self._watch = False
         elif watch is None:
@@ -101,6 +116,16 @@ class Supervisor:
 
     def run(self) -> None:
         self._install_signal_handlers()
+
+        # Record our pid before any blocking work so `opik <type> stop` can find
+        # us. Best-effort: if we can't write the file, the supervisor still runs;
+        # `stop` callers will simply fall back to the no-match message.
+        pid_file.write(
+            runner_id=self._runner_id,
+            runner_type=self._runner_type.value,
+            project_name=self._project_name,
+            workspace=self._workspace,
+        )
 
         heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop, name="supervisor-heartbeat", daemon=True
@@ -158,9 +183,16 @@ class Supervisor:
                 self._shutdown_event.wait()
         finally:
             self._shutdown_event.set()
+            # Notify the backend first so the FE flips the runner card off without
+            # waiting for child teardown — the disconnect call is bounded (2s) and
+            # independent of how long the user's process takes to exit.
+            self._notify_runner_closing()
             self._bg_tracker.shutdown()
             if self._command is not None:
                 self._stop_child()
+            pid_file.remove(
+                runner_type=self._runner_type.value, runner_id=self._runner_id
+            )
             LOGGER.info("Supervisor shutdown complete")
 
     def _main_loop(self) -> None:
@@ -168,11 +200,11 @@ class Supervisor:
             with self._child_lock:
                 child = self._child
             if child is None:
-                self._shutdown_event.wait(0.5)
+                self._shutdown_event.wait(self._main_loop_tick_seconds)
                 continue
 
             try:
-                exit_code = child.wait(timeout=0.5)
+                exit_code = child.wait(timeout=self._main_loop_tick_seconds)
             except subprocess.TimeoutExpired:
                 continue
 
@@ -253,9 +285,9 @@ class Supervisor:
         with self._stderr_lock:
             return "\n".join(self._stderr_buffer)
 
-    def _stop_child(
-        self, graceful_timeout: int = _GRACEFUL_TIMEOUT_SECONDS
-    ) -> Optional[int]:
+    def _stop_child(self, graceful_timeout: Optional[float] = None) -> Optional[int]:
+        if graceful_timeout is None:
+            graceful_timeout = self._graceful_timeout_seconds
         with self._child_lock:
             child = self._child
             if child is None:
@@ -326,7 +358,7 @@ class Supervisor:
             if old_child.poll() is None:
                 try:
                     old_child.send_signal(signal.SIGTERM)
-                    old_child.wait(timeout=_GRACEFUL_TIMEOUT_SECONDS)
+                    old_child.wait(timeout=self._graceful_timeout_seconds)
                 except (OSError, subprocess.TimeoutExpired):
                     try:
                         old_child.kill()
@@ -394,7 +426,22 @@ class Supervisor:
             except Exception:
                 LOGGER.debug("Heartbeat error", exc_info=True)
 
-            self._shutdown_event.wait(_HEARTBEAT_INTERVAL_SECONDS)
+            self._shutdown_event.wait(self._heartbeat_interval_seconds)
+
+    def _notify_runner_closing(self) -> None:
+        # Tell the backend we're closing so the FE flips off the runner card on the next
+        # poll, instead of waiting out the heartbeat TTL. Best-effort: server-side cleanup
+        # is idempotent and the reaper picks up anything we miss.
+        #
+        # Called at the top of run()'s finally — before _stop_child — so the FE learns
+        # we're gone immediately, even if the child takes the full graceful timeout to
+        # exit. Reached on Ctrl+C, SIGTERM, clean child exit, 410 eviction, and unhandled
+        # exceptions. SIGKILL / segfault skip Python cleanup entirely; the heartbeat-TTL
+        # reaper is the backstop for those.
+        try:
+            self._api.runners.disconnect_runner(self._runner_id)
+        except Exception:
+            LOGGER.debug("Failed to notify backend of runner shutdown", exc_info=True)
 
     def _install_signal_handlers(self) -> None:
         def handler(signum: int, frame: object) -> None:

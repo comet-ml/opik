@@ -8,7 +8,7 @@ export interface LocalRunnerAgent {
   name: string;
   description?: string;
   language?: string;
-  params?: { name: string; type: string }[];
+  params?: { name: string; type: string; presence?: "required" | "optional" }[];
 }
 
 export type LocalRunnerType = "connect" | "endpoint";
@@ -47,6 +47,5 @@ export interface CreateLocalRunnerJobRequest {
   agent_name: string;
   inputs: Record<string, unknown>;
   project_id: string;
-  mask_id?: string;
-  blueprint_name?: string;
+  prompt_masks?: Record<string, string>;
 }

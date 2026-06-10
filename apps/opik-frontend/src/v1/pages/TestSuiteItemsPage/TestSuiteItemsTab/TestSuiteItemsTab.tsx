@@ -54,7 +54,7 @@ import {
   injectColumnCallback,
   migrateSelectedColumns,
 } from "@/lib/table";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import Loader from "@/shared/Loader/Loader";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";

@@ -7,6 +7,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionLink;
+import com.comet.opik.api.PromptVersionType;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -19,6 +20,8 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
@@ -26,20 +29,27 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
@@ -51,6 +61,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
@@ -69,7 +80,15 @@ public interface PromptService {
 
     Prompt getById(UUID id);
 
+    Prompt getById(UUID id, UUID maskId);
+
+    Prompt getById(UUID id, UUID maskId, String environment);
+
+    void setVersionEnvironment(UUID versionId, Set<String> environments);
+
     List<Prompt> getByIds(Set<UUID> ids);
+
+    List<PromptVersion> retrieveVersionsByIds(List<UUID> ids);
 
     PromptVersionPage getVersionsByPromptId(
             UUID promptId,
@@ -81,13 +100,14 @@ public interface PromptService {
 
     PromptVersion getVersionById(UUID id);
 
+    PromptVersion getVersionByNumber(UUID promptId, String versionNumber);
+
     int updateVersions(PromptVersionBatchUpdate update);
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
-    PromptVersion retrievePromptVersion(String name, String commit, String projectName);
-
-    PromptVersion retrievePromptVersion(String name, String commit, UUID projectId);
+    PromptVersion retrievePromptVersion(String name, String commit, String environment, String versionNumber,
+            String projectName);
 
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
@@ -105,8 +125,12 @@ class PromptServiceImpl implements PromptService {
 
     private static final String ALREADY_EXISTS = "Prompt id or name already exists";
     private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
+    private static final String BI_EVENT_PROMPT_VERSION_CREATED = "prompt_version_created";
     private static final String PROMPT_NOT_FOUND = "Prompt not found";
     private static final String PROMPT_VERSION_NOT_FOUND = "Prompt version not found";
+    private static final String PROMPT_VERSION_LOCK = "prompt_version:%s:%s";
+    private static final String MASK_ENV_NOT_ALLOWED = "environment cannot be set on a mask version";
+    private static final String ENV_MASK_MUTUALLY_EXCLUSIVE = "environment and mask_id are mutually exclusive";
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
@@ -117,6 +141,9 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingFactoryPromptVersions sortingFactoryPromptVersions;
     private final @NonNull EventBus eventBus;
     private final @NonNull ProjectService projectService;
+    private final @NonNull EnvironmentService environmentService;
+    private final @NonNull LockService lockService;
+    private final @NonNull AnalyticsService analyticsService;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -168,34 +195,20 @@ class PromptServiceImpl implements PromptService {
     private PromptVersion createPromptVersionFromPromptRequest(Prompt createdPrompt,
             String workspaceId,
             Prompt promptRequest) {
-        log.info("Creating prompt version for prompt id '{}'", createdPrompt.id());
+        UUID versionId = idGenerator.generateId();
+        PromptVersion promptVersion = PromptVersion.builder()
+                .id(versionId)
+                .promptId(createdPrompt.id())
+                .commit(CommitUtils.getCommit(versionId))
+                .template(promptRequest.template())
+                .metadata(promptRequest.metadata())
+                .changeDescription(promptRequest.changeDescription())
+                .type(promptRequest.type())
+                .createdBy(createdPrompt.createdBy())
+                .build();
 
-        var createdVersion = transactionTemplate.inTransaction(WRITE, handle -> {
-            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-
-            UUID versionId = idGenerator.generateId();
-            PromptVersion promptVersion = PromptVersion.builder()
-                    .id(versionId)
-                    .promptId(createdPrompt.id())
-                    .commit(CommitUtils.getCommit(versionId))
-                    .template(promptRequest.template())
-                    .metadata(promptRequest.metadata())
-                    .changeDescription(promptRequest.changeDescription())
-                    .type(promptRequest.type())
-                    .createdBy(createdPrompt.createdBy())
-                    .build();
-
-            IdGenerator.validateVersion(promptVersion.id(), "prompt");
-
-            promptVersionDAO.save(workspaceId, promptVersion);
-
-            PromptVersion savedVersion = promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
-            return savedVersion;
-        });
-
-        log.info("Created Prompt version for prompt id '{}'", createdPrompt.id());
-
-        return createdVersion;
+        return withPromptVersionLock(workspaceId, createdPrompt.id(),
+                () -> savePromptVersion(workspaceId, createdPrompt.projectId(), promptVersion, createdPrompt.name()));
     }
 
     private Prompt savePrompt(String workspaceId, Prompt prompt) {
@@ -328,31 +341,82 @@ class PromptServiceImpl implements PromptService {
         Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure,
                 projectId);
 
-        EntityConstraintHandler<PromptVersion> handler = EntityConstraintHandler.handle(() -> {
-            PromptVersion promptVersion = createPromptVersion.version().toBuilder()
-                    .promptId(prompt.id())
-                    .createdBy(userName)
-                    .id(id)
-                    .commit(commit)
-                    .build();
+        Set<String> environments = createPromptVersion.version().environments() == null
+                ? Set.of()
+                : createPromptVersion.version().environments().stream()
+                        .filter(StringUtils::isNotBlank)
+                        .map(String::strip)
+                        .collect(toSet());
 
-            var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
-            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
+        if (!CollectionUtils.isEmpty(environments)) {
+            environmentService.bulkCreate(environments, workspaceId, userName);
+        }
 
-            return savedPromptVersion;
-        });
+        return withPromptVersionLock(workspaceId, prompt.id(), () -> {
+            if (!environments.isEmpty()) {
+                return createVersionWithEnvironment(workspaceId, workspaceName, userName, projectId, prompt,
+                        createPromptVersion, id, commit, environments);
+            }
 
-        if (createPromptVersion.version().commit() != null) {
-            return handler.withError(this::newVersionConflict);
-        } else {
-            // only retry if commit is not provided
-            return handler.onErrorDo(() -> {
-                var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
+            EntityConstraintHandler<PromptVersion> handler = EntityConstraintHandler.handle(() -> {
+                PromptVersion promptVersion = createPromptVersion.version().toBuilder()
+                        .promptId(prompt.id())
+                        .createdBy(userName)
+                        .id(id)
+                        .commit(commit)
+                        .build();
+
+                var savedPromptVersion = savePromptVersion(workspaceId, projectId, promptVersion, prompt.name());
                 postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
 
                 return savedPromptVersion;
             });
+
+            if (createPromptVersion.version().commit() != null) {
+                return handler.withError(this::newVersionConflict);
+            } else {
+                // only retry if commit is not provided
+                return handler.onErrorDo(() -> {
+                    var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt,
+                            userName);
+                    postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
+
+                    return savedPromptVersion;
+                });
+            }
+        });
+    }
+
+    private PromptVersion createVersionWithEnvironment(String workspaceId, String workspaceName, String userName,
+            UUID projectId, Prompt prompt, CreatePromptVersion createPromptVersion, UUID id, String commit,
+            Set<String> environments) {
+        Set<String> takenEnvs = transactionTemplate.<Set<String>>inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
+            return dao.findTakenEnvironments(prompt.id(), workspaceId, environments);
+        });
+        if (!takenEnvs.isEmpty()) {
+            throw new EntityAlreadyExistsException(new ErrorMessage(409,
+                    "Environments already mapped to another version: '%s'".formatted(takenEnvs)));
         }
+
+        PromptVersion promptVersion = createPromptVersion.version().toBuilder()
+                .promptId(prompt.id())
+                .createdBy(userName)
+                .id(id)
+                .commit(commit)
+                .environments(environments)
+                .build();
+
+        var saved = savePromptVersion(workspaceId, projectId, promptVersion, prompt.name());
+        postPromptCommittedEvent(saved, workspaceId, workspaceName, userName, projectId);
+        return saved;
+    }
+
+    private <T> T withPromptVersionLock(String workspaceId, UUID promptId, Callable<T> action) {
+        return lockService.executeWithLock(
+                new LockService.Lock(PROMPT_VERSION_LOCK.formatted(workspaceId, promptId)),
+                Mono.fromCallable(action).subscribeOn(Schedulers.boundedElastic()))
+                .block();
     }
 
     @Override
@@ -447,12 +511,13 @@ class PromptServiceImpl implements PromptService {
                     .commit(CommitUtils.getCommit(newId))
                     .build();
 
-            return savePromptVersion(workspaceId, promptVersion);
+            return savePromptVersion(workspaceId, prompt.projectId(), promptVersion, prompt.name());
 
         }).withRetry(3, this::newVersionConflict);
     }
 
-    private PromptVersion savePromptVersion(String workspaceId, PromptVersion promptVersion) {
+    private PromptVersion savePromptVersion(String workspaceId, UUID projectId, PromptVersion promptVersion,
+            String promptName) {
         log.info("Creating prompt version for prompt id '{}'", promptVersion.promptId());
 
         IdGenerator.validateVersion(promptVersion.id(), "prompt version");
@@ -461,8 +526,23 @@ class PromptServiceImpl implements PromptService {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            promptVersionDAO.save(workspaceId, promptVersion);
-            promptDAO.updateLastUpdatedAt(promptVersion.promptId(), workspaceId, promptVersion.createdBy());
+            PromptVersion toSave;
+            if (promptVersion.versionType() != PromptVersionType.MASK) {
+                int nextNumber = promptVersionDAO.findMaxVersionNumber(workspaceId, promptVersion.promptId()) + 1;
+                toSave = promptVersion.toBuilder().versionNumber("v" + nextNumber).build();
+            } else {
+                toSave = promptVersion.toBuilder().versionNumber(null).build();
+            }
+
+            promptVersionDAO.save(workspaceId, toSave);
+            if (!CollectionUtils.isEmpty(toSave.environments())) {
+                List<UUID> envIds = toSave.environments().stream().map(ignored -> idGenerator.generateId()).toList();
+                promptVersionDAO.saveEnvironments(envIds, workspaceId, toSave.promptId(), toSave.id(),
+                        toSave.environments(), toSave.createdBy());
+            }
+            if (toSave.versionType() != PromptVersionType.MASK) {
+                promptDAO.updateLastUpdatedAt(toSave.promptId(), workspaceId, toSave.createdBy());
+            }
 
             return null;
         });
@@ -470,7 +550,31 @@ class PromptServiceImpl implements PromptService {
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
         PromptVersion savedVersion = getById(workspaceId, promptVersion.id());
+        trackPromptVersionCreated(savedVersion, projectId, workspaceId, promptName);
         return savedVersion;
+    }
+
+    private void trackPromptVersionCreated(PromptVersion promptVersion, UUID projectId, String workspaceId,
+            String promptName) {
+        if (DemoData.PROMPTS.contains(promptName)) {
+            return;
+        }
+        Schedulers.boundedElastic().schedule(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("prompt_version_id", Objects.toString(promptVersion.id(), ""));
+            properties.put("prompt_id", Objects.toString(promptVersion.promptId(), ""));
+            properties.put("workspace_id", Objects.toString(workspaceId, ""));
+            properties.put("user_name", Objects.toString(promptVersion.createdBy(), ""));
+            properties.put("version_type",
+                    Optional.ofNullable(promptVersion.versionType()).orElse(PromptVersionType.PROMPT_VERSION)
+                            .getValue());
+            properties.put("date", Instant.now().toString());
+            if (projectId != null) {
+                properties.put("project_id", projectId.toString());
+            }
+
+            analyticsService.trackEvent(BI_EVENT_PROMPT_VERSION_CREATED, properties, promptVersion.createdBy());
+        });
     }
 
     private PromptVersion getById(String workspaceId, UUID id) {
@@ -487,26 +591,50 @@ class PromptServiceImpl implements PromptService {
 
     @Override
     public Prompt getById(@NonNull UUID id) {
+        return getById(id, null, null);
+    }
+
+    @Override
+    public Prompt getById(@NonNull UUID id, UUID maskId) {
+        return getById(id, maskId, null);
+    }
+
+    @Override
+    public Prompt getById(@NonNull UUID id, UUID maskId, String environment) {
+        String env = StringUtils.trimToNull(environment);
+
+        if (maskId != null && env != null) {
+            throw new BadRequestException(ENV_MASK_MUTUALLY_EXCLUSIVE);
+        }
+
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            Prompt prompt = promptDAO.findById(id, workspaceId);
+            Prompt prompt = promptDAO.findById(id, workspaceId, maskId, env);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
             }
 
+            if ((maskId != null || env != null) && prompt.requestedVersion() == null) {
+                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+            }
+
             return prompt.toBuilder()
-                    .latestVersion(
-                            Optional.ofNullable(prompt.latestVersion())
-                                    .map(promptVersion -> promptVersion.toBuilder()
-                                            .variables(getVariables(promptVersion.template(), promptVersion.type()))
-                                            .build())
-                                    .orElse(null))
+                    .latestVersion(enrichWithVariables(prompt.latestVersion()))
+                    .requestedVersion(enrichWithVariables(prompt.requestedVersion()))
                     .build();
         });
+    }
+
+    private PromptVersion enrichWithVariables(PromptVersion version) {
+        return Optional.ofNullable(version)
+                .map(v -> v.toBuilder()
+                        .variables(getVariables(v.template(), v.type()))
+                        .build())
+                .orElse(null);
     }
 
     @Override
@@ -517,6 +645,23 @@ class PromptServiceImpl implements PromptService {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             return promptDAO.findByIds(ids, workspaceId);
+        });
+    }
+
+    @Override
+    public List<PromptVersion> retrieveVersionsByIds(@NonNull List<UUID> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            return promptVersionDAO.findByIds(ids, workspaceId).stream()
+                    .map(this::enrichWithVariables)
+                    .toList();
         });
     }
 
@@ -623,6 +768,24 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
+    public PromptVersion getVersionByNumber(@NonNull UUID promptId, @NonNull String versionNumber) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+            return promptVersionDAO.findByVersionNumber(promptId, versionNumber, workspaceId);
+        });
+
+        if (promptVersion == null) {
+            throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+        }
+
+        return promptVersion.toBuilder()
+                .variables(getVariables(promptVersion.template(), promptVersion.type()))
+                .build();
+    }
+
+    @Override
     public int updateVersions(@NonNull PromptVersionBatchUpdate update) {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Updating prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
@@ -637,17 +800,77 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersion retrievePromptVersion(@NonNull String name, String commit, String projectName) {
+    public void setVersionEnvironment(@NonNull UUID versionId, Set<String> environments) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        Set<String> envs = environments == null
+                ? Set.of()
+                : environments.stream()
+                        .filter(StringUtils::isNotBlank)
+                        .map(String::strip)
+                        .collect(toSet());
+
+        PromptVersion version = getVersionById(versionId);
+
+        if (version.versionType() == PromptVersionType.MASK) {
+            throw new BadRequestException(MASK_ENV_NOT_ALLOWED);
+        }
+
+        if (!CollectionUtils.isEmpty(envs)) {
+            Set<String> existing = environmentService.findExistingNames(envs, workspaceId);
+            if (existing.size() != envs.size()) {
+                Set<String> missing = new HashSet<>(envs);
+                missing.removeAll(existing);
+                throw new ConflictException(
+                        "Environments do not exist in the workspace: '%s'".formatted(missing));
+            }
+        }
+
+        UUID promptId = version.promptId();
+
+        withPromptVersionLock(workspaceId, promptId, () -> transactionTemplate.inTransaction(WRITE, handle -> {
+            PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
+
+            Set<String> currentEnvs = dao.findVersionEnvironments(versionId, workspaceId);
+
+            Set<String> toAdd = new HashSet<>(envs);
+            toAdd.removeAll(currentEnvs);
+
+            Set<String> toRemove = new HashSet<>(currentEnvs);
+            toRemove.removeAll(envs);
+
+            if (!CollectionUtils.isEmpty(toRemove)) {
+                dao.closeVersionEnvironmentsForNames(versionId, workspaceId, toRemove);
+            }
+            if (!CollectionUtils.isEmpty(toAdd)) {
+                dao.closeEnvOwnershipsForPrompt(promptId, workspaceId, toAdd);
+                List<UUID> envIds = toAdd.stream().map(ignored -> idGenerator.generateId()).toList();
+                dao.saveEnvironments(envIds, workspaceId, promptId, versionId, toAdd, userName);
+            }
+            return null;
+        }));
+
+        log.info("Set environments '{}' on prompt version '{}'", envs, versionId);
+    }
+
+    @Override
+    public PromptVersion retrievePromptVersion(@NonNull String name, String commit, String environment,
+            String versionNumber, String projectName) {
         String workspaceId = requestContext.get().getWorkspaceId();
         UUID projectId = null;
         if (StringUtils.isNotBlank(projectName)) {
             projectId = projectService.findProjectIdByName(workspaceId, projectName).orElse(null);
         }
-        return retrievePromptVersion(name, commit, projectId);
+        return retrievePromptVersion(name, commit, environment, versionNumber, projectId);
     }
 
-    @Override
-    public PromptVersion retrievePromptVersion(@NonNull String name, String commit, UUID projectId) {
+    private PromptVersion retrievePromptVersion(@NonNull String name, String commit, String environment,
+            String versionNumber, UUID projectId) {
+        String env = StringUtils.trimToNull(environment);
+        String trimmedCommit = StringUtils.trimToNull(commit);
+        String trimmedVersionNumber = StringUtils.trimToNull(versionNumber);
+
         String workspaceId = requestContext.get().getWorkspaceId();
 
         Prompt prompt = findByName(workspaceId, name, projectId);
@@ -660,19 +883,19 @@ class PromptServiceImpl implements PromptService {
             }
 
             PromptVersion promptVersion;
-            if (commit == null) {
-                // Fetch latest version directly from prompt_versions table
-                List<PromptVersion> versions = promptVersionDAO.find(workspaceId, prompt.id(), 0, 1);
-                if (versions.isEmpty()) {
-                    throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
-                }
-                promptVersion = versions.getFirst();
+            if (env != null) {
+                promptVersion = promptVersionDAO.findByEnvironment(prompt.id(), env, workspaceId);
+            } else if (trimmedVersionNumber != null) {
+                promptVersion = promptVersionDAO.findByVersionNumber(prompt.id(), trimmedVersionNumber, workspaceId);
+            } else if (trimmedCommit != null) {
+                promptVersion = promptVersionDAO.findByCommit(prompt.id(), trimmedCommit, workspaceId);
             } else {
-                promptVersion = promptVersionDAO.findByCommit(prompt.id(), commit, workspaceId);
+                List<PromptVersion> versions = promptVersionDAO.find(workspaceId, prompt.id(), 0, 1);
+                promptVersion = versions.isEmpty() ? null : versions.getFirst();
+            }
 
-                if (promptVersion == null) {
-                    throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
-                }
+            if (promptVersion == null) {
+                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
             }
 
             return promptVersion.toBuilder()
@@ -704,22 +927,26 @@ class PromptServiceImpl implements PromptService {
         UUID newVersionId = idGenerator.generateId();
         String newCommit = CommitUtils.getCommit(newVersionId);
 
+        String versionRef = StringUtils.defaultIfBlank(versionToRestore.versionNumber(), versionToRestore.commit());
+
         PromptVersion newVersion = versionToRestore.toBuilder()
                 .id(newVersionId)
                 .commit(newCommit)
                 .createdBy(userName)
-                .changeDescription("Restored from version " + versionToRestore.commit())
+                .changeDescription("Restored from version " + versionRef)
                 .tags(null) // Don't propagate tags to restored version
+                .environments(null) // Don't propagate environment ownership to restored version
                 .build();
 
-        PromptVersion restoredVersion = EntityConstraintHandler
-                .handle(() -> savePromptVersion(workspaceId, newVersion))
-                .onErrorDo(() -> retryableCreateVersion(workspaceId,
-                        CreatePromptVersion.builder()
-                                .name(prompt.name())
-                                .version(newVersion)
-                                .build(),
-                        prompt, userName));
+        PromptVersion restoredVersion = withPromptVersionLock(workspaceId, promptId,
+                () -> EntityConstraintHandler
+                        .handle(() -> savePromptVersion(workspaceId, prompt.projectId(), newVersion, prompt.name()))
+                        .onErrorDo(() -> retryableCreateVersion(workspaceId,
+                                CreatePromptVersion.builder()
+                                        .name(prompt.name())
+                                        .version(newVersion)
+                                        .build(),
+                                prompt, userName)));
 
         log.info("Successfully restored prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
                 versionId, promptId, workspaceId);
@@ -792,6 +1019,9 @@ class PromptServiceImpl implements PromptService {
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
             String userName, UUID projectId) {
+        if (promptVersion.versionType() == PromptVersionType.MASK) {
+            return;
+        }
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)

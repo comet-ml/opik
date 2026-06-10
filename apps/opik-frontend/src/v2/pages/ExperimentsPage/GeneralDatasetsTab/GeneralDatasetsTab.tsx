@@ -1,6 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { ChartLine, RotateCw } from "lucide-react";
-import { ColumnSort, Row, RowSelectionState } from "@tanstack/react-table";
+import { ChartLine } from "lucide-react";
+import {
+  CellContext,
+  ColumnSort,
+  Row,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import {
@@ -9,6 +14,7 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
 import isNumber from "lodash/isNumber";
@@ -16,9 +22,8 @@ import isObject from "lodash/isObject";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import IdCell from "@/shared/DataTableCells/IdCell";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
@@ -26,7 +31,6 @@ import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
-import Loader from "@/shared/Loader/Loader";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import { isTestSuiteExperiment } from "@/lib/experiments";
@@ -51,8 +55,7 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { Button } from "@/ui/button";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { Separator } from "@/ui/separator";
 import { Card } from "@/ui/card";
 import useGroupedExperimentsList, {
@@ -70,17 +73,41 @@ import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
+import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { Skeleton } from "@/ui/skeleton";
+
 const PASS_RATE_LABEL = "Pass rate";
+
+const withRunningSkeleton = <TValue,>(
+  Cell: React.ComponentType<CellContext<GroupedExperiment, TValue>>,
+) => {
+  const WrappedCell = (context: CellContext<GroupedExperiment, TValue>) => {
+    const { row } = context;
+    if (
+      !getIsGroupRow(row) &&
+      row.original?.status === EXPERIMENT_STATUS.RUNNING
+    ) {
+      return (
+        <div className="flex size-full items-center p-2">
+          <Skeleton className="size-full" />
+        </div>
+      );
+    }
+    return <Cell {...context} />;
+  };
+  return WrappedCell;
+};
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -100,7 +127,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
-  "dataset_version",
   "pass_rate",
   "trace_count",
   "duration.p50",
@@ -120,11 +146,11 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 type GeneralDatasetsTabProps = {
-  onNewExperimentClick?: () => void;
+  isExistencePending?: boolean;
 };
 
 const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
-  onNewExperimentClick,
+  isExistencePending = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
@@ -141,15 +167,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
-    defaultValue: 100,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
-  });
+  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
@@ -186,23 +204,13 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: ITEM_SOURCE_LABEL,
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
         },
-      },
-      {
-        id: "dataset_version",
-        label: "Test suite version",
-        type: COLUMN_TYPE.string,
-        iconType: "version" as const,
-        accessorFn: (row: GroupedExperiment) =>
-          row.dataset_version_summary?.version_name || "",
-        cell: DatasetVersionCell as never,
       },
       {
         id: "created_at",
@@ -220,7 +228,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Duration (avg.)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p50",
@@ -231,7 +239,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Duration (p90)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p90",
@@ -242,7 +250,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Duration (p99)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p99",
@@ -268,7 +276,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
-        cell: TextCell as never,
+        cell: withRunningSkeleton(TextCell) as never,
         aggregatedCell: TextCell.Aggregation as never,
         customMeta: {
           aggregationKey: "trace_count",
@@ -278,7 +286,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         id: "total_estimated_cost",
         label: "Total estimated cost",
         type: COLUMN_TYPE.cost,
-        cell: CostCell as never,
+        cell: withRunningSkeleton(CostCell) as never,
         aggregatedCell: CostCell.Aggregation as never,
         customMeta: {
           aggregationKey: "total_estimated_cost",
@@ -288,7 +296,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         id: "total_estimated_cost_avg",
         label: "Cost per trace (avg.)",
         type: COLUMN_TYPE.cost,
-        cell: CostCell as never,
+        cell: withRunningSkeleton(CostCell) as never,
         aggregatedCell: CostCell.Aggregation as never,
         customMeta: {
           aggregationKey: "total_estimated_cost_avg",
@@ -300,7 +308,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         type: COLUMN_TYPE.number,
         iconType: "pass_rate",
         accessorFn: (row) => row.pass_rate,
-        cell: PassRateCell as never,
+        cell: withRunningSkeleton(PassRateCell) as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
           aggregationKey: "pass_rate",
@@ -311,7 +319,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Feedback Scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
-        cell: FeedbackScoreListCell as never,
+        cell: withRunningSkeleton(FeedbackScoreListCell) as never,
         aggregatedCell: FeedbackScoreListCell.Aggregation as never,
         customMeta: {
           getHoverCardName: (row: GroupedExperiment) => row.name,
@@ -394,6 +402,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [data?.aggregationMap],
   );
 
+  const datasetTypeMap = useMemo(
+    () => data?.datasetTypeMap ?? {},
+    [data?.datasetTypeMap],
+  );
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -404,10 +417,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
   });
 
   const total = data?.total ?? 0;
-  const noData = !search && filters.length === 0;
-  const noDataText = noData
-    ? "There are no experiments yet"
-    : "No search results";
 
   const {
     columns,
@@ -436,6 +445,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
+    datasetTypeMap,
   });
 
   const handleRowClick = useCallback(
@@ -455,6 +465,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [navigate, workspaceName, activeProjectId],
   );
 
+  const handleClearFilters = useCallback(() => {
+    setSearch(undefined);
+    setFilters([]);
+  }, [setSearch, setFilters]);
+
   const hasGroups = Boolean(groups.length);
 
   const renderCustomRowCallback = useCallback(
@@ -464,14 +479,10 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [setGroupLimit],
   );
 
-  // Filter out name and dataset columns when grouping by dataset
+  // Name becomes the grouping anchor when any grouping is active and is rendered
+  // by the group cell, so hide it from the columns menu in that case.
   const availableColumns = useMemo(() => {
-    const isGroupingByDataset = groups.some(
-      (g) => g.field === COLUMN_DATASET_ID,
-    );
-
     return columnsDef.filter((col) => {
-      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
       if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
       return true;
     });
@@ -498,7 +509,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           id: datasetId,
           name: [
             {
-              label: "Test suite",
+              label: ITEM_SOURCE_LABEL,
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -535,11 +546,17 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                   undefined,
                 );
 
+                const groupField = groups[index]?.field;
+                const groupLabel =
+                  groupField === COLUMN_DATASET_ID
+                    ? ITEM_SOURCE_LABEL
+                    : calculateGroupLabel(groups[index]);
+
                 return {
-                  label: calculateGroupLabel(groups[index]),
+                  label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted test suite"
+                      ? "Deleted dataset"
                       : label || value || "Undefined",
                 };
               }),
@@ -609,34 +626,40 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     groupFieldNames,
   ]);
 
-  if (isPending || isFeedbackScoresPending) {
-    return <Loader />;
-  }
+  const isTableLoading =
+    isExistencePending ||
+    isPending ||
+    isFeedbackScoresPending ||
+    (isPlaceholderData && experiments.length === 0);
 
   return (
     <>
-      {Boolean(experiments.length) && (
+      {(isTableLoading || experiments.length > 0) && (
         <PageBodyStickyContainer
           direction="horizontal"
           className="-mb-2 pt-4"
           limitWidth
         >
-          <FeedbackScoresChartsWrapper
-            chartsData={chartsData}
-            noDataComponent={
-              <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
-                <ChartLine className="size-4 shrink-0 text-light-slate" />
-                <div className="comet-body-s-accented text-foreground">
-                  No charts to show
-                </div>
-                <div className="comet-body-s text-muted-slate">
-                  Please expand a group to see its chart. You can expand up to{" "}
-                  {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
-                </div>
-              </Card>
-            }
-            areAggregatedScores
-          />
+          {isTableLoading ? (
+            <Skeleton className="h-[208px] w-full min-w-[400px] rounded-md" />
+          ) : (
+            <FeedbackScoresChartsWrapper
+              chartsData={chartsData}
+              noDataComponent={
+                <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
+                  <ChartLine className="size-4 shrink-0 text-light-slate" />
+                  <div className="comet-body-s-accented text-foreground">
+                    No charts to show
+                  </div>
+                  <div className="comet-body-s text-muted-slate">
+                    Please expand a group to see its chart. You can expand up to{" "}
+                    {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
+                  </div>
+                </Card>
+              }
+              areAggregatedScores
+            />
+          )}
         </PageBodyStickyContainer>
       )}
       <PageBodyStickyContainer
@@ -675,16 +698,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             }}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh experiments list">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => refetch()}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
+          <RefreshButton
+            tooltip="Refresh experiments list"
+            isFetching={isFetching}
+            onRefresh={() => refetch()}
+          />
           <ColumnsButton
             columns={availableColumns}
             selectedColumns={selectedColumns}
@@ -714,18 +732,17 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
         noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={onNewExperimentClick}>
-                Create experiment
-              </Button>
-            )}
-          </DataTableNoData>
+          <DataTableNoMatchingData
+            onClearFilters={
+              search || filters.length > 0 ? handleClearFilters : undefined
+            }
+          />
         }
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

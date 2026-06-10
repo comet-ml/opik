@@ -21,7 +21,7 @@ import { Button } from "@/ui/button";
 import NoData from "@/shared/NoData/NoData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import VirtualizedTreeViewer from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/VirtualizedTreeViewer";
 import useTreeDetailsStore, {
   TREE_DATABLOCK_TYPE,

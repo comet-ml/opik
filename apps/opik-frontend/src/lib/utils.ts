@@ -27,6 +27,10 @@ export const buildDocsUrl = (path: string = "", hash: string = "") => {
   return `${BASE_DOCUMENTATION_URL}${path}?from=llm${hash}`;
 };
 
+export const buildDocsMarkdownUrl = (path: string = "") => {
+  return `${BASE_DOCUMENTATION_URL}${path}.md`;
+};
+
 export const buildFullBaseUrl = () => {
   return new URL(import.meta.env.VITE_BASE_URL, location.origin).toString();
 };
@@ -223,6 +227,25 @@ export const extractIdFromLocation = (location: string) =>
 export const formatNumericData = (value: number, precision = 2) =>
   String(round(value, precision));
 
+export const padDecimalsString = (
+  raw: string,
+  decimals: number,
+  integerOnly = false,
+): string => {
+  if (raw === "") return raw;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return integerOnly ? String(Math.trunc(n)) : n.toFixed(Math.max(0, decimals));
+};
+
+export const truncateMiddle = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  const keep = maxLength - 1;
+  const left = Math.ceil(keep / 2);
+  const right = Math.floor(keep / 2);
+  return `${text.slice(0, left)}…${text.slice(-right)}`;
+};
+
 export const formatNumberInK = (value: number, precision = 1): string => {
   const ranges = [
     { threshold: 1000000000, suffix: "B", divider: 1000000000 },
@@ -324,4 +347,14 @@ export const escapeJsString = (value: string): string => {
         return ch;
     }
   });
+};
+
+export const getSelectAllCheckedState = (
+  selectedCount: number,
+  totalCount: number,
+): boolean | "indeterminate" => {
+  if (totalCount === 0) return false;
+  if (selectedCount >= totalCount) return true;
+  if (selectedCount > 0) return "indeterminate";
+  return false;
 };

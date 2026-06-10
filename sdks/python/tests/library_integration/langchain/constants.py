@@ -1,8 +1,9 @@
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
 )
 
-OPENAI_MODEL_FOR_TESTS = "gpt-4o-mini"
+OPENAI_MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_NANO
 
 EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT = {
     "prompt_tokens": ANY_BUT_NONE,
@@ -28,7 +29,7 @@ EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
 }
 
-BEDROCK_MODEL_FOR_TESTS = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+BEDROCK_MODEL_FOR_TESTS = llm_constants.BEDROCK_CLAUDE_SONNET
 
 EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT = {
     "prompt_tokens": ANY_BUT_NONE,

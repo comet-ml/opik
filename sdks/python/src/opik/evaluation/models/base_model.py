@@ -1,13 +1,55 @@
 import abc
 import logging
+import sys
 from contextlib import contextmanager, asynccontextmanager
-from typing import Any, List, Dict, Optional, Type
+from typing import Any, List, Dict, Literal, Optional, Type
 import pydantic
+from typing_extensions import TypedDict
+
+if sys.version_info < (3, 11):
+    from typing_extensions import Required
+else:
+    from typing import Required
 
 from opik import exceptions
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+Role = Literal["system", "user", "assistant", "tool"]
+
+
+class ToolCallFunction(TypedDict):
+    name: str
+    arguments: str
+
+
+class ToolCall(TypedDict):
+    id: str
+    type: Literal["function"]
+    function: ToolCallFunction
+
+
+class ConversationDict(TypedDict, total=False):
+    """OpenAI-shape chat message used to ferry turns between callers and LLM wrappers.
+
+    ``role`` is always set. The remaining fields are conditionally required:
+
+    - ``content`` is set on system/user/tool messages and on assistant messages
+      that produce text. It is *omitted* (key absent — never ``None``) on
+      assistant messages that only emit ``tool_calls``, so callers that always
+      expect text — every existing judge — can index ``message["content"]``
+      and get ``str``.
+    - ``tool_calls`` appears on assistant messages that invoke tools.
+    - ``tool_call_id`` (and optional ``name``) appear on tool-result messages.
+    """
+
+    role: Required[Role]
+    content: str
+    tool_calls: List[ToolCall]
+    tool_call_id: str
+    name: str
 
 
 class OpikBaseModel(abc.ABC):
@@ -65,6 +107,37 @@ class OpikBaseModel(abc.ABC):
         """
         pass
 
+    # Don't mark it as abstractmethod to avoid breaking existing user implementations
+    def generate_chat_completion(
+        self,
+        messages: List[ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> ConversationDict:
+        """
+        Generate the assistant turn from a list of role-tagged chat messages.
+
+        Implementations should forward the messages to the underlying
+        chat-completions API verbatim. Preserving the caller's ``system``/``user``
+        split is what allows providers to cache the stable system prefix across
+        calls — which is the whole point of using this method instead of
+        :meth:`generate_string`.
+
+        Args:
+            messages: A list of ``{"role": ..., "content": ...}`` dictionaries
+                following the OpenAI chat-completions shape.
+            response_format: Optional Pydantic model specifying the expected output
+                format.
+            kwargs: Additional arguments forwarded to the underlying provider call.
+
+        Returns:
+            A ``{"role": "assistant", "content": ...}`` dict so callers can append
+            it back onto the input ``messages`` for follow-up turns.
+        """
+        raise NotImplementedError(
+            "Chat completion generation not implemented for this provider"
+        )
+
     async def agenerate_string(
         self,
         input: str,
@@ -100,6 +173,17 @@ class OpikBaseModel(abc.ABC):
 
         Returns:
             Any: The response from the model provider, which can be of any type depending on the use case and LLM.
+        """
+        raise NotImplementedError("Async generation not implemented for this provider")
+
+    async def agenerate_chat_completion(
+        self,
+        messages: List[ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> ConversationDict:
+        """
+        Async counterpart of :meth:`generate_chat_completion`.
         """
         raise NotImplementedError("Async generation not implemented for this provider")
 

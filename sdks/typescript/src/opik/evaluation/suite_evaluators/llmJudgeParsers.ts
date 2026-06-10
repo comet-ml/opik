@@ -55,7 +55,6 @@ export class ResponseSchema {
           value: 0,
           reason: `Assertion field missing from LLM response: "${fieldKey}"`,
           scoringFailed: true,
-          categoryName: "suite_assertion",
         });
         continue;
       }
@@ -66,7 +65,6 @@ export class ResponseSchema {
           value: 0,
           reason: `Assertion field malformed in LLM response: "${fieldKey}"`,
           scoringFailed: true,
-          categoryName: "suite_assertion",
         });
         continue;
       }
@@ -79,7 +77,6 @@ export class ResponseSchema {
           value: 0,
           reason: `Assertion field malformed in LLM response: "${fieldKey}"`,
           scoringFailed: true,
-          categoryName: "suite_assertion",
         });
         continue;
       }
@@ -88,7 +85,6 @@ export class ResponseSchema {
         name: assertion,
         value: parsed.data.score ? 1 : 0,
         reason: parsed.data.reason,
-        categoryName: "suite_assertion",
       });
     }
 

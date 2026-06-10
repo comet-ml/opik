@@ -80,19 +80,23 @@ class RunnerTUI:
         self,
         project_name: str,
         url: str = "",
+        workspace: Optional[str] = None,
     ) -> None:
         padding = self._PADDING
         lw = self._LABEL_WIDTH
 
         info = Text()
         info.append("   ")
-        info.append("\u2800\u20dd", style="rgb(224,62,45)")
+        info.append("\u25cf", style="rgb(224,62,45)")
         info.append(" opik  ", style="bold")
         info.append("Opik URL".ljust(lw), style="dim")
-        info.append(url if url else "-")
+        info.append(url if url else "-", style="bold")
+        info.append(f"\n{padding}")
+        info.append("Workspace".ljust(lw), style="dim")
+        info.append(workspace if workspace else "-", style="bold")
         info.append(f"\n{padding}")
         info.append("Project".ljust(lw), style="dim")
-        info.append(project_name)
+        info.append(project_name, style="bold")
 
         self._console.print(info)
 
@@ -107,13 +111,10 @@ class RunnerTUI:
 
     def pairing_completed(self, project_url: Optional[str] = None) -> None:
         with self._lock:
-            was_active = self._pairing_active
             self._pairing_active = False
             self._pairing_deadline = None
             self._pairing_url = None
             self._project_url = project_url
-        if not was_active:
-            return
 
         text = Text()
         text.append(self._PADDING)

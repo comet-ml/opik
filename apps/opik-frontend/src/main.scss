@@ -13,6 +13,7 @@
     --primary-active: 238 65% 43%;
     --secondary: 240 93% 95%;
     --primary-100: 235 85% 97%;
+    --primary-50: 240 71% 99%;
     --white: #ffffff;
 
     --foreground-secondary: 224 71% 4%;
@@ -20,12 +21,11 @@
     --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
 
-    --muted-slate: 215 16%, 47%;
+    --muted-slate: 215 16% 47%;
     --light-slate: 215 20% 65%;
     --tree-line: 213 16% 88%;
     --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
-    --breadcrumb-last: 216 20% 40%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
@@ -43,6 +43,7 @@
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
+    --skeleton-shimmer-highlight: hsl(0 0% 100% / 0.6);
 
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
@@ -90,6 +91,8 @@
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
+    --chart-gray-light: #ebf2f5;
+    --chart-gray-dark: #45575f;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
@@ -101,7 +104,7 @@
     --thread-inactive: #e2effd;
     --thread-icon-background: #3438d0;
     --thread-icon-text: #ffffff;
-    --message-input-background: #e7ecff;
+    --message-input-background: #f2f2ff;
 
     /* Action cards */
     --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
@@ -120,6 +123,7 @@
     /* Feature/brand colors */
     --feature-experiment-management: #6c6ff7;
     --feature-llm: #52aea4;
+    --color-ollie: #f46e41;
 
     /* Config link icon color */
     --color-fuchsia: #db46ef;
@@ -207,6 +211,8 @@
     --tag-lavender-bg: #e5e5fe;
     --tag-lavender-text: #3b3b8e;
 
+    --click-blue: #262ab5;
+
     /* Trace/span type colors */
     --type-trace: #945fcf;
     --type-trace-bg: #efe2fd80;
@@ -265,6 +271,7 @@
     --primary-active: 220, 91%, 67%;
     --secondary: 0, 0%, 18%;
     --primary-100: 222, 25%, 14%;
+    --primary-50: 222, 25%, 12%;
     --white: #ffffff;
 
     --foreground-secondary: 214, 32%, 91%;
@@ -277,7 +284,6 @@
     --tree-line: 0 0% 30%;
     --slate-300: 213 27% 84%;
     --border: 0, 0%, 16%;
-    --breadcrumb-last: 214, 32%, 91%;
     --secondary-foreground: 0, 0%, 10%;
     --primary-foreground: 0, 0%, 11%;
 
@@ -335,6 +341,7 @@
     /* Feature colors - Dark Mode */
     --feature-experiment-management: #3b70f6;
     --feature-llm: #20ac74;
+    --color-ollie: #f46e41;
 
     /* Config link icon color - Dark Mode */
     --color-fuchsia: #c850c0;
@@ -348,6 +355,7 @@
 
     /* Muted colors - Dark Mode */
     --muted: 0, 0%, 11%;
+    --skeleton-shimmer-highlight: hsl(0 0% 100% / 0.06);
 
     /* Toggle colors - Dark Mode */
     --toggle-outline-active: #2c3c56;
@@ -369,6 +377,8 @@
     --codemirror-syntax-keyword: #ff7b72;
     --codemirror-syntax-punctuation: #8b949e;
 
+    --click-blue: #262ab5;
+
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
     --chart-grid-stroke: #303030;
@@ -381,6 +391,8 @@
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
+    --chart-gray-light: #2e2e2e;
+    --chart-gray-dark: #e2e8f0;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
@@ -495,6 +507,11 @@
     background-color: rgba(255, 255, 255, 0.15) !important;
   }
 
+  .cm-editor:not(.cm-focused) .cm-activeLine,
+  .cm-editor:not(.cm-focused) .cm-activeLineGutter {
+    background-color: transparent !important;
+  }
+
   /* Static Lezer code highlighting (used in PrettyLLMMessageCodeBlock) */
   .static-code-highlight {
     font-family:
@@ -533,11 +550,6 @@
     .tok-punctuation {
       color: var(--codemirror-syntax-punctuation);
     }
-  }
-
-  .static-code-gutter {
-    color: var(--codemirror-gutter);
-    background: transparent;
   }
 
   .dark .static-code-highlight {
@@ -827,20 +839,21 @@
 
   td:last-child,
   th:last-child,
-  // Pinned/grouped cells use box-shadow for their border (see getCommonPinningStyles)
-  .comet-pinned-cell,
-  .comet-grouped-cell ~ td {
+  // Pinned cells use box-shadow for their border (see getCommonPinningStyles)
+  .comet-pinned-cell {
     border-right: none;
   }
 
-  // Hide the last left-pinned column border (e.g. checkbox) until
-  // the user scrolls right and content slides under the pinned column
   .comet-pinned-last-left {
-    box-shadow: none;
+    box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
   }
 
-  [data-scrolled-right] & .comet-pinned-last-left {
-    box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
+  // In group rows the grouped cell paints its right border via inline
+  // box-shadow; the immediately-adjacent aggregated cell is only a thin
+  // (~1px) phantom slot whose own border-right would render as a second
+  // line right next to it. Suppress only that one neighbour's border-right.
+  .comet-grouped-cell + td {
+    border-right: none;
   }
 }
 
@@ -891,7 +904,7 @@
     right: 0;
     bottom: 0;
     z-index: -5;
-    background: var(--secondary);
+    background: hsl(var(--secondary));
   }
 }
 
@@ -903,6 +916,15 @@
   max-width: 100%;
   overflow-wrap: break-word;
   word-break: break-word;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-medium;
+  }
 
   pre {
     color: hsl(var(--foreground));

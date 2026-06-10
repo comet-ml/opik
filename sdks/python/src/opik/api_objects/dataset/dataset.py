@@ -344,6 +344,14 @@ class Dataset(DatasetExportOperations):
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
+        # True when the local hash cache is consistent with the backend.
+        # Directly-constructed Datasets (create_dataset, test-suite helpers,
+        # unit tests) start synced — there's nothing on the backend we haven't
+        # seen locally. The backend-fetch factories (`from_public`,
+        # `rest_operations.get_datasets`) flip this to False so dedup does a
+        # one-shot sync on the first `insert()` instead of paying an N+1
+        # sync at list time.
+        self._hashes_synced: bool = True
 
     @classmethod
     def from_public(
@@ -374,7 +382,9 @@ class Dataset(DatasetExportOperations):
             dataset_items_count=dataset_fern.dataset_items_count,
             client=client,
         )
-        dataset_.__internal_api__sync_hashes__()
+        # Backend may already hold items we haven't seen; lazy-sync on first
+        # insert so content-hash dedup still works without paying a sync now.
+        dataset_.__internal_api__hashes_synced__ = False
         return dataset_
 
     @functools.cached_property
@@ -603,6 +613,13 @@ class Dataset(DatasetExportOperations):
     def __internal_api__insert_items_as_dataclasses__(
         self, items: List[dataset_item.DatasetItem]
     ) -> None:
+        # Lazy-sync against the backend the first time we insert into a
+        # dataset that was fetched from the backend (list or get-by-name
+        # factory), so content-hash dedup still works without paying an
+        # N+1 sync at list time.
+        if not self._hashes_synced:
+            self.__internal_api__sync_hashes__()
+
         # Remove duplicates if they already exist
         deduplicated_items: List[dataset_item.DatasetItem] = []
         for item in items:
@@ -650,6 +667,23 @@ class Dataset(DatasetExportOperations):
         ]
         self.__internal_api__insert_items_as_dataclasses__(dataset_items)
 
+    @property
+    def __internal_api__hashes_synced__(self) -> bool:
+        """Whether the local hash cache is in sync with the backend.
+
+        `__init__` defaults this to True (a freshly constructed Dataset
+        has no backend state to sync). Factory paths that construct a
+        Dataset from an existing backend state (`from_public`,
+        `rest_operations.get_datasets`) flip it to False so the first
+        :meth:`insert` triggers a one-shot sync instead of paying an
+        N+1 sync at list time.
+        """
+        return self._hashes_synced
+
+    @__internal_api__hashes_synced__.setter
+    def __internal_api__hashes_synced__(self, value: bool) -> None:
+        self._hashes_synced = value
+
     def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""
         LOGGER.debug("Start hash sync in dataset")
@@ -662,6 +696,7 @@ class Dataset(DatasetExportOperations):
             self._id_to_hash[item.id] = item_hash  # type: ignore
             self._hashes.add(item_hash)
 
+        self._hashes_synced = True
         LOGGER.debug("Finish hash sync in dataset")
 
     def update(self, items: List[Dict[str, Any]]) -> None:

@@ -81,17 +81,17 @@ class Factuality(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the factuality score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = template.generate_query(
+        messages = template.build_messages(
             input=input,
             output=output,
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=FactualityResponseFormat
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=FactualityResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
     async def ascore(
         self, input: str, output: str, context: List[str], **ignored_kwargs: Any
@@ -111,14 +111,14 @@ class Factuality(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: A ScoreResult object with the factuality score and reason.
         """
-        llm_query = template.generate_query(
+        messages = template.build_messages(
             input=input,
             output=output,
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=FactualityResponseFormat
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=FactualityResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)

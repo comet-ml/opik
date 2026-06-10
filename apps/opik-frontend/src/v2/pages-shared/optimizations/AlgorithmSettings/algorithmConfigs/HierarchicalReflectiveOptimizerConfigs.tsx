@@ -5,7 +5,7 @@ import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { HierarchicalReflectiveOptimizerParameters } from "@/types/optimizations";
 import { DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 interface HierarchicalReflectiveOptimizerConfigsProps {
   configs: Partial<HierarchicalReflectiveOptimizerParameters>;

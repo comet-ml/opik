@@ -13,6 +13,8 @@ export const TraceThreadFilterWriteOperator = {
     LessThanOrEqualTo: "<=",
     IsEmpty: "is_empty",
     IsNotEmpty: "is_not_empty",
+    In: "in",
+    NotIn: "not_in",
 } as const;
 export type TraceThreadFilterWriteOperator =
     (typeof TraceThreadFilterWriteOperator)[keyof typeof TraceThreadFilterWriteOperator];

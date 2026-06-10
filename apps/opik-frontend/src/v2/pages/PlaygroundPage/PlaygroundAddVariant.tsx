@@ -74,9 +74,10 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
     <div
       ref={stripRef}
       className={cn(
-        "group/variant flex w-[var(--add-variant-width)] shrink-0 cursor-pointer items-start justify-center self-stretch border-r bg-background hover:bg-primary-100",
+        "group/variant flex w-[var(--add-variant-width)] shrink-0 cursor-pointer items-start justify-center self-stretch bg-background hover:bg-primary-100",
         addVariantOpen && "bg-primary-100",
       )}
+      style={{ boxShadow: "1px 0 0 hsl(var(--border))" }}
       onClick={() => setAddVariantOpen(true)}
     >
       <div className="flex h-[50vh] items-center">
@@ -84,6 +85,7 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
           <PopoverTrigger asChild>
             <div className="flex cursor-pointer flex-col items-center gap-3">
               <Button
+                data-testid="playground-add-variant-button"
                 variant="secondary"
                 size="icon-xs"
                 className="group-hover/variant:bg-secondary group-hover/variant:text-primary-hover"

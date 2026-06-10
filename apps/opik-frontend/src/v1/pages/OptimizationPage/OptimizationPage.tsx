@@ -14,6 +14,7 @@ import OptimizationHeader from "./OptimizationHeader";
 import OptimizationTrialsControls from "./OptimizationTrialsControls";
 import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 enum OPTIMIZATION_TAB {
   OVERVIEW = "overview",
@@ -22,6 +23,9 @@ enum OPTIMIZATION_TAB {
 
 const OptimizationPage: React.FC = () => {
   const navigate = useNavigate();
+  const {
+    permissions: { canUseOptimizationStudio },
+  } = usePermissions();
 
   const {
     workspaceName,
@@ -126,6 +130,7 @@ const OptimizationPage: React.FC = () => {
   }
 
   const canRerun =
+    canUseOptimizationStudio &&
     Boolean(optimization?.studio_config) &&
     Boolean(optimization?.id) &&
     optimization?.status &&

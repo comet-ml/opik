@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
@@ -465,6 +467,46 @@ public class SpanResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .method(HttpMethod.PATCH, Entity.json(batchUpdate));
+    }
+
+    public Response callAddSpanComment(UUID spanId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .path("comments")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(comment));
+    }
+
+    public Response callUpdateSpanComment(UUID commentId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path(commentId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(comment));
+    }
+
+    public Response callDeleteSpanComments(BatchDelete batchDelete, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete));
+    }
+
+    public Response callAddSpanFeedbackScore(UUID spanId, FeedbackScore score, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .path("feedback-scores")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(score));
     }
 
 }

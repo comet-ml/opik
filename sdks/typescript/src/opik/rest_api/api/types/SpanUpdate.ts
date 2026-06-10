@@ -28,4 +28,5 @@ export interface SpanUpdate {
     errorInfo?: OpikApi.ErrorInfo;
     ttft?: number;
     source?: OpikApi.SpanUpdateSource;
+    environment?: string;
 }

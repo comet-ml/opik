@@ -21,7 +21,7 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { Alert, AlertTitle } from "@/ui/alert";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { DATASET_ITEM_PREFILLED_DATA } from "@/constants/datasets";
 
 type AddDatasetItemDialogProps = {

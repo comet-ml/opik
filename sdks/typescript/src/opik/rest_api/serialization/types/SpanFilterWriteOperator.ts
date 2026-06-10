@@ -20,6 +20,8 @@ export const SpanFilterWriteOperator: core.serialization.Schema<
     "<=",
     "is_empty",
     "is_not_empty",
+    "in",
+    "not_in",
 ]);
 
 export declare namespace SpanFilterWriteOperator {
@@ -35,5 +37,7 @@ export declare namespace SpanFilterWriteOperator {
         | "<"
         | "<="
         | "is_empty"
-        | "is_not_empty";
+        | "is_not_empty"
+        | "in"
+        | "not_in";
 }

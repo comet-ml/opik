@@ -20,7 +20,6 @@ import CompareExperimentsHeader from "@/v2/pages-shared/experiments/CompareExper
 import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import Loader from "@/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
 import { formatScoreDisplay, getScoreDisplayName } from "@/lib/feedback-scores";
@@ -212,9 +211,7 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
     [columnsWidth, setColumnsWidth],
   );
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending;
 
   return (
     <>
@@ -235,6 +232,7 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showSkeleton={isTableLoading}
       />
       <PageBodyStickyContainer
         className="pb-6"

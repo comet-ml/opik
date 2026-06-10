@@ -26,6 +26,7 @@ SpanSearchStreamRequestPublicExcludeItem = typing.Union[
         "duration",
         "ttft",
         "source",
+        "environment",
     ],
     typing.Any,
 ]

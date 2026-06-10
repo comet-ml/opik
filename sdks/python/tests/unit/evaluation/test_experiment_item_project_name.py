@@ -25,6 +25,7 @@ def test_evaluate_llm_task_context__experiment_item_includes_trace_project_name(
 
     # Create mock experiment
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.insert = mock.Mock()
 
     # Create mock client
@@ -70,6 +71,7 @@ def test_evaluate_llm_task_context__experiment_item_includes_none_project_name()
 
     # Create mock experiment
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.insert = mock.Mock()
 
     # Create mock client
@@ -162,6 +164,7 @@ def test_evaluate_llm_task_context__experiment_item_includes_execution_policy():
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.insert = mock.Mock()
     mock_client = mock.Mock(spec=opik.Opik)
 
@@ -195,6 +198,7 @@ def test_evaluate_llm_task_context__experiment_item_execution_policy_none_by_def
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.insert = mock.Mock()
     mock_client = mock.Mock(spec=opik.Opik)
 

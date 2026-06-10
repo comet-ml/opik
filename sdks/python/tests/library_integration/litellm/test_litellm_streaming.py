@@ -5,6 +5,7 @@ import litellm.litellm_core_utils.streaming_handler
 
 import opik
 from opik.integrations.litellm import track_completion
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -22,9 +23,11 @@ pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 
 
-@pytest.mark.parametrize("model,expected_provider", constants.TEST_MODELS_PARAMETRIZE)
+@pytest.mark.parametrize(
+    "model,expected_provider,extra_call_kwargs", constants.TEST_MODELS_PARAMETRIZE
+)
 def test_litellm_completion_streaming__happyflow(
-    fake_backend, model, expected_provider
+    fake_backend, model, expected_provider, extra_call_kwargs
 ):
     """Test basic LiteLLM streaming completion tracking."""
     tracked_completion = track_completion()(litellm.completion)
@@ -37,9 +40,10 @@ def test_litellm_completion_streaming__happyflow(
     stream = tracked_completion(
         model=model,
         messages=messages,
-        max_tokens=10,
+        max_tokens=64,
         stream=True,
         stream_options={"include_usage": True},
+        **extra_call_kwargs,
     )
 
     # Consume the stream
@@ -66,7 +70,7 @@ def test_litellm_completion_streaming__happyflow(
         metadata=ANY_DICT.containing(
             {
                 "created_from": "litellm",
-                "max_tokens": 10,
+                "max_tokens": 64,
             }
         ),
         start_time=ANY_BUT_NONE,
@@ -83,7 +87,7 @@ def test_litellm_completion_streaming__happyflow(
                 metadata=ANY_DICT.containing(
                     {
                         "created_from": "litellm",
-                        "max_tokens": 10,
+                        "max_tokens": 64,
                     }
                 ),
                 usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,  # Usage info must be present
@@ -116,7 +120,8 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
     stream = await tracked_acompletion(
         model=MODEL_FOR_TESTS,
         messages=messages,
-        max_tokens=10,
+        max_tokens=64,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -145,7 +150,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
         metadata=ANY_DICT.containing(
             {
                 "created_from": "litellm",
-                "max_tokens": 10,
+                "max_tokens": 64,
             }
         ),
         start_time=ANY_BUT_NONE,
@@ -162,7 +167,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
                 metadata=ANY_DICT.containing(
                     {
                         "created_from": "litellm",
-                        "max_tokens": 10,
+                        "max_tokens": 64,
                     }
                 ),
                 usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,  # Usage info must be present
@@ -206,6 +211,7 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         stream=True,
         stream_options={"include_usage": True},
         opik_args=args_dict,

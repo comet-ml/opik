@@ -9,7 +9,8 @@
  * Happy-path only — edge cases are covered in the TestSuite unit tests.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Opik, TestSuite } from "@/index";
+import { Opik, TestSuite, runTests } from "@/index";
+import { TestSuiteExperiment } from "@/experiment/TestSuiteExperiment";
 import { searchAndWaitForDone } from "@/utils/searchHelpers";
 import {
   shouldRunIntegrationTests,
@@ -108,6 +109,70 @@ describe.skipIf(!shouldRunApiTests)(
         await expect(client.getTestSuite(name)).rejects.toThrow();
       },
       30000
+    );
+
+    it(
+      "getTestSuiteExperiments — returns TestSuiteExperiment instances with suite aggregates populated after runTests",
+      async () => {
+        const name = `client-suite-experiments-${Date.now()}`;
+        createdSuiteNames.push(name);
+
+        const suite = await TestSuite.create(client, {
+          name,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.insert([{ data: { input: "Q1", expected: "A1" } }]);
+        await suite.insert([{ data: { input: "Q2", expected: "A2" } }]);
+
+        await searchAndWaitForDone(
+          async () => suite.getItems(),
+          2,
+          WAIT_OPTIONS.timeout,
+          WAIT_OPTIONS.interval
+        );
+
+        const runResult = await runTests({
+          testSuite: suite,
+          task: async (item) => ({
+            input: item.input,
+            output: `Echo: ${item.input}`,
+          }),
+        });
+
+        await client.flush();
+
+        const clientResults = await searchAndWaitForDone(
+          async () => {
+            const experiments = await client.getTestSuiteExperiments(name);
+            return experiments.filter(
+              (e) =>
+                e.id === runResult.experimentId &&
+                e.totalCount !== undefined &&
+                e.totalCount > 0
+            );
+          },
+          1,
+          WAIT_OPTIONS.timeout,
+          WAIT_OPTIONS.interval
+        );
+
+        expect(clientResults.length).toBeGreaterThanOrEqual(1);
+        const [fetched] = clientResults;
+
+        expect(fetched).toBeInstanceOf(TestSuiteExperiment);
+        expect(fetched.id).toBe(runResult.experimentId);
+        expect(fetched.datasetName).toBe(name);
+        expect(fetched.totalCount).toBe(2);
+        expect(fetched.passedCount).toBeGreaterThanOrEqual(0);
+        expect(fetched.passedCount).toBeLessThanOrEqual(2);
+        expect(fetched.passRate).toBeGreaterThanOrEqual(0);
+        expect(fetched.passRate).toBeLessThanOrEqual(1);
+        expect(Array.isArray(fetched.assertionScores)).toBe(true);
+        expect(fetched.assertionScores!.length).toBeGreaterThanOrEqual(1);
+      },
+      90000
     );
 
     it(

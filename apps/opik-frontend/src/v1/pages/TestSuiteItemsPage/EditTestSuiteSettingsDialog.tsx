@@ -202,25 +202,15 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-col gap-1 pb-4">
-              <div className="mb-1">
-                <Label className="comet-body-s-accented">
-                  Global assertions
-                </Label>
-                <p className="comet-body-xs text-light-slate">
-                  Define the global conditions all items in this test suite must
-                  pass.
-                </p>
-              </div>
-              <div className="pt-1.5">
-                <AssertionsField
-                  editableAssertions={fields.map((f) => f.value)}
-                  onChangeEditable={(index, value) => update(index, { value })}
-                  onRemoveEditable={(index) => remove(index)}
-                  onAdd={() => append({ value: "" })}
-                  placeholder="e.g. Response should be factually accurate and cite sources"
-                />
-              </div>
+            <div className="pb-4">
+              <AssertionsField
+                variant="global"
+                editableAssertions={fields.map((f) => f.value)}
+                onChangeEditable={(index, value) => update(index, { value })}
+                onRemoveEditable={(index) => remove(index)}
+                onAdd={() => append({ value: "" })}
+                placeholder="e.g. Response should be factually accurate and cite sources"
+              />
             </div>
           </div>
         </DialogAutoScrollBody>

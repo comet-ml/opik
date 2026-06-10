@@ -98,7 +98,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import GuardrailsCell from "@/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import {
   DetailsActionSection,
   DetailsActionSectionParam,
@@ -574,6 +574,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         size: size as number,
         search: trimmedSearch,
         truncate: truncationEnabled,
+        stripAttachments: true,
         fromTime: intervalStart,
         toTime: intervalEnd,
         exclude: excludeFields,

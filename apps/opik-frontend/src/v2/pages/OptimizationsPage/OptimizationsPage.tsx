@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import { RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
@@ -11,7 +10,7 @@ import {
 } from "use-query-params";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DatasetNameCell from "@/v2/pages/OptimizationsPage/DatasetNameCell";
 import OptimizationStatusCell from "@/v2/pages/OptimizationsPage/OptimizationStatusCell";
 import {
@@ -21,7 +20,6 @@ import {
   OptimizationCostCell,
   OptimizationTotalCostCell,
 } from "@/v2/pages/OptimizationsPage/OptimizationMetricCells";
-import Loader from "@/shared/Loader/Loader";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -36,15 +34,15 @@ import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/Dat
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import OptimizationRowActionsCell from "@/v2/pages/OptimizationsPage/OptimizationRowActionsCell";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { Button } from "@/ui/button";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { Separator } from "@/ui/separator";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
+import OptimizationsEmptyState from "@/v2/pages/OptimizationsPage/OptimizationsEmptyState";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
@@ -172,7 +170,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canViewDatasets, canDeleteOptimizationRuns },
+    permissions: {
+      canViewDatasets,
+      canDeleteOptimizationRuns,
+      canUseOptimizationStudio,
+    },
   } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -213,10 +215,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const noData = !search && filters.length === 0;
-  const noDataText = noData
-    ? "There are no optimizations yet\n" +
-      "Optimizations help improve your LLM application's performance, accuracy, and overall user experience"
-    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -316,38 +314,44 @@ const OptimizationsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading =
+    isPending || (isPlaceholderData && optimizations.length === 0);
+  const isEmpty = !isTableLoading && noData && optimizations.length === 0;
 
-  const isEmpty = noData && optimizations.length === 0;
+  const handleClearFilters = useCallback(() => {
+    setSearch(undefined);
+    setFilters([]);
+  }, [setSearch, setFilters]);
 
   return (
     <div className="flex min-h-full flex-col pt-4">
       <div className="mb-1 flex min-h-7 items-center justify-between">
         <h1 className="comet-body-accented truncate break-words">
-          Optimization Studio
+          Optimization runs
         </h1>
       </div>
       {isEmpty ? (
-        <PageEmptyState
-          lightImageUrl={emptyOptStudioLightUrl}
-          darkImageUrl={emptyOptStudioDarkUrl}
-          title="No optimization runs yet"
-          description={
-            "Explore different prompt variations and see what performs best.\nOptimizations help you improve accuracy, consistency, and overall user experience."
-          }
-          primaryActionLabel="Create optimization run"
-          onPrimaryAction={handleNewOptimizationClick}
-          docsUrl={buildDocsUrl("/agent_optimization/optimization_studio")}
-        />
+        isOptimizationStudioEnabled && canUseOptimizationStudio ? (
+          <OptimizationsEmptyState
+            onOptimizeClick={handleNewOptimizationClick}
+          />
+        ) : (
+          <PageEmptyState
+            lightImageUrl={emptyOptStudioLightUrl}
+            darkImageUrl={emptyOptStudioDarkUrl}
+            title="No optimization runs yet"
+            description="Try different prompt versions and see what performs best. Optimization runs help you improve accuracy, consistency, and user experience."
+            docsUrl={buildDocsUrl(
+              "/development/optimization-runs/optimization_studio",
+            )}
+          />
+        )
       ) : (
         <>
-          {isOptimizationStudioEnabled && <StudioTemplates />}
+          {isOptimizationStudioEnabled && canUseOptimizationStudio && (
+            <StudioTemplates />
+          )}
           <div className="pt-4">
-            <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-              Optimization runs
-            </h2>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
               <div className="flex items-center gap-2">
                 <SearchInput
@@ -374,16 +378,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
                     <Separator orientation="vertical" className="mx-2 h-4" />
                   </>
                 )}
-                <TooltipWrapper content="Refresh optimizations list">
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    className="shrink-0"
-                    onClick={() => refetch()}
-                  >
-                    <RotateCw />
-                  </Button>
-                </TooltipWrapper>
+                <RefreshButton
+                  tooltip="Refresh optimizations list"
+                  isFetching={isFetching}
+                  onRefresh={() => refetch()}
+                />
                 <ColumnsButton
                   columns={visibleColumns}
                   selectedColumns={selectedColumns}
@@ -404,15 +403,18 @@ const OptimizationsPage: React.FunctionComponent = () => {
                 setRowSelection,
               }}
               noData={
-                <DataTableNoData title={noDataText}>
-                  {noData && (
-                    <Button variant="link" onClick={handleNewOptimizationClick}>
-                      Create optimization
-                    </Button>
-                  )}
-                </DataTableNoData>
+                <DataTableNoMatchingData
+                  onClearFilters={
+                    search || filters.length > 0
+                      ? handleClearFilters
+                      : undefined
+                  }
+                />
               }
-              showLoadingOverlay={isPlaceholderData && isFetching}
+              showSkeleton={isTableLoading}
+              showLoadingOverlay={
+                !isTableLoading && isPlaceholderData && isFetching
+              }
             />
             <div className="py-4">
               <DataTablePagination

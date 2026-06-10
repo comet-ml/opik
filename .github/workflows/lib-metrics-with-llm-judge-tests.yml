@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
 
     steps:
       - name: Check out code
@@ -59,4 +59,4 @@ jobs:
       - name: Run tests
         run: |
           cd ./tests/library_integration/metrics_with_llm_judge/
-          python -m pytest  -vv .
+          python -m pytest -vv --durations=20 .

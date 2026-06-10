@@ -1,4 +1,4 @@
-export enum ExperimentItemStatus {
+export enum RunStatus {
   PASSED = "passed",
   FAILED = "failed",
   SKIPPED = "skipped",

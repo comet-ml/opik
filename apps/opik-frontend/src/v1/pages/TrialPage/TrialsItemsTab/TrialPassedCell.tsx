@@ -1,6 +1,6 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
-import { RunStatus } from "@/types/datasets";
+import { RunStatus } from "@/types/test-suites";
 
 type FlattenedTrialItem = {
   experimentItem: {
@@ -28,7 +28,7 @@ const TrialPassedCell: React.FC<CellContext<FlattenedTrialItem, unknown>> = (
 
   if (runSummary) {
     const { passed_runs, total_runs, status } = runSummary;
-    const itemPassed = status === "passed";
+    const itemPassed = status === RunStatus.PASSED;
 
     if (total_runs === 1) {
       return (
@@ -52,7 +52,7 @@ const TrialPassedCell: React.FC<CellContext<FlattenedTrialItem, unknown>> = (
   }
 
   if (allRuns.length === 1) {
-    const itemPassed = firstRun.status === "passed";
+    const itemPassed = firstRun.status === RunStatus.PASSED;
     return (
       <span className={itemPassed ? "text-success" : "text-destructive"}>
         {itemPassed ? "Yes" : "No"}
@@ -60,7 +60,9 @@ const TrialPassedCell: React.FC<CellContext<FlattenedTrialItem, unknown>> = (
     );
   }
 
-  const runsPassed = allRuns.filter((r) => r.status === "passed").length;
+  const runsPassed = allRuns.filter(
+    (r) => r.status === RunStatus.PASSED,
+  ).length;
   const passThreshold = executionPolicy?.pass_threshold ?? 1;
   const itemPassed = runsPassed >= passThreshold;
 

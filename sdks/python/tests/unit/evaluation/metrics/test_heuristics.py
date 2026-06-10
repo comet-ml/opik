@@ -190,6 +190,45 @@ def test_evaluation__levenshtein_ratio():
     )
 
 
+# --- None input validation tests ---
+
+
+@pytest.mark.parametrize(
+    "output,reference",
+    [
+        (None, "valid reference"),
+        ("valid output", None),
+        (None, None),
+    ],
+)
+def test_equals__none_input__raises_metric_computation_error(output, reference):
+    metric = equals.Equals(track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output=output, reference=reference)
+
+
+@pytest.mark.parametrize(
+    "output,reference",
+    [
+        (None, "valid reference"),
+        ("valid output", None),
+        (None, None),
+    ],
+)
+def test_levenshtein_ratio__none_input__raises_metric_computation_error(
+    output, reference
+):
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output=output, reference=reference)
+
+
+def test_regex_match__none_output__raises_metric_computation_error():
+    metric = regex_match.RegexMatch(r".+metric$", track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output=None)
+
+
 @pytest.mark.parametrize(
     "candidate,reference,expected_min,expected_max",
     [

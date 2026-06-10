@@ -5,6 +5,7 @@ og:description: Evaluate prompt templates against datasets effortlessly with Opi
 og:site_name: Opik Documentation
 og:title: Evaluate Prompt Function - Opik
 title: evaluatePrompt Function
+canonical-url: https://www.comet.com/docs/opik/reference/typescript-sdk/evaluation/evaluate_prompt_function
 ---
 
 <Note>
@@ -15,7 +16,7 @@ The `evaluatePrompt` function provides a streamlined way to evaluate prompt temp
 
 ## Overview
 
-`evaluatePrompt` is a convenience wrapper around the [`evaluate`](/reference/typescript-sdk/evaluation/evaluate) function that handles:
+`evaluatePrompt` is a convenience wrapper around the [`evaluate`](/reference/typescript-sdk/evaluation/evaluate_function) function that handles:
 
 - **Template formatting**: Automatically formats message templates with dataset item variables
 - **Model invocation**: Generates LLM responses using your specified model
@@ -154,9 +155,10 @@ experimentConfig: {
 - **Description**: Array of Opik Prompt objects to link to this experiment. Useful for tracking which prompt versions were used.
 
 ```typescript
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "translation-prompt",
   prompt: "Translate to {{language}}: {{text}}",
+  projectName: "my-project",
 });
 
 prompts: [prompt];
@@ -332,14 +334,13 @@ model: claude;
 Track which prompt versions are used in evaluations:
 
 ```typescript
-import { Opik, evaluatePrompt } from "opik";
-
-const client = new Opik();
+import { Opik, Prompt, evaluatePrompt } from "opik";
 
 // Create or get a prompt
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "customer-support-prompt",
   prompt: "{{system_message}}\n\nUser: {{user_query}}",
+  projectName: "my-project",
 });
 
 // Link the prompt to the evaluation
@@ -572,7 +573,7 @@ Common validation errors:
 
 ## See Also
 
-- [evaluate Function](/reference/typescript-sdk/evaluation/evaluate) - For evaluating custom tasks
+- [evaluate Function](/reference/typescript-sdk/evaluation/evaluate_function) - For evaluating custom tasks
 - [Datasets](/reference/typescript-sdk/evaluation/datasets) - Working with evaluation datasets
 - [Metrics](/reference/typescript-sdk/evaluation/metrics) - Available evaluation metrics
 - [Models](/reference/typescript-sdk/evaluation/models) - Model configuration and usage

@@ -1,0 +1,420 @@
+"""Planner + CLI-help tests for ``opik migrate dataset``.
+
+The planner cases (conflict, project-not-found, default flow ordering)
+live here; the meaty version-replay tests live in
+``test_migrate_dataset_version_replay.py`` and the cascade tests live in
+``test_migrate_dataset_experiments_cascade.py``.
+
+Shared helpers (``_DatasetRow``, ``_Page``, ``_planner_rest_client``)
+come from ``_migrate_helpers``.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+from click.testing import CliRunner
+
+from opik.cli import cli
+from opik.cli.migrate.audit import AuditLog
+from opik.cli.migrate.datasets import planner as planner_module
+from opik.cli.migrate.errors import (
+    ConflictError,
+    DatasetNotFoundError,
+    ProjectNotFoundError,
+)
+
+from ._migrate_helpers import (
+    _DatasetRow,
+    _Page,
+    _planner_client,
+    _planner_rest_client,
+)
+
+
+# ---------------------------------------------------------------------------
+# Elapsed-time formatter
+# ---------------------------------------------------------------------------
+
+
+class TestFormatElapsed:
+    """Pin the wall-clock duration renderer used in the migrate success /
+    failure lines. Sub-minute → one decimal of seconds; past a minute →
+    integer ``Mm Ss`` or ``Hh Mm Ss`` (no fractional seconds).
+    """
+
+    def test_sub_minute__one_decimal_seconds(self) -> None:
+        from opik.cli.migrate.main import _format_elapsed
+
+        assert _format_elapsed(0.0) == "0.0s"
+        assert _format_elapsed(12.34) == "12.3s"
+        assert _format_elapsed(59.99) == "60.0s"
+
+    def test_minute_range__integer_m_s(self) -> None:
+        from opik.cli.migrate.main import _format_elapsed
+
+        assert _format_elapsed(60.0) == "1m 0s"
+        assert _format_elapsed(125.7) == "2m 5s"
+
+    def test_hour_range__integer_h_m_s(self) -> None:
+        from opik.cli.migrate.main import _format_elapsed
+
+        assert _format_elapsed(3600.0) == "1h 0m 0s"
+        assert _format_elapsed(3725.0) == "1h 2m 5s"
+
+
+# ---------------------------------------------------------------------------
+# OPIK-6599: loud-fail on skipped items
+#
+# When the cascade emits any ``skip`` audit record, the migrate must:
+#   1. Finalize the audit log to ``failed`` (not ``ok``)
+#   2. Print a SKIP_SUMMARY line to stderr (not stdout) so CI gates can
+#      grep without parsing the JSON
+#   3. Exit non-zero
+#
+# Tests below cover ``_finalize_with_skips_or_ok`` directly so they don't
+# need a fully-wired Opik client + REST server stub. The CLI is only the
+# wrapper around this helper.
+# ---------------------------------------------------------------------------
+
+
+class TestFinalizeWithSkipsOrOk:
+    def _make_audit_with_skips(self) -> AuditLog:
+        audit = AuditLog(command="opik migrate dataset", args={})
+        audit.record(
+            type="skip",
+            status="skipped",
+            details={
+                "reason": "items_missing_dataset_item_remap",
+                "experiment_id": "src-exp-1",
+                "experiment_name": "exp-1",
+                "count": 2500,
+                "sample_source_ids": ["src-ds-item-1", "src-ds-item-2"],
+            },
+        )
+        return audit
+
+    def test_skips_present__finalizes_failed_exits_1_stderr_summary(
+        self, tmp_path, capsys
+    ) -> None:
+        from opik.cli.migrate.main import _finalize_with_skips_or_ok
+
+        audit = self._make_audit_with_skips()
+        audit_path = tmp_path / "audit.json"
+
+        with pytest.raises(SystemExit) as exc:
+            _finalize_with_skips_or_ok(
+                audit,
+                audit_path,
+                name="MyDataset",
+                target_label="MyDataset",
+                target_project="DestProject",
+                elapsed_seconds=12.3,
+            )
+
+        # AC 1: non-zero exit code
+        assert exc.value.code == 1
+
+        captured = capsys.readouterr()
+        # AC 3: skip message on stderr (not stdout), with the
+        # machine-parseable SKIP_SUMMARY suffix
+        assert "SKIP_SUMMARY:" in captured.err
+        assert "items_skipped_missing_item=2500" in captured.err
+        assert "experiments_skipped=0" in captured.err
+        assert "items_skipped_missing_trace=0" in captured.err
+        assert "NOT rolled back" in captured.err
+        # Rollback hint names the entities the operator must remove,
+        # the destination project, and the rename-back step on the source.
+        assert "roll back manually" in captured.err
+        assert "DestProject" in captured.err
+        assert "MyDataset_v1" in captured.err
+
+        # AC 2: audit finalized to failed with skip record intact
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "failed"
+        assert any(a.get("status") == "skipped" for a in on_disk["actions"])
+
+    def test_no_skips__finalizes_ok_no_exit_no_stderr(self, tmp_path, capsys) -> None:
+        from opik.cli.migrate.main import _finalize_with_skips_or_ok
+
+        audit = AuditLog(command="opik migrate dataset", args={})
+        audit.record(type="rename_source", status="ok", details={})
+        audit_path = tmp_path / "audit.json"
+
+        # Happy path returns without raising; happy-path message goes to
+        # stdout, stderr stays clean.
+        _finalize_with_skips_or_ok(
+            audit,
+            audit_path,
+            name="MyDataset",
+            target_label="MyDataset",
+            target_project="DestProject",
+            elapsed_seconds=5.0,
+        )
+
+        captured = capsys.readouterr()
+        assert "SKIP_SUMMARY:" not in captured.err
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "ok"
+
+    def test_multiple_skip_records__totals_aggregated_by_reason(
+        self, tmp_path, capsys
+    ) -> None:
+        from opik.cli.migrate.main import _finalize_with_skips_or_ok
+
+        # Two experiments, each contributing skips for both reasons.
+        audit = AuditLog(command="opik migrate dataset", args={})
+        for exp_id in ("src-exp-1", "src-exp-2"):
+            audit.record(
+                type="skip",
+                status="skipped",
+                details={
+                    "reason": "items_missing_trace_remap",
+                    "experiment_id": exp_id,
+                    "experiment_name": exp_id,
+                    "count": 7,
+                    "sample_source_ids": [],
+                },
+            )
+            audit.record(
+                type="skip",
+                status="skipped",
+                details={
+                    "reason": "items_missing_dataset_item_remap",
+                    "experiment_id": exp_id,
+                    "experiment_name": exp_id,
+                    "count": 3,
+                    "sample_source_ids": [],
+                },
+            )
+
+        with pytest.raises(SystemExit):
+            _finalize_with_skips_or_ok(
+                audit,
+                tmp_path / "audit.json",
+                name="MyDataset",
+                target_label="MyDataset",
+                target_project="DestProject",
+                elapsed_seconds=1.0,
+            )
+
+        captured = capsys.readouterr()
+        # 7 + 7 = 14 trace skips, 3 + 3 = 6 dataset-item skips
+        assert "items_skipped_missing_trace=14" in captured.err
+        assert "items_skipped_missing_item=6" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Help text
+# ---------------------------------------------------------------------------
+
+
+class TestMigrateHelp:
+    def test_migrate_group__help_invoked__lists_subcommands(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["migrate", "--help"])
+        assert result.exit_code == 0
+        assert "Migrate Opik entities" in result.output
+        assert "dataset" in result.output
+
+    def test_migrate_dataset__help_invoked__lists_required_flags(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["migrate", "dataset", "--help"])
+        assert result.exit_code == 0
+        assert "--to-project" in result.output
+        assert "--from-project" in result.output
+        assert "--dry-run" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Planner unit tests (no Click invocation)
+# ---------------------------------------------------------------------------
+
+
+class TestPlanBuilding:
+    def test_build_dataset_plan__default_flow__orders_rename_create_replay_optimizations_experiments(
+        self,
+    ) -> None:
+        # The plan emits: rename source -> create destination -> replay
+        # versions -> cascade optimizations -> cascade experiments. The
+        # order is load-bearing: CascadeOptimizations populates
+        # plan.optimization_id_remap which CascadeExperiments reads when
+        # re-pointing each experiment's optimization_id FK. Pin the
+        # sequence so a future reorder can't break that contract
+        # silently.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+            "CascadeOptimizations",
+            "CascadeExperiments",
+        ]
+        rename = plan.actions[0]
+        assert rename.from_name == "MyDataset"
+        assert rename.to_name == "MyDataset_v1"
+        assert plan.target_name == "MyDataset"
+        # New remap dict starts empty; _cascade_optimizations populates it.
+        assert plan.optimization_id_remap == {}
+
+    def test_build_dataset_plan__test_suite__type_forwarded_to_destination(
+        self,
+    ) -> None:
+        # Test suites flow through the same plan shape as plain datasets;
+        # the only difference is ``CreateDestination.type`` being forwarded
+        # so the target accepts suite-level evaluators + execution_policy
+        # via ``ReplayVersions``.
+        rest_client = _planner_rest_client(
+            [
+                _Page(
+                    [_DatasetRow(id="src-1", name="MySuite", type="evaluation_suite")]
+                ),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MySuite",
+            to_project="B",
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+            "CascadeOptimizations",
+            "CascadeExperiments",
+        ]
+        replay = plan.actions[2]
+        assert replay.is_test_suite is True
+
+    def test_build_dataset_plan__post_rename_name_collides_workspace_wide__raises_conflict(
+        self,
+    ) -> None:
+        # Source rename frees the target name, but the post-rename name
+        # "<source>_v1" itself collides with another dataset in the
+        # workspace.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([_DatasetRow(id="other-1", name="MyDataset_v1")]),
+            ]
+        )
+
+        with pytest.raises(ConflictError) as exc_info:
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="MyDataset",
+                to_project="B",
+            )
+        assert "MyDataset_v1" in str(exc_info.value)
+
+    def test_build_dataset_plan__post_rename_match_is_source_itself__no_conflict(
+        self,
+    ) -> None:
+        # When find_datasets returns the source itself, we must not treat that
+        # as a collision — it's about to be renamed.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([_DatasetRow(id="src-1", name="MyDataset_v1")]),
+            ]
+        )
+        # Should NOT raise: the only "match" is the source dataset itself.
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+        )
+        assert plan.target_name == "MyDataset"
+
+    def test_build_dataset_plan__source_name_not_found__raises_dataset_not_found(
+        self,
+    ) -> None:
+        rest_client = _planner_rest_client([_Page([])])
+
+        with pytest.raises(DatasetNotFoundError) as exc_info:
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="Missing",
+                to_project="B",
+            )
+        assert "Missing" in str(exc_info.value)
+
+    def test_build_dataset_plan__source_name_resolves_to_many__raises_conflict(
+        self,
+    ) -> None:
+        # Workspace uniqueness is enforced by the BE (UNIQUE
+        # (workspace_id, name)); if the BE invariant is somehow
+        # violated, surface it as ConflictError rather than silently
+        # picking a row.
+        rest_client = _planner_rest_client(
+            [
+                _Page(
+                    [
+                        _DatasetRow(id="a", name="MyDataset"),
+                        _DatasetRow(id="b", name="MyDataset"),
+                    ]
+                )
+            ]
+        )
+
+        with pytest.raises(ConflictError):
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="MyDataset",
+                to_project="B",
+            )
+
+    def test_build_dataset_plan__destination_project_missing__raises_project_not_found(
+        self,
+    ) -> None:
+        rest_client = _planner_rest_client(
+            find_side_effects=[],
+            target_project_exists=False,
+        )
+
+        with pytest.raises(ProjectNotFoundError) as exc_info:
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="MyDataset",
+                to_project="DoesNotExist",
+            )
+        assert "DoesNotExist" in str(exc_info.value)
+
+    def test_build_dataset_plan__destination_project_missing__suggests_similar_names(
+        self,
+    ) -> None:
+        rest_client = _planner_rest_client(
+            find_side_effects=[],
+            target_project_exists=False,
+            workspace_project_names=["production", "staging", "Beat", "Best"],
+        )
+
+        with pytest.raises(ProjectNotFoundError) as exc_info:
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="MyDataset",
+                to_project="Beta",
+            )
+        message = str(exc_info.value)
+        assert "Beta" in message
+        # difflib should surface the close one-letter neighbours.
+        assert "Did you mean" in message
+        assert "Beat" in message or "Best" in message

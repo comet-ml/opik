@@ -201,17 +201,21 @@ public class DashboardResourceClient {
     }
 
     public void batchDelete(Set<UUID> ids, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = callBatchDelete(ids, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public Response callBatchDelete(Set<UUID> ids, String apiKey, String workspaceName) {
         var batchDelete = com.comet.opik.api.BatchDelete.builder()
                 .ids(ids)
                 .build();
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete-batch")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(batchDelete))) {
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-        }
+                .post(Entity.json(batchDelete));
     }
 
     public Dashboard.DashboardBuilder createPartialDashboard() {

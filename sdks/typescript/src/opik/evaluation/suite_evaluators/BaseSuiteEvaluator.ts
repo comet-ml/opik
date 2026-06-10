@@ -12,6 +12,14 @@ export abstract class BaseSuiteEvaluator extends BaseMetric {
 
   abstract toConfig(): LLMJudgeConfig;
 
+  /**
+   * Score the given input and return one or more assertion results.
+   *
+   * Each returned `EvaluationScoreResult.value` MUST be `0` (failed) or `1`
+   * (passed) — suite evaluator outputs are routed to the assertion-results
+   * endpoint where they are persisted as `passed | failed`. Non-binary values
+   * are coerced to `failed` and logged as a warning.
+   */
   abstract score(
     input: unknown
   ):

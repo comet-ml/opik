@@ -3,7 +3,7 @@ import { ExternalLink, Info, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
 import { Button } from "@/ui/button";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Explainer } from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
 
@@ -18,7 +18,6 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
   title,
   description,
   docLink,
-  docHash,
   className,
   Icon = Info,
   isDismissable = true,
@@ -44,11 +43,7 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
         {description}
         {docLink && (
           <Button variant="link" size="3xs" asChild>
-            <a
-              href={buildDocsUrl(docLink, docHash)}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a href={docLink} target="_blank" rel="noreferrer">
               Read more
               <ExternalLink className="ml-0.5 size-3 shrink-0" />
             </a>

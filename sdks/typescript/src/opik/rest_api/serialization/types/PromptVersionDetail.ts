@@ -6,6 +6,7 @@ import type * as serializers from "../index.js";
 import { JsonNodeDetail } from "./JsonNodeDetail.js";
 import { PromptVersionDetailTemplateStructure } from "./PromptVersionDetailTemplateStructure.js";
 import { PromptVersionDetailType } from "./PromptVersionDetailType.js";
+import { PromptVersionDetailVersionType } from "./PromptVersionDetailVersionType.js";
 
 export const PromptVersionDetail: core.serialization.ObjectSchema<
     serializers.PromptVersionDetail.Raw,
@@ -14,9 +15,13 @@ export const PromptVersionDetail: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
     commit: core.serialization.string().optional(),
+    versionNumber: core.serialization.property("version_number", core.serialization.string().optional()),
     template: core.serialization.string(),
     metadata: JsonNodeDetail.optional(),
     type: PromptVersionDetailType.optional(),
+    versionType: core.serialization.property("version_type", PromptVersionDetailVersionType.optional()),
+    environment: core.serialization.string().optional(),
+    environments: core.serialization.list(core.serialization.string()).optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     tags: core.serialization.list(core.serialization.string()).optional(),
     variables: core.serialization.list(core.serialization.string()).optional(),
@@ -33,9 +38,13 @@ export declare namespace PromptVersionDetail {
         id?: string | null;
         prompt_id?: string | null;
         commit?: string | null;
+        version_number?: string | null;
         template: string;
         metadata?: JsonNodeDetail.Raw | null;
         type?: PromptVersionDetailType.Raw | null;
+        version_type?: PromptVersionDetailVersionType.Raw | null;
+        environment?: string | null;
+        environments?: string[] | null;
         change_description?: string | null;
         tags?: string[] | null;
         variables?: string[] | null;

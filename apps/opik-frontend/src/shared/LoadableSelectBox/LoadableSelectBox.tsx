@@ -10,7 +10,7 @@ import { Button, ButtonProps } from "@/ui/button";
 import { Spinner } from "@/ui/spinner";
 import { Separator } from "@/ui/separator";
 import { Checkbox } from "@/ui/checkbox";
-import { cn } from "@/lib/utils";
+import { cn, getSelectAllCheckedState } from "@/lib/utils";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { DropdownOption } from "@/types/shared";
 import NoOptions from "./NoOptions";
@@ -111,13 +111,18 @@ export const LoadableSelectBox = ({
     return multiselect && isArray(value) ? value : [];
   }, [multiselect, value]);
 
+  const selectedValuesSet = useMemo(
+    () => new Set(selectedValues),
+    [selectedValues],
+  );
+
   const isSelected = useCallback(
     (optionValue: string) => {
       return multiselect
-        ? selectedValues.includes(optionValue)
+        ? selectedValuesSet.has(optionValue)
         : value === optionValue;
     },
-    [multiselect, selectedValues, value],
+    [multiselect, selectedValuesSet, value],
   );
 
   const selectedOptions = useMemo(
@@ -167,20 +172,27 @@ export const LoadableSelectBox = ({
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
   }, [options, search]);
 
-  const allFilteredSelected = useMemo(() => {
-    if (!multiselect || !filteredOptions.length) return false;
-    return filteredOptions.every((option) =>
-      selectedValues.includes(option.value),
-    );
-  }, [multiselect, filteredOptions, selectedValues]);
+  const filteredSelectedCount = multiselect
+    ? filteredOptions.filter((option) => selectedValuesSet.has(option.value))
+        .length
+    : 0;
+
+  const allFilteredSelected =
+    filteredOptions.length > 0 &&
+    filteredSelectedCount === filteredOptions.length;
+
+  const selectAllCheckedState = getSelectAllCheckedState(
+    filteredSelectedCount,
+    filteredOptions.length,
+  );
 
   const handleSelectAll = useCallback(() => {
     if (!multiselect) return;
 
     if (allFilteredSelected) {
-      const filteredValues = filteredOptions.map((o) => o.value);
+      const filteredValuesSet = new Set(filteredOptions.map((o) => o.value));
       const newSelectedValues = selectedValues.filter(
-        (v) => !filteredValues.includes(v),
+        (v) => !filteredValuesSet.has(v),
       );
       onChange && (onChange as (value: string[]) => void)(newSelectedValues);
     } else {
@@ -425,11 +437,15 @@ export const LoadableSelectBox = ({
                   onClick={handleSelectAll}
                 >
                   <Checkbox
-                    checked={allFilteredSelected}
+                    checked={selectAllCheckedState}
                     className="shrink-0"
+                    tabIndex={-1}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="comet-body-s truncate">Select all</div>
+                    <div className="comet-body-s truncate">
+                      {filteredSelectedCount} of {filteredOptions.length}{" "}
+                      selected
+                    </div>
                   </div>
                 </div>
               </>

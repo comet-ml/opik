@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
 import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
-import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
-import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
+import useDatasetItemsFromJsonMutation from "@/api/datasets/useDatasetItemsFromJsonMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
-import { useFetchDataset } from "@/api/datasets/useDatasetById";
 import { Button } from "@/ui/button";
-import { Description } from "@/ui/description";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -23,25 +19,21 @@ import {
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
-import { Card } from "@/ui/card";
 import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import UploadField from "@/shared/UploadField/UploadField";
-import Loader from "@/shared/Loader/Loader";
-import { buildDocsUrl } from "@/lib/utils";
-import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
-import { Dataset, DATASET_TYPE, DATASET_ITEM_SOURCE } from "@/types/datasets";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import DatasetUploadDescription from "@/v1/pages-shared/datasets/DatasetUploadDescription";
+import DatasetUploadField from "@/v1/pages-shared/datasets/DatasetUploadField";
+import { buildDocsUrl } from "@/v1/lib/utils";
+import { getApiErrorMessage } from "@/lib/api-error";
+import {
+  formatToHumanLabel,
+  getDatasetUploadFilenameWithoutExtension,
+  UploadFormat,
+  validateDatasetUploadFile,
+} from "@/lib/file";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 
-const ACCEPTED_TYPE = ".csv";
-
-// JSON mode (toggle OFF) - with restrictions
-const JSON_MODE_FILE_SIZE_LIMIT_IN_MB = 20;
-const JSON_MODE_MAX_ITEMS = 1000;
-
-// CSV mode (toggle ON) - no restrictions
-const CSV_MODE_FILE_SIZE_LIMIT_IN_MB = 2000;
+const FILE_SIZE_LIMIT_IN_MB = 2000;
 
 type AddEditTestSuiteDialogProps = {
   dataset?: Dataset;
@@ -60,25 +52,20 @@ const AddEditTestSuiteDialog = ({
   hideUpload,
   csvRequired = false,
 }: AddEditTestSuiteDialogProps) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
-  const isCsvUploadEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.CSV_UPLOAD_ENABLED,
-  );
 
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
-  const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
-  const fetchDataset = useFetchDataset();
+  const { mutate: createItemsFromJsonMutate } =
+    useDatasetItemsFromJsonMutation();
 
-  const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
-  const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
-  const [csvData, setCsvData] = useState<Record<string, unknown>[] | undefined>(
+  const [uploadFile, setUploadFile] = useState<File | undefined>(undefined);
+  const [uploadError, setUploadError] = useState<string | undefined>(undefined);
+  const [uploadFormat, setUploadFormat] = useState<UploadFormat | undefined>(
     undefined,
   );
-  const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
   const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.DATASET);
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
@@ -88,14 +75,13 @@ const AddEditTestSuiteDialog = ({
   );
 
   useEffect(() => {
-    setIsOverlayShown(false);
     setConfirmOpen(false);
     setNameError(undefined);
 
     if (!open) {
-      setCsvFile(undefined);
-      setCsvError(undefined);
-      setCsvData(undefined);
+      setUploadFile(undefined);
+      setUploadError(undefined);
+      setUploadFormat(undefined);
       setType(DATASET_TYPE.DATASET);
       if (!dataset) {
         setName("");
@@ -108,100 +94,61 @@ const AddEditTestSuiteDialog = ({
   }, [open, dataset]);
 
   const isEdit = Boolean(dataset);
-  const hasValidCsvFile = csvFile && !csvError;
+  const hasValidUploadFile = uploadFile && !uploadError;
   // Validation: name is required, and CSV is required only if csvRequired is true
   const isValid =
     name.length > 0 &&
-    (isEdit || hideUpload || !csvRequired || hasValidCsvFile);
+    (isEdit || hideUpload || !csvRequired || hasValidUploadFile);
 
   const typeLabel = type === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
   const title = isEdit ? "Edit" : "Create new";
   const buttonText = isEdit ? "Update" : "Create new";
 
-  // Determine which mode we're in and set limits accordingly
-  const fileSizeLimit = isCsvUploadEnabled
-    ? CSV_MODE_FILE_SIZE_LIMIT_IN_MB
-    : JSON_MODE_FILE_SIZE_LIMIT_IN_MB;
+  const fileSizeLimit = FILE_SIZE_LIMIT_IN_MB;
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
-      if (hasValidCsvFile) {
-        setIsOverlayShown(true);
-      }
+      if (hasValidUploadFile && uploadFile && uploadFormat && newDataset.id) {
+        const label = formatToHumanLabel(uploadFormat);
+        const handlers = {
+          onSuccess: () => {
+            toast({
+              title: `${label} upload accepted`,
+              description: `Your ${label} file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.`,
+            });
+          },
+          onError: (error: unknown) => {
+            console.error(`Error uploading ${label} file:`, error);
+            toast({
+              title: `Error uploading ${label} file`,
+              description: getApiErrorMessage(
+                error,
+                `Failed to upload ${label} file`,
+              ),
+              variant: "destructive",
+            });
+          },
+          onSettled: () => {
+            setOpen(false);
+            if (onDatasetCreated) {
+              onDatasetCreated(newDataset);
+            }
+          },
+        };
 
-      if (hasValidCsvFile && newDataset.id) {
-        if (isCsvUploadEnabled && csvFile) {
-          // CSV mode: Upload CSV file directly to backend
+        if (uploadFormat === "csv") {
           createItemsFromCsvMutate(
-            {
-              datasetId: newDataset.id,
-              csvFile,
-            },
-            {
-              onSuccess: () => {
-                toast({
-                  title: "CSV upload accepted",
-                  description:
-                    "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
-                });
-              },
-              onError: (error: unknown) => {
-                console.error("Error uploading CSV file:", error);
-                const errorMessage =
-                  (
-                    error as { response?: { data?: { errors?: string[] } } }
-                  ).response?.data?.errors?.join(", ") ||
-                  (error as { message?: string }).message ||
-                  "Failed to upload CSV file";
-                toast({
-                  title: "Error uploading CSV file",
-                  description: errorMessage,
-                  variant: "destructive",
-                });
-              },
-              onSettled: () => {
-                setOpen(false);
-                if (onDatasetCreated) {
-                  onDatasetCreated(newDataset);
-                }
-              },
-            },
+            { datasetId: newDataset.id, csvFile: uploadFile },
+            handlers,
           );
-        } else if (!isCsvUploadEnabled && csvData) {
-          // JSON mode: Send parsed JSON data
-          createItemsMutate(
+        } else {
+          createItemsFromJsonMutate(
             {
               datasetId: newDataset.id,
-              workspaceName,
-              datasetItems: csvData.map((row) => ({
-                data: row,
-                source: DATASET_ITEM_SOURCE.manual,
-              })),
+              jsonFile: uploadFile,
+              format: uploadFormat,
             },
-            {
-              onSuccess: () => {
-                // Fetch dataset to get latest_version populated by backend
-                fetchDataset({ datasetId: newDataset.id })
-                  .then((enrichedDataset) => {
-                    if (onDatasetCreated) {
-                      onDatasetCreated(enrichedDataset);
-                    }
-                  })
-                  .catch((error) => {
-                    console.error(
-                      "Failed to fetch test suite after item creation:",
-                      error,
-                    );
-
-                    if (onDatasetCreated) {
-                      onDatasetCreated(newDataset);
-                    }
-                  });
-              },
-              onError: () => {
-                setOpen(false);
-              },
-            },
+            handlers,
           );
         }
       } else {
@@ -212,17 +159,14 @@ const AddEditTestSuiteDialog = ({
       }
     },
     [
-      hasValidCsvFile,
-      isCsvUploadEnabled,
-      csvFile,
-      csvData,
+      hasValidUploadFile,
+      uploadFile,
+      uploadFormat,
       createItemsFromCsvMutate,
-      createItemsMutate,
-      workspaceName,
+      createItemsFromJsonMutate,
       onDatasetCreated,
       setOpen,
       toast,
-      fetchDataset,
     ],
   );
 
@@ -294,55 +238,30 @@ const AddEditTestSuiteDialog = ({
   ]);
 
   const handleFileSelect = useCallback(
-    async (file?: File) => {
-      setCsvError(undefined);
-      setCsvFile(undefined);
-      setCsvData(undefined);
+    (file?: File) => {
+      setUploadError(undefined);
+      setUploadFile(undefined);
+      setUploadFormat(undefined);
 
       if (!file) {
         return;
       }
 
-      if (isCsvUploadEnabled) {
-        // CSV mode: Just validate size and format, don't parse
-        if (file.size > fileSizeLimit * 1024 * 1024) {
-          setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
-          return;
-        }
+      const result = validateDatasetUploadFile(file, fileSizeLimit);
+      if (result.error) {
+        setUploadError(result.error);
+        return;
+      }
+      if (!result.file || !result.format) return;
 
-        if (!file.name.toLowerCase().endsWith(".csv")) {
-          setCsvError("File must be in .csv format");
-          return;
-        }
+      setUploadFile(result.file);
+      setUploadFormat(result.format);
 
-        setCsvFile(file);
-
-        // Autofill name from filename if name is empty
-        if (!name.trim()) {
-          setName(getCsvFilenameWithoutExtension(file.name));
-        }
-      } else {
-        // JSON mode: Validate and parse CSV with row limit
-        const result = await validateCsvFile(
-          file,
-          fileSizeLimit,
-          JSON_MODE_MAX_ITEMS,
-        );
-
-        if (result.error) {
-          setCsvError(result.error);
-        } else if (result.data) {
-          setCsvFile(file);
-          setCsvData(result.data);
-
-          // Autofill name from filename if name is empty
-          if (!name.trim()) {
-            setName(getCsvFilenameWithoutExtension(file.name));
-          }
-        }
+      if (!name.trim()) {
+        setName(getDatasetUploadFilenameWithoutExtension(result.file.name));
       }
     },
-    [isCsvUploadEnabled, fileSizeLimit, name],
+    [fileSizeLimit, name],
   );
 
   return (
@@ -352,37 +271,6 @@ const AddEditTestSuiteDialog = ({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
-          {isOverlayShown && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/10">
-              <Card className="w-3/4">
-                <Loader
-                  className="min-h-56"
-                  message={
-                    <div>
-                      <div className="comet-body-s-accented text-center">
-                        {isCsvUploadEnabled
-                          ? "Upload in progress..."
-                          : "Processing the CSV"}
-                      </div>
-                      {!isCsvUploadEnabled && (
-                        <>
-                          <div className="comet-body-s mt-2 text-center text-light-slate">
-                            This should take less than a minute. <br /> You can
-                            safely close this popup while we work.
-                          </div>
-                          <div className="mt-4 flex items-center justify-center">
-                            <Button onClick={() => setOpen(false)}>
-                              Close
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  }
-                />
-              </Card>
-            </div>
-          )}
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="testSuiteName">Name</Label>
             <Input
@@ -400,7 +288,7 @@ const AddEditTestSuiteDialog = ({
               onKeyDown={(event) => {
                 if (event.key === "Enter" && isValid) {
                   event.preventDefault();
-                  csvError ? setConfirmOpen(true) : submitHandler();
+                  uploadError ? setConfirmOpen(true) : submitHandler();
                 }
               }}
             />
@@ -425,53 +313,29 @@ const AddEditTestSuiteDialog = ({
           </div>
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV</Label>
-              <Description className="tracking-normal">
-                {isCsvUploadEnabled ? (
-                  <>
-                    Your CSV file can be up to {fileSizeLimit}MB in size. The
-                    file will be processed in the background.
-                  </>
-                ) : (
-                  <>
-                    Your CSV file can contain up to 1,000 rows, for larger test
-                    suites use the SDK instead.
-                  </>
-                )}
-                <Button variant="link" size="sm" className="h-5 px-1" asChild>
-                  <a
-                    href={buildDocsUrl("/evaluation/manage_datasets")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Learn more
-                    <ExternalLink className="ml-0.5 size-3 shrink-0" />
-                  </a>
-                </Button>
-              </Description>
-              <UploadField
-                disabled={isEdit}
-                description="Drop a CSV file to upload or"
-                accept={ACCEPTED_TYPE}
+              <Label>Upload a CSV or JSON file</Label>
+              <DatasetUploadDescription
+                fileSizeLimit={fileSizeLimit}
+                docsUrl={buildDocsUrl("/evaluation/manage_datasets")}
+              />
+              <DatasetUploadField
+                uploadFile={uploadFile}
+                uploadFormat={uploadFormat}
+                uploadError={uploadError}
                 onFileSelect={handleFileSelect}
-                errorText={csvError}
-                successText={
-                  csvFile && !csvError ? "CSV file ready to upload" : undefined
-                }
+                disabled={isEdit}
               />
             </div>
           )}
         </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">
-              {isOverlayShown ? "Close" : "Cancel"}
-            </Button>
+            <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button
             type="submit"
             disabled={!isValid}
-            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+            onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
           >
             {buttonText}
           </Button>

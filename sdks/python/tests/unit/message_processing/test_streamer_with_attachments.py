@@ -35,7 +35,7 @@ def streamer_with_attachments_enabled(fake_file_upload_manager):
         yield tested, mock_message_processor
     finally:
         if tested is not None:
-            tested.close(timeout=5)
+            tested.close(flush=False)
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def streamer_with_attachments_disabled(fake_file_upload_manager):
         yield tested, mock_message_processor
     finally:
         if tested is not None:
-            tested.close(timeout=5)
+            tested.close(flush=False)
 
 
 def test_streamer__create_span_message__attachments_enabled__does_not_wrap_without_end_time(

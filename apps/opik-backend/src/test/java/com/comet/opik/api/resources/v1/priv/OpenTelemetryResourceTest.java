@@ -20,6 +20,8 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.protobuf.ByteString;
 import com.redis.testcontainers.RedisContainer;
@@ -98,6 +100,7 @@ class OpenTelemetryResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final TimeBasedEpochGenerator UUID_V7_GENERATOR = Generators.timeBasedEpochGenerator();
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
@@ -132,14 +135,15 @@ class OpenTelemetryResourceTest {
 
         ClientSupportUtils.config(client);
 
-        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE);
 
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
-    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    private void mockTargetWorkspace(String apiKey, String workspaceName) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName,
+                OpenTelemetryResourceTest.WORKSPACE_ID, USER);
     }
 
     @AfterAll
@@ -182,7 +186,7 @@ class OpenTelemetryResourceTest {
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             var otelTraceId = UUID.randomUUID().toString().getBytes(); // otel uses 128-bit, but it doesnt matter
             var parentSpanId = UUID.randomUUID().toString().getBytes();// otel uses  64-bit, but it doesnt matter
@@ -268,7 +272,7 @@ class OpenTelemetryResourceTest {
             String payload2 = "{\"resourceSpans\":[{\"resource\":{\"attributes\":[{\"key\":\"service.name\",\"value\":{\"stringValue\":\"my-service\"}}]},\"scopeSpans\":[{\"spans\":[{\"traceId\":\"%s\",\"spanId\":\"%s\",\"name\":\"example-span\",\"kind\":\"SPAN_KIND_SERVER\",\"startTimeUnixNano\":\"%d\",\"endTimeUnixNano\":\"1623456790000000000\"}]}]}]}";
 
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             String otelTraceId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
             String spanId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
@@ -413,7 +417,7 @@ class OpenTelemetryResourceTest {
         @DisplayName("test thread_id support in OpenTelemetry")
         void testThreadIdSupport() {
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             var otelTraceId = UUID.randomUUID().toString().getBytes();
             var parentSpanId = UUID.randomUUID().toString().getBytes();
@@ -474,7 +478,7 @@ class OpenTelemetryResourceTest {
         @DisplayName("test gen_ai.conversation.id maps to threadId in OpenTelemetry")
         void testGenAiConversationIdSupport() {
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             var otelTraceId = UUID.randomUUID().toString().getBytes();
             var parentSpanId = UUID.randomUUID().toString().getBytes();
@@ -535,7 +539,7 @@ class OpenTelemetryResourceTest {
         @DisplayName("test integer thread_id is properly stored in OpenTelemetry traces")
         void testIntegerThreadIdSupport() {
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             var otelTraceId = UUID.randomUUID().toString().getBytes();
             var parentSpanId = UUID.randomUUID().toString().getBytes();
@@ -596,7 +600,7 @@ class OpenTelemetryResourceTest {
         @DisplayName("test token deduplication when parent and child both have usage (PydanticAI/Logfire pattern)")
         void testTokenDeduplicationWhenParentAndChildBothHaveUsage() {
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             var otelTraceId = UUID.randomUUID().toString().getBytes();
             var parentSpanId = UUID.randomUUID().toString().getBytes();
@@ -670,7 +674,7 @@ class OpenTelemetryResourceTest {
         @DisplayName("test no token deduplication when only parent has usage (no child usage)")
         void testNoTokenDeduplicationWhenOnlyParentHasUsage() {
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             var otelTraceId = UUID.randomUUID().toString().getBytes();
             var parentSpanId = UUID.randomUUID().toString().getBytes();
@@ -735,7 +739,7 @@ class OpenTelemetryResourceTest {
         @DisplayName("test token deduplication with multiple children having usage")
         void testTokenDeduplicationWithMultipleChildrenHavingUsage() {
             String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockTargetWorkspace(okApikey, workspaceName);
 
             var otelTraceId = UUID.randomUUID().toString().getBytes();
             var parentSpanId = UUID.randomUUID().toString().getBytes();
@@ -820,5 +824,200 @@ class OpenTelemetryResourceTest {
             childSpans.forEach(span -> assertThat(span.usage()).isNotNull());
         }
 
+        @Test
+        @DisplayName("test opik.trace_id connects OTEL span to existing OPIK trace without creating a new trace")
+        void testOpikTraceIdConnectsToExistingTrace() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            String projectName = "Test Project " + UUID.randomUUID();
+
+            // First, create an existing OPIK trace via the Trace API (must be UUIDv7)
+            var existingTraceId = UUID_V7_GENERATOR.generate();
+            var existingTrace = Trace.builder()
+                    .id(existingTraceId)
+                    .name("existing trace")
+                    .projectName(projectName)
+                    .startTime(Instant.now().minus(Duration.ofSeconds(5)))
+                    .build();
+            traceResourceClient.createTrace(existingTrace, okApikey, workspaceName);
+
+            // Now send an OTEL span with opik.trace_id pointing to the existing trace
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+
+            var otelSpan = Span.newBuilder()
+                    .setName("attached otel span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(otelSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(existingTraceId.toString()))
+                            .build())
+                    .build();
+
+            sendProtobufTraces(List.of(otelSpan), projectName, workspaceName, okApikey, true, null);
+
+            // Verify the span is connected to the existing trace
+            var spanPage = spanResourceClient.getByTraceIdAndProject(existingTraceId,
+                    projectName, workspaceName, okApikey);
+            assertThat(spanPage.size()).isEqualTo(1);
+
+            var attachedSpan = spanPage.content().getFirst();
+            assertThat(attachedSpan.traceId()).isEqualTo(existingTraceId);
+            assertThat(attachedSpan.parentSpanId()).isNull();
+            assertThat(attachedSpan.name()).isEqualTo("attached otel span");
+
+            // Verify opik.trace_id is not leaked into span attributes
+            if (attachedSpan.input() != null) {
+                assertThat(attachedSpan.input().has("opik.trace_id")).isFalse();
+            }
+            if (attachedSpan.metadata() != null) {
+                assertThat(attachedSpan.metadata().has("opik.trace_id")).isFalse();
+            }
+        }
+
+        @Test
+        @DisplayName("test opik.trace_id and opik.parent_span_id connect OTEL span to existing OPIK span")
+        void testOpikTraceIdAndParentSpanIdConnectToExistingSpan() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            String projectName = "Test Project " + UUID.randomUUID();
+
+            // Create an existing OPIK trace and span via the APIs (must be UUIDv7)
+            var existingTraceId = UUID_V7_GENERATOR.generate();
+            var existingTrace = Trace.builder()
+                    .id(existingTraceId)
+                    .name("existing trace")
+                    .projectName(projectName)
+                    .startTime(Instant.now().minus(Duration.ofSeconds(5)))
+                    .build();
+            traceResourceClient.createTrace(existingTrace, okApikey, workspaceName);
+
+            var existingParentSpanId = UUID_V7_GENERATOR.generate();
+            var existingSpan = com.comet.opik.api.Span.builder()
+                    .id(existingParentSpanId)
+                    .traceId(existingTraceId)
+                    .name("existing parent span")
+                    .projectName(projectName)
+                    .startTime(Instant.now().minus(Duration.ofSeconds(4)))
+                    .build();
+            spanResourceClient.createSpan(existingSpan, okApikey, workspaceName);
+
+            // Send OTEL span with both opik.trace_id and opik.parent_span_id
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+
+            var otelSpan = Span.newBuilder()
+                    .setName("child otel span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(otelSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(existingTraceId.toString()))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("opik.parent_span_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(existingParentSpanId.toString()))
+                            .build())
+                    .build();
+
+            sendProtobufTraces(List.of(otelSpan), projectName, workspaceName, okApikey, true, null);
+
+            // Verify the span is connected to the existing trace with the correct parent
+            var spanPage = spanResourceClient.getByTraceIdAndProject(existingTraceId,
+                    projectName, workspaceName, okApikey);
+
+            // Should have 2 spans: the existing parent and the new child
+            assertThat(spanPage.size()).isEqualTo(2);
+
+            var childSpan = spanPage.content().stream()
+                    .filter(s -> "child otel span".equals(s.name()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(childSpan.traceId()).isEqualTo(existingTraceId);
+            assertThat(childSpan.parentSpanId()).isEqualTo(existingParentSpanId);
+
+            // Verify opik attributes are not leaked
+            if (childSpan.input() != null) {
+                assertThat(childSpan.input().has("opik.trace_id")).isFalse();
+                assertThat(childSpan.input().has("opik.parent_span_id")).isFalse();
+            }
+            if (childSpan.metadata() != null) {
+                assertThat(childSpan.metadata().has("opik.trace_id")).isFalse();
+                assertThat(childSpan.metadata().has("opik.parent_span_id")).isFalse();
+            }
+        }
+
+        @Test
+        @DisplayName("test mixed batch: spans with and without opik.trace_id override")
+        void testMixedBatchWithAndWithoutOpikTraceIdOverride() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            String projectName = "Test Project " + UUID.randomUUID();
+
+            // Create an existing OPIK trace to attach to (must be UUIDv7)
+            var existingTraceId = UUID_V7_GENERATOR.generate();
+            var existingTrace = Trace.builder()
+                    .id(existingTraceId)
+                    .name("existing trace")
+                    .projectName(projectName)
+                    .startTime(Instant.now().minus(Duration.ofSeconds(5)))
+                    .build();
+            traceResourceClient.createTrace(existingTrace, okApikey, workspaceName);
+
+            // Create a batch with: one normal OTEL root span + one span with opik.trace_id override
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var normalRootSpanId = UUID.randomUUID().toString().getBytes();
+            var overrideSpanId = UUID.randomUUID().toString().getBytes();
+
+            // Normal root span (should create a new trace)
+            var normalRootSpan = Span.newBuilder()
+                    .setName("normal root span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(normalRootSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            // Span with opik.trace_id override (should attach to existing trace, no new trace)
+            var overrideSpan = Span.newBuilder()
+                    .setName("override span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(overrideSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("opik.trace_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(existingTraceId.toString()))
+                            .build())
+                    .build();
+
+            var otelSpans = List.of(normalRootSpan, overrideSpan);
+
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedNewTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, projectName, workspaceName, okApikey, true, null);
+
+            // Verify the normal root span created a new trace
+            Trace newTrace = traceResourceClient.getById(expectedNewTraceId, workspaceName, okApikey);
+            assertThat(newTrace.id()).isEqualTo(expectedNewTraceId);
+            assertThat(newTrace.name()).isEqualTo("normal root span");
+
+            // Verify the override span is attached to the existing trace
+            var existingTraceSpans = spanResourceClient.getByTraceIdAndProject(existingTraceId,
+                    projectName, workspaceName, okApikey);
+            assertThat(existingTraceSpans.size()).isEqualTo(1);
+            assertThat(existingTraceSpans.content().getFirst().name()).isEqualTo("override span");
+            assertThat(existingTraceSpans.content().getFirst().traceId()).isEqualTo(existingTraceId);
+        }
     }
 }

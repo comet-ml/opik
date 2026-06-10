@@ -9,7 +9,7 @@ import pytest
 
 from opik.evaluation.metrics.llm_judges import g_eval
 from opik.evaluation.models import models_factory
-from opik.evaluation.models.litellm import litellm_chat_model
+from opik.evaluation.models.litellm import litellm_chat_model, response_parser
 from opik.evaluation.models import base_model
 
 
@@ -113,6 +113,49 @@ def test_models_factory_default_model_from_env(monkeypatch):
     assert default_instance.model_name == "gpt-4o-mini"
 
 
+class TestCoerceTemperatureToFloat:
+    """The helper underpins every "is temperature 1?" check on the
+    LiteLLM path (GPT-5 filter, Anthropic reasoning_effort conflict).
+    Pin its semantics directly so the indirect tests above don't
+    over-couple to incidental call-site behavior.
+    """
+
+    def test_returns_float_for_int(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(1) == 1.0
+
+    def test_returns_float_for_float(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(0.5) == 0.5
+
+    def test_returns_float_for_numeric_string(self):
+        from opik.evaluation.models.litellm import util
+
+        # The bug the reviewer flagged: `temperature="1"` would compare
+        # unequal to `1` and trigger an unwanted drop. Pinning the
+        # coercion path directly here so regressions surface fast.
+        assert util.coerce_temperature_to_float("1") == 1.0
+        assert util.coerce_temperature_to_float("1.0") == 1.0
+        assert util.coerce_temperature_to_float(" 0.7 ") == 0.7
+
+    def test_returns_none_for_non_numeric_string(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float("not-a-number") is None
+
+    def test_returns_none_for_none(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(None) is None
+
+    def test_returns_none_for_arbitrary_object(self):
+        from opik.evaluation.models.litellm import util
+
+        assert util.coerce_temperature_to_float(object()) is None
+
+
 def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     stub = _install_litellm_stub(monkeypatch)
 
@@ -122,7 +165,6 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
         temperature=0.5,
     )
 
-    assert "temperature" not in model._completion_kwargs
     assert any(
         "temperature" in record.message and "Dropping" in record.message
         for record in caplog.records
@@ -131,6 +173,9 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     caplog.clear()
     model.generate_string("hello")
 
+    # Assert against the actual outbound call, not on the private
+    # `_completion_kwargs` constructor state — the contract callers
+    # care about is "what gets sent to litellm.completion".
     assert stub._calls, "Expected completion to be invoked"
     _, _, kwargs = stub._calls[-1]
     assert "temperature" not in kwargs
@@ -162,6 +207,335 @@ def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
     assert not caplog.records
 
 
+def test_litellm_chat_model_drops_seed_when_provider_does_not_support(
+    monkeypatch, caplog
+):
+    """`seed` is an OpenAI-shape param; Anthropic (and a handful of
+    other providers) reject it with `UnsupportedParamsError` rather
+    than ignoring it. The native `AnthropicChatModel` silently filters
+    it; this test pins the same behavior on the LiteLLM path so callers
+    that pass `seed` (e.g. the agentic judge integration tests for
+    reproducibility) don't blow up when the underlying provider is
+    Anthropic.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        # Mirror Anthropic's litellm-reported support: no `seed`.
+        supported_params=["temperature", "response_format", "tools", "tool_choice"],
+    )
+
+    caplog.set_level(
+        logging.DEBUG, logger="opik.evaluation.models.litellm.litellm_chat_model"
+    )
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        seed=42,
+        temperature=0.0,
+    )
+
+    model.generate_string("hello")
+
+    # Public observable: the outbound litellm.completion call. `seed`
+    # must be filtered out; `temperature` must survive.
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert "seed" not in kwargs
+    assert kwargs.get("temperature") == 0.0
+
+
+def test_litellm_chat_model_drops_reasoning_effort_for_anthropic_when_temperature_conflicts(
+    monkeypatch, caplog
+):
+    """LiteLLM translates OpenAI-shape `reasoning_effort` into the
+    Anthropic-specific `thinking` parameter; with thinking enabled,
+    Anthropic requires `temperature == 1`. Callers that set a
+    deterministic `temperature` (the agentic loop's default, plus
+    most reproducibility-sensitive callers) hit a 400 from the
+    provider. The drop only fires when the conflict is real — i.e.
+    when temperature is explicitly set to a non-1 value — so callers
+    who opt into both keep extended thinking. See the
+    `_keeps_reasoning_effort_when_temperature_is_one` counterpart.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        # LiteLLM reports `reasoning_effort` as supported for
+        # Anthropic — that's exactly why the generic
+        # supported_params filter doesn't catch it.
+        supported_params=[
+            "temperature",
+            "response_format",
+            "reasoning_effort",
+            "tools",
+            "tool_choice",
+        ],
+    )
+
+    caplog.set_level(
+        logging.DEBUG, logger="opik.evaluation.models.litellm.litellm_chat_model"
+    )
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+        temperature=0.0,
+    )
+
+    model.generate_string("hello")
+
+    _, _, kwargs = stub._calls[-1]
+    # The actual call to `litellm.completion` is what matters: the
+    # conflict-resolution pass must strip `reasoning_effort` from the
+    # outbound request even though it was set at construction time.
+    # `temperature` is preserved because it's the half of the conflict
+    # that survives, and the provider needs it to know the request is
+    # in deterministic mode.
+    assert "reasoning_effort" not in kwargs
+    assert kwargs.get("temperature") == 0.0
+
+
+def test_litellm_chat_model_drops_reasoning_effort_for_bare_claude_when_temperature_conflicts(
+    monkeypatch,
+):
+    # Same drop must trigger for the bare `claude-...` form too,
+    # matching `model_name_helper.is_anthropic_model`'s predicate.
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "response_format", "reasoning_effort"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="claude-sonnet-4-6",
+        reasoning_effort="low",
+        temperature=0.5,
+    )
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_drops_reasoning_effort_when_temperature_is_per_call_only(
+    monkeypatch,
+):
+    """Cross-source conflict — `reasoning_effort` from constructor,
+    `temperature=0` from the per-call kwargs (the agentic judge loop's
+    pattern). The conflict-resolution pass must run on the merged
+    effective dict so it catches conflicts whose two halves come from
+    different sources. The per-source `_remove_unnecessary_not_supported_params`
+    by itself couldn't see this — at constructor time it never saw the
+    per-call temperature, and at call time it never sees the
+    constructor-time reasoning_effort.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "response_format", "reasoning_effort"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+    )
+
+    # Per-call temperature=0 (the agentic judge loop's hardcoded pin)
+    # is the half of the conflict that lives outside `_completion_kwargs`.
+    model.generate_string("hello", temperature=0)
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_when_temperature_is_string_one(
+    monkeypatch,
+):
+    """`temperature` can arrive as a string ("1", "1.0") and LiteLLM
+    coerces it before the API call. The conflict-resolution pass must
+    coerce the same way before comparing, otherwise it'd drop
+    `reasoning_effort` on a caller who legitimately opted into
+    thinking via a stringy temperature.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    for stringy_one in ("1", "1.0", " 1 "):
+        model = litellm_chat_model.LiteLLMChatModel(
+            model_name="anthropic/claude-haiku-4-5",
+            reasoning_effort="low",
+            temperature=stringy_one,
+        )
+        model.generate_string("hello")
+        _, _, kwargs = stub._calls[-1]
+        assert kwargs.get("reasoning_effort") == "low", (
+            f"temperature={stringy_one!r} should coerce to 1.0 and "
+            f"preserve reasoning_effort; got kwargs={kwargs}"
+        )
+
+
+def test_litellm_chat_model_drops_reasoning_effort_when_temperature_is_string_non_one(
+    monkeypatch,
+):
+    # Counterpart: stringy non-1 values must still trigger the drop.
+    # Otherwise stringy callers would bypass conflict detection
+    # entirely.
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+        temperature="0.5",
+    )
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_when_temperature_is_non_numeric(
+    monkeypatch,
+):
+    """Coercion failure ("unknown" type) is treated as "don't drop" —
+    a non-numeric temperature is the provider's problem to surface,
+    and we shouldn't compound the error by also silently dropping
+    `reasoning_effort`.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+        temperature="not-a-number",
+    )
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    # `reasoning_effort` stays — the provider will surface the bad
+    # temperature shape on its own.
+    assert kwargs.get("reasoning_effort") == "low"
+
+
+def test_litellm_chat_model_drops_reasoning_effort_when_reasoning_effort_is_per_call_only(
+    monkeypatch,
+):
+    """Mirror of the previous test — the other cross-source ordering:
+    `temperature` from the constructor, `reasoning_effort` arriving
+    per-call. Without the merged-dict check this would slip past:
+    constructor `_remove_unnecessary_not_supported_params` saw only
+    `temperature`, per-call `_remove_unnecessary_not_supported_params`
+    saw only `reasoning_effort`, neither was the conflict pair.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "response_format", "reasoning_effort"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        temperature=0,
+    )
+
+    model.generate_string("hello", reasoning_effort="low")
+    _, _, kwargs = stub._calls[-1]
+    assert "reasoning_effort" not in kwargs
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_for_anthropic_when_temperature_is_one(
+    monkeypatch,
+):
+    """Opt-in path for Anthropic extended thinking: explicit
+    `temperature=1` plus `reasoning_effort=...` keeps both. The
+    `thinking` mode LiteLLM enables under the hood is compatible with
+    `temperature=1`, so the drop must not fire.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="medium",
+        temperature=1,
+    )
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    # Both must reach the outbound call — that's the opt-in shape for
+    # Anthropic extended thinking.
+    assert kwargs.get("reasoning_effort") == "medium"
+    assert kwargs.get("temperature") == 1
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_for_anthropic_when_temperature_omitted(
+    monkeypatch,
+):
+    """When `temperature` isn't set explicitly, Anthropic defaults to
+    1 server-side, which doesn't conflict with thinking mode. The
+    drop must not fire under that signal-absent state.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-haiku-4-5",
+        reasoning_effort="low",
+    )
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    # `reasoning_effort` must reach the outbound call; `temperature`
+    # was never set, so it must not appear either (Anthropic defaults
+    # to 1 server-side).
+    assert kwargs.get("reasoning_effort") == "low"
+    assert "temperature" not in kwargs
+
+
+def test_litellm_chat_model_keeps_reasoning_effort_for_openai(monkeypatch):
+    """Counterpart to the Anthropic drop tests: for OpenAI (and any
+    other provider whose litellm support doesn't translate
+    `reasoning_effort` into a conflicting param), the value must
+    round-trip so determinism + reasoning callers keep working.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "reasoning_effort", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="gpt-5-mini",
+        reasoning_effort="low",
+    )
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("reasoning_effort") == "low"
+
+
+def test_litellm_chat_model_keeps_seed_when_provider_supports_it(monkeypatch):
+    """Counterpart to the drop test: when `seed` IS in the provider's
+    supported set (e.g. OpenAI), it must round-trip through to the
+    completion call so determinism still works on providers that
+    honor it.
+    """
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["temperature", "seed", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="gpt-4o-mini",
+        seed=42,
+    )
+
+    model.generate_string("hello")
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("seed") == 42
+
+
 def test_litellm_chat_model_drops_top_logprobs_for_dashscope(
     monkeypatch,
 ):
@@ -176,15 +550,12 @@ def test_litellm_chat_model_drops_top_logprobs_for_dashscope(
         top_logprobs=10,
     )
 
-    # top_logprobs should not be kept in static completion kwargs
-    assert "top_logprobs" not in model._completion_kwargs
-
     model.generate_string("hello")
 
+    # top_logprobs should not be forwarded to the provider (public
+    # observable — what `litellm.completion` actually receives).
     assert stub._calls, "Expected completion to be invoked"
     _, _, kwargs = stub._calls[-1]
-
-    # top_logprobs should not be forwarded to the provider
     assert "top_logprobs" not in kwargs
 
 
@@ -322,80 +693,146 @@ def test_models_factory_track_parameter_creates_separate_instances(monkeypatch):
     assert model_tracked is model_tracked_2
 
 
-class TestExtractMessageContent:
-    def test_returns_content_when_present(self):
-        choice = {"message": {"content": "hello"}}
-        assert litellm_chat_model._extract_message_content(choice) == "hello"
+class TestParseAssistantMessage:
+    def _wrap(self, message):
+        return SimpleNamespace(choices=[{"message": message}])
 
-    def test_returns_none_when_no_content_and_no_tool_calls(self):
-        choice = {"message": {"content": None}}
-        assert litellm_chat_model._extract_message_content(choice) is None
+    def test_returns_content_when_present(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap({"content": "hello"})
+        )
+        assert message == {"role": "assistant", "content": "hello"}
+
+    def test_raises_when_no_content_and_no_tool_calls(self):
+        from opik import exceptions
+
+        with pytest.raises(exceptions.BaseLLMError):
+            response_parser.parse_assistant_message(self._wrap({"content": None}))
 
     def test_falls_back_to_structured_output_tool_call(self):
-        choice = {
-            "message": {
-                "content": None,
-                "tool_calls": [
-                    {
-                        "function": {
-                            "name": "json_tool_call",
-                            "arguments": '{"assertion_1": {"score": true, "reason": "ok", "confidence": 0.9}}',
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_synthetic",
+                            "function": {
+                                "name": "json_tool_call",
+                                "arguments": '{"assertion_1": {"score": true, "reason": "ok", "confidence": 0.9}}',
+                            },
                         }
-                    }
-                ],
-            }
-        }
-        result = litellm_chat_model._extract_message_content(choice)
-        assert '"assertion_1"' in result
-        assert '"score": true' in result
+                    ],
+                }
+            )
+        )
+        assert '"assertion_1"' in message["content"]
+        assert "tool_calls" not in message
 
     def test_falls_back_to_structured_output_tool_call_from_object_message(self):
-        choice = {
-            "message": SimpleNamespace(
-                content=None,
-                tool_calls=[
-                    SimpleNamespace(
-                        function=SimpleNamespace(
-                            name="json_tool_call",
-                            arguments='{"score": true}',
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                SimpleNamespace(
+                    content=None,
+                    tool_calls=[
+                        SimpleNamespace(
+                            id="call_synthetic",
+                            function=SimpleNamespace(
+                                name="json_tool_call",
+                                arguments='{"score": true}',
+                            ),
                         )
-                    )
-                ],
+                    ],
+                )
             )
-        }
-        assert litellm_chat_model._extract_message_content(choice) == '{"score": true}'
+        )
+        assert message["content"] == '{"score": true}'
+        assert "tool_calls" not in message
 
-    def test_ignores_non_structured_output_tool_calls(self):
-        choice = {
-            "message": {
-                "content": None,
-                "tool_calls": [
-                    {
-                        "function": {
-                            "name": "get_weather",
-                            "arguments": '{"city": "Paris"}',
+    def test_surfaces_real_tool_calls_alongside_text(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": "looking that up",
+                    "tool_calls": [
+                        {
+                            "id": "call_123",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": '{"query": "capital of France"}',
+                            },
                         }
-                    }
-                ],
+                    ],
+                }
+            )
+        )
+        assert message["content"] == "looking that up"
+        assert message["tool_calls"] == [
+            {
+                "id": "call_123",
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "arguments": '{"query": "capital of France"}',
+                },
             }
-        }
-        assert litellm_chat_model._extract_message_content(choice) is None
+        ]
 
-    def test_prefers_content_over_tool_calls(self):
-        choice = {
-            "message": {
-                "content": "direct content",
-                "tool_calls": [
-                    {
-                        "function": {
-                            "name": "json_tool_call",
-                            "arguments": "should not use this",
-                        }
-                    }
-                ],
+    def test_skips_synthetic_tool_call_when_listed_alongside_real_ones(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "synth",
+                            "function": {
+                                "name": "json_tool_call",
+                                "arguments": '{"score": 5}',
+                            },
+                        },
+                        {
+                            "id": "call_real",
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": '{"city": "Paris"}',
+                            },
+                        },
+                    ],
+                }
+            )
+        )
+        assert message["content"] == '{"score": 5}'
+        assert message["tool_calls"] == [
+            {
+                "id": "call_real",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"city": "Paris"}',
+                },
             }
-        }
-        assert litellm_chat_model._extract_message_content(choice) == "direct content"
+        ]
+
+    def test_prefers_content_over_synthetic_tool_call_arguments(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": "direct content",
+                    "tool_calls": [
+                        {
+                            "id": "synth",
+                            "function": {
+                                "name": "json_tool_call",
+                                "arguments": "should not use this",
+                            },
+                        }
+                    ],
+                }
+            )
+        )
+        assert message["content"] == "direct content"
+        assert "tool_calls" not in message
 
 
 @pytest.mark.parametrize(
@@ -423,10 +860,15 @@ def test_litellm_chat_model_track_parameter_controls_monitoring(
 
         return decorator
 
-    litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
-    litellm_integration_stub.track_completion = mock_track_completion
-    monkeypatch.setitem(
-        sys.modules, "opik.integrations.litellm", litellm_integration_stub
+    # Patch the function on the actual module. Replacing the `sys.modules`
+    # entry isn't enough because `import opik.integrations.litellm as X`
+    # resolves via the `opik.integrations` package attribute, which still
+    # points at the real module once it has been imported earlier in the
+    # suite (e.g. by any LLM-judge metric default-model instantiation).
+    import opik.integrations.litellm as _real_litellm_integration
+
+    monkeypatch.setattr(
+        _real_litellm_integration, "track_completion", mock_track_completion
     )
 
     # Create model with specified track value

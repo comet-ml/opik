@@ -82,7 +82,7 @@ def test_batch_manager__flush_is_called__all_batchers_are_flushed():
     strings_batcher.flush.assert_called_once()
 
 
-def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed():
+def test_batch_manager__flush_then_stop__accumulated_data_is_flushed_and_thread_is_stopped():
     collected_messages = []
 
     def flush_callback(message: messages.BaseMessage):
@@ -108,6 +108,9 @@ def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed(
     for span_message in span_messages_batch:
         tested.process_message(span_message)
 
+    # BatchManager.stop() is a pure signal now — callers must flush first if
+    # they want pending batches pushed downstream.
+    tested.flush()
     tested.stop()
 
     assert len(collected_messages) >= 2

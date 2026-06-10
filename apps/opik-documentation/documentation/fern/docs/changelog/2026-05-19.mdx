@@ -1,0 +1,55 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog
+---
+
+## 🚀 Client-Side Prompt Caching (Python & TypeScript SDKs)
+
+`client.get_prompt()` and `client.get_chat_prompt()` now cache results in-process, so repeated calls inside a hot path skip the network round-trip entirely. Pinned commits are cached indefinitely; latest-version lookups use a 5-minute TTL that refreshes in the background so your code always gets a reasonably fresh value without blocking.
+
+**What's new:**
+
+- **Automatic caching** — results are cached on the first fetch; subsequent calls return instantly from memory
+- **Configurable TTL** — set `OPIK_PROMPT_CACHE_TTL_SECONDS` to adjust the freshness window (default: 300 s)
+- **Bypass when needed** — pass `no_cache=True` / `noCache: true` to force a live fetch from the backend
+- **Prompt metadata injected into traces** — when you fetch a prompt inside an `@track` context, the prompt ID and commit are automatically recorded in the trace metadata so you know which version was used at inference time
+- **TypeScript SDK** — the same caching and metadata injection are available in the TypeScript client
+
+```python
+# Cached after the first call — no extra latency on subsequent invocations
+prompt = client.get_prompt("my-system-prompt")
+
+# Force a fresh fetch, bypassing the cache
+prompt = client.get_prompt("my-system-prompt", no_cache=True)
+```
+
+## 🔌 `opik connect` CLI Improvements
+
+The `opik connect` and `opik endpoint` CLI commands have been reorganized with a much better error experience:
+
+- **Formatted error output** — configuration problems now show a labelled card (Reason / Workspace / URL / Config / Fix / Docs) so you can see exactly what's wrong and how to fix it without reading a stack trace
+- **Auto-configure on first run** — if no `~/.opik.config` file exists, `opik connect` now offers to run `opik configure` automatically (skipped in non-interactive / headless environments)
+- **Instant disconnect** — stopping a local runner session now notifies the backend immediately, so the connection status in the UI updates right away instead of waiting for a timeout
+
+## 🔧 Bug Fixes & Improvements
+
+- **Playground: Gemma 4 no longer leaks reasoning traces** — the internal thinking output from Gemma 4 models was appearing at the top of Playground responses; it is now suppressed so you see only the final model response
+- **Playground: updated default models for Gemini and Vertex AI** — the provider dropdown previously defaulted to deprecated model aliases that weren't selectable in the picker; both providers now default to their current recommended models
+- **Google ADK integration: re-patching fixed** — `OpikADKOtelTracer` was killing all active OpenTelemetry spans and re-patching the ADK exporter on every request; the patcher is now idempotent and preserves user-configured OTel pipelines
+- **Environments: auto-created environments get distinct colors** — environments created automatically from trace ingestion now receive a color from the palette (assigned deterministically by name hash), so they no longer all appear identical
+- **Environments: inline validation errors** — when creating or editing an environment, backend errors (duplicate name, invalid value) now appear inline below the field; the dialog stays open so you don't lose your input
+- **Environments: SDK preserves environment on update** — calling `span.end()`, `span.update()`, `trace.end()`, or `trace.update()` no longer clears the `environment` field set at creation time
+- **Experiments: "Item source" column** — the column previously labeled "Test suite" in the Experiments table is now called "Item source" and shows a dynamic icon reflecting the actual source (dataset, trace, manual, etc.)
+- **Dataset version copy no longer drops items** — when a dataset version was copied and the stored item count had drifted from the actual ClickHouse row count, some items could be silently lost; the copy now uses a live count, eliminating the discrepancy
+- **Self-hosted onboarding skip no longer loops** — clicking "Skip" during onboarding on deployments without demo data (self-hosted Docker Compose, self-hosted EKS) previously started a 5-minute polling loop; it now routes directly to the home page
+- **CSV dataset upload always available** — the CSV upload button in the dataset UI is now always shown; it was previously hidden on self-hosted Docker Compose and some staging environments even though the feature was fully functional
+
+## ⚡ Performance Improvements
+
+- **Dataset streaming uses less backend CPU** — resolved a query pattern that caused the MySQL reader to scan all dataset versions on every `/datasets/items/stream` call; under high request volume this was pushing database CPU to 80–99%, it now uses a direct primary-key lookup instead
+- **Workspace selector loads faster** — the workspace dropdown now fetches a lighter summary endpoint, reducing the number of backend queries on each page load for users with many workspaces
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.31...2.0.37)
+
+_Releases_: `2.0.32`, `2.0.33`, `2.0.34`, `2.0.35`, `2.0.36`, `2.0.37`

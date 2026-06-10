@@ -140,8 +140,6 @@ public class TestDropwizardAppExtensionUtils {
         }
 
         GuiceyConfigurationHook hook = injector -> {
-            injector.modulesOverride(TestHttpClientUtils.testAuthModule());
-
             Optional.ofNullable(appContextConfig.disableModules)
                     .orElse(List.of())
                     .forEach(injector::disableModules);

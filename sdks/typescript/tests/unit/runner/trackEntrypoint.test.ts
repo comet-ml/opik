@@ -58,7 +58,7 @@ describe("track with entrypoint", () => {
     const entry = all.get("my-entrypoint-agent");
     expect(entry).toBeDefined();
     expect(entry!.name).toBe("my-entrypoint-agent");
-    expect(entry!.params).toEqual([{ name: "msg", type: "string" }]);
+    expect(entry!.params).toEqual([{ name: "msg", type: "string", presence: "required" }]);
   });
 
   it("still traces execution normally when entrypoint=true", async () => {
@@ -120,7 +120,7 @@ describe("track with entrypoint", () => {
     );
 
     const entry = getAll().get("fallback-params-agent");
-    expect(entry!.params).toEqual([{ name: "userId", type: "string" }]);
+    expect(entry!.params).toEqual([{ name: "userId", type: "string", presence: "required" }]);
   });
 
   it("warns when explicit params use unsupported types", () => {

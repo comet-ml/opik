@@ -22,4 +22,5 @@ export interface TraceExperimentItemBulkWriteView {
     ttft?: number;
     threadId?: string;
     source?: OpikApi.TraceExperimentItemBulkWriteViewSource;
+    environment?: string;
 }

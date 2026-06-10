@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
 import uniq from "lodash/uniq";
@@ -23,6 +23,7 @@ import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataT
 import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
+import { Skeleton } from "@/ui/skeleton";
 import SpanDetailsButton from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
 import useTreeDetailsStore, {
   TreeNodeConfig,
@@ -39,8 +40,9 @@ import { TREE_FILTER_COLUMNS } from "@/v2/pages-shared/traces/TraceDetailsPanel/
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
-import { cn, getJSONPaths } from "@/lib/utils";
+import { getJSONPaths } from "@/lib/utils";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 // Left toolbar — sits above the tree panel
 type TraceTreeToolbarProps = {
@@ -69,10 +71,6 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
   const { toggleExpandAll, expandedTreeRows, fullExpandedSet } =
     useTreeDetailsStore();
   const isAllExpanded = expandedTreeRows.size === fullExpandedSet.size;
-
-  const [isSearchExpanded, setIsSearchExpanded] = useState(
-    Boolean(search && search.length),
-  );
 
   const hasSearch = Boolean(search && search.length);
   const hasFilter = Boolean(filters.length);
@@ -187,18 +185,12 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
   );
 
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between border-b bg-muted/50 px-4">
-      {!isSearchExpanded && (
+    <div className="flex h-10 shrink-0 items-center border-b bg-muted/50 px-4">
+      <div className="relative flex flex-1 items-center">
         <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
           Spans ({spanCount})
         </span>
-      )}
-      <div
-        className={cn(
-          "flex items-center gap-1 text-foreground",
-          isSearchExpanded && "w-full",
-        )}
-      >
+        <div className="flex-auto" />
         <ExpandableSearchInput
           value={search}
           placeholder="Search by all fields"
@@ -206,8 +198,10 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
           disabled={isSpansLazyLoading}
           buttonVariant="ghost"
           tooltip="Search spans"
-          onExpandedChange={setIsSearchExpanded}
+          overlayExpand
         />
+      </div>
+      <div className="flex items-center gap-1 text-foreground">
         <FiltersButton
           columns={filtersColumnData}
           filters={filters}
@@ -254,27 +248,35 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
 
 // Right toolbar — sits above the data panel
 type TraceDataToolbarProps = {
-  dataToView: Trace | Span;
+  dataToView: Trace | Span | undefined;
   setActiveSection: (v: DetailsActionSectionValue) => void;
+  isLoading?: boolean;
+  hideAnnotateActions?: boolean;
 };
 
 export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   dataToView,
   setActiveSection,
+  isLoading = false,
+  hideAnnotateActions,
 }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
+
   useHotkeys(
     "a",
     (e) => {
       e.preventDefault();
       setActiveSection(DetailsActionSection.Annotate);
     },
-    { enableOnFormTags: false },
-    [setActiveSection],
+    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    [setActiveSection, canAnnotateTraceSpanThread],
   );
 
   const rows = useMemo(() => (dataToView ? [dataToView] : []), [dataToView]);
 
-  const isSpan = isObjectSpan(dataToView);
+  const isSpan = dataToView ? isObjectSpan(dataToView) : false;
   const dataType = isSpan ? "spans" : "traces";
   const inspectType: BASE_TRACE_DATA_TYPE = isSpan
     ? (dataToView as Span).type
@@ -285,29 +287,41 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
       <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
         Inspect:
       </span>
-      <BaseTraceDataTypeIcon type={inspectType} />
-      <span className="comet-body-xs-accented truncate">
-        {dataToView?.name}
-      </span>
+      {isLoading || !dataToView ? (
+        <Skeleton className="h-4 w-32" />
+      ) : (
+        <>
+          <BaseTraceDataTypeIcon type={inspectType} />
+          <span className="comet-body-xs-accented truncate">
+            {dataToView?.name}
+          </span>
+        </>
+      )}
 
       <div className="flex-auto" />
 
-      <AddToDropdown
-        getDataForExport={async () => rows}
-        selectedRows={rows}
-        dataType={dataType}
-        buttonVariant="ghost"
-        buttonSize="2xs"
-      />
-      <DetailsActionSectionToggle
-        activeSection={null}
-        setActiveSection={setActiveSection}
-        layoutSize={ButtonLayoutSize.Large}
-        type={DetailsActionSection.Annotate}
-        variant="ghost"
-        buttonSize="2xs"
-        hotkey="A"
-      />
+      {!hideAnnotateActions && (
+        <AddToDropdown
+          getDataForExport={async () => rows}
+          selectedRows={rows}
+          dataType={dataType}
+          buttonVariant="ghost"
+          buttonSize="2xs"
+          disabled={isLoading || !dataToView}
+        />
+      )}
+      {canAnnotateTraceSpanThread && !hideAnnotateActions && (
+        <DetailsActionSectionToggle
+          activeSection={null}
+          setActiveSection={setActiveSection}
+          layoutSize={ButtonLayoutSize.Large}
+          type={DetailsActionSection.Annotate}
+          variant="ghost"
+          buttonSize="2xs"
+          hotkey="A"
+          disabled={isLoading || !dataToView}
+        />
+      )}
     </div>
   );
 };

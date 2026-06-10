@@ -24,5 +24,6 @@ public record OptimizationStudioJobMessage(
         @NonNull String workspaceId,
         @NonNull String workspaceName,
         @NonNull OptimizationStudioConfig config,
-        String opikApiKey) {
+        String opikApiKey,
+        String projectName) {
 }

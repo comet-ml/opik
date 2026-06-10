@@ -4,7 +4,7 @@ import type * as OpikApi from "../index.js";
 
 export interface LlmAsJudgeModelParameters {
     name: string;
-    temperature: number;
+    temperature?: number;
     seed?: number;
     customParameters?: OpikApi.JsonNode;
 }

@@ -11,6 +11,10 @@ class AlertTriggerConfigWrite(UniversalBaseModel):
     id: typing.Optional[str] = None
     type: AlertTriggerConfigWriteType
     config_value: typing.Optional[typing.Dict[str, str]] = None
+    group_index: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Groups configs within a trigger: same group_index means AND between configs, different group_index means OR between groups. Null means a legacy/singleton group of one config. Always null for scope:project configs.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

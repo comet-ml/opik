@@ -3,15 +3,17 @@ package com.comet.opik.domain.workspaces;
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.domain.AlertDAO;
-import com.comet.opik.domain.DashboardDAO;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ExperimentDAO;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.OptimizationDAO;
 import com.comet.opik.domain.PromptDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -22,9 +24,13 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.ServiceTogglesConfig.FORCE_WORKSPACE_VERSION_DISABLED;
+import static com.comet.opik.api.OpikVersion.DISABLED;
+import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 /**
@@ -38,9 +44,12 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * <ol>
  *   <li><b>V2 workspace allowlist</b> ({@code TOGGLE_V2_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
  *       that always receive {@code version_2}. Highest priority, all deployment modes.</li>
+ *   <li><b>V1 workspace allowlist</b> ({@code TOGGLE_V1_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
+ *       that always receive {@code version_1}. Overridden by the V2 allowlist; overrides the force flag and
+ *       all subsequent steps. Defensive rollback layer for customers pinned to legacy navigation.</li>
  *   <li><b>Feature flag override</b> ({@code TOGGLE_FORCE_WORKSPACE_VERSION}) — if set to a valid
  *       {@link OpikVersion} value ({@code "version_1"} or {@code "version_2"}), that version is returned
- *       unconditionally. Value {@code "disabled"} means no override.</li>
+ *       unconditionally. Value {@code "disabled"} means no override. Defaults to {@code "version_2"}.</li>
  *   <li><b>Auth one-way V2 gate</b> (authenticated mode only) — if auth metadata indicates the workspace
  *       was created post-launch ({@code version_2}), always return {@code version_2}.
  *       Prevents V2 to V1 demotion. Defensive: gracefully degrades when auth service doesn't
@@ -55,7 +64,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Entity Types Checked:</h3>
  * <ul>
- *   <li>State database (cheapest-first): dashboards, automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
+ *   <li>State database (cheapest-first): automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
  *   <li>Analytics database (cheapest-first): optimizations, experiments (excl. demo) etc.</li>
  *   <li>Not yet checked: alerts (no project_id column yet)</li>
  * </ul>
@@ -80,6 +89,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  */
 public interface WorkspaceVersionService {
     Mono<WorkspaceVersion> getWorkspaceVersion(String workspaceId, OpikVersion authSuggestedVersion);
+
+    Mono<Boolean> evictCache(String workspaceId);
 }
 
 /**
@@ -99,22 +110,46 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     protected final TransactionTemplate transactionTemplate;
     protected final ExperimentDAO experimentDAO;
     protected final OptimizationDAO optimizationDAO;
+    protected final FeedbackScoreDAO feedbackScoreDAO;
     protected final ServiceTogglesConfig serviceTogglesConfig;
     protected final CacheManager cacheManager;
     protected final CacheConfiguration cacheConfiguration;
+    protected final WorkspacesService workspacesService;
+    protected final AnalyticsService analyticsService;
 
     protected AbstractWorkspaceVersionService(@NonNull TransactionTemplate transactionTemplate,
             @NonNull ExperimentDAO experimentDAO,
             @NonNull OptimizationDAO optimizationDAO,
+            @NonNull FeedbackScoreDAO feedbackScoreDAO,
             @NonNull ServiceTogglesConfig serviceTogglesConfig,
             @NonNull CacheManager cacheManager,
-            @NonNull CacheConfiguration cacheConfiguration) {
+            @NonNull CacheConfiguration cacheConfiguration,
+            @NonNull WorkspacesService workspacesService,
+            @NonNull AnalyticsService analyticsService) {
         this.transactionTemplate = transactionTemplate;
         this.experimentDAO = experimentDAO;
         this.optimizationDAO = optimizationDAO;
+        this.feedbackScoreDAO = feedbackScoreDAO;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.cacheManager = cacheManager;
         this.cacheConfiguration = cacheConfiguration;
+        this.workspacesService = workspacesService;
+        this.analyticsService = analyticsService;
+        warnIfWorkspaceAllowlistsOverlap();
+    }
+
+    private void warnIfWorkspaceAllowlistsOverlap() {
+        var v1 = serviceTogglesConfig.getV1WorkspaceAllowlistIds();
+        var v2 = serviceTogglesConfig.getV2WorkspaceAllowlistIds();
+        if (v1.isEmpty() || v2.isEmpty()) {
+            return;
+        }
+        var overlap = v1.stream().filter(v2::contains).collect(Collectors.toUnmodifiableSet());
+        if (!overlap.isEmpty()) {
+            log.warn(
+                    "Workspace IDs are configured in both V1 and V2 allowlists; V2 wins per priority order, ids '{}'",
+                    overlap);
+        }
     }
 
     @Override
@@ -124,24 +159,38 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
             log.info("Workspace included in version_2 allowlist, workspaceId '{}'", workspaceId);
             return Mono.just(buildResponse(OpikVersion.VERSION_2));
         }
+        var isWorkspaceInV1Allowlist = serviceTogglesConfig.getV1WorkspaceAllowlistIds().contains(workspaceId);
+        if (isWorkspaceInV1Allowlist) {
+            log.info("Workspace included in version_1 allowlist, workspaceId '{}'", workspaceId);
+            return Mono.just(buildResponse(OpikVersion.VERSION_1));
+        }
         var forcedVersion = getForcedVersion();
         if (forcedVersion.isPresent()) {
             log.info("Workspace version forced by feature flag, opikVersion '{}', workspaceId '{}'",
                     forcedVersion.get().getValue(), workspaceId);
             return Mono.just(buildResponse(forcedVersion.get()));
         }
-        if (cacheConfiguration.isEnabled()) {
-            return cacheManager.get(cacheKey(workspaceId), WorkspaceVersion.class)
-                    .onErrorResume(throwable -> {
-                        log.warn("Cache read failed, computing version, workspaceId '{}'", workspaceId, throwable);
-                        return Mono.empty();
-                    })
-                    .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion)
-                            .flatMap(response -> cacheResult(workspaceId, response))
-                            .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
-        }
-        return computeVersion(workspaceId, authSuggestedVersion)
-                .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
+        // Pull the API user from the reactive context the resource set via .contextWrite(...).
+        // SYSTEM_USER is a defensive fallback for callers that don't propagate a request scope.
+        return Mono.deferContextual(ctx -> {
+            var userName = ctx.<String>getOrEmpty(RequestContext.USER_NAME)
+                    .filter(StringUtils::isNotBlank)
+                    .orElse(SYSTEM_USER);
+            if (cacheConfiguration.isEnabled()) {
+                return cacheManager.get(cacheKey(workspaceId), WorkspaceVersion.class)
+                        .onErrorResume(throwable -> {
+                            log.warn("Cache read failed, computing version, workspaceId '{}'", workspaceId,
+                                    throwable);
+                            return Mono.empty();
+                        })
+                        .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion, userName)
+                                .flatMap(response -> cacheResult(workspaceId, response))
+                                .onErrorResume(
+                                        throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
+            }
+            return computeVersion(workspaceId, authSuggestedVersion, userName)
+                    .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
+        });
     }
 
     protected abstract OpikVersion getFallbackVersion(String workspaceId, OpikVersion authSuggestedVersion);
@@ -150,6 +199,54 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
             Throwable throwable) {
         log.warn("Version 1 entity check failed, returning fallback, workspaceId '{}'", workspaceId, throwable);
         return Mono.just(buildResponse(getFallbackVersion(workspaceId, authSuggestedVersion)));
+    }
+
+    /**
+     * Fire-and-forget persistence + analytics emission. Reaches this method on the auth
+     * one-way V2 gate too, so {@code last_known_version} for those workspaces reflects
+     * the auth-state, not an entity-scan result.
+     */
+    private void persistAndEmit(String workspaceId, WorkspaceVersion response, String userName) {
+        Schedulers.boundedElastic().schedule(() -> {
+            try {
+                persistAndEmitBlocking(workspaceId, response, userName);
+            } catch (RuntimeException exception) {
+                log.warn("Failed to persist workspace version determination, workspaceId '{}'",
+                        workspaceId, exception);
+            }
+        });
+    }
+
+    private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response, String userName) {
+        var newVersion = response.opikVersion();
+        var existingWorkspace = workspacesService.findById(workspaceId);
+        var previousVersion = existingWorkspace
+                .map(Workspace::lastKnownVersion)
+                .flatMap(OpikVersion::findByValue);
+        workspacesService.upsertVersion(workspaceId, newVersion, userName);
+        // Skip the CH probe + MySQL write once the flag is false — the legacy table only
+        // shrinks (no new writes land there), so the answer can't flip back to true.
+        boolean storedHasLegacyScores = existingWorkspace
+                .map(Workspace::hasLegacyScores)
+                .orElse(true);
+        if (storedHasLegacyScores) {
+            try {
+                boolean hasLegacyScores = Boolean.TRUE.equals(feedbackScoreDAO.hasLegacyScores(workspaceId).block());
+                if (existingWorkspace.isEmpty() || !hasLegacyScores) {
+                    workspacesService.upsertHasLegacyScores(workspaceId, hasLegacyScores, userName);
+                }
+            } catch (RuntimeException exception) {
+                log.warn("Failed to probe legacy feedback_scores, leaving flag untouched, workspaceId '{}'",
+                        workspaceId, exception);
+            }
+        }
+        var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
+        analyticsService.trackEvent("workspace_version_determined", Map.of(
+                "workspace_id", workspaceId,
+                "previous_version", previousVersion.map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
+                "new_version", Optional.ofNullable(newVersion).map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
+                "version_changed", String.valueOf(versionChanged),
+                "date", Instant.now().toString()));
     }
 
     private Mono<WorkspaceVersion> cacheResult(String workspaceId, WorkspaceVersion response) {
@@ -163,15 +260,17 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 });
     }
 
-    private Mono<WorkspaceVersion> computeVersion(String workspaceId, OpikVersion authSuggestedVersion) {
+    private Mono<WorkspaceVersion> computeVersion(String workspaceId, OpikVersion authSuggestedVersion,
+            String userName) {
         if (authSuggestedVersion == OpikVersion.VERSION_2) {
             log.info("Locked via auth one-way gate, workspaceId '{}', version '{}'", workspaceId, authSuggestedVersion);
-            return Mono.just(buildResponse(OpikVersion.VERSION_2));
+            return Mono.just(buildResponse(OpikVersion.VERSION_2))
+                    .doOnNext(response -> persistAndEmit(workspaceId, response, userName));
         }
         return Flux.concat(
                 Mono.fromCallable(() -> hasStateDbVersion1Entities(workspaceId))
                         .subscribeOn(Schedulers.boundedElastic()),
-                optimizationDAO.hasVersion1Optimizations(workspaceId),
+                optimizationDAO.hasVersion1Optimizations(workspaceId, DemoData.OPTIMIZATIONS),
                 experimentDAO.hasVersion1Experiments(workspaceId, DemoData.EXPERIMENTS))
                 .any(found -> found)
                 .map(found -> {
@@ -179,17 +278,19 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                     log.info("Workspace version determined as '{}' for workspace '{}' (hasVersion1Entities={})",
                             version.getValue(), workspaceId, found);
                     return buildResponse(version);
-                });
+                })
+                .doOnNext(response -> persistAndEmit(workspaceId, response, userName));
     }
 
     private Optional<OpikVersion> getForcedVersion() {
         var forced = serviceTogglesConfig.getForceWorkspaceVersion();
-        if (StringUtils.isBlank(forced) || FORCE_WORKSPACE_VERSION_DISABLED.equalsIgnoreCase(forced)) {
+        if (DISABLED.equalsIgnoreCase(forced)) {
             return Optional.empty();
         }
         var version = OpikVersion.findByValue(forced);
         if (version.isEmpty()) {
-            log.warn("Invalid forceWorkspaceVersion config value: '{}', ignoring", forced);
+            log.warn("Invalid forceWorkspaceVersion config value: '{}', defaulting to version_2", forced);
+            return Optional.of(OpikVersion.VERSION_2);
         }
         return version;
     }
@@ -203,15 +304,11 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      */
     private boolean hasStateDbVersion1Entities(String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            if (handle.attach(DashboardDAO.class).hasVersion1Dashboards(workspaceId)) {
-                log.info("Found version_1 dashboards in workspace '{}'", workspaceId);
-                return true;
-            }
             if (handle.attach(AutomationRuleDAO.class).hasVersion1AutomationRules(workspaceId)) {
                 log.info("Found multi-project automation rules in workspace '{}'", workspaceId);
                 return true;
             }
-            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId)) {
+            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId, DemoData.PROMPTS)) {
                 log.info("Found version_1 prompts in workspace '{}'", workspaceId);
                 return true;
             }
@@ -233,5 +330,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private WorkspaceVersion buildResponse(OpikVersion version) {
         return WorkspaceVersion.builder().opikVersion(version).build();
+    }
+
+    @Override
+    public Mono<Boolean> evictCache(@NonNull String workspaceId) {
+        return cacheManager.evict(cacheKey(workspaceId), false);
     }
 }

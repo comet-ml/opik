@@ -19,6 +19,7 @@ type UseTracesListParams = {
   page: number;
   size: number;
   truncate?: boolean;
+  stripAttachments?: boolean;
   fromTime?: string;
   toTime?: string;
   exclude?: string[];
@@ -41,6 +42,7 @@ const getTracesList = async (
     size,
     page,
     truncate,
+    stripAttachments,
     fromTime,
     toTime,
     exclude,
@@ -62,6 +64,9 @@ const getTracesList = async (
       size,
       page,
       truncate,
+      ...(stripAttachments !== undefined && {
+        strip_attachments: stripAttachments,
+      }),
       ...(fromTime && { from_time: fromTime }),
       ...(toTime && { to_time: toTime }),
       ...(exclude &&

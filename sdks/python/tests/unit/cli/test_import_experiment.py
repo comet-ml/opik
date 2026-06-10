@@ -342,6 +342,81 @@ class TestRecreateExperiment:
         assert not mock_client.get_or_create_dataset.called
         assert not mock_client.create_experiment.called
 
+    def test_recreate_experiment_chunks_items_within_be_cap(
+        self, mock_client: Mock
+    ) -> None:
+        # BE rejects a single ``create_experiment_items`` POST whose item
+        # count exceeds ``ExperimentItemsBatch``'s ``@Size(max=…)``. The
+        # actual cap value is BE-configured and may change over time, so
+        # we read it from the module-level constant the chunker uses and
+        # assert behavior against that, not against a hardcoded literal.
+        # Contract: every batch ``<= cap``, total across batches ==
+        # full item count, multiple batches when items > cap.
+        from opik.cli.imports.experiment import _EXPERIMENT_ITEMS_INSERT_BATCH_SIZE
+
+        cap = _EXPERIMENT_ITEMS_INSERT_BATCH_SIZE
+        # 2.5 × cap exercises the multi-batch path with a partial-last-
+        # batch remainder; any value above ``cap`` works for the contract.
+        n_items = cap * 5 // 2
+        experiment_data = ExperimentData(
+            experiment={
+                "id": "exp-big",
+                "name": "big-experiment",
+                "dataset_name": "test-dataset",
+                "type": "regular",
+            },
+            items=[
+                {
+                    "trace_id": f"trace-{i}",
+                    "dataset_item_id": f"ds-item-{i}",
+                    "dataset_item_data": {"input": f"test input {i}"},
+                }
+                for i in range(n_items)
+            ],
+        )
+        trace_id_map = {f"trace-{i}": f"new-trace-{i}" for i in range(n_items)}
+        dataset_item_id_map = {
+            f"ds-item-{i}": f"new-ds-item-{i}" for i in range(n_items)
+        }
+
+        with patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers:
+            mock_id_helpers.generate_id = Mock(
+                side_effect=[f"exp-item-{i}" for i in range(n_items)]
+            )
+
+            recreate_experiment(
+                mock_client,
+                experiment_data,
+                "test-project",
+                trace_id_map,
+                dataset_item_id_map,
+                dry_run=False,
+                debug=False,
+            )
+
+            create_calls = mock_client._rest_client.experiments.create_experiment_items.call_args_list
+            # ceil(n_items / cap) batched POSTs.
+            expected_batches = (n_items + cap - 1) // cap
+            assert len(create_calls) == expected_batches, (
+                f"expected {expected_batches} chunked create_experiment_items "
+                f"calls for {n_items} items at cap={cap}, got {len(create_calls)}"
+            )
+            # Every batch must respect the BE cap; total must equal the
+            # full item count (nothing dropped, nothing duplicated).
+            batch_sizes = [
+                len(call.kwargs.get("experiment_items", []))
+                if call.kwargs.get("experiment_items") is not None
+                else len(call.args[0])
+                for call in create_calls
+            ]
+            assert all(size <= cap for size in batch_sizes), (
+                f"every batch must respect the BE cap (={cap}), got {batch_sizes}"
+            )
+            assert sum(batch_sizes) == n_items, (
+                f"all {n_items} items must end up across the chunked batches, "
+                f"got sum={sum(batch_sizes)}"
+            )
+
 
 class TestImportTracesWithSpans:
     """Test trace import with span parent_span_id preservation."""

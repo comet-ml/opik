@@ -12,7 +12,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { Plus } from "lucide-react";
 
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
 import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -24,7 +24,6 @@ import TextCell from "@/shared/DataTableCells/TextCell";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { Dashboard, DASHBOARD_TYPE_LABELS } from "@/types/dashboard";
-import Loader from "@/shared/Loader/Loader";
 import AddEditCloneDashboardDialog from "@/v2/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 import { DashboardRowActionsCell } from "@/v2/pages/DashboardsPage/DashboardRowActionsCell";
 import DashboardsActionsPanel from "@/v2/pages/DashboardsPage/DashboardsActionsPanel";
@@ -348,11 +347,9 @@ const DashboardsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
-    return <Loader />;
-  }
-
-  const isEmpty = noData && dashboards.length === 0;
+  const isTableLoading =
+    isPending || (isPlaceholderData && dashboards.length === 0);
+  const isEmpty = !isTableLoading && noData && dashboards.length === 0;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -373,9 +370,13 @@ const DashboardsPage: React.FunctionComponent = () => {
           description={
             "Build a cross-project dashboard to get a real-time view of your agents, metrics,\nand costs. Or explore a project to see detailed insights."
           }
-          primaryActionLabel="Create your first dashboard"
-          onPrimaryAction={handleNewDashboardClick}
-          docsUrl={buildDocsUrl("/production/dashboards")}
+          primaryActionLabel={
+            canCreateDashboards ? "Create your first dashboard" : undefined
+          }
+          onPrimaryAction={
+            canCreateDashboards ? handleNewDashboardClick : undefined
+          }
+          docsUrl={buildDocsUrl("/tracing/dashboards/dashboards")}
         />
       ) : (
         <>
@@ -424,7 +425,10 @@ const DashboardsPage: React.FunctionComponent = () => {
             getRowId={getRowId}
             columnPinning={DEFAULT_COLUMN_PINNING}
             noData={<DataTableNoMatchingData />}
-            showLoadingOverlay={isPlaceholderData && isFetching}
+            showSkeleton={isTableLoading}
+            showLoadingOverlay={
+              !isTableLoading && isPlaceholderData && isFetching
+            }
           />
           <div className="py-4">
             <DataTablePagination

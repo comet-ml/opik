@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isStringMarkdown, removeUndefinedKeys, isLooseEqual } from "./utils";
+import {
+  getSelectAllCheckedState,
+  isStringMarkdown,
+  removeUndefinedKeys,
+  isLooseEqual,
+} from "./utils";
 
 describe("isStringMarkdown", () => {
   // Test non-string inputs
@@ -380,5 +385,27 @@ describe("isLooseEqual", () => {
     const a = { x: 1 };
     const b = { x: 1, y: 2 };
     expect(isLooseEqual(a, b)).toBe(false);
+  });
+});
+
+describe("getSelectAllCheckedState", () => {
+  it("returns false when there is nothing to select (totalCount === 0)", () => {
+    expect(getSelectAllCheckedState(0, 0)).toBe(false);
+  });
+
+  it("returns false when nothing is selected", () => {
+    expect(getSelectAllCheckedState(0, 5)).toBe(false);
+  });
+
+  it("returns true when all items are selected", () => {
+    expect(getSelectAllCheckedState(5, 5)).toBe(true);
+  });
+
+  it('returns "indeterminate" when only some items are selected', () => {
+    expect(getSelectAllCheckedState(2, 5)).toBe("indeterminate");
+  });
+
+  it("returns true when selectedCount exceeds totalCount", () => {
+    expect(getSelectAllCheckedState(7, 5)).toBe(true);
   });
 });

@@ -5,10 +5,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
   AssistantSidebarBridge,
+  AssistantSurfaceVariant,
   BridgeContext,
   BridgeSurface,
   HostEventMap,
@@ -25,46 +25,17 @@ import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
-import OllieLoader, { OllieLoaderVariant } from "@/plugins/comet/OllieLoader";
+import OllieLoader from "@/plugins/comet/OllieLoader";
+import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
+import useAssistantManifest from "@/plugins/comet/useAssistantManifest";
 import {
-  ASSISTANT_DEV_BASE_URL,
-  IS_ASSISTANT_DEV,
-} from "@/plugins/comet/constants/assistant";
+  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  getStoredAssistantSidebarWidth,
+  isAssistantSidebarOpen,
+  setAssistantSidebarOpen,
+} from "@/constants/assistantSidebar";
 
 const BRIDGE_PROTOCOL_VERSION = 1;
-
-const LOADER_DEFAULT_WIDTH = 400;
-const LOADER_COLLAPSED_WIDTH = 33;
-
-// Pod may serve /console/manifest.json before /health/ready flips — retry
-// with backoff so transient 404/503 during warmup don't permanently fail.
-// Budget (~140s) exceeds the 2 min health-poll timeout so manifest doesn't
-// give up before health polling does.
-const MANIFEST_RETRY_COUNT = 30;
-const MANIFEST_RETRY_BASE_DELAY_MS = 500;
-const MANIFEST_RETRY_MAX_DELAY_MS = 5000;
-
-function getStoredSidebarWidth(): number {
-  try {
-    const parsed = parseInt(
-      localStorage.getItem("assistant-sidebar-width") ?? "",
-      10,
-    );
-    if (parsed > 0) return parsed;
-  } catch {
-    /* localStorage unavailable */
-  }
-  return LOADER_DEFAULT_WIDTH;
-}
-
-function getStoredSidebarOpen(): boolean {
-  try {
-    const stored = localStorage.getItem("assistant-sidebar-open");
-    return stored === null ? true : stored === "true";
-  } catch {
-    return true;
-  }
-}
 
 interface AssistantSidebarLoaderProps {
   error: string | null;
@@ -81,9 +52,11 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   retryCount = 0,
   surface,
 }) => {
-  const [isOpen, setIsOpen] = useState(getStoredSidebarOpen);
+  const [isOpen, setIsOpen] = useState(isAssistantSidebarOpen);
   const initialWidth = useRef(
-    getStoredSidebarOpen() ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+    isAssistantSidebarOpen()
+      ? getStoredAssistantSidebarWidth()
+      : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
   );
 
   useEffect(() => {
@@ -93,18 +66,29 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   const handleToggle = useCallback(() => {
     setIsOpen((prev) => {
       const next = !prev;
-      localStorage.setItem("assistant-sidebar-open", String(next));
-      onWidthChange(next ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH);
+      setAssistantSidebarOpen(next);
+      onWidthChange(
+        next
+          ? getStoredAssistantSidebarWidth()
+          : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+      );
       return next;
     });
   }, [onWidthChange]);
 
-  const collapsed = !isOpen;
+  let variant: AssistantSurfaceVariant;
+  if (surface === "page") {
+    variant = "page";
+  } else if (!isOpen) {
+    variant = "collapsed";
+  } else {
+    variant = "sidebar";
+  }
 
   if (error) {
     return (
       <AssistantErrorState
-        collapsed={collapsed}
+        variant={variant}
         onRetry={onRetry}
         onToggle={handleToggle}
         retryCount={retryCount}
@@ -112,12 +96,6 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
     );
   }
 
-  let variant: OllieLoaderVariant = "sidebar";
-  if (collapsed) {
-    variant = "collapsed";
-  } else if (surface === "page") {
-    variant = "page";
-  }
   return <OllieLoader variant={variant} />;
 };
 
@@ -128,13 +106,6 @@ function useLatestRef<T>(value: T): React.MutableRefObject<T> {
   const ref = useRef(value);
   ref.current = value;
   return ref;
-}
-
-interface AssistantManifest {
-  js: string;
-  css?: string;
-  shell: string;
-  ver: string;
 }
 
 type HostListeners = {
@@ -285,61 +256,6 @@ function useBridgeContext(
   );
 }
 
-interface AssistantMeta {
-  scriptUrl: string;
-  cssUrl?: string;
-  shellUrl: string;
-  version: string;
-}
-
-function resolveManifestUrl(backendUrl: string | null): string | null {
-  if (ASSISTANT_DEV_BASE_URL) return `${ASSISTANT_DEV_BASE_URL}/manifest.json`;
-  if (backendUrl) return `${backendUrl}/console/manifest.json`;
-  return null;
-}
-
-const DEV_META: AssistantMeta = {
-  scriptUrl: "/assistant/assistant.js",
-  cssUrl: "/assistant/assistant.css",
-  shellUrl: "/assistant/shell",
-  version: "dev",
-};
-
-function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
-  const manifestUrl = resolveManifestUrl(backendUrl);
-
-  const manifestBase = manifestUrl
-    ? manifestUrl.substring(0, manifestUrl.lastIndexOf("/"))
-    : null;
-
-  const { data } = useQuery<AssistantMeta>({
-    queryKey: ["assistant-manifest", manifestUrl],
-    queryFn: async () => {
-      const res = await fetch(manifestUrl!);
-      if (!res.ok) throw new Error(`manifest ${res.status}`);
-      const manifest: AssistantManifest = await res.json();
-      return {
-        scriptUrl: `${manifestBase}/${manifest.js}`,
-        cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: `/assistant/${manifest.shell}`,
-        version: manifest.ver,
-      };
-    },
-    enabled: !IS_ASSISTANT_DEV && !!manifestUrl,
-    staleTime: Infinity,
-    retry: MANIFEST_RETRY_COUNT,
-    retryDelay: (attempt) =>
-      Math.min(
-        MANIFEST_RETRY_BASE_DELAY_MS * 2 ** attempt,
-        MANIFEST_RETRY_MAX_DELAY_MS,
-      ),
-  });
-
-  if (IS_ASSISTANT_DEV) return DEV_META;
-
-  return data ?? null;
-}
-
 interface AssistantSidebarProps {
   surface?: BridgeSurface;
   onWidthChange: (width: number) => void;
@@ -358,7 +274,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     retry,
     retryCount,
   } = useAssistantBackend();
-  const meta = useAssistantMeta(probeUrl);
+  const meta = useAssistantManifest(probeUrl);
   const context = useBridgeContext(backendUrl ?? "", surface);
   const router = useRouter();
 
@@ -416,12 +332,26 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
    * responsible for supplying values that match the destination route's
    * search schema. Structured values are single-stringified by the router so
    * `use-query-params`' `JsonParam` round-trips correctly.
+   *
+   * The workspace is injected via a `$workspaceName` template param rather
+   * than string concatenation. TanStack Router strips the basepath from `to`
+   * with an unbounded `^basepath` regex (see @tanstack/react-router path.js
+   * `resolvePath`/`removeBasepath`), so a literal `to: "/opik-demos/..."`
+   * with basepath `/opik` would be mangled to `/opik/-demos/...`. Keeping
+   * the workspace as a param defers substitution until after the strip runs.
    */
   const navigateRef = useLatestRef(
     (path: string, search?: Record<string, unknown>) => {
       const ws = contextRef.current.workspaceName;
-      const fullPath = ws ? `/${ws}${path}` : path;
-      router.navigate({ to: fullPath, search });
+      if (ws) {
+        router.navigate({
+          to: `/$workspaceName${path}`,
+          params: { workspaceName: ws },
+          search,
+        });
+      } else {
+        router.navigate({ to: path, search });
+      }
     },
   );
 

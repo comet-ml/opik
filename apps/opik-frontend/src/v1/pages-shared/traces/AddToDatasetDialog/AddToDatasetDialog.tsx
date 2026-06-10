@@ -35,7 +35,7 @@ import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/ui/use-toast";
 import AddEditTestSuiteDialog from "@/v1/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_SIZE = 100;

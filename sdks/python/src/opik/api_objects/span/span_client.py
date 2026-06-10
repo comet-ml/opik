@@ -34,6 +34,7 @@ class Span:
         source: TraceSource,
         parent_span_id: Optional[str] = None,
         config: Optional[opik_config.OpikConfig] = None,
+        environment: Optional[str] = None,
     ):
         """
         A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Opik.span`) or another Span (:meth:`opik.Span.span`).
@@ -46,6 +47,7 @@ class Span:
         self._url_override = url_override
         self.source = source
         self._config = config
+        self._environment = environment
 
     def end(
         self,
@@ -209,6 +211,7 @@ class Span:
             error_info=error_info,
             total_cost=total_cost,
             source=self.source,
+            environment=self._environment,
         )
 
     def span(
@@ -280,6 +283,7 @@ class Span:
             attachments=attachments,
             source=self.source,
             config=self._config,
+            environment=self._environment,
         )
 
     def log_feedback_score(
@@ -348,6 +352,7 @@ def create_span(
     attachments: Optional[List[attachment.Attachment]] = None,
     source: TraceSource = "sdk",
     config: Optional[opik_config.OpikConfig] = None,
+    environment: Optional[str] = None,
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -383,6 +388,7 @@ def create_span(
         total_cost=total_cost,
         last_updated_at=datetime_helpers.local_timestamp(),
         source=source,
+        environment=environment,
     )
     message_streamer.put(create_span_message)
 
@@ -406,6 +412,7 @@ def create_span(
         url_override=url_override,
         source=source,
         config=config,
+        environment=environment,
     )
 
 
@@ -428,6 +435,7 @@ def update_span(
     error_info: Optional[ErrorInfoDict] = None,
     total_cost: Optional[float] = None,
     attachments: Optional[List[attachment.Attachment]] = None,
+    environment: Optional[str] = None,
 ) -> None:
     backend_compatible_usage = validation_helpers.validate_and_parse_usage(
         usage=usage,
@@ -454,6 +462,7 @@ def update_span(
         error_info=error_info,
         total_cost=total_cost,
         source=source,
+        environment=environment,
     )
 
     if attachments is not None:

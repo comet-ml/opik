@@ -13,7 +13,6 @@ import useUserPermission from "@/plugins/comet/useUserPermission";
 import DataTable from "@/shared/DataTable/DataTable";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import InviteUsersPopover from "./InviteUsersPopover";
@@ -210,7 +209,7 @@ const CollaboratorsTab = () => {
       ? mappedMembers.filter((member) => {
           return (
             member.userName?.toLowerCase().includes(searchLower) ||
-            member.email.toLowerCase().includes(searchLower) ||
+            member.email?.toLowerCase().includes(searchLower) ||
             member.role?.toLowerCase().includes(searchLower)
           );
         })
@@ -226,16 +225,12 @@ const CollaboratorsTab = () => {
   ]);
 
   const renderTable = () => {
-    const isLoading =
+    const isTableLoading =
       isPending ||
       isPermissionsPending ||
       isInvitedMembersPending ||
       (isPermissionsManagementEnabled &&
         (isUsersRolesPending || isWorkspaceRolesPending));
-
-    if (isLoading) {
-      return <Loader />;
-    }
 
     return (
       <WorkspaceRolesProvider
@@ -246,6 +241,7 @@ const CollaboratorsTab = () => {
           columns={columns}
           data={tableData}
           resizeConfig={resizeConfig}
+          showSkeleton={isTableLoading}
         />
       </WorkspaceRolesProvider>
     );

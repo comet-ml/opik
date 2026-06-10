@@ -8,14 +8,22 @@ from llama_index.core.callbacks import CallbackManager
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.types import LLMProvider
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
     ANY_DICT,
     TraceModel,
-    assert_dict_has_keys,
     assert_equal,
     SpanModel,
+)
+
+EXPECTED_LLAMAINDEX_LLM_USAGE = ANY_DICT.containing(
+    {
+        "completion_tokens": ANY_BUT_NONE,
+        "prompt_tokens": ANY_BUT_NONE,
+        "total_tokens": ANY_BUT_NONE,
+    }
 )
 
 EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
@@ -119,9 +127,7 @@ def test_llama_index__happyflow(
 
     # check token usage info (now one level less deep due to removed duplicate span)
     llm_response = fake_backend.trace_trees[1].spans[1].spans[3].usage
-    assert_dict_has_keys(
-        llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
-    )
+    assert llm_response == EXPECTED_LLAMAINDEX_LLM_USAGE
 
 
 @pytest.mark.parametrize(
@@ -184,9 +190,7 @@ def test_llama_index__no_index_construction_logging_happyflow(
 
     # check token usage info (now one level less deep due to removed duplicate span)
     llm_response = fake_backend.trace_trees[0].spans[1].spans[3].usage
-    assert_dict_has_keys(
-        llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
-    )
+    assert llm_response == EXPECTED_LLAMAINDEX_LLM_USAGE
 
 
 @pytest.mark.parametrize(
@@ -218,7 +222,10 @@ def test_llama_index_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model="gpt-3.5-turbo")
+    llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -263,7 +270,7 @@ def test_llama_index_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                     provider=LLMProvider.OPENAI,
                     source="sdk",
                 )
@@ -307,7 +314,8 @@ def test_llama_index_stream_chat__happyflow(
 
     # Configure OpenAI LLM with stream_options to include usage information
     llm = OpenAI(
-        model="gpt-3.5-turbo",
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         additional_kwargs={"stream_options": {"include_usage": True}},
     )
     messages = [
@@ -358,7 +366,7 @@ def test_llama_index_stream_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                     provider=LLMProvider.OPENAI,
                     source="sdk",
                 )
@@ -394,7 +402,10 @@ async def test_llama_index_async_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model="gpt-3.5-turbo")
+    llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -435,7 +446,7 @@ async def test_llama_index_async_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                     provider=LLMProvider.OPENAI,
                     source="sdk",
                 )
@@ -473,7 +484,8 @@ async def test_llama_index_async_stream_chat__happyflow(
 
     # Configure OpenAI LLM with stream_options to include usage information
     llm = OpenAI(
-        model="gpt-3.5-turbo",
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         additional_kwargs={"stream_options": {"include_usage": True}},
     )
     messages = [
@@ -521,7 +533,7 @@ async def test_llama_index_async_stream_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                     provider=LLMProvider.OPENAI,
                     source="sdk",
                 )
@@ -560,7 +572,10 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
         Settings.callback_manager = opik_callback_manager
         Settings.transformations = None
 
-        llm = OpenAI(model="gpt-3.5-turbo")
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(
                 role="system", content="You are a pirate with a colorful personality."
@@ -644,7 +659,9 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
                                 end_time=ANY_BUT_NONE,
                                 project_name=expected_project_name,
                                 spans=[],
-                                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                                model=ANY_STRING.starting_with(
+                                    llm_constants.OPENAI_GPT_NANO
+                                ),
                                 provider=LLMProvider.OPENAI,
                                 source="sdk",
                             )
@@ -694,7 +711,10 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
             Settings.callback_manager = opik_callback_manager
             Settings.transformations = None
 
-            llm = OpenAI(model="gpt-3.5-turbo")
+            llm = OpenAI(
+                model=llm_constants.OPENAI_GPT_NANO,
+                reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+            )
             messages = [
                 ChatMessage(role="user", content="Say hello"),
             ]
@@ -785,7 +805,9 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
                                         end_time=ANY_BUT_NONE,
                                         project_name=expected_project_name,
                                         spans=[],
-                                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                                        model=ANY_STRING.starting_with(
+                                            llm_constants.OPENAI_GPT_NANO
+                                        ),
                                         provider=LLMProvider.OPENAI,
                                         source="sdk",
                                     )
@@ -822,7 +844,10 @@ def test_llama_index__callback_reused_multiple_times__creates_separate_traces(
     Settings.callback_manager = opik_callback_manager
     Settings.transformations = None
 
-    llm = OpenAI(model="gpt-3.5-turbo")
+    llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
 
     # First call
     messages1 = [ChatMessage(role="user", content="Say one")]
@@ -863,7 +888,7 @@ def test_llama_index__callback_reused_multiple_times__creates_separate_traces(
                     end_time=ANY_BUT_NONE,
                     project_name="llama-index-integration-test",
                     spans=[],
-                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                     provider=LLMProvider.OPENAI,
                     source="sdk",
                 )
@@ -894,7 +919,7 @@ def test_llama_index__callback_reused_multiple_times__creates_separate_traces(
                     end_time=ANY_BUT_NONE,
                     project_name="llama-index-integration-test",
                     spans=[],
-                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                     provider=LLMProvider.OPENAI,
                     source="sdk",
                 )
@@ -936,7 +961,10 @@ def test_llama_index__used_with_start_as_current_trace__attached_to_external_tra
         Settings.callback_manager = opik_callback_manager
         Settings.transformations = None
 
-        llm = OpenAI(model="gpt-3.5-turbo")
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(role="user", content="Say hello"),
         ]
@@ -989,7 +1017,7 @@ def test_llama_index__used_with_start_as_current_trace__attached_to_external_tra
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
-                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         provider=LLMProvider.OPENAI,
                         source="sdk",
                     )
@@ -1034,7 +1062,10 @@ async def test_llama_index_async__used_with_start_as_current_trace__attached_to_
         Settings.callback_manager = opik_callback_manager
         Settings.transformations = None
 
-        llm = OpenAI(model="gpt-3.5-turbo")
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(role="user", content="Say hello in 3 words"),
         ]
@@ -1087,7 +1118,7 @@ async def test_llama_index_async__used_with_start_as_current_trace__attached_to_
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
-                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         provider=LLMProvider.OPENAI,
                         source="sdk",
                     )
@@ -1129,7 +1160,10 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
     Settings.callback_manager = opik_callback_manager
 
     # Use OpenAI for both LLM and embeddings
-    Settings.llm = OpenAI(model="gpt-3.5-turbo")
+    Settings.llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 
     # Load documents and create index
@@ -1263,7 +1297,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
-                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         provider=LLMProvider.OPENAI,
                         source="sdk",
                     ),
@@ -1304,7 +1338,10 @@ def test_llama_index__concurrent_pipelines__thread_safe(
 
     def run_pipeline(pipeline_id: int):
         """Run a LlamaIndex pipeline with unique messages"""
-        llm = OpenAI(model="gpt-3.5-turbo")
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(role="user", content=f"Say pipeline {pipeline_id} in one word"),
         ]

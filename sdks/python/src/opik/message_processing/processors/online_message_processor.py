@@ -17,7 +17,7 @@ from opik.rest_api.types import (
     experiment_item,
 )
 
-from . import message_processors
+from . import assertion_results_processor, message_processors
 from .. import encoder_helpers, messages, permissions
 from ..replay import replay_manager, db_manager
 
@@ -45,6 +45,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._replay_manager = fallback_replay_manager
         self._unauthorized_message_types_registry = unauthorized_message_types_registry
 
+        self._assertion_results_processor = (
+            assertion_results_processor.AssertionResultsMessageProcessor(
+                rest_client=rest_client,
+            )
+        )
+
         self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
             messages.CreateTraceMessage: self._process_create_trace_message,  # type: ignore
@@ -56,6 +62,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateSpansBatchMessage: self._process_create_spans_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
+            messages.AddAssertionResultsBatchMessage: self._process_add_assertion_results_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._process_create_experiment_items_batch_message,  # type: ignore
             messages.CreateAttachmentMessage: self._process_create_attachment,  # type: ignore
             messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
@@ -360,6 +367,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             batch.append(guardrail_batch_item_message)
 
         self._rest_client.guardrails.create_guardrails(guardrails=batch)
+
+    def _process_add_assertion_results_batch_message(
+        self,
+        message: messages.AddAssertionResultsBatchMessage,
+    ) -> None:
+        self._assertion_results_processor.process(message)
 
     def _process_create_experiment_items_batch_message(
         self,

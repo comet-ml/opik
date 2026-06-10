@@ -61,6 +61,27 @@ export const getTimeFromNow = (value: string): string => {
     : date.format("D MMM YYYY");
 };
 
+export const formatRelativeDateTime = (value: string): string => {
+  if (!isString(value)) return "";
+
+  const date = dayjs(value);
+  if (!date.isValid()) return "";
+
+  const now = dayjs();
+
+  if (date.isAfter(now)) return formatDate(value);
+
+  const time = date.format("h:mm A");
+
+  if (date.isSame(now, "day")) return `Today, ${time}`;
+  if (date.isSame(now.subtract(1, "day"), "day")) return `Yesterday, ${time}`;
+
+  const diffDays = now.diff(date, "day");
+  if (diffDays <= 7) return `${diffDays} days ago, ${time}`;
+
+  return formatDate(value);
+};
+
 export const makeStartOfMinute = (value: string) => {
   return dayjs(value).startOf("minute").toISOString();
 };

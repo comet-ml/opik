@@ -3,8 +3,7 @@ import { SheetClose } from "@/ui/sheet";
 import useAppStore from "@/store/AppStore";
 import { Link } from "@tanstack/react-router";
 import evaluationGifUrl from "/images/playground_evaluation.gif";
-import { buildDocsUrl } from "@/lib/utils";
-
+import { buildDocsUrl } from "@/v1/lib/utils";
 const UsingPlaygroundTab = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 

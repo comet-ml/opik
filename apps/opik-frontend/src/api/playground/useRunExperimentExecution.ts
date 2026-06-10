@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, { EXPERIMENT_EXECUTION_REST_ENDPOINT } from "@/api/api";
+import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { snakeCaseObj } from "@/lib/utils";
 import { PlaygroundPromptType } from "@/types/playground";
 import { useToast } from "@/ui/use-toast";
@@ -25,6 +26,28 @@ interface UseRunExperimentExecutionParams {
   projectName?: string;
 }
 
+interface PromptVersionRef {
+  id: string;
+  prompt_id: string;
+}
+
+const collectPromptVersions = (
+  prompt: PlaygroundPromptType,
+): PromptVersionRef[] | undefined => {
+  const refs: PromptVersionRef[] = [];
+  const seen = new Set<string>();
+  const add = (versionId?: string, promptId?: string) => {
+    if (!versionId || !promptId || seen.has(versionId)) return;
+    seen.add(versionId);
+    refs.push({ id: versionId, prompt_id: promptId });
+  };
+
+  add(prompt.loadedChatPromptVersionId, prompt.loadedChatPromptId);
+  prompt.messages.forEach((msg) => add(msg.promptVersionId, msg.promptId));
+
+  return refs.length > 0 ? refs : undefined;
+};
+
 const runExperimentExecution = async ({
   datasetName,
   datasetVersionId,
@@ -37,10 +60,11 @@ const runExperimentExecution = async ({
     return {
       model: prompt.model,
       messages: prompt.messages.map((msg) => snakeCaseObj(msg)),
-      configs: prompt.configs,
-      prompt_versions: prompt.loadedChatPromptId
-        ? [{ id: prompt.loadedChatPromptId }]
-        : undefined,
+      configs: sanitizeConfigForRequest(
+        prompt.model,
+        prompt.configs as Record<string, unknown>,
+      ),
+      prompt_versions: collectPromptVersions(prompt),
     };
   });
 

@@ -37,7 +37,7 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import useAppStore from "@/store/AppStore";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import ChatPromptRawView from "@/v1/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";

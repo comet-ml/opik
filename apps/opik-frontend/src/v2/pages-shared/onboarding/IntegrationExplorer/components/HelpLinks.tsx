@@ -6,6 +6,7 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import Slack from "@/icons/slack.svg?react";
 import { Link } from "@tanstack/react-router";
 import usePluginsStore from "@/store/PluginsStore";
+import useDemoProject from "@/api/projects/useDemoProject";
 
 export const VIDEO_TUTORIAL_LINK =
   "https://www.youtube.com/watch?v=h1XK-dMtUJI";
@@ -131,6 +132,11 @@ PlaygroundButton.displayName = "HelpLinks.Playground";
 
 const DemoProjectButton: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { data: demoProject } = useDemoProject({ workspaceName });
+
+  if (!demoProject) {
+    return null;
+  }
 
   return (
     <Button
@@ -141,9 +147,10 @@ const DemoProjectButton: React.FC = () => {
       data-fs-element="HelpLinksDemoProject"
     >
       <Link
-        to={"/$workspaceName/projects"}
+        to="/$workspaceName/projects/$projectId/logs"
         params={{
           workspaceName,
+          projectId: demoProject.id,
         }}
       >
         <MousePointerClick className="mr-2 size-4" />

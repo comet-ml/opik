@@ -48,6 +48,7 @@ class BackendEmulatorMessageProcessor(
         thread_id: Optional[str],
         source: TraceSource,
         last_updated_at: Optional[datetime.datetime] = None,
+        environment: Optional[str] = None,
     ) -> models.TraceModel:
         if spans is None:
             spans = []
@@ -70,6 +71,7 @@ class BackendEmulatorMessageProcessor(
             thread_id=thread_id,
             last_updated_at=last_updated_at,
             source=source,
+            environment=environment,
         )
 
     def create_span_model(
@@ -93,6 +95,7 @@ class BackendEmulatorMessageProcessor(
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
         source: TraceSource,
+        environment: Optional[str] = None,
     ) -> models.SpanModel:
         if spans is None:
             spans = []
@@ -119,6 +122,7 @@ class BackendEmulatorMessageProcessor(
             total_cost=total_cost,
             last_updated_at=last_updated_at,
             source=source,
+            environment=environment,
         )
 
     def create_feedback_score_model(

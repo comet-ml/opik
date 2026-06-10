@@ -55,6 +55,7 @@ module.exports = {
           foreground: "hsl(var(--primary-foreground))",
           hover: "hsl(var(--primary-hover))",
           active: "hsl(var(--primary-active))",
+          50: "hsl(var(--primary-50))",
           100: "hsl(var(--primary-100))",
         },
         secondary: {
@@ -98,11 +99,12 @@ module.exports = {
         "toggle-outline-active": "var(--toggle-outline-active)",
         "diff-removed-bg": "var(--diff-removed-bg)",
         "diff-removed-text": "var(--diff-removed-text)",
+        "diff-removed-border": "var(--diff-removed-border)",
         "diff-added-bg": "var(--diff-added-bg)",
         "diff-added-text": "var(--diff-added-text)",
+        "diff-added-border": "var(--diff-added-border)",
         "upload-icon-bg": "hsl(var(--upload-icon-bg))",
         "code-block": "var(--code-block)",
-        "breadcrumb-last": "hsl(var(--breadcrumb-last))",
         "special-button": "var(--special-button)",
         "thread-active": "var(--thread-active)",
         "selection-bar": "hsl(var(--selection-bar))",
@@ -131,6 +133,9 @@ module.exports = {
         "chart-purple": "var(--chart-purple)",
         "chart-pink": "var(--chart-pink)",
         "chart-orange": "var(--chart-orange)",
+        "chart-teal": "var(--chart-teal)",
+        "chart-gray-light": "var(--chart-gray-light)",
+        "chart-gray-dark": "var(--chart-gray-dark)",
 
         /* Template icon colors */
         "template-icon-metrics": "var(--template-icon-metrics)",
@@ -165,6 +170,10 @@ module.exports = {
           from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        shimmer: {
+          "0%": { backgroundPosition: "200% 0" },
+          "100%": { backgroundPosition: "-200% 0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -172,6 +181,7 @@ module.exports = {
         "ollie-breathe": "ollie-breathe 3.2s ease-in-out infinite",
         "ollie-blink": "ollie-blink 5.4s ease-in-out infinite",
         "ollie-text-in": "ollie-text-in 300ms ease-out",
+        shimmer: "shimmer 1.8s ease-in-out infinite",
       },
       boxShadow: {
         "action-card": "var(--action-card-shadow)",

@@ -53,10 +53,12 @@ public interface Field {
     String DATA_QUERY_PARAM = "data";
     String FULL_DATA_QUERY_PARAM = "full_data";
     String SOURCE_QUERY_PARAM = "source";
+    String ENVIRONMENT_QUERY_PARAM = "environment";
     String TRACE_ID_QUERY_PARAM = "trace_id";
     String SPAN_ID_QUERY_PARAM = "span_id";
     String ANNOTATION_QUEUE_IDS_QUERY_PARAM = "annotation_queue_ids";
     String EXPERIMENT_ID_QUERY_PARAM = "experiment_id";
+    String EXPERIMENT_IDS_QUERY_PARAM = "experiment_ids";
     String WEBHOOK_URL_QUERY_PARAM = "webhook_url";
     String ALERT_TYPE_QUERY_PARAM = "alert_type";
     String ENABLED_QUERY_PARAM = "enabled";
@@ -64,6 +66,7 @@ public interface Field {
     String COMMIT_QUERY_PARAM = "commit";
     String TEMPLATE_QUERY_PARAM = "template";
     String CHANGE_DESCRIPTION_QUERY_PARAM = "change_description";
+    String VERSION_NUMBER_QUERY_PARAM = "version_number";
     String SCOPE_QUERY_PARAM = "scope";
 
     @JsonValue

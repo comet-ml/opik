@@ -36,7 +36,7 @@ async function _run(): Promise<void> {
     return {
       description: entry.docstring,
       language: "typescript",
-      params: entry.params.map((p) => ({ name: p.name, type: p.type })),
+      params: entry.params.map((p) => ({ name: p.name, type: p.type, presence: p.presence })),
       timeout: 0,
     };
   }

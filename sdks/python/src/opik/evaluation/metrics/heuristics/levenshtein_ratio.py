@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from .. import base_metric, score_result
+from opik.exceptions import MetricComputationError
 
 
 class LevenshteinRatio(base_metric.BaseMetric):
@@ -59,6 +60,12 @@ class LevenshteinRatio(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with a value between 0.0 and 1.0,
                 representing the Levenshtein ratio between the output and reference strings.
         """
+        if output is None or reference is None:
+            raise MetricComputationError(
+                f"LevenshteinRatio metric requires non-None 'output' and 'reference' arguments, "
+                f"got output={output!r}, reference={reference!r}"
+            )
+
         import rapidfuzz.distance.Indel
 
         value = output if self._case_sensitive else output.lower()

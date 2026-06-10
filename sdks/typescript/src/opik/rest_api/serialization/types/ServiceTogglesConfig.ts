@@ -16,11 +16,11 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
-    csvUploadEnabled: core.serialization.boolean(),
     exportEnabled: core.serialization.boolean(),
     optimizationStudioEnabled: core.serialization.boolean(),
     datasetVersioningEnabled: core.serialization.boolean(),
     datasetExportEnabled: core.serialization.boolean(),
+    demoDataEnabled: core.serialization.boolean(),
     openaiProviderEnabled: core.serialization.boolean(),
     anthropicProviderEnabled: core.serialization.boolean(),
     geminiProviderEnabled: core.serialization.boolean(),
@@ -29,10 +29,14 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     bedrockProviderEnabled: core.serialization.boolean(),
     customllmProviderEnabled: core.serialization.boolean(),
     ollamaProviderEnabled: core.serialization.boolean(),
-    collaboratorsTabEnabled: core.serialization.boolean(),
+    ollieEnabled: core.serialization.boolean(),
+    agenticToolsEnabled: core.serialization.boolean(),
     v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
+    v1WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     forceWorkspaceVersion: core.serialization.string(),
+    defaultPageSize: core.serialization.number().optional(),
     v2WorkspaceAllowlist: core.serialization.string().optional(),
+    v1WorkspaceAllowlist: core.serialization.string().optional(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -45,11 +49,11 @@ export declare namespace ServiceTogglesConfig {
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
-        csvUploadEnabled: boolean;
         exportEnabled: boolean;
         optimizationStudioEnabled: boolean;
         datasetVersioningEnabled: boolean;
         datasetExportEnabled: boolean;
+        demoDataEnabled: boolean;
         openaiProviderEnabled: boolean;
         anthropicProviderEnabled: boolean;
         geminiProviderEnabled: boolean;
@@ -58,9 +62,13 @@ export declare namespace ServiceTogglesConfig {
         bedrockProviderEnabled: boolean;
         customllmProviderEnabled: boolean;
         ollamaProviderEnabled: boolean;
-        collaboratorsTabEnabled: boolean;
+        ollieEnabled: boolean;
+        agenticToolsEnabled: boolean;
         v2WorkspaceAllowlistIds: string[];
+        v1WorkspaceAllowlistIds: string[];
         forceWorkspaceVersion: string;
+        defaultPageSize?: number | null;
         v2WorkspaceAllowlist?: string | null;
+        v1WorkspaceAllowlist?: string | null;
     }
 }

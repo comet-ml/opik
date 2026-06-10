@@ -151,21 +151,7 @@ const ZoomPanContainer: React.FC<ZoomPanContainerProps> = ({
   return (
     <>
       <div className={cn("relative size-full overflow-hidden p-6", className)}>
-        <div className="absolute right-0 top-0 z-10 flex items-center gap-1.5">
-          <TooltipWrapper
-            content={canZoomIn ? "Zoom in" : "Maximum zoom reached"}
-          >
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={handleZoomIn}
-              disabled={!canZoomIn}
-              aria-label="Zoom in"
-            >
-              <ZoomIn />
-            </Button>
-          </TooltipWrapper>
-
+        <div className="absolute right-2 top-0 z-10 flex items-center gap-1.5">
           <TooltipWrapper
             content={canZoomOut ? "Zoom out" : "Minimum zoom reached"}
           >
@@ -177,6 +163,20 @@ const ZoomPanContainer: React.FC<ZoomPanContainerProps> = ({
               aria-label="Zoom out"
             >
               <ZoomOut />
+            </Button>
+          </TooltipWrapper>
+
+          <TooltipWrapper
+            content={canZoomIn ? "Zoom in" : "Maximum zoom reached"}
+          >
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={handleZoomIn}
+              disabled={!canZoomIn}
+              aria-label="Zoom in"
+            >
+              <ZoomIn />
             </Button>
           </TooltipWrapper>
 

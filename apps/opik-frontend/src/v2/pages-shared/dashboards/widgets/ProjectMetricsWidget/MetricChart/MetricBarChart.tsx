@@ -18,6 +18,7 @@ interface MetricBarChartProps {
   interval: INTERVAL_TYPE;
   renderValue?: (data: { value: ValueType }) => ValueType;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
+  customXTickFormatter?: (value: string) => string;
   chartId: string;
   data: TransformedData[];
   isPending: boolean;
@@ -26,6 +27,9 @@ interface MetricBarChartProps {
   showLegend?: boolean;
   tooltipPosition?: { x?: number; y?: number };
   targetTickCount?: number;
+  xTickInterval?: number | "preserveStart" | "preserveEnd" | "preserveStartEnd";
+  hideXAxis?: boolean;
+  hideYAxis?: boolean;
 }
 
 const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
@@ -33,6 +37,7 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
   interval,
   renderValue = renderTooltipValue,
   customYTickFormatter,
+  customXTickFormatter,
   chartId,
   isPending,
   data,
@@ -41,6 +46,9 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
   showLegend = true,
   tooltipPosition,
   targetTickCount,
+  xTickInterval,
+  hideXAxis = false,
+  hideYAxis = false,
 }) => {
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -85,7 +93,10 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
       config={config}
       data={data}
       xAxisKey="time"
-      xTickFormatter={xTickFormatter}
+      xTickFormatter={customXTickFormatter ?? xTickFormatter}
+      xTickInterval={xTickInterval}
+      hideXAxis={hideXAxis}
+      hideYAxis={hideYAxis}
       customYTickFormatter={customYTickFormatter}
       renderTooltipValue={renderValue}
       renderTooltipHeader={renderChartTooltipHeader}

@@ -8,16 +8,25 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.InvocationCallback;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.function.Function;
 
+/**
+ * Reactive HTTP POST helper with retry semantics over a JAX-RS {@link Client}. Returns a cold
+ * {@link Mono} so callers compose into a non-blocking pipeline; safe to subscribe from any thread.
+ * <p>
+ * Subscribed on {@link Schedulers#boundedElastic()} so any incidental subscribe-side work
+ * is isolated from caller threads. This keeps the client
+ * encapsulated regardless of how callers invoke it.
+ */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RetriableHttpClient {
@@ -25,71 +34,27 @@ public class RetriableHttpClient {
     private final @NonNull Client client;
 
     /**
-     * Fluent interface for building and executing retryable HTTP POST requests.
+     * Immutable specification of an outbound POST. {@code connectTimeout} caps TCP/TLS handshake duration;
+     * {@code readTimeout} caps the response read. Both are optional but recommended.
      */
-    public interface RetryableHttpPost {
-
-        @NonNull Function<Client, WebTarget> callEndpoint();
-
-        static RetryableHttpPost of(@NonNull Function<Client, WebTarget> requestFunction) {
-            return () -> requestFunction;
-        }
-
-        default RetryableHttpCallContext withRetryPolicy(@NonNull Retry retryPolicy) {
-            return () -> Tuples.of(this, retryPolicy);
-        }
-
-    }
-
-    public interface RetryableHttpCallContext {
-        Tuple2<RetryableHttpPost, Retry> getRequestWithContext();
-
-        default RetryableHttpCallContextWithResponse withRequestBody(@NonNull Entity<?> requestEntity) {
-            return () -> Tuples.of(this, requestEntity);
-        }
-    }
-
-    public interface RetryableHttpCallContextWithResponse {
-        Tuple2<RetryableHttpCallContext, Entity<?>> getRequestWithContextAndFunction();
-
-        default <T> RetryableHttpExecutableContext<T> withResponse(@NonNull Function<Response, T> responseFunction) {
-            return () -> Tuples.of(this, responseFunction);
-        }
-    }
-
-    public interface RetryableHttpExecutableContext<T> {
-
-        Tuple2<RetryableHttpCallContextWithResponse, Function<Response, T>> getFullContext();
-
-        default T execute(@NonNull RetriableHttpClient httpClient) {
-            Function<Client, WebTarget> requestFunction = getFullContext().getT1().getRequestWithContextAndFunction()
-                    .getT1().getRequestWithContext().getT1().callEndpoint();
-            Retry retrySpec = getFullContext().getT1().getRequestWithContextAndFunction().getT1()
-                    .getRequestWithContext().getT2();
-            Entity<?> requestBody = getFullContext().getT1().getRequestWithContextAndFunction().getT2();
-            Function<Response, T> responseFunction = getFullContext().getT2();
-
-            return httpClient.executePostWithRetry(requestBody, retrySpec, requestFunction, responseFunction);
-        }
-
+    @Builder
+    public record Request<T>(
+            @NonNull Function<Client, WebTarget> requestFunction,
+            @NonNull Retry retryPolicy,
+            @NonNull Entity<?> body,
+            Duration connectTimeout,
+            Duration readTimeout,
+            @NonNull Function<Response, T> responseFunction) {
     }
 
     /**
-     * Initiates a new retryable HTTP POST request to the specified endpoint.
-     *
-     * @param requestFunction Function that takes a JAX-RS Client and returns a WebTarget for the desired endpoint.
-     * @return A RetryableHttpPost instance to further configure the request.
+     * Execute the request and return a cold {@link Mono} that emits the response value, retrying on
+     * 503/504 according to the supplied policy.
      */
-    public static RetryableHttpPost newPost(@NonNull Function<Client, WebTarget> requestFunction) {
-        return RetryableHttpPost.of(requestFunction);
-    }
-
-    private <T> T executePostWithRetry(Entity<?> request, Retry retrySpec, Function<Client, WebTarget> requestFunction,
-            Function<Response, T> responseFunction) {
-        return Mono.defer(() -> performHttpPost(request, requestFunction)
+    public <T> Mono<T> executePostWithRetry(@NonNull Request<T> request) {
+        return Mono.defer(() -> performHttpPost(request)
                 .flatMap(response -> {
                     int statusCode = response.getStatus();
-
                     if (isRetryableStatusCode(statusCode)) {
                         response.bufferEntity(); // Buffer the entity to allow multiple reads
                         String body = response.readEntity(String.class);
@@ -97,34 +62,38 @@ public class RetriableHttpClient {
                                 "Service temporarily unavailable (HTTP %s): %s".formatted(statusCode, body),
                                 statusCode));
                     }
-
                     return Mono.just(response);
                 })
-                .flatMap(value -> Mono.fromCallable(() -> responseFunction.apply(value))))
+                .flatMap(value -> Mono.fromCallable(() -> request.responseFunction().apply(value))))
                 .subscribeOn(Schedulers.boundedElastic())
-                .retryWhen(retrySpec)
-                .block();
+                .retryWhen(request.retryPolicy());
     }
 
     private boolean isRetryableStatusCode(int statusCode) {
         return statusCode == 503 || statusCode == 504;
     }
 
-    private Mono<Response> performHttpPost(Entity<?> request, Function<Client, WebTarget> requestFunction) {
-        return Mono.create(sink -> requestFunction.apply(client)
-                .request()
-                .async()
-                .post(request, new InvocationCallback<Response>() {
-                    @Override
-                    public void completed(Response response) {
-                        sink.success(response);
-                    }
+    private <T> Mono<Response> performHttpPost(Request<T> request) {
+        return Mono.create(sink -> {
+            var builder = request.requestFunction().apply(client)
+                    .request();
+            if (request.connectTimeout() != null) {
+                builder.property(ClientProperties.CONNECT_TIMEOUT, (int) request.connectTimeout().toMillis());
+            }
+            if (request.readTimeout() != null) {
+                builder.property(ClientProperties.READ_TIMEOUT, (int) request.readTimeout().toMillis());
+            }
+            builder.async().post(request.body(), new InvocationCallback<Response>() {
+                @Override
+                public void completed(Response response) {
+                    sink.success(response);
+                }
 
-                    @Override
-                    public void failed(Throwable throwable) {
-                        sink.error(throwable);
-                    }
-                }));
+                @Override
+                public void failed(Throwable throwable) {
+                    sink.error(throwable);
+                }
+            });
+        });
     }
-
 }

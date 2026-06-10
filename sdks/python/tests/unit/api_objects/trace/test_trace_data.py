@@ -61,6 +61,7 @@ def test_trace_data__as_parameters__expected_parameters_are_set():
         "thread_id": ANY_BUT_NONE,
         "attachments": ANY_BUT_NONE,
         "source": "sdk",
+        "environment": None,
     }
 
     assert_equal(expected_parameters, trace_data.as_parameters)

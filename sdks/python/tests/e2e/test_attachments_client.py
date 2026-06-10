@@ -5,9 +5,12 @@ import pytest
 import opik
 from opik import Attachment, id_helpers
 from . import verifiers
-from .conftest import OPIK_E2E_TESTS_PROJECT_NAME, ATTACHMENT_FILE_SIZE
+from .conftest import ATTACHMENT_FILE_SIZE
+from ..testlib import generate_project_name
 from opik.rest_api import core as rest_api_core
 from opik import synchronization
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def test_attachments_client__get_attachment_list_for_trace__happyflow(
@@ -25,7 +28,7 @@ def test_attachments_client__get_attachment_list_for_trace__happyflow(
     opik_client.trace(
         id=trace_id,
         name="test-trace-with-attachment",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         attachments=[attachment],
     )
 
@@ -36,7 +39,7 @@ def test_attachments_client__get_attachment_list_for_trace__happyflow(
     synchronization.wait_for_done(
         lambda: len(
             attachments_client.get_attachment_list(
-                project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+                project_name=PROJECT_NAME,
                 entity_id=trace_id,
                 entity_type="trace",
             )
@@ -46,7 +49,7 @@ def test_attachments_client__get_attachment_list_for_trace__happyflow(
     )
 
     attachments_list = attachments_client.get_attachment_list(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         entity_id=trace_id,
         entity_type="trace",
     )
@@ -70,7 +73,7 @@ def test_attachments_client__download_attachment_for_trace__happyflow(
     opik_client.trace(
         id=trace_id,
         name="test-trace-download-attachment",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         attachments=[attachment],
     )
 
@@ -80,7 +83,7 @@ def test_attachments_client__download_attachment_for_trace__happyflow(
     synchronization.wait_for_done(
         lambda: len(
             attachments_client.get_attachment_list(
-                project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+                project_name=PROJECT_NAME,
                 entity_id=trace_id,
                 entity_type="trace",
             )
@@ -90,7 +93,7 @@ def test_attachments_client__download_attachment_for_trace__happyflow(
     )
 
     attachment_data = attachments_client.download_attachment(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         entity_type="trace",
         entity_id=trace_id,
         file_name=file_name,
@@ -120,7 +123,7 @@ def test_attachments_client__get_attachment_list_for_span__happyflow(
     opik_client.trace(
         id=trace_id,
         name="test-trace-for-span",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
     opik_client.span(
         id=span_id,
@@ -136,7 +139,7 @@ def test_attachments_client__get_attachment_list_for_span__happyflow(
     synchronization.wait_for_done(
         lambda: len(
             attachments_client.get_attachment_list(
-                project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+                project_name=PROJECT_NAME,
                 entity_id=span_id,
                 entity_type="span",
             )
@@ -146,7 +149,7 @@ def test_attachments_client__get_attachment_list_for_span__happyflow(
     )
 
     attachments_list = attachments_client.get_attachment_list(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         entity_id=span_id,
         entity_type="span",
     )
@@ -169,7 +172,7 @@ def test_attachments_client__invalid_project_name__or_non_existing_entity_id__ra
 
     with pytest.raises(rest_api_core.ApiError):
         attachments_client.get_attachment_list(
-            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+            project_name=PROJECT_NAME,
             entity_id="non-existent-entity-id",
             entity_type="trace",
         )
@@ -184,7 +187,7 @@ def test_attachments_client__upload_attachment_for_trace__happyflow(
     opik_client.trace(
         id=trace_id,
         name="test-trace-for-upload",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
 
     opik_client.flush()
@@ -193,7 +196,7 @@ def test_attachments_client__upload_attachment_for_trace__happyflow(
 
     file_name = os.path.basename(attachment_data_file.name)
     attachments_client.upload_attachment(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         entity_type="trace",
         entity_id=trace_id,
         file_path=attachment_data_file.name,
@@ -226,7 +229,7 @@ def test_attachments_client__upload_attachment_for_span__happyflow(
     opik_client.trace(
         id=trace_id,
         name="test-trace-for-span-upload",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
     opik_client.span(
         id=span_id,
@@ -240,7 +243,7 @@ def test_attachments_client__upload_attachment_for_span__happyflow(
 
     file_name = os.path.basename(attachment_data_file.name)
     attachments_client.upload_attachment(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         entity_type="span",
         entity_id=span_id,
         file_path=attachment_data_file.name,

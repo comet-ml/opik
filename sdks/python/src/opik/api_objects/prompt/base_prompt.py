@@ -7,7 +7,10 @@ Defines abstract interface that both string and chat prompt variants must implem
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from typing_extensions import Self
+
 from . import types as prompt_types
+from opik.rest_api import types as rest_api_types
 
 
 class BasePrompt(ABC):
@@ -27,7 +30,18 @@ class BasePrompt(ABC):
     @property
     @abstractmethod
     def commit(self) -> Optional[str]:
-        """The commit hash of the prompt version."""
+        """Legacy commit hash of the prompt version.
+
+        DEPRECATED — use :attr:`version` (e.g. ``"v3"``) instead. ``commit``
+        is no longer surfaced in the Opik UI and is kept only for backwards
+        compatibility with older SDK callers.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def version(self) -> Optional[str]:
+        """The sequential version selector for the prompt version (e.g. ``"v3"``)."""
         pass
 
     @property
@@ -78,6 +92,12 @@ class BasePrompt(ABC):
         """The name of the project this prompt belongs to."""
         pass
 
+    @property
+    @abstractmethod
+    def environments(self) -> Optional[List[str]]:
+        """The environments that currently own this prompt version, or ``None`` if unowned."""
+        pass
+
     # Internal API fields for backend synchronization
     __internal_api__prompt_id__: Optional[str]
     __internal_api__version_id__: Optional[str]
@@ -93,6 +113,17 @@ class BasePrompt(ABC):
             - ChatPrompt returns List[Dict[str, MessageContent]]
         """
         pass
+
+    @classmethod
+    def from_fern_prompt_version(
+        cls,
+        name: str,
+        prompt_version: rest_api_types.PromptVersionDetail,
+        project_name: Optional[str] = None,
+    ) -> Self:
+        raise NotImplementedError(
+            f"{cls.__name__} does not implement from_fern_prompt_version"
+        )
 
     @abstractmethod
     def __internal_api__to_info_dict__(self) -> Dict[str, Any]:

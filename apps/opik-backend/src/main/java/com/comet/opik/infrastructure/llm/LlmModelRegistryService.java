@@ -145,8 +145,14 @@ public class LlmModelRegistryService {
             return immutable(result);
         }
 
-        var overrides = loadFileResource(path);
-        return Map.copyOf(merge(result, overrides));
+        try {
+            var overrides = loadFileResource(path);
+            return Map.copyOf(merge(result, overrides));
+        } catch (Exception e) {
+            log.error("Failed to load local override registry from '{}', falling back to defaults",
+                    overridePath, e);
+            return immutable(result);
+        }
     }
 
     private static Map<String, List<LlmModelDefinition>> immutable(Map<String, List<LlmModelDefinition>> raw) {

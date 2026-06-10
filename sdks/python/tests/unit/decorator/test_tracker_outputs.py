@@ -2144,3 +2144,94 @@ def test_track__functools_partial_function__function_name_extracted_correctly(
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__environment_parameter__propagated_to_trace_and_root_span(fake_backend):
+    @tracker.track(environment="production")
+    def f(x):
+        return "output"
+
+    f("input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "input"},
+        output={"output": "output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        environment="production",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "input"},
+                output={"output": "output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                environment="production",
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__environment_parameter__nested_spans_inherit_environment(fake_backend):
+    @tracker.track
+    def f_inner(x):
+        return "inner-output"
+
+    @tracker.track(environment="staging")
+    def f_outer(x):
+        f_inner("inner-input")
+        return "outer-output"
+
+    f_outer("outer-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "outer-input"},
+        output={"output": "outer-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        environment="staging",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_outer",
+                input={"x": "outer-input"},
+                output={"output": "outer-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                environment="staging",
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="f_inner",
+                        input={"x": "inner-input"},
+                        output={"output": "inner-output"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                        environment="staging",
+                        source="sdk",
+                    )
+                ],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

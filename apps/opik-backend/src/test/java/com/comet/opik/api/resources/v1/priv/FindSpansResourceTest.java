@@ -519,8 +519,8 @@ class FindSpansResourceTest {
                                                 .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                                 .build());
                                 case ERROR_CONTAINER -> Stream.of();
-                                case LIST -> {
-                                    // For LIST fields, skip invalid value tests for NO_VALUE_OPERATORS
+                                case LIST, ENUM -> {
+                                    // For LIST, ENUM fields, skip invalid value tests for NO_VALUE_OPERATORS
                                     // because these operators don't care about the value
                                     if (Operator.NO_VALUE_OPERATORS.contains(operator)) {
                                         yield Stream.empty();
@@ -3933,7 +3933,196 @@ class FindSpansResourceTest {
                     Arguments.of(errorInfoComparator,
                             SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.ASC).build()),
                     Arguments.of(errorInfoComparator.reversed(),
-                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::environment)
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::environment).reversed()
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.DESC)
+                                    .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when paginating a result sorted by a field while excluding a field, then every page matches the expected sorted slice (OPIK-6747)")
+        void whenPaginatingSortedAndExcludingField__thenEachPageMatchesExpectedSlice(SortingField sorting,
+                Comparator<Span> comparator, Span.SpanField excludeField) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int total = 12;
+            int pageSize = 5;
+
+            // Deterministic, distinct values on the sortable columns so the expected order is unambiguous.
+            var spans = IntStream.range(0, total)
+                    .mapToObj(i -> {
+                        var base = podamFactory.manufacturePojo(Span.class);
+                        return base.toBuilder()
+                                .projectId(null)
+                                .projectName(projectName)
+                                .feedbackScores(null)
+                                .comments(null)
+                                .name("span-%03d".formatted(i))
+                                .output(JsonUtils.getJsonNodeFromString("{\"v\":\"%03d\"}".formatted(i)))
+                                .endTime(base.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                                .usage(Map.of("total_tokens", RandomUtils.secure().randomInt()))
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Full expected order: sorted by the field, with the excluded field nulled to match the response.
+            var expected = spans.stream()
+                    .sorted(comparator)
+                    .map(span -> SpanAssertions.EXCLUDE_FUNCTIONS.get(excludeField).apply(span))
+                    .toList();
+
+            // Walk every page (size < total) and assert the FULL page content equals the expected sorted slice.
+            // If the page_ids pre-filter dropped the sort key, the slice would be wrong.
+            int pages = (total + pageSize - 1) / pageSize;
+            for (int p = 1; p <= pages; p++) {
+                var page = spanResourceClient.findSpans(workspaceName, apiKey, projectName, null, p, pageSize, null,
+                        null, List.of(), List.of(sorting), List.of(excludeField));
+                var expectedSlice = expected.subList((p - 1) * pageSize, Math.min(p * pageSize, total));
+                SpanAssertions.assertPage(page, p, expectedSlice.size(), total);
+                SpanAssertions.assertSpan(page.content(), expectedSlice, List.of(), USER);
+            }
+        }
+
+        static Stream<Arguments> whenPaginatingSortedAndExcludingField__thenEachPageMatchesExpectedSlice() {
+            Comparator<Span> byOutput = Comparator.comparing(span -> span.output().toString());
+            Comparator<Span> byName = Comparator.comparing(Span::name);
+
+            return Stream.of(
+                    // Sort by a wide column while EXCLUDING that same column (the deferred-wide core case).
+                    Arguments.of(SortingField.builder().field(SortableFields.OUTPUT).direction(Direction.ASC).build(),
+                            byOutput, Span.SpanField.OUTPUT),
+                    // Sort by a regular column while excluding a wide column.
+                    Arguments.of(SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build(),
+                            byName.reversed(), Span.SpanField.OUTPUT));
+        }
+
+        @Test
+        @DisplayName("when truncate=true and a wide field is excluded, the deferred-wide query stays valid and that field is excluded (OPIK-6747)")
+        void whenTruncatingAndExcludingWideField__thenQueryStaysValidAndFieldExcluded() {
+            // Regression lock for the two-phase deferred-wide EXCEPT lists. With truncate=true AND a wide
+            // field (input) excluded, page_wide projects only the *other* field's truncated_* column, so the
+            // final SELECT must not EXCEPT a column page_wide dropped (e.g. truncated_input). ClickHouse
+            // tolerates EXCEPT of an absent column today, so this can't fail on the current engine — it asserts
+            // the response is correct AND guards against a stricter ClickHouse that would reject such a query.
+            // (The actual EXCEPT-list correctness was verified separately via the rendered SQL.)
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            // Plain JSON (no images) so truncate is a no-op on the content; that keeps the expectation exact.
+            var spans = Stream.of(podamFactory.manufacturePojo(Span.class))
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .parentSpanId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .input(JsonUtils.getJsonNodeFromString("{\"k\":\"in\"}"))
+                            .output(JsonUtils.getJsonNodeFromString("{\"k\":\"out\"}"))
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"k\":\"md\"}"))
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("page", 1)
+                    .queryParam("size", 5)
+                    .queryParam("project_name", projectName)
+                    .queryParam("truncate", true)
+                    .queryParam("exclude", toURLEncodedQueryParam(List.of(Span.SpanField.INPUT)))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualSpans = response.readEntity(Span.SpanPage.class).content();
+                assertThat(actualSpans).hasSize(1);
+
+                // Full actual-vs-expected assertion: the excluded wide field (input) is dropped; every other
+                // field round-trips unchanged.
+                var expectedSpans = spans.stream()
+                        .map(span -> span.toBuilder().input(null).build())
+                        .toList();
+                assertSpan(actualSpans, expectedSpans, USER);
+            }
+        }
+
+        @Test
+        @DisplayName("OPIK-6747 regression: filtered + sorted + excluded list paginates byte-for-byte (filter input CONTAINS, sort input ASC, exclude output)")
+        void whenFilterSortExcludeAcrossPages__thenEachPageMatchesFullPageAndReference() {
+            // Reproduces the production scenario that blew up memory: a filtered spans list with custom sort and a
+            // deferred wide column excluded, paged. Asserts each page == the corresponding slice of an independent
+            // Java-side (filter + sort) reference == the single full page, with full row content. Non-matching rows
+            // must be filtered out (absent + not counted in total).
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int matchingCount = 12; // > page size -> multiple pages
+            int nonMatchingCount = 5; // must be filtered out
+            int pageSize = 5;
+
+            var spans = IntStream.range(0, matchingCount + nonMatchingCount)
+                    .mapToObj(i -> {
+                        var q = (i < matchingCount ? "MATCH-%03d" : "OTHER-%03d").formatted(i);
+                        return podamFactory.manufacturePojo(Span.class).toBuilder()
+                                .projectId(null)
+                                .parentSpanId(null)
+                                .projectName(projectName)
+                                .feedbackScores(null)
+                                .comments(null)
+                                .usage(Map.of("total_tokens", RandomUtils.secure().randomInt()))
+                                .input(JsonUtils.getJsonNodeFromString("{\"q\":\"%s\"}".formatted(q)))
+                                .output(JsonUtils.getJsonNodeFromString("{\"o\":\"%03d\"}".formatted(i)))
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var matching = spans.stream().filter(s -> s.input().toString().contains("MATCH")).toList();
+            var nonMatching = spans.stream().filter(s -> !s.input().toString().contains("MATCH")).toList();
+
+            List<? extends SpanFilter> filters = List.of(SpanFilter.builder()
+                    .field(SpanField.INPUT).operator(Operator.CONTAINS).value("MATCH").build());
+            var sorting = List.of(SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build());
+            var exclude = List.of(Span.SpanField.OUTPUT);
+
+            // Independent reference: matching rows only, sorted by input ASC, with the excluded field nulled.
+            Comparator<Span> byInput = Comparator.comparing(s -> s.input().toString());
+            var reference = matching.stream()
+                    .sorted(byInput)
+                    .map(s -> SpanAssertions.EXCLUDE_FUNCTIONS.get(Span.SpanField.OUTPUT).apply(s))
+                    .toList();
+
+            // Single full page == reference (and non-matching rows are absent + not counted).
+            getAndAssertPage(workspaceName, projectName, null, null, null, filters, 1, matchingCount, reference,
+                    matchingCount, nonMatching, apiKey, sorting, exclude);
+
+            // Every page == the corresponding slice of the same reference; total stays the filtered count.
+            int pages = (matchingCount + pageSize - 1) / pageSize;
+            for (int p = 1; p <= pages; p++) {
+                var slice = reference.subList((p - 1) * pageSize, Math.min(p * pageSize, matchingCount));
+                getAndAssertPage(workspaceName, projectName, null, null, null, filters, p, pageSize, slice,
+                        matchingCount, nonMatching, apiKey, sorting, exclude);
+            }
         }
 
         @Test

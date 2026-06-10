@@ -4,6 +4,7 @@ from .api_objects.annotation_queue import (
     ThreadsAnnotationQueue,
 )
 from .api_objects.attachment import Attachment
+from .rest_api.types.environment_public import EnvironmentPublic as Environment
 from .api_objects.dataset import Dataset
 from .api_objects.dataset.test_suite import TestSuite
 from .api_objects.dataset.test_suite.types import TestSuiteResult
@@ -26,6 +27,7 @@ from .evaluation import (
     evaluate_experiment,
     evaluate_on_dict_items,
     evaluate_prompt,
+    evaluate_resume,
     run_tests,
 )
 from .integrations.sagemaker import auth as sagemaker_auth
@@ -53,10 +55,12 @@ __all__ = [
     "TracesAnnotationQueue",
     "ThreadsAnnotationQueue",
     "Attachment",
+    "Environment",
     "evaluate",
     "evaluate_prompt",
     "evaluate_experiment",
     "evaluate_on_dict_items",
+    "evaluate_resume",
     "run_tests",
     "ExperimentItemContent",
     "ExperimentItemReferences",

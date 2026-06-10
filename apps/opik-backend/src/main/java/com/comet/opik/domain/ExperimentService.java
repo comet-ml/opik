@@ -258,6 +258,7 @@ public class ExperimentService {
         return new PromptVersionLink(
                 version.id(),
                 info != null ? info.commit() : null,
+                info != null ? info.versionNumber() : null,
                 version.promptId(),
                 info != null ? info.promptName() : null);
     }
@@ -702,6 +703,7 @@ public class ExperimentService {
             try {
                 datasetService.getById(experiment.datasetId(), workspaceId)
                         .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
+                        .filter(dataset -> !DemoData.DATASETS.contains(dataset.name()))
                         .ifPresent(dataset -> analyticsService.trackEvent("opik_eval_suite_run", Map.of(
                                 "eval_suite_id", dataset.id().toString(),
                                 "experiment_id", experiment.id().toString(),
@@ -850,6 +852,7 @@ public class ExperimentService {
                         .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
                         .doOnSuccess(unused -> eventBus.post(new ExperimentsDeleted(
                                 experimentDatasetInfo,
+                                ids,
                                 ctx.get(RequestContext.WORKSPACE_ID),
                                 ctx.get(RequestContext.USER_NAME))))))
                 .then();

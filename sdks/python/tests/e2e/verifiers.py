@@ -1,7 +1,7 @@
 import base64
 import json
 import re
-from typing import Any, Dict, Iterable, List, Literal, Optional, Set, Union
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Set, Union
 from unittest import mock
 
 import pytest
@@ -46,6 +46,49 @@ def _try_build_set(iterable: Optional[Iterable[Any]]) -> Optional[Set[Any]]:
     return set(iterable)
 
 
+def _retry_until_assertions_pass(check: Callable[[], None]) -> None:
+    """Run ``check`` repeatedly until its asserts pass, or surface the failure.
+
+    ``check`` is the same body used to verify a trace/span — including
+    ``assert``s. We poll it because traces/spans are eventually-consistent in
+    ClickHouse: the initial create lands fast, but a later ``update`` (e.g. a
+    message replayed from the offline queue, or a follow-up SDK call) can take
+    longer to ingest. Asserting on a single read-once snapshot was racy under
+    xdist load — the existence-only `is not None` poll passed too early.
+
+    Re-using the assertion body as the predicate (instead of a parallel
+    "matches expected" helper) keeps the comparison logic in one place — the
+    asserts already encode what counts as a match (incl. ``mock.ANY`` via
+    ``assert_equal``, set-equality for tags, etc.).
+
+    Errors during polling are tolerated (``allow_errors=True``) to match the
+    rest of this file — a 404 on a not-yet-ingested entity, a transient
+    network blip, or any other ``Exception`` simply triggers a retry. This
+    does NOT mask real bugs: ``synchronization.until`` is bounded by
+    ``max_try_seconds``, and on timeout we re-run ``check()`` so the actual
+    exception (with its traceback) reaches pytest.
+
+    ``pytest_deepassert.equal`` (used by ``assert_equal``) raises
+    ``pytest.fail.Exception`` (a.k.a. ``_pytest.outcomes.Failed``), which
+    inherits from ``BaseException``, NOT from ``Exception`` — so
+    ``synchronization.until``'s ``except Exception`` would not catch it and
+    the retry would degenerate to a single attempt. Convert it to a return
+    value here so the polling actually works for value-comparable fields.
+    """
+
+    def _attempt() -> bool:
+        try:
+            check()
+        except pytest.fail.Exception:
+            return False
+        return True
+
+    if synchronization.until(_attempt, allow_errors=True):
+        return
+    # Timeout — re-run so the original error reaches pytest.
+    check()
+
+
 def verify_trace(
     opik_client: opik.Opik,
     trace_id: str,
@@ -60,68 +103,80 @@ def verify_trace(
     thread_id: Optional[str] = mock.ANY,  # type: ignore
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
+    environment: Optional[str] = mock.ANY,  # type: ignore
+    comments: List[str] = mock.ANY,  # type: ignore
 ):
-    if not synchronization.until(
-        lambda: opik_client.get_trace_content(id=trace_id) is not None,
-        allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get trace with id {trace_id}.")
+    def _check() -> None:
+        trace = opik_client.get_trace_content(id=trace_id)
+        assert trace is not None, f"Failed to get trace with id {trace_id}."
 
-    trace = opik_client.get_trace_content(id=trace_id)
+        testlib.assert_equal(name, trace.name)
+        testlib.assert_equal(input, trace.input)
+        testlib.assert_equal(output, trace.output)
+        testlib.assert_equal(metadata, trace.metadata)
+        testlib.assert_equal(source, trace.source)
 
-    testlib.assert_equal(name, trace.name)
-    testlib.assert_equal(input, trace.input)
-    testlib.assert_equal(output, trace.output)
-    testlib.assert_equal(metadata, trace.metadata)
-    testlib.assert_equal(source, trace.source)
+        if environment is not mock.ANY:
+            testlib.assert_equal(environment, trace.environment)
 
-    if tags is not mock.ANY:
-        testlib.assert_equal(_try_build_set(tags), _try_build_set(trace.tags))
+        if tags is not mock.ANY:
+            testlib.assert_equal(_try_build_set(tags), _try_build_set(trace.tags))
 
-    if error_info is not mock.ANY:
-        testlib.assert_equal(error_info, _try_get__dict__(trace.error_info))
+        if error_info is not mock.ANY:
+            testlib.assert_equal(error_info, _try_get__dict__(trace.error_info))
 
-    assert thread_id == trace.thread_id, f"{trace.thread_id} != {thread_id}"
+        assert thread_id == trace.thread_id, f"{trace.thread_id} != {thread_id}"
 
-    if project_name is not mock.ANY:
-        trace_project = opik_client.get_project(trace.project_id)
-        assert trace_project.name == project_name
+        if project_name is not mock.ANY:
+            trace_project = opik_client.get_project(trace.project_id)
+            assert trace_project.name == project_name
 
-    if feedback_scores is not mock.ANY:
-        _assert_feedback_scores(
-            item_id=trace_id,
-            feedback_scores=trace.feedback_scores,
-            expected_feedback_scores=feedback_scores,
-        )
-
-    if guardrails_validations is not mock.ANY:
-        if trace.guardrails_validations is None:
-            assert guardrails_validations is None, (
-                f"Expected guardrails validation to be None, but got {guardrails_validations}"
+        if feedback_scores is not mock.ANY:
+            _assert_feedback_scores(
+                item_id=trace_id,
+                feedback_scores=trace.feedback_scores,
+                expected_feedback_scores=feedback_scores,
             )
-            return
 
-        actual_guardrails_validations = (
-            [] if trace.guardrails_validations is None else trace.guardrails_validations
-        )
-        assert len(actual_guardrails_validations) == len(guardrails_validations), (
-            f"Expected amount of trace guardrails validation ({len(guardrails_validations)}) is not equal to actual amount ({len(actual_guardrails_validations)})"
-        )
+        if guardrails_validations is not mock.ANY:
+            if trace.guardrails_validations is None:
+                assert guardrails_validations is None, (
+                    f"Expected guardrails validation to be None, but got {guardrails_validations}"
+                )
+                return
 
-        actual_guardrails_validations = [
-            guardrail.model_dump() for guardrail in trace.guardrails_validations
-        ]
+            actual_guardrails_validations = (
+                []
+                if trace.guardrails_validations is None
+                else trace.guardrails_validations
+            )
+            assert len(actual_guardrails_validations) == len(guardrails_validations), (
+                f"Expected amount of trace guardrails validation ({len(guardrails_validations)}) is not equal to actual amount ({len(actual_guardrails_validations)})"
+            )
 
-        sorted_actual_guardrails_validations = sorted(
-            actual_guardrails_validations, key=lambda item: item["span_id"]
-        )
-        sorted_expected_guardrails_validations = sorted(
-            guardrails_validations, key=lambda item: item["span_id"]
-        )
-        for actual_guardrail, expected_guardrail in zip(
-            sorted_actual_guardrails_validations, sorted_expected_guardrails_validations
-        ):
-            testlib.assert_dicts_equal(actual_guardrail, expected_guardrail)
+            actual_guardrails_validations = [
+                guardrail.model_dump() for guardrail in trace.guardrails_validations
+            ]
+
+            sorted_actual_guardrails_validations = sorted(
+                actual_guardrails_validations, key=lambda item: item["span_id"]
+            )
+            sorted_expected_guardrails_validations = sorted(
+                guardrails_validations, key=lambda item: item["span_id"]
+            )
+            for actual_guardrail, expected_guardrail in zip(
+                sorted_actual_guardrails_validations,
+                sorted_expected_guardrails_validations,
+            ):
+                testlib.assert_dicts_equal(actual_guardrail, expected_guardrail)
+
+        if comments is not mock.ANY:
+            actual_comments = [c.text for c in (trace.comments or [])]
+            assert actual_comments == comments, (
+                f"trace comments differ: expected {comments}, got {actual_comments}"
+            )
+
+    _retry_until_assertions_pass(_check)
 
 
 def verify_span(
@@ -142,54 +197,65 @@ def verify_span(
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     total_cost: Optional[float] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
+    environment: Optional[str] = mock.ANY,  # type: ignore
+    comments: List[str] = mock.ANY,  # type: ignore
 ):
-    if not synchronization.until(
-        lambda: opik_client.get_span_content(id=span_id) is not None,
-        allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get span with id {span_id}.")
+    def _check() -> None:
+        span = opik_client.get_span_content(id=span_id)
+        assert span is not None, f"Failed to get span with id {span_id}."
 
-    span = opik_client.get_span_content(id=span_id)
+        assert span.trace_id == trace_id, f"{span.trace_id} != {trace_id}"
 
-    assert span.trace_id == trace_id, f"{span.trace_id} != {trace_id}"
+        if parent_span_id is None:
+            assert span.parent_span_id is None, (
+                f"{span.parent_span_id} != {parent_span_id}"
+            )
+        else:
+            assert span.parent_span_id == parent_span_id, (
+                f"{span.parent_span_id} != {parent_span_id}"
+            )
 
-    if parent_span_id is None:
-        assert span.parent_span_id is None, f"{span.parent_span_id} != {parent_span_id}"
-    else:
-        assert span.parent_span_id == parent_span_id, (
-            f"{span.parent_span_id} != {parent_span_id}"
+        testlib.assert_equal(name, span.name)
+        testlib.assert_equal(type, span.type)
+
+        testlib.assert_equal(input, span.input)
+        testlib.assert_equal(output, span.output)
+        testlib.assert_equal(metadata, span.metadata)
+        testlib.assert_equal(source, span.source)
+
+        if environment is not mock.ANY:
+            testlib.assert_equal(environment, span.environment)
+
+        if tags is not mock.ANY:
+            testlib.assert_equal(_try_build_set(tags), _try_build_set(span.tags))
+
+        if error_info is not mock.ANY:
+            testlib.assert_equal(error_info, _try_get__dict__(span.error_info))
+
+        assert span.model == model, f"{span.model} != {model}"
+        assert span.provider == provider, f"{span.provider} != {provider}"
+        assert span.total_estimated_cost == total_cost, (
+            f"{span.total_estimated_cost} != {total_cost}"
         )
 
-    testlib.assert_equal(name, span.name)
-    testlib.assert_equal(type, span.type)
+        if project_name is not mock.ANY:
+            span_project = opik_client.get_project(span.project_id)
+            assert span_project.name == project_name
 
-    testlib.assert_equal(input, span.input)
-    testlib.assert_equal(output, span.output)
-    testlib.assert_equal(metadata, span.metadata)
-    testlib.assert_equal(source, span.source)
+        if feedback_scores is not mock.ANY:
+            _assert_feedback_scores(
+                item_id=span_id,
+                feedback_scores=span.feedback_scores,
+                expected_feedback_scores=feedback_scores,
+            )
 
-    if tags is not mock.ANY:
-        testlib.assert_equal(_try_build_set(tags), _try_build_set(span.tags))
+        if comments is not mock.ANY:
+            actual_comments = [c.text for c in (span.comments or [])]
+            assert actual_comments == comments, (
+                f"span comments differ: expected {comments}, got {actual_comments}"
+            )
 
-    if error_info is not mock.ANY:
-        testlib.assert_equal(error_info, _try_get__dict__(span.error_info))
-
-    assert span.model == model, f"{span.model} != {model}"
-    assert span.provider == provider, f"{span.provider} != {provider}"
-    assert span.total_estimated_cost == total_cost, (
-        f"{span.total_estimated_cost} != {total_cost}"
-    )
-
-    if project_name is not mock.ANY:
-        span_project = opik_client.get_project(span.project_id)
-        assert span_project.name == project_name
-
-    if feedback_scores is not mock.ANY:
-        _assert_feedback_scores(
-            item_id=span_id,
-            feedback_scores=span.feedback_scores,
-            expected_feedback_scores=feedback_scores,
-        )
+    _retry_until_assertions_pass(_check)
 
 
 def verify_dataset(
@@ -199,11 +265,10 @@ def verify_dataset(
     dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
     project_name: Optional[str] = None,
 ):
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: opik_client.get_dataset(name=name) is not None,
         allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get dataset with name {name}.")
+    ), f"Failed to get dataset with name {name}."
 
     actual_dataset = opik_client.get_dataset(name=name, project_name=project_name)
     assert actual_dataset.description == description
@@ -251,11 +316,10 @@ def verify_experiment(
 
     rest_client.datasets.find_dataset_items_with_experiment_items
 
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: rest_client.experiments.get_experiment_by_id(id) is not None,
         allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get experiment with id {id}.")
+    ), f"Failed to get experiment with id {id}."
 
     experiment_content = rest_client.experiments.get_experiment_by_id(id)
 
@@ -294,6 +358,55 @@ def verify_experiment(
             f"Expected dataset_version_id {dataset_version_id}, "
             f"got {experiment_content.dataset_version_id}"
         )
+
+
+def verify_experiment_items_completed(
+    opik_client: opik.Opik,
+    experiment_id: str,
+    *,
+    expected_completed_dataset_item_ids: Set[str],
+    timeout: float = 15,
+) -> None:
+    """
+    Assert that the set of dataset item ids with at least one fully-
+    completed experiment item matches ``expected_completed_dataset_item_ids``
+    exactly.
+
+    Goes through the same predicate ``opik.evaluate_resume`` uses
+    (``trace.output`` is set only when the engine's happy-path-only line
+    runs), so this check correctly excludes both task-side failures
+    (task raised before producing output) and scoring-side failures
+    (output stripped by the engine when scoring did not finish).
+    """
+    from opik.evaluation.resume import context as resume_context
+
+    # The experiment record is eventually consistent: looking it up right
+    # after ``evaluate()`` returns can hit a 404, or a transient API/network
+    # error. Fetch the handle inside the poll (matching ``verify_experiment``
+    # / ``verify_test_suite_result``), so a fresh handle is also taken on
+    # each iteration rather than a stale one being cached across the poll.
+    def _completed_ids_or_none() -> Optional[Set[str]]:
+        experiment = opik_client.get_experiment_by_id(experiment_id)
+        return {
+            item.dataset_item_id
+            for item in experiment.get_items()
+            if resume_context.is_trial_fully_completed(item)
+        }
+
+    last_observed: Set[str] = set()
+
+    def _converged() -> bool:
+        nonlocal last_observed
+        last_observed = _completed_ids_or_none() or set()
+        return last_observed == expected_completed_dataset_item_ids
+
+    assert synchronization.until(
+        _converged, max_try_seconds=timeout, allow_errors=True
+    ), (
+        f"Expected completed dataset item ids "
+        f"{sorted(expected_completed_dataset_item_ids)}; got "
+        f"{sorted(last_observed)} after {timeout}s"
+    )
 
 
 def verify_attachments(
@@ -366,7 +479,7 @@ def _wait_for_attachments_list(
     expected_size: int,
     timeout: int,
 ) -> List[Attachment]:
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: (
             _get_trace_or_span(
                 opik_client, entity_type=entity_type, entity_id=entity_id
@@ -375,8 +488,7 @@ def _wait_for_attachments_list(
         ),
         allow_errors=True,
         max_try_seconds=timeout,
-    ):
-        raise AssertionError(f"Failed to get {entity_type} with id {entity_id}.")
+    ), f"Failed to get {entity_type} with id {entity_id}."
 
     trace_or_span = _get_trace_or_span(
         opik_client, entity_type=entity_type, entity_id=entity_id
@@ -384,7 +496,7 @@ def _wait_for_attachments_list(
     url_override = opik_client._config.url_override
     url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
 
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: (
             len(
                 _get_attachments(
@@ -399,10 +511,7 @@ def _wait_for_attachments_list(
         ),
         allow_errors=True,
         max_try_seconds=timeout,
-    ):
-        raise AssertionError(
-            f"Failed to get all expected attachments for {entity_type} with id {entity_id}."
-        )
+    ), f"Failed to get all expected attachments for {entity_type} with id {entity_id}."
 
     return _get_attachments(
         opik_client=opik_client,
@@ -448,10 +557,56 @@ def _verify_experiment_metadata(
     experiment_metadata = experiment_content.metadata
     if experiment_content.metadata is not None:
         experiment_metadata = {**experiment_content.metadata}
+        # SDK-managed keys that ``evaluate()`` writes into the
+        # experiment config; tests assert on user-supplied keys only.
         experiment_metadata.pop("prompt", None)
         experiment_metadata.pop("prompts", None)
+        experiment_metadata.pop("_opik_resume", None)
+        # Tests that supplied no ``experiment_config`` expect
+        # ``metadata=None``; after stripping SDK keys we may be left
+        # with an empty dict for the same case.
+        if not experiment_metadata:
+            experiment_metadata = None
 
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
+
+
+def verify_experiment_traces_have_opik_prompts(
+    opik_client: opik.Opik,
+    trace_ids: List[str],
+    prompts: List[Prompt],
+) -> None:
+    """Verify each trace produced by an experiment carries `opik_prompts`
+    in its metadata. Backend needs this for trace-level prompt linkage."""
+    assert trace_ids, "Expected at least one trace_id to verify prompt injection"
+
+    expected_prompt_keys = sorted(
+        (p.__internal_api__prompt_id__, p.commit) for p in prompts
+    )
+
+    for trace_id in trace_ids:
+        assert synchronization.until(
+            lambda: opik_client.get_trace_content(id=trace_id) is not None,
+            allow_errors=True,
+        ), f"Failed to get trace {trace_id}"
+
+        trace_content = opik_client.get_trace_content(id=trace_id)
+        assert trace_content.metadata is not None, (
+            f"Trace {trace_id} has no metadata; expected opik_prompts"
+        )
+        actual_prompts = trace_content.metadata.get("opik_prompts")
+        assert actual_prompts, (
+            f"Trace {trace_id} metadata is missing 'opik_prompts': "
+            f"{trace_content.metadata}"
+        )
+        actual_keys = sorted(
+            (p.get("id"), (p.get("version") or {}).get("commit"))
+            for p in actual_prompts
+        )
+        assert actual_keys == expected_prompt_keys, (
+            f"Trace {trace_id} opik_prompts mismatch: "
+            f"actual={actual_keys}, expected={expected_prompt_keys}"
+        )
 
 
 def _verify_experiment_prompts(
@@ -541,11 +696,10 @@ def verify_optimization(
     objective_name: Optional[str] = mock.ANY,  # type: ignore
     project_name: Optional[str] = None,
 ) -> None:
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: opik_client.get_optimization_by_id(optimization_id) is not None,
         allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get optimization with id {optimization_id}.")
+    ), f"Failed to get optimization with id {optimization_id}."
 
     optimization = opik_client.get_optimization_by_id(optimization_id)
 
@@ -580,7 +734,7 @@ def verify_thread(
     project_name: Optional[str] = None,
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
 ) -> None:
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: (
             len(
                 opik_client.search_threads(
@@ -589,8 +743,7 @@ def verify_thread(
             )
             == 1
         ),
-    ):
-        raise AssertionError(f"Failed to get thread with id '{thread_id}'.")
+    ), f"Failed to get thread with id '{thread_id}'."
     threads = opik_client.search_threads(
         project_name=project_name,
         filter_string=f'id = "{thread_id}"',
@@ -608,10 +761,9 @@ def verify_thread(
 
     if feedback_scores is not mock.ANY:
         # wait for feedback scores to propagate
-        if not synchronization.until(lambda: _get_feedback_scores() is not None):
-            raise AssertionError(
-                f"Failed to get feedback scores for thread with id '{thread_id}'."
-            )
+        assert synchronization.until(lambda: _get_feedback_scores() is not None), (
+            f"Failed to get feedback scores for thread with id '{thread_id}'."
+        )
 
         actual_feedback_scores = _get_feedback_scores()
         _assert_feedback_scores(
@@ -674,6 +826,7 @@ def verify_prompt_version(
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
     project_name: Any = mock.ANY,
+    environments: Optional[Iterable[str]] = None,
 ) -> None:
     testlib.assert_equal(name, prompt.name)
     testlib.assert_equal(project_name, prompt.project_name)
@@ -687,6 +840,8 @@ def verify_prompt_version(
         f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == prompt.commit, f"{prompt.commit} != {commit}"
+    if environments is not None:
+        verify_prompt_environments(prompt, contains=environments)
 
 
 def verify_chat_prompt_version(
@@ -700,6 +855,7 @@ def verify_chat_prompt_version(
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
     project_name: Any = mock.ANY,  # type: ignore
+    environments: Optional[Iterable[str]] = None,
 ) -> None:
     """
     Verifies that a ChatPrompt has the expected properties.
@@ -720,6 +876,67 @@ def verify_chat_prompt_version(
         f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
+    if environments is not None:
+        verify_prompt_environments(chat_prompt, contains=environments)
+
+
+def verify_prompt_environments(
+    prompt: Union[Prompt, ChatPrompt],
+    *,
+    contains: Optional[Iterable[str]] = None,
+    excludes: Optional[Iterable[str]] = None,
+    exactly: Optional[Iterable[str]] = None,
+) -> None:
+    """Verify the environment ownership of a prompt version.
+
+    Environment order is not guaranteed by the backend, so checks are
+    set-based:
+    - ``contains``: every listed environment must be present
+    - ``excludes``: none of the listed environments may be present
+    - ``exactly``: the environment set must match exactly (use an empty
+      iterable to assert ownership was cleared)
+    """
+    actual: Set[str] = set(prompt.environments or [])
+
+    if exactly is not None:
+        expected = set(exactly)
+        assert actual == expected, f"environments {actual} != expected {expected}"
+
+    if contains is not None:
+        missing = set(contains) - actual
+        assert not missing, f"environments {actual} missing {missing}"
+
+    if excludes is not None:
+        present = set(excludes) & actual
+        assert not present, f"environments {actual} should not contain {present}"
+
+
+def verify_opik_prompt_entry(
+    entry: Dict[str, Any],
+    *,
+    name: str,
+    template_structure: str,
+) -> None:
+    """Verify a single entry inside metadata['opik_prompts']."""
+    assert entry["name"] == name, f"Expected name {name!r}, got {entry.get('name')!r}"
+    assert entry.get("template_structure") == template_structure, (
+        f"Expected template_structure {template_structure!r}, got {entry.get('template_structure')!r}"
+    )
+    assert "id" in entry, f"Missing 'id' in opik_prompts entry for {name}"
+    version = entry.get("version", {})
+    assert "template" in version, (
+        f"Missing 'version.template' in opik_prompts entry for {name}"
+    )
+    assert "commit" in version, (
+        f"Missing 'version.commit' in opik_prompts entry for {name}"
+    )
+    # Sequential version identifier (e.g. "v1"). Mask versions don't carry one,
+    # but the injected entries in this happy-path test come from non-mask
+    # `create_prompt` / `create_chat_prompt` calls, which always have it.
+    assert version.get("version_number", "").startswith("v"), (
+        f"Expected 'version.version_number' starting with 'v' in opik_prompts entry for {name}, "
+        f"got {version.get('version_number')!r}"
+    )
 
 
 def verify_dataset_filtered_items(
@@ -763,11 +980,10 @@ def verify_traces_annotation_queue(
     description: Optional[str] = mock.ANY,  # type: ignore
     instructions: Optional[str] = mock.ANY,  # type: ignore
 ) -> None:
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: opik_client.get_traces_annotation_queue(queue_id) is not None,
         allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
+    ), f"Failed to get annotation queue with id {queue_id}."
 
     queue = opik_client.get_traces_annotation_queue(queue_id)
 
@@ -786,11 +1002,10 @@ def verify_threads_annotation_queue(
     description: Optional[str] = mock.ANY,  # type: ignore
     instructions: Optional[str] = mock.ANY,  # type: ignore
 ) -> None:
-    if not synchronization.until(
+    assert synchronization.until(
         lambda: opik_client.get_threads_annotation_queue(queue_id) is not None,
         allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
+    ), f"Failed to get annotation queue with id {queue_id}."
 
     queue = opik_client.get_threads_annotation_queue(queue_id)
 
@@ -850,16 +1065,27 @@ def verify_test_suite_result(
     if experiment_items_count is mock.ANY:
         return
 
-    retrieved_experiment = opik_client.get_experiment_by_name(
-        suite_result.experiment_name, project_name=project_name
-    )
-    testlib.assert_equal(retrieved_experiment.name, suite_result.experiment_name)
-    experiment_items = retrieved_experiment.get_items()
+    retrieved_experiment = None
+    experiment_items: List[Any] = []
 
-    assert len(experiment_items) == experiment_items_count, (
-        f"Expected {experiment_items_count} experiment items, "
-        f"got {len(experiment_items)}"
+    def _experiment_ready() -> bool:
+        nonlocal retrieved_experiment, experiment_items
+        try:
+            retrieved_experiment = opik_client.get_experiment_by_name(
+                suite_result.experiment_name, project_name=project_name
+            )
+        except Exception:
+            return False
+        experiment_items = retrieved_experiment.get_items()
+        return len(experiment_items) == experiment_items_count
+
+    assert synchronization.until(_experiment_ready, max_try_seconds=10), (
+        f"Experiment '{suite_result.experiment_name}' did not become "
+        f"visible with {experiment_items_count} items in time "
+        f"(got {len(experiment_items)})"
     )
+
+    testlib.assert_equal(retrieved_experiment.name, suite_result.experiment_name)
 
     all_scores = []
     all_score_names: Set[str] = set()

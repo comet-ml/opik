@@ -17,6 +17,8 @@ def test_litellm_opik_logging__happyflow(
 
     def streaming_function(input):
         messages = [{"role": "user", "content": input}]
+        # Note: no reasoning_effort here — the litellm pinned in the e2e env
+        # doesn't recognize it for gpt-5-nano and raises UnsupportedParamsError.
         response = litellm.completion(
             model=constants.MODEL_NAME,
             messages=messages,

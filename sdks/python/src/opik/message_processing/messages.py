@@ -87,6 +87,7 @@ class CreateTraceMessage(BaseMessage):
     thread_id: Optional[str]
     last_updated_at: Optional[datetime.datetime]
     source: TraceSource
+    environment: Optional[str] = None
 
     message_type = "CreateTraceMessage"
 
@@ -122,6 +123,7 @@ class UpdateTraceMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
     source: str
+    environment: Optional[str] = None
 
     message_type = "UpdateTraceMessage"
 
@@ -162,6 +164,7 @@ class CreateSpanMessage(BaseMessage):
     total_cost: Optional[float]
     last_updated_at: Optional[datetime.datetime]
     source: TraceSource
+    environment: Optional[str] = None
 
     message_type = "CreateSpanMessage"
 
@@ -201,6 +204,7 @@ class UpdateSpanMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
     source: str
+    environment: Optional[str] = None
 
     message_type = "UpdateSpanMessage"
 
@@ -363,6 +367,41 @@ class GuardrailBatchMessage(BaseMessage):
         data = super().as_payload_dict()
         data.pop("supports_batching")
         return data
+
+
+@dataclasses.dataclass
+class AssertionResultMessage(BaseMessage):
+    """
+    There is no handler for that in the message processor, it exists
+    only as an item of AddAssertionResultsBatchMessage.
+    """
+
+    entity_id: str
+    project_name: Optional[str]
+    name: str
+    status: Literal["passed", "failed"]
+    source: Literal["sdk", "ui", "online_scoring"]
+    reason: Optional[str] = None
+
+    message_type = "AssertionResultMessage"
+
+
+@dataclasses.dataclass
+class AddAssertionResultsBatchMessage(BaseMessage):
+    batch: List[AssertionResultMessage]
+    entity_type: Literal["TRACE", "SPAN", "THREAD"] = "TRACE"
+    # Producers (Opik.log_assertion_results) already split via
+    # sequence_splitter; bypass BatchManager so the streamer doesn't try to
+    # re-batch (no batcher mapping is registered for this message type).
+    supports_batching: bool = False
+
+    message_type = "AddAssertionResultsBatchMessage"
+
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_base_message_batch(self.batch, AssertionResultMessage)
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_base_message_batch_to_dict(self.__dict__, self.batch)
 
 
 @dataclasses.dataclass

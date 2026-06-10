@@ -2,8 +2,7 @@ import { Button } from "@/ui/button";
 import { Book, PenLine } from "lucide-react";
 import React from "react";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { buildDocsUrl } from "@/lib/utils";
-
+import { buildDocsUrl } from "@/v2/lib/utils";
 const entityCopy = {
   thread: "threads",
   trace: "traces/LLM calls",
@@ -23,9 +22,25 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
     permissions: { canUpdateOnlineEvaluationRules, canAnnotateTraceSpanThread },
   } = usePermissions();
 
-  const evaluationDocsLink = buildDocsUrl("/production/rules");
+  const evaluationDocsLink = buildDocsUrl(
+    entityType === "experiment"
+      ? "/evaluation/overview"
+      : "/production/online-evaluation/rules",
+  );
+
+  const evaluationDocsLabel =
+    entityType === "experiment"
+      ? "Learn about experiment scoring"
+      : "Learn about online evaluation";
 
   const getDescription = () => {
+    if (entityType === "experiment") {
+      if (canAnnotateTraceSpanThread) {
+        return "Use the SDK to automatically score your experiments, or manually annotate them with human review.";
+      }
+      return "Use the SDK to automatically score your experiments.";
+    }
+
     if (canUpdateOnlineEvaluationRules && canAnnotateTraceSpanThread) {
       return `Use the SDK or Online evaluation rules to automatically score your ${entityCopy[entityType]}, or manually annotate your ${entityCopy[entityType]} with human review.`;
     }
@@ -44,7 +59,9 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
   return (
     <div className="flex min-h-48 flex-col items-center justify-center gap-2 bg-background p-6">
       <div>No feedback scores yet</div>
-      {(canAnnotateTraceSpanThread || canUpdateOnlineEvaluationRules) && (
+      {(canAnnotateTraceSpanThread ||
+        canUpdateOnlineEvaluationRules ||
+        entityType === "experiment") && (
         <>
           <span className="max-w-[500px] whitespace-pre-wrap break-words text-center text-muted-slate">
             {getDescription()}
@@ -56,7 +73,8 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
                 Add human review
               </Button>
             )}
-            {canUpdateOnlineEvaluationRules && (
+            {(entityType === "experiment" ||
+              canUpdateOnlineEvaluationRules) && (
               <Button variant="secondary" size="sm" asChild>
                 <a
                   href={evaluationDocsLink}
@@ -64,7 +82,7 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
                   rel="noopener noreferrer"
                 >
                   <Book className="mr-2 size-4" />
-                  Learn about online evaluation
+                  {evaluationDocsLabel}
                 </a>
               </Button>
             )}

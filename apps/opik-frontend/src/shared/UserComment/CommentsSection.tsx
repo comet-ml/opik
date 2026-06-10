@@ -28,7 +28,7 @@ const CommentsSection: React.FC<CommentsSectionProps> = ({
 }) => {
   const userName = useLoggedInUserName();
   const {
-    permissions: { canWriteComments },
+    permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
   const sortedComments = useMemo(
@@ -38,7 +38,7 @@ const CommentsSection: React.FC<CommentsSectionProps> = ({
 
   return (
     <>
-      {canWriteComments && (
+      {canAnnotateTraceSpanThread && (
         <UserCommentForm
           onSubmit={(data) => onSubmit(data.commentText)}
           className={formClassName}

@@ -18,12 +18,18 @@ interface MetricLineChartProps {
   interval: INTERVAL_TYPE;
   renderValue?: (data: { value: ValueType }) => ValueType;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
+  customXTickFormatter?: (value: string) => string;
   chartId: string;
   data: TransformedData[];
   isPending: boolean;
   labelActions?: Record<string, LegendLabelAction>;
   isAggregateTotal?: boolean;
   showLegend?: boolean;
+  tooltipPosition?: { x?: number; y?: number };
+  targetTickCount?: number;
+  xTickInterval?: number | "preserveStart" | "preserveEnd" | "preserveStartEnd";
+  hideXAxis?: boolean;
+  hideYAxis?: boolean;
 }
 
 const MetricLineChart: React.FunctionComponent<MetricLineChartProps> = ({

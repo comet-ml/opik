@@ -49,18 +49,18 @@ class TestSuiteEvaluatorMapperTest {
 
         static Stream<Arguments> singleProviderCases() {
             return Stream.of(
-                    Arguments.of(LlmProvider.OPEN_AI, OpenaiModelName.GPT_5_NANO.toString()),
+                    Arguments.of(LlmProvider.OPEN_AI, OpenaiModelName.GPT_4O_MINI.toString()),
                     Arguments.of(LlmProvider.ANTHROPIC, AnthropicModelName.CLAUDE_HAIKU_4_5.toString()),
                     Arguments.of(LlmProvider.GEMINI, GeminiModelName.GEMINI_2_0_FLASH.toString()),
                     Arguments.of(LlmProvider.VERTEX_AI, VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName()));
         }
 
         @Test
-        @DisplayName("picks OpenAI over Anthropic and Gemini when all are connected")
+        @DisplayName("picks Anthropic over OpenAI and Gemini when all are connected")
         void picksHighestPriorityProvider() {
             var result = SupportedJudgeProvider.resolveModel(
                     Set.of(LlmProvider.GEMINI, LlmProvider.ANTHROPIC, LlmProvider.OPEN_AI));
-            assertThat(result).hasValue(OpenaiModelName.GPT_5_NANO.toString());
+            assertThat(result).hasValue(AnthropicModelName.CLAUDE_HAIKU_4_5.toString());
         }
 
         @Test

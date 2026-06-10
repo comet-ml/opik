@@ -20,6 +20,7 @@ import CopyButton from "@/shared/CopyButton/CopyButton";
 import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import { useLLMMessagesExpandAll } from "@/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import Loader from "@/shared/Loader/Loader";
+import CollapsibleSection from "@/v2/pages-shared/traces/TraceDetailsPanel/CollapsibleSection";
 
 const ESTIMATED_COLLAPSED_HEIGHT = 36; // single header row height in px
 const ESTIMATED_EXPANDED_HEIGHT = 200; // fallback for expanded items before measurement
@@ -248,33 +249,31 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
 
   return (
     <MediaProvider media={media}>
-      <div className="overflow-hidden">
-        <div className="flex h-8 items-center justify-between">
-          <div className="comet-body-s-accented flex min-w-40 items-center pr-3 text-foreground">
-            LLM messages
-          </div>
-          <div className="flex flex-1 items-center justify-end gap-2">
+      <CollapsibleSection
+        title="LLM messages"
+        actions={
+          <>
             {combinedMessages.length > 0 && expandCollapseButton}
             {copyButton}
-          </div>
-        </div>
-        <div className="pt-3">
-          {combinedMessages.length > 0 ? (
-            <>
-              {shouldVirtualize
-                ? renderVirtualizedMessages()
-                : renderStaticMessages()}
-              {usage && (
-                <div className="mt-3">
-                  <PrettyLLMMessage.Usage usage={usage} />
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-sm text-muted-foreground">No messages</div>
-          )}
-        </div>
-      </div>
+          </>
+        }
+        bodyClassName="px-2 pb-2 pt-1"
+      >
+        {combinedMessages.length > 0 ? (
+          <>
+            {shouldVirtualize
+              ? renderVirtualizedMessages()
+              : renderStaticMessages()}
+            {usage && (
+              <div className="mt-3">
+                <PrettyLLMMessage.Usage usage={usage} />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-sm text-muted-foreground">No messages</div>
+        )}
+      </CollapsibleSection>
     </MediaProvider>
   );
 };

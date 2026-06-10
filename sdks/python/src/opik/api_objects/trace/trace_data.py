@@ -68,6 +68,7 @@ class TraceData(ObservationData):
             total_cost=total_cost,
             attachments=attachments,
             source=self.source,
+            environment=self.environment,
         )
 
     @property
@@ -87,6 +88,8 @@ class TraceData(ObservationData):
             start_parameters["metadata"] = self.metadata
         if self.tags is not None:
             start_parameters["tags"] = self.tags
+        if self.environment is not None:
+            start_parameters["environment"] = self.environment
 
         return start_parameters
 
@@ -108,4 +111,5 @@ class TraceData(ObservationData):
             "thread_id": self.thread_id,
             "attachments": self.attachments,
             "source": self.source,
+            "environment": self.environment,
         }

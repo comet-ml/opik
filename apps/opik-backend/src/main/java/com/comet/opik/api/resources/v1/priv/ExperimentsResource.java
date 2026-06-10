@@ -292,6 +292,7 @@ public class ExperimentsResource {
     @Operation(operationId = "createExperiment", summary = "Create experiment", description = "Create experiment", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/experiments/{id}", schema = @Schema(implementation = String.class))})})
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     @RateLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Experiment.class))) @JsonView(Experiment.View.Write.class) @NotNull @Valid Experiment experiment,

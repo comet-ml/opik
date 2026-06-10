@@ -5,6 +5,7 @@ og:description: Quarkus LangChain4j uses Quarkus OTEL properties; this guide map
 og:site_name: Opik Documentation
 og:title: Quarkus LangChain4j Integration - Opik
 title: Observability for Quarkus LangChain4j with Opik
+canonical-url: https://www.comet.com/docs/opik/integrations/quarkus-langchain4j
 ---
 
 [Quarkus LangChain4j](https://docs.quarkiverse.io/quarkus-langchain4j/dev/index.html) uses Quarkus OpenTelemetry configuration in `application.properties`.
@@ -15,7 +16,7 @@ Use this if your app is Quarkus + LangChain4j and you want OTEL traces to land i
 
 ## Opik OTLP endpoint modes
 
-For full endpoint/header details, see [Opik OpenTelemetry overview](/v1/tracing/opentelemetry/overview).
+For full endpoint/header details, see [Opik OpenTelemetry overview](/v1/integrations/opentelemetry).
 
 - Cloud endpoint: `https://www.comet.com/opik/api/v1/private/otel`
 - Enterprise endpoint: `https://<comet-deployment-url>/opik/api/v1/private/otel`
@@ -59,4 +60,4 @@ quarkus.otel.exporter.otlp.traces.headers=Authorization=<your-api-key>,Comet-Wor
 
 - [Quarkus OpenTelemetry guide](https://quarkus.io/guides/opentelemetry)
 - [Quarkus LangChain4j docs](https://docs.quarkiverse.io/quarkus-langchain4j/dev/index.html)
-- [Opik OpenTelemetry overview](/v1/tracing/opentelemetry/overview)
+- [Opik OpenTelemetry overview](/v1/integrations/opentelemetry)

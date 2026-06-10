@@ -39,6 +39,8 @@ export const COLUMN_PROJECT_ID = "project_id";
 export const COLUMN_DURATION_ID = "duration";
 export const COLUMN_CUSTOM_ID = "custom";
 export const COLUMN_EXPERIMENT_ID = "experiment_id";
+export const COLUMN_EXPERIMENT_IDS = "experiment_ids";
+export const COLUMN_ENVIRONMENT_ID = "environment";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 export const COLUMN_DATA_ID = "data";
@@ -73,7 +75,6 @@ export type Explainer = {
   type?: explainerType;
   description: string;
   docLink?: string;
-  docHash?: string;
 };
 
 export type HeaderIconType =

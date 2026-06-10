@@ -6,7 +6,7 @@ from typing import Optional, Any, Dict
 from opik import config, _logging
 
 from .litellm import litellm_chat_model
-from . import base_model
+from . import base_model, model_name_helper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,12 +57,8 @@ def get(
     return _MODEL_CACHE[cache_key]
 
 
-def _is_anthropic_model(model_name: str) -> bool:
-    return model_name.startswith("anthropic/") or model_name.startswith("claude")
-
-
 def _should_use_anthropic_native(model_name: str) -> bool:
-    if not _is_anthropic_model(model_name):
+    if not model_name_helper.is_anthropic_model(model_name):
         return False
     if "anthropic" in sys.modules:
         return True

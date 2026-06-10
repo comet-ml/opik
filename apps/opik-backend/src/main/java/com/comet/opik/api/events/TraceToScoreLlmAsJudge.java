@@ -3,6 +3,7 @@ package com.comet.opik.api.events;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Trace;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -22,5 +23,6 @@ public record TraceToScoreLlmAsJudge(
         @NotNull String userName,
         String categoryName,
         @NotNull Map<String, String> scoreNameMapping,
-        @NotNull PromptType promptType) {
+        @NotNull PromptType promptType,
+        @Nullable UUID experimentId) {
 }

@@ -34,10 +34,10 @@ public final class AutomationRuleEvaluatorTraceThreadLlmAsJudge
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record TraceThreadLlmAsJudgeCode(
-            @JsonView( {
+            @JsonView({
                     View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
-            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema){
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema) {
 
         public static final String CONTEXT_VARIABLE_NAME = "context";
 

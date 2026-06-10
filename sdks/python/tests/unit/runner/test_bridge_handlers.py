@@ -127,7 +127,7 @@ class TestExecHandler:
 
     def test_timeout__bridge_level_wins_when_lower(self, handler: ExecHandler) -> None:
         with pytest.raises(CommandError) as exc_info:
-            handler.execute({"command": "sleep 999", "timeout": 60}, timeout=1.0)
+            handler.execute({"command": "sleep 999", "timeout": 60}, timeout=0.1)
         assert exc_info.value.code == "timeout"
 
     def test_cwd__runs_in_repo_root(self, handler: ExecHandler, tmp_path: Path) -> None:
@@ -258,7 +258,7 @@ class TestBackgroundProcesses:
 
     @pytest.fixture()
     def handler(self, tmp_path: Path, tracker: BackgroundProcessTracker) -> ExecHandler:
-        return ExecHandler(tmp_path, bg_tracker=tracker, bg_startup_wait=0.5)
+        return ExecHandler(tmp_path, bg_tracker=tracker, bg_startup_wait=0.05)
 
     def test_background__returns_pid_and_log(self, handler: ExecHandler) -> None:
         result = handler.execute(

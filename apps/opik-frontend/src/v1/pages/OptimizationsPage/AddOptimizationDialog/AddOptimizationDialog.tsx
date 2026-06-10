@@ -82,12 +82,10 @@ def levenshtein_ratio(dataset_item, llm_output):
 # Run the optimization
 optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",  # Task model (LiteLLM name)
-    reasoning_model="openai/gpt-4o",  # Optional reasoning model
-    rounds=3,
-    num_prompts_per_round=4,
+    model_parameters={"temperature": 0.0},
+    prompts_per_round=4,
     n_threads=8,
     enable_context=True,
-    temperature=0.0,
     seed=42,
 )
 
@@ -238,9 +236,7 @@ def levenshtein_ratio(dataset_item, llm_output):
 # Run the optimization
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",  # Task model (LiteLLM name)
-    reflection_model="openai/gpt-4o",  # Reflection model for re-ranking
-    temperature=0.0,
-    max_tokens=400,
+    model_parameters={"temperature": 0.0, "max_tokens": 400},
 )
 
 result = optimizer.optimize_prompt(

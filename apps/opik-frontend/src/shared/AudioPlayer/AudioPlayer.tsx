@@ -29,7 +29,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
     >
       {/* Header: Filename and Duration */}
       <div className="mb-1 flex items-center justify-between">
-        <span className="truncate text-xs" style={{ color: "#45575F" }}>
+        <span className="truncate text-xs text-chart-gray-dark">
           {name || "Audio"}
         </span>
         {hasError ? (

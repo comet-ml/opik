@@ -7,6 +7,7 @@ import { ReactNode } from "react";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 import { DATASET_TYPE } from "@/types/datasets";
+import { TooltipProvider } from "@/ui/tooltip";
 
 const mockAddTracesToDataset = vi.fn();
 const mockAddSpansToDataset = vi.fn();
@@ -19,9 +20,21 @@ const ALL_DATASETS = [
     type: DATASET_TYPE.DATASET,
   },
   {
+    id: "dataset-2",
+    name: "Test Dataset 2",
+    description: "Second test dataset",
+    type: DATASET_TYPE.DATASET,
+  },
+  {
     id: "suite-1",
     name: "Test Suite 1",
     description: "First test suite",
+    type: DATASET_TYPE.TEST_SUITE,
+  },
+  {
+    id: "suite-2",
+    name: "Test Suite 2",
+    description: "Second test suite",
     type: DATASET_TYPE.TEST_SUITE,
   },
 ];
@@ -104,9 +117,11 @@ describe("AddToDatasetDialog", () => {
 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <PermissionsProvider value={DEFAULT_PERMISSIONS}>
-        {children}
-      </PermissionsProvider>
+      <TooltipProvider>
+        <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+          {children}
+        </PermissionsProvider>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 
@@ -163,17 +178,27 @@ describe("AddToDatasetDialog", () => {
     datasetType: DATASET_TYPE.TEST_SUITE,
   };
 
+  const openDropdownAndSelect = (itemName: string) => {
+    const trigger = screen.getByRole("button", {
+      name: new RegExp(`Select a|${itemName}`),
+    });
+    fireEvent.click(trigger);
+    const items = screen.getAllByText(itemName);
+    fireEvent.click(items[items.length - 1]);
+  };
+
   it("should render the test suite dialog when open", () => {
     render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
 
-    expect(screen.getByText("Select a test suite")).toBeInTheDocument();
-    expect(screen.getByText("Test Suite 1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Select a test suite/i }),
+    ).toBeInTheDocument();
   });
 
   it("should display enrichment checkboxes when selecting a dataset with traces", () => {
     render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     expect(screen.getByLabelText("Nested spans")).toBeInTheDocument();
     expect(screen.getByLabelText("Tags")).toBeInTheDocument();
@@ -186,7 +211,7 @@ describe("AddToDatasetDialog", () => {
   it("should have all enrichment checkboxes checked by default", () => {
     render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     expect(screen.getByLabelText("Nested spans")).toBeChecked();
     expect(screen.getByLabelText("Tags")).toBeChecked();
@@ -199,7 +224,7 @@ describe("AddToDatasetDialog", () => {
   it("should allow unchecking enrichment options", async () => {
     render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     const spansCheckbox = screen.getByLabelText("Nested spans");
     const tagsCheckbox = screen.getByLabelText("Tags");
@@ -222,7 +247,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     expect(screen.queryByLabelText("Nested spans")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Tags")).toBeInTheDocument();
@@ -240,7 +265,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     expect(screen.getByLabelText("Tags")).toBeChecked();
     expect(screen.getByLabelText("Feedback scores")).toBeChecked();
@@ -257,7 +282,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     const tagsCheckbox = screen.getByLabelText("Tags");
     const usageCheckbox = screen.getByLabelText("Usage metrics");
@@ -275,6 +300,11 @@ describe("AddToDatasetDialog", () => {
   it("should list only datasets matching dataset type when adding to a dataset", () => {
     render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
 
+    const trigger = screen.getByRole("button", {
+      name: /Select a dataset/i,
+    });
+    fireEvent.click(trigger);
+
     expect(screen.getByText("Test Dataset 1")).toBeInTheDocument();
     expect(screen.getByText("First test dataset")).toBeInTheDocument();
     expect(screen.queryByText("Test Suite 1")).not.toBeInTheDocument();
@@ -283,22 +313,37 @@ describe("AddToDatasetDialog", () => {
   it("should list only test suites when adding to a test suite", () => {
     render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
 
+    const trigger = screen.getByRole("button", {
+      name: /Select a test suite/i,
+    });
+    fireEvent.click(trigger);
+
     expect(screen.getByText("Test Suite 1")).toBeInTheDocument();
     expect(screen.getByText("First test suite")).toBeInTheDocument();
     expect(screen.queryByText("Test Dataset 1")).not.toBeInTheDocument();
   });
 
-  it("should display search input", () => {
+  it("should display search input in dropdown", () => {
     render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
 
-    const searchInput = screen.getByPlaceholderText("Search");
+    const trigger = screen.getByRole("button", {
+      name: /Select a dataset/i,
+    });
+    fireEvent.click(trigger);
+
+    const searchInput = screen.getByPlaceholderText("Search datasets");
     expect(searchInput).toBeInTheDocument();
   });
 
-  it("should display create new test suite button", () => {
+  it("should display add test suite option in dropdown", () => {
     render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
 
-    expect(screen.getByText("Create new test suite")).toBeInTheDocument();
+    const trigger = screen.getByRole("button", {
+      name: /Select a test suite/i,
+    });
+    fireEvent.click(trigger);
+
+    expect(screen.getByText("Add test suite")).toBeInTheDocument();
   });
 
   it("should show alert when no valid rows are present", () => {
@@ -334,7 +379,7 @@ describe("AddToDatasetDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("should disable create new test suite button when no valid rows", () => {
+  it("should disable dropdown when no valid rows", () => {
     const propsWithInvalidRows = {
       ...testSuiteModeProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
@@ -342,14 +387,16 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
 
-    const createButton = screen.getByText("Create new test suite");
-    expect(createButton).toBeDisabled();
+    const trigger = screen.getByRole("button", {
+      name: /Select a test suite/i,
+    });
+    expect(trigger).toBeDisabled();
   });
 
   it("should call addTracesToDataset mutation when clicking on dataset with only traces", async () => {
     render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     fireEvent.click(screen.getByRole("button", { name: "Add to dataset" }));
 
@@ -381,7 +428,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     fireEvent.click(screen.getByRole("button", { name: "Add to dataset" }));
 
@@ -407,7 +454,7 @@ describe("AddToDatasetDialog", () => {
   it("should respect unchecked enrichment options when adding traces", async () => {
     render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     fireEvent.click(screen.getByLabelText("Nested spans"));
     fireEvent.click(screen.getByLabelText("Tags"));
@@ -440,7 +487,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    fireEvent.click(screen.getByText("Test Dataset 1"));
+    openDropdownAndSelect("Test Dataset 1");
 
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Comments"));

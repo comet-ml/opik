@@ -6,7 +6,10 @@ import React, {
 } from "react";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 import { isPlaceholder } from "./utils";
-import { isBackendAttachmentPlaceholder } from "@/lib/images";
+import {
+  extractWrappedAttachmentPlaceholder,
+  isBackendAttachmentPlaceholder,
+} from "@/lib/images";
 
 /**
  * Media context value providing unified media access and resolution utilities
@@ -71,14 +74,18 @@ export const MediaProvider: React.FC<MediaProviderProps> = ({
    */
   const resolveMedia = useCallback(
     (urlOrPlaceholder: string, fallbackName?: string) => {
+      // Recover placeholders older SDKs left wrapped in a "data:<mime>;base64,[...]"
+      // prefix (OPIK-6608), so they resolve like a bare placeholder.
+      const resolvable =
+        extractWrappedAttachmentPlaceholder(urlOrPlaceholder) ??
+        urlOrPlaceholder;
+
       // Check if it's a placeholder like "[image_0]"
       if (
-        isPlaceholder(urlOrPlaceholder) ||
-        isBackendAttachmentPlaceholder(urlOrPlaceholder)
+        isPlaceholder(resolvable) ||
+        isBackendAttachmentPlaceholder(resolvable)
       ) {
-        const mediaItem = media.find(
-          (item) => item.placeholder === urlOrPlaceholder,
-        );
+        const mediaItem = media.find((item) => item.placeholder === resolvable);
         if (mediaItem) {
           return {
             url: mediaItem.url,

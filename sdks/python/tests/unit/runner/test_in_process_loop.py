@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from opik.api_objects.prompt import mask_context as prompt_mask_context_module
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.local_runner_heartbeat_response import (
     LocalRunnerHeartbeatResponse,
@@ -37,6 +38,7 @@ def loop(mock_api, shutdown_event):
         "r-1",
         shutdown_event,
         heartbeat_interval_seconds=100,
+        poll_idle_interval_seconds=0.01,
     )
 
 
@@ -444,6 +446,70 @@ class TestJobExecution:
 
         # All report calls go through _safe_report_job_result — failures are swallowed.
         assert mock_api.runners.report_job_result.call_count == 2
+
+    def test_execute_job__prompt_masks__activates_mask_context_during_execution(
+        self, mock_api, shutdown_event
+    ):
+        captured = {}
+
+        def my_agent(**kwargs):
+            captured["p1"] = prompt_mask_context_module.get_mask_for_prompt("prompt-1")
+            captured["p2"] = prompt_mask_context_module.get_mask_for_prompt("prompt-2")
+            captured["unknown"] = prompt_mask_context_module.get_mask_for_prompt(
+                "prompt-unknown"
+            )
+            return "ok"
+
+        registry.register("my_agent", my_agent, "proj", [], "")
+
+        lp = in_process_loop.InProcessRunnerLoop(
+            mock_api,
+            "r-1",
+            shutdown_event,
+        )
+
+        job = LocalRunnerJob(
+            id="j-1",
+            agent_name="my_agent",
+            inputs={},
+            prompt_masks={"prompt-1": "mask-a", "prompt-2": "mask-b"},
+        )
+
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(lp._execute_job(job))
+        loop.close()
+
+        assert captured["p1"] == "mask-a"
+        assert captured["p2"] == "mask-b"
+        assert captured["unknown"] is None
+        assert prompt_mask_context_module.get_active_prompt_masks() is None
+
+    def test_execute_job__prompt_masks_absent__mask_context_inactive(
+        self, mock_api, shutdown_event
+    ):
+        captured = {}
+
+        def my_agent(**kwargs):
+            captured["p1"] = prompt_mask_context_module.get_mask_for_prompt("prompt-1")
+            captured["all"] = prompt_mask_context_module.get_active_prompt_masks()
+            return "ok"
+
+        registry.register("my_agent", my_agent, "proj", [], "")
+
+        lp = in_process_loop.InProcessRunnerLoop(
+            mock_api,
+            "r-1",
+            shutdown_event,
+        )
+
+        job = LocalRunnerJob(id="j-1", agent_name="my_agent", inputs={})
+
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(lp._execute_job(job))
+        loop.close()
+
+        assert captured["p1"] is None
+        assert captured["all"] is None
 
 
 class TestInjectTraceId:

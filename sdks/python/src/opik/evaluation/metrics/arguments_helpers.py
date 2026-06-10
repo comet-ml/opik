@@ -59,7 +59,7 @@ def create_scoring_inputs(
     else:
         for key, value in scoring_key_mapping.items():
             if callable(value):
-                mapped_inputs[key] = value(dataset_item)
+                mapped_inputs[key] = value(mapped_inputs)
             else:
                 if value not in mapped_inputs:
                     LOGGER.debug(

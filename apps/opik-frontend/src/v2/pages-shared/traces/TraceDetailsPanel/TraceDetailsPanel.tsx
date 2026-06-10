@@ -16,7 +16,7 @@ import {
   ResizablePanelGroup,
 } from "@/ui/resizable";
 import useTraceById from "@/api/traces/useTraceById";
-import Loader from "@/shared/Loader/Loader";
+import { Skeleton } from "@/ui/skeleton";
 import TraceDataViewer from "./TraceDataViewer/TraceDataViewer";
 import TraceTreeViewer from "./TraceTreeViewer/TraceTreeViewer";
 import TraceAIViewer from "./TraceAIViewer/TraceAIViewer";
@@ -46,11 +46,49 @@ import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 const EMPTY_FILTERS: unknown[] = [];
 
-type TraceDetailsPanelProps = {
+const TREE_ROW_INDENTS = [
+  0, 20, 20, 40, 20, 40, 60, 20, 40, 20, 40, 60,
+] as const;
+
+const TraceTreeSkeleton: React.FC = () => (
+  <div className="flex size-full flex-col gap-2 overflow-hidden p-4">
+    {TREE_ROW_INDENTS.map((indent, i) => (
+      <div
+        key={i}
+        className="flex items-center gap-1"
+        style={{ paddingLeft: indent }}
+      >
+        <Skeleton className="size-4 shrink-0" />
+        <Skeleton className="h-4 flex-1" />
+      </div>
+    ))}
+  </div>
+);
+
+const TraceDataSkeleton: React.FC = () => (
+  <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-2">
+      <Skeleton className="h-6 w-full max-w-screen-sm" />
+      <div className="flex gap-2">
+        <Skeleton className="h-6 w-[72px]" />
+        <Skeleton className="h-6 w-[72px]" />
+        <Skeleton className="h-6 w-[72px]" />
+      </div>
+    </div>
+    <div className="flex flex-col gap-2">
+      <Skeleton className="h-9 w-full" />
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-60 w-full" />
+    </div>
+  </div>
+);
+
+export type TraceDetailsPanelProps = {
   projectId?: string;
   traceId: string;
   spanId: string;
@@ -63,6 +101,7 @@ type TraceDetailsPanelProps = {
   onRowChange?: (shift: number) => void;
   container?: HTMLElement | null;
   refetchInterval?: number | false;
+  hideAnnotateActions?: boolean;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -78,6 +117,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onRowChange,
   container,
   refetchInterval,
+  hideAnnotateActions,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -111,6 +151,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       defaultValue: SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE,
     },
   );
+
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
 
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
@@ -214,25 +258,33 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   }, [hasPreviousRow, hasNextRow, onRowChange, onClose]);
 
   const renderContent = () => {
-    if (isTracePending || isSpansPending) {
-      return <Loader />;
-    }
+    const isLoading = isTracePending || isSpansPending;
 
-    if (!dataToView || !trace) {
+    if (!isLoading && (!dataToView || !trace)) {
       return <NoData />;
     }
 
-    const treeViewer = (
-      <TraceTreeViewer
-        trace={trace}
-        spans={spansData?.content}
-        rowId={spanId || traceId}
-        onSelectRow={handleRowSelect}
-        search={search}
-        filters={filters}
-        config={treeConfig}
-      />
-    );
+    const treeViewer =
+      isLoading || !trace ? (
+        <TraceTreeSkeleton />
+      ) : (
+        <TraceTreeViewer
+          trace={trace}
+          spans={spansData?.content}
+          rowId={spanId || traceId}
+          onSelectRow={handleRowSelect}
+          search={search}
+          filters={filters}
+          config={treeConfig}
+        />
+      );
+
+    const isAnnotating =
+      activeSection === DetailsActionSection.Annotate ||
+      activeSection === DetailsActionSection.Annotations ||
+      activeSection === DetailsActionSection.Comments;
+
+    const showAgentGraph = !isLoading && Boolean(agentGraphData);
 
     return (
       <div className="relative size-full">
@@ -245,12 +297,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 setSearch={setSearch}
                 filters={filters}
                 setFilters={setFilters}
-                isSpansLazyLoading={isSpansLazyLoading}
+                isSpansLazyLoading={isSpansLazyLoading || isLoading}
                 treeData={treeData}
                 config={treeConfig}
                 setConfig={setTreeConfig}
               />
-              {agentGraphData && !isGraphCollapsed ? (
+              {showAgentGraph && !isGraphCollapsed ? (
                 <ResizablePanelGroup
                   direction="vertical"
                   autoSaveId="trace-tree-graph"
@@ -289,7 +341,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                   <div className="relative flex-auto overflow-hidden">
                     {treeViewer}
                   </div>
-                  {agentGraphData && (
+                  {showAgentGraph && (
                     <AgentGraphHeader
                       isCollapsed
                       onToggleCollapse={() => setIsGraphCollapsed(false)}
@@ -307,50 +359,56 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               <TraceDataToolbar
                 dataToView={dataToView}
                 setActiveSection={setActiveSection}
+                isLoading={isLoading}
+                hideAnnotateActions={hideAnnotateActions}
               />
               <div className="relative flex-auto overflow-hidden">
-                <TraceDataViewer
-                  data={dataToView}
-                  projectId={projectId}
-                  spanId={spanId}
-                  traceId={traceId}
-                  setActiveSection={setActiveSection}
-                  isSpansLazyLoading={isSpansLazyLoading}
-                  search={search}
-                />
+                {isLoading || !dataToView ? (
+                  <TraceDataSkeleton />
+                ) : (
+                  <TraceDataViewer
+                    data={dataToView}
+                    projectId={projectId}
+                    spanId={spanId}
+                    traceId={traceId}
+                    setActiveSection={setActiveSection}
+                    isSpansLazyLoading={isSpansLazyLoading}
+                    search={search}
+                  />
+                )}
               </div>
             </div>
           </ResizablePanel>
-          {Boolean(activeSection) && (
-            <>
-              <ResizableHandle />
-              <ResizablePanel
-                id="last-section-viewer"
-                defaultSize={40}
-                minSize={30}
-              >
-                {(activeSection === DetailsActionSection.Annotate ||
-                  activeSection === DetailsActionSection.Annotations ||
-                  activeSection === DetailsActionSection.Comments) && (
-                  <AnnotatePanel
-                    data={dataToView}
-                    traceId={traceId}
-                    projectId={projectId}
-                    activeSection={activeSection}
-                    setActiveSection={setActiveSection}
-                  />
-                )}
-                {activeSection === DetailsActionSection.AIAssistants && (
-                  <TraceAIViewer
-                    traceId={traceId}
-                    activeSection={activeSection}
-                    setActiveSection={setActiveSection}
-                    spans={spansData?.content}
-                  />
-                )}
-              </ResizablePanel>
-            </>
-          )}
+          {!isLoading &&
+            Boolean(activeSection) &&
+            (canAnnotateTraceSpanThread || !isAnnotating) && (
+              <>
+                <ResizableHandle />
+                <ResizablePanel
+                  id="last-section-viewer"
+                  defaultSize={40}
+                  minSize={30}
+                >
+                  {isAnnotating && dataToView && (
+                    <AnnotatePanel
+                      data={dataToView}
+                      traceId={traceId}
+                      projectId={projectId}
+                      activeSection={activeSection}
+                      setActiveSection={setActiveSection}
+                    />
+                  )}
+                  {activeSection === DetailsActionSection.AIAssistants && (
+                    <TraceAIViewer
+                      traceId={traceId}
+                      activeSection={activeSection}
+                      setActiveSection={setActiveSection}
+                      spans={spansData?.content}
+                    />
+                  )}
+                </ResizablePanel>
+              </>
+            )}
         </ResizablePanelGroup>
         {agentGraphData && (
           <Dialog open={isGraphFullscreen} onOpenChange={setIsGraphFullscreen}>
@@ -379,7 +437,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       panelId="traces"
       entity="trace"
       open={open}
-      headerContent={
+      header={
         <TraceDetailsActionsPanel
           traceId={traceId}
           spanId={spanId}
@@ -396,7 +454,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
         />
       }
       onClose={onClose}
-      hideDefaultControls
       ignoreHotkeys={isGraphFullscreen}
       horizontalNavigation={horizontalNavigation}
       verticalNavigation={verticalNavigation}

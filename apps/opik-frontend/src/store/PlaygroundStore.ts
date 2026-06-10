@@ -115,6 +115,8 @@ export type PlaygroundStore = {
   experimentNamePrefix: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
+  recentDatasetIdByType: Partial<Record<DATASET_TYPE, string>>;
+  scoresByDatasetId: Record<string, string[] | null>;
 
   setPromptMap: (
     promptIds: string[],
@@ -158,6 +160,8 @@ export type PlaygroundStore = {
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
+  setRecentDatasetForType: (type: DATASET_TYPE, datasetId: string) => void;
+  setScoresForDataset: (datasetId: string, ruleIds: string[] | null) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -183,6 +187,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       experimentNamePrefix: null,
       datasetType: null,
       experimentByPromptId: {},
+      recentDatasetIdByType: {},
+      scoresByDatasetId: {},
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -433,7 +439,42 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         set((state) => ({ ...state, datasetType: type }));
       },
       setExperimentByPromptId: (map) => {
-        set((state) => ({ ...state, experimentByPromptId: map }));
+        set((state) => {
+          // Test suites run on the BE, so updateOutput is never called and outputMap
+          // entries are never created. Seed empty entries so stale tracking works
+          // when the user changes prompt settings after a run.
+          const newOutputMap = { ...state.outputMap };
+          for (const promptId of Object.keys(map)) {
+            newOutputMap[promptId] ??= {
+              isLoading: false,
+              value: null,
+              stale: false,
+            };
+          }
+          return {
+            ...state,
+            experimentByPromptId: map,
+            outputMap: newOutputMap,
+          };
+        });
+      },
+      setRecentDatasetForType: (type, datasetId) => {
+        set((state) => ({
+          ...state,
+          recentDatasetIdByType: {
+            ...state.recentDatasetIdByType,
+            [type]: datasetId,
+          },
+        }));
+      },
+      setScoresForDataset: (datasetId, ruleIds) => {
+        set((state) => ({
+          ...state,
+          scoresByDatasetId: {
+            ...state.scoresByDatasetId,
+            [datasetId]: ruleIds,
+          },
+        }));
       },
     }),
     {
@@ -524,6 +565,14 @@ export const useOutputStaleStatusByPromptDatasetItemId = (
     useOutputByPromptDatasetItemId(promptId, datasetItemId)?.stale ?? false
   );
 };
+
+export const useIsPromptOutputStale = (promptId: string) =>
+  usePlaygroundStore((state) => {
+    const entry = state.outputMap?.[promptId];
+    if (!entry) return false;
+    if (!isPlaygroundOutputWithDatasetItem(entry)) return entry.stale;
+    return Object.values(entry.datasetItemMap).some((o) => o.stale);
+  });
 
 export const usePromptMap = () =>
   usePlaygroundStore((state) => state.promptMap);
@@ -696,5 +745,17 @@ export const useExperimentIdByPromptId = (promptId: string) =>
 
 export const useSetExperimentByPromptId = () =>
   usePlaygroundStore((state) => state.setExperimentByPromptId);
+
+export const useRecentDatasetIdByType = () =>
+  usePlaygroundStore((state) => state.recentDatasetIdByType);
+
+export const useSetRecentDatasetForType = () =>
+  usePlaygroundStore((state) => state.setRecentDatasetForType);
+
+export const useScoresByDatasetId = () =>
+  usePlaygroundStore((state) => state.scoresByDatasetId);
+
+export const useSetScoresForDataset = () =>
+  usePlaygroundStore((state) => state.setScoresForDataset);
 
 export default usePlaygroundStore;

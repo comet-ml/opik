@@ -24,6 +24,7 @@ export const SpanSearchStreamRequestPublicExcludeItem = {
     Duration: "duration",
     Ttft: "ttft",
     Source: "source",
+    Environment: "environment",
 } as const;
 export type SpanSearchStreamRequestPublicExcludeItem =
     (typeof SpanSearchStreamRequestPublicExcludeItem)[keyof typeof SpanSearchStreamRequestPublicExcludeItem];

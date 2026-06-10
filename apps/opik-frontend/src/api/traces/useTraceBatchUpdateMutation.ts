@@ -4,11 +4,8 @@ import { AxiosError } from "axios";
 import api, { TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
 import { useToast } from "@/ui/use-toast";
-import {
-  TagUpdateFields,
-  buildTagUpdatePayload,
-  extractErrorMessage,
-} from "@/lib/tags";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 type UseTraceBatchUpdateMutationParams = {
   projectId: string;

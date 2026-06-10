@@ -6,30 +6,26 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
-import com.comet.opik.api.resources.utils.ConditionalGZipFilter;
+import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
-import org.glassfish.jersey.client.ClientProperties;
 import org.glassfish.jersey.media.multipart.FormDataBodyPart;
 import org.glassfish.jersey.media.multipart.FormDataMultiPart;
-import org.glassfish.jersey.media.multipart.MultiPartFeature;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,28 +94,21 @@ class DatasetsCsvUploadResourceTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
-                        .customConfigs(List.of(new CustomConfig("serviceToggles.csvUploadEnabled", "true")))
                         .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
-    private Client registeredClient;
+    private ClientSupport registeredClient;
     private DatasetResourceClient datasetResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
 
-        // Configure client but DON'T use GrizzlyConnectorProvider for multipart support
-        // GrizzlyConnector doesn't properly handle multipart Content-Type headers
-        client.getClient().register(new ConditionalGZipFilter());
-        client.getClient().property(ClientProperties.READ_TIMEOUT, 35_000);
-        // Note: NOT setting connectorProvider - use default HttpUrlConnector for multipart
-
-        // Register MultiPartFeature on the client and capture the registered client
-        this.registeredClient = client.getClient().register(MultiPartFeature.class);
+        this.registeredClient = client;
+        ClientSupportUtils.configMultiPartFeature(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
 
@@ -270,10 +259,12 @@ class DatasetsCsvUploadResourceTest {
         UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
         // Prepare CSV with special characters
-        String csvContent = "input,output\n" +
-                "\"What's the weather?\",\"It's sunny!\"\n" +
-                "\"Quote: \"\"Hello\"\"\",\"Response: \"\"Hi\"\"\"\n" +
-                "\"Comma, test\",\"Value, with, commas\"\n";
+        String csvContent = """
+                input,output
+                "What's the weather?","It's sunny!"
+                "Quote: ""Hello""\","Response: ""Hi""\"
+                "Comma, test","Value, with, commas"
+                """;
 
         // When: Upload CSV file
         try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
@@ -328,9 +319,11 @@ class DatasetsCsvUploadResourceTest {
         // Prepare CSV content WITH UTF-8 BOM (0xEF 0xBB 0xBF)
         // Simulating customer's issue where CSV has BOM in first column name
         byte[] bomBytes = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
-        String csvContentWithoutBom = "Standard Question,Standard Answer,Other Field\n" +
-                "\"如何强制触发4G/5G后台搜索？\",\"测试答案\",\"测试值\"\n" +
-                "\"Second question\",\"Second answer\",\"Value2\"\n";
+        String csvContentWithoutBom = """
+                Standard Question,Standard Answer,Other Field
+                "如何强制触发4G/5G后台搜索？","测试答案","测试值"
+                "Second question","Second answer","Value2"
+                """;
 
         byte[] csvBytesWithBom = new byte[bomBytes.length
                 + csvContentWithoutBom.getBytes(StandardCharsets.UTF_8).length];
@@ -380,6 +373,17 @@ class DatasetsCsvUploadResourceTest {
                             TEST_WORKSPACE);
                     assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
+    }
+
+    @Test
+    @DisplayName("Upload CSV to nonexistent dataset - should return 404 Not Found")
+    void uploadCsvFile__nonexistentDataset__notFound() {
+        UUID datasetId = UUID.randomUUID();
+        String csvContent = "input,expected_output\nq1,a1\n";
+
+        try (var response = uploadCsvFile(datasetId, csvContent)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
     }
 
     @ParameterizedTest

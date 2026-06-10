@@ -2,34 +2,32 @@ import langchain_anthropic
 import pytest
 from langchain_core.prompts import PromptTemplate
 
-from typing import Dict, Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from ...testlib import (
+    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
     SpanModel,
     TraceModel,
     assert_equal,
-    assert_dict_has_keys,
 )
 
 
 pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
 
 
-def _assert_usage_validity(usage: Dict[str, Any]):
-    REQUIRED_USAGE_KEYS = [
-        "completion_tokens",
-        "prompt_tokens",
-        "total_tokens",
-        "original_usage.input_tokens",
-        "original_usage.output_tokens",
-        "original_usage.cache_creation_input_tokens",
-        "original_usage.cache_read_input_tokens",
-    ]
-
-    assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
+EXPECTED_USAGE_ANTHROPIC = ANY_DICT.containing(
+    {
+        "completion_tokens": ANY,
+        "prompt_tokens": ANY,
+        "total_tokens": ANY,
+        "original_usage.input_tokens": ANY,
+        "original_usage.output_tokens": ANY,
+        "original_usage.cache_creation_input_tokens": ANY,
+        "original_usage.cache_read_input_tokens": ANY,
+    }
+)
 
 
 MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
@@ -109,7 +107,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                 ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_ANTHROPIC,
                 provider="anthropic",
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 source="sdk",
@@ -120,9 +118,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
-    _assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
@@ -205,7 +201,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                 ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_ANTHROPIC,
                 provider="anthropic",
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 source="sdk",
@@ -216,7 +212,5 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
-    _assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

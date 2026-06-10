@@ -134,15 +134,13 @@ class AnswerRelevance(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the answer relevance score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = self._generate_llm_query(
-            input=input, output=output, context=context
-        )
+        messages = self._build_messages(input=input, output=output, context=context)
 
-        model_output = self._model.generate_string(
-            input=llm_query,
+        message = self._model.generate_chat_completion(
+            messages=messages,
             response_format=AnswerRelevanceResponseFormat,
         )
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
     async def ascore(
         self,
@@ -166,19 +164,17 @@ class AnswerRelevance(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: A ScoreResult object with the answer relevance score and reason.
         """
-        llm_query = self._generate_llm_query(
-            input=input, output=output, context=context
-        )
-        model_output = await self._model.agenerate_string(
-            input=llm_query,
+        messages = self._build_messages(input=input, output=output, context=context)
+        message = await self._model.agenerate_chat_completion(
+            messages=messages,
             response_format=AnswerRelevanceResponseFormat,
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
-    def _generate_llm_query(
+    def _build_messages(
         self, input: str, output: str, context: Optional[List[str]]
-    ) -> str:
+    ) -> List[base_model.ConversationDict]:
         if not context:
             if self._require_context:
                 raise exceptions.MetricComputationError(
@@ -186,17 +182,15 @@ class AnswerRelevance(base_metric.BaseMetric):
                     f"enable it via `AnswerRelevancy(require_context=False)"
                 )
 
-            llm_query = templates.generate_query_no_context(
+            return templates.build_messages_no_context(
                 input=input,
                 output=output,
                 few_shot_examples=self._few_shot_examples_no_context,
             )
-        else:
-            llm_query = templates.generate_query_with_context(
-                input=input,
-                output=output,
-                context=context,
-                few_shot_examples=self._few_shot_examples_with_context,
-            )
 
-        return llm_query
+        return templates.build_messages_with_context(
+            input=input,
+            output=output,
+            context=context,
+            few_shot_examples=self._few_shot_examples_with_context,
+        )

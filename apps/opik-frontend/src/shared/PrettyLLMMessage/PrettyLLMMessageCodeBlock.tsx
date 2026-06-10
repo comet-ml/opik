@@ -38,8 +38,6 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> =
       return result;
     }, [code]);
 
-    const gutterWidth = String(lines.length).length;
-
     return (
       <div
         className={cn(
@@ -61,13 +59,7 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> =
           <pre className="static-code-highlight m-0 p-0">
             {lines.map((tokens, i) => (
               <div key={i} className="flex">
-                <span
-                  className="static-code-gutter shrink-0 select-none px-2 text-right"
-                  style={{ minWidth: `${gutterWidth + 2}ch` }}
-                >
-                  {i + 1}
-                </span>
-                <span className="flex-1 px-1">{tokens}</span>
+                <span className="flex-1 px-2">{tokens}</span>
               </div>
             ))}
           </pre>
