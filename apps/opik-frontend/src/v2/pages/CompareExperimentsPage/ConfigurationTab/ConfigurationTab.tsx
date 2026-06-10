@@ -66,10 +66,9 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
   const isCompare = experimentsIds.length > 1;
 
-  const promptVersions =
-    !isCompare && experiments[0]?.prompt_versions?.length
-      ? experiments[0].prompt_versions
-      : [];
+  // Prompt-version links only make sense for a single experiment; in compare
+  // mode we don't show them. An empty array simply renders nothing.
+  const promptVersions = isCompare ? [] : experiments[0]?.prompt_versions ?? [];
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
