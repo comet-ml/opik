@@ -115,21 +115,11 @@ const NamedPromptsDiff: React.FC<{
     return Array.from(s).sort();
   }, [baseline, current]);
 
-  if (names.length === 1) {
-    const name = names[0];
-    return (
-      <MessagesDiff
-        baseline={baseline[name] ?? []}
-        current={current[name] ?? []}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
       {names.map((name) => (
         <div key={name}>
-          <p className="comet-body-xs mb-1 text-muted-slate">{name}</p>
+          <p className="comet-body-s mb-1 text-muted-slate">{name}</p>
           <MessagesDiff
             baseline={baseline[name] ?? []}
             current={current[name] ?? []}

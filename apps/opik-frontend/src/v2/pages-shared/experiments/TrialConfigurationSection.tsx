@@ -58,9 +58,11 @@ const MessageBlock: React.FC<{ message: MessageEntry }> = ({ message }) => {
   return (
     <div className="rounded-md border bg-muted/30 p-3">
       {message.role && (
-        <Tag variant="gray" size="sm" className="mb-2 capitalize">
-          {message.role}
-        </Tag>
+        <div className="mb-2 flex items-center gap-2">
+          <Tag variant="gray" size="sm" className="capitalize">
+            {message.role}
+          </Tag>
+        </div>
       )}
       <p className="comet-body-s whitespace-pre-wrap break-words">
         {displayText}
@@ -78,11 +80,36 @@ const MessageBlock: React.FC<{ message: MessageEntry }> = ({ message }) => {
 };
 
 const PromptBlock: React.FC<{ value: unknown }> = ({ value }) => {
+  const namedPrompts = useMemo(() => {
+    if (!isRecord(value)) return null;
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return null;
+    if (!entries.every(([, v]) => isArray(v))) return null;
+    return entries as [string, unknown[]][];
+  }, [value]);
+
   const messages = useMemo(() => extractMessages(value), [value]);
   const text = useMemo(
     () => (isString(value) ? value : JSON.stringify(value, null, 2)),
     [value],
   );
+
+  if (namedPrompts) {
+    return (
+      <div className="flex flex-col gap-4">
+        {namedPrompts.map(([name, msgs]) => (
+          <div key={name}>
+            <p className="comet-body-s mb-1 text-muted-slate">{name}</p>
+            <div className="flex flex-col gap-2">
+              {(msgs as MessageEntry[]).map((msg, i) => (
+                <MessageBlock key={`${name}-${msg.role}-${i}`} message={msg} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (messages) {
     return (
@@ -419,7 +446,6 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
                   </div>
                 );
               }
-
               return (
                 <div key={key}>
                   <ConfigEntry label={key} value={value} />
