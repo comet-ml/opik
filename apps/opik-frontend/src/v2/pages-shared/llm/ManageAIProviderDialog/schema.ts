@@ -14,6 +14,25 @@ export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 // Centralised here so changing the default requires editing only one place.
 export const DEFAULT_OPENAI_PIPELINE_MODE: OpenAiPipelineMode = "chat_completions_api";
 
+/**
+ * Normalises a backend-stored {@code openai_pipeline_mode} string into a typed
+ * {@link OpenAiPipelineMode}. The backend's {@code OpenAIClientGenerator.extractApiPipelineMode}
+ * accepts any casing (it uppercases before enum lookup), so the persisted value could be either
+ * lowercase or uppercase depending on how it was written (UI vs direct REST). The form schema is
+ * strict-cased lowercase, so we lowercase here and reject anything that isn't one of the known
+ * values — falling back to {@link DEFAULT_OPENAI_PIPELINE_MODE}. Keeps the Select always pointing
+ * at a valid option and prevents Zod from blocking submit on legacy/odd-cased values.
+ */
+export const normalizeOpenAiPipelineMode = (
+  value: string | undefined | null,
+): OpenAiPipelineMode => {
+  if (!value) return DEFAULT_OPENAI_PIPELINE_MODE;
+  const lowered = value.toLowerCase();
+  return (OPENAI_PIPELINE_MODE_VALUES as readonly string[]).includes(lowered)
+    ? (lowered as OpenAiPipelineMode)
+    : DEFAULT_OPENAI_PIPELINE_MODE;
+};
+
 export const CloudAIProviderDetailsFormSchema = z.object({
   provider: z.enum(
     Object.values(PROVIDER_TYPE).filter(

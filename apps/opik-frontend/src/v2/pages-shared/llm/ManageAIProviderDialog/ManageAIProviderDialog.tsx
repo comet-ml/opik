@@ -29,6 +29,7 @@ import {
   createAIProviderFormSchema,
   AIProviderFormType,
   DEFAULT_OPENAI_PIPELINE_MODE,
+  normalizeOpenAiPipelineMode,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -135,9 +136,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       authHeaderName: providerKey?.configuration?.auth_header_name ?? "",
       suppressDefaultAuth:
         providerKey?.configuration?.suppress_default_auth === "true",
-      openaiPipelineMode:
-        providerKey?.configuration?.openai_pipeline_mode ??
-        DEFAULT_OPENAI_PIPELINE_MODE,
+      openaiPipelineMode: normalizeOpenAiPipelineMode(
+        providerKey?.configuration?.openai_pipeline_mode,
+      ),
     } as AIProviderFormType,
   });
 
@@ -242,8 +243,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       );
       form.setValue(
         "openaiPipelineMode",
-        providerData?.configuration?.openai_pipeline_mode ??
-          DEFAULT_OPENAI_PIPELINE_MODE,
+        normalizeOpenAiPipelineMode(
+          providerData?.configuration?.openai_pipeline_mode,
+        ),
       );
 
       form.setValue("provider", providerType);
