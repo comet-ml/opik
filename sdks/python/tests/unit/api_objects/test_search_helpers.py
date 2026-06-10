@@ -49,14 +49,14 @@ def _stream(record: dict):
 
 @pytest.fixture
 def patched_sleep():
-    with mock.patch("opik.api_objects.rest_helpers.time.sleep") as sleep_mock:
+    # Patch the rest_helpers retry-delay indirection, NOT the global time.sleep:
+    # a global patch turns background daemon threads' pacing sleep into a busy
+    # loop that can starve the interpreter and hang the suite.
+    with mock.patch("opik.api_objects.rest_helpers._sleep") as sleep_mock:
         yield sleep_mock
 
 
 def _sleep_called_with(mock_sleep: mock.Mock, seconds) -> bool:
-    """Patching time.sleep is global — background threads also trip the mock.
-    Assert on the specific value we expect rather than total call count.
-    """
     return any(call.args == (seconds,) for call in mock_sleep.call_args_list)
 
 
