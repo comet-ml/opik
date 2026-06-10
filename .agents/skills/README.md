@@ -5,6 +5,7 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 | Skill | Path | Description |
 |-------|------|-------------|
 | analytics-instrumentation | `analytics-instrumentation/` | Add analytics events to Opik features. Use when wiring PostHog events on the frontend or backend for product analytics tracking. |
+| debugging-e2e-tests | `debugging-e2e-tests/` | Investigate a failed Opik E2E test and propose a fix (read-only). Use when a test goes red in CI, a TestOps launch, or locally — gathers the trace + history, classifies regression vs. flake, proposes a fix. |
 | diagram-generation | `diagram-generation/` | Generate self-contained HTML architecture diagrams. Use when creating visual diagrams for PRs, task plans, or architectural explanations. |
 | documentation | `documentation/` | Feature documentation and release notes patterns. Use when documenting changes, writing PR descriptions, or preparing releases. |
 | local-dev | `local-dev/` | Local development environment setup and commands. Use when helping with dev server, Docker, or local testing. |
