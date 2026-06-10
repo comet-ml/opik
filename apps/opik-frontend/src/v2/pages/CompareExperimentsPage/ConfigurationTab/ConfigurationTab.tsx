@@ -195,6 +195,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
               id={pv.prompt_id}
               name={`${pv.prompt_name}${pv.commit ? ` (${pv.commit})` : ""}`}
               resource={RESOURCE_TYPE.prompt}
+              search={{ activeVersionId: pv.id }}
             />
           ))}
         </div>

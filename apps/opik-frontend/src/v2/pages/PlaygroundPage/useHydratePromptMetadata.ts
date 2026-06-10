@@ -76,7 +76,9 @@ export function useHydratePromptMetadata() {
         }
       }
 
-      // For TEXT prompts - check message-level library link. Prefer an exact
+      // For TEXT prompts - check message-level library link. Anchor to the
+      // specific version the message was loaded from (message.promptVersionId),
+      // not necessarily the latest, mirroring the CHAT branch. Prefer an exact
       // (unmodified) match; otherwise keep the first edited library-linked
       // message and mark it modified (OPIK-6838 #4) rather than dropping it.
       let fallback: PromptLibraryMetadata | undefined;
@@ -86,19 +88,34 @@ export function useHydratePromptMetadata() {
         try {
           const promptData = await fetchPrompt({ promptId: message.promptId });
 
-          if (!promptData?.latest_version) continue;
+          const explicitVersionId = message.promptVersionId;
+          const targetVersionId =
+            explicitVersionId ?? promptData?.latest_version?.id;
+          if (!targetVersionId) continue;
 
-          const libraryContent = parsePromptVersionContent(
-            promptData.latest_version,
-          );
+          let versionData: PromptVersion | undefined;
+          try {
+            versionData = await fetchPromptVersion({
+              versionId: targetVersionId,
+            });
+          } catch {
+            // Only fall back to latest_version when no explicit version was
+            // requested; otherwise bail rather than compare the wrong version.
+          }
+          if (explicitVersionId && !versionData) continue;
+
+          const sourceVersion = versionData ?? promptData?.latest_version;
+          if (!sourceVersion) continue;
+
+          const libraryContent = parsePromptVersionContent(sourceVersion);
           const modified = !isEqual(message.content, libraryContent);
           const metadata = buildPromptLibraryMetadata(
             promptData,
             {
-              id: promptData.latest_version.id,
-              template: promptData.latest_version.template,
-              commit: promptData.latest_version.commit,
-              metadata: promptData.latest_version.metadata,
+              id: sourceVersion.id,
+              template: sourceVersion.template,
+              commit: sourceVersion.commit,
+              metadata: sourceVersion.metadata,
             },
             modified,
           );
