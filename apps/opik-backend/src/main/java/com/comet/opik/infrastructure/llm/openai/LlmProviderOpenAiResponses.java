@@ -3,6 +3,9 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
+import com.google.common.base.Throwables;
+import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -82,6 +85,31 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        return LlmProviderLangChainMapper.INSTANCE.getErrorObject(throwable, log);
+        // openai-java's OpenAIServiceException (BadRequestException, RateLimitException, …) wraps
+        // the failed HTTP call. Its getMessage() is the short "<status>: <text>" form, not the JSON
+        // body, so LlmProviderLangChainMapper's JSON-scan logic skips it and the request bubbles up
+        // as a generic 500. Extract the status + diagnostic directly from the typed exception.
+        return findOpenAiServiceException(throwable)
+                .map(LlmProviderOpenAiResponses::toErrorMessage)
+                .or(() -> LlmProviderLangChainMapper.INSTANCE.getErrorObject(throwable, log));
+    }
+
+    private static Optional<OpenAIServiceException> findOpenAiServiceException(Throwable throwable) {
+        return Throwables.getCausalChain(throwable).stream()
+                .filter(OpenAIServiceException.class::isInstance)
+                .map(OpenAIServiceException.class::cast)
+                .findFirst();
+    }
+
+    private static ErrorMessage toErrorMessage(OpenAIServiceException ex) {
+        // Prefer the diagnostic code (e.g., "unsupported_parameter") for HTTP status; fall back to
+        // the high-level type ("invalid_request_error"); finally fall back to the SDK-provided
+        // statusCode() so we always return a meaningful 4xx/5xx instead of a generic 500.
+        // Optional.map(fn) already returns empty when fn yields null, so no explicit filter is needed.
+        Integer status = ex.code()
+                .map(OpenAiCompatStatusCodes::fromCode)
+                .or(() -> ex.type().map(OpenAiCompatStatusCodes::fromCode))
+                .orElseGet(ex::statusCode);
+        return new ErrorMessage(status, ex.getMessage(), ex.code().orElse(null));
     }
 }

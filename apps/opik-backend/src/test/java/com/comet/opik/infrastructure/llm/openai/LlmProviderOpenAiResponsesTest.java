@@ -1,6 +1,11 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.openai.core.JsonField;
+import com.openai.core.http.Headers;
+import com.openai.errors.BadRequestException;
+import com.openai.errors.RateLimitException;
+import com.openai.models.ErrorObject;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -297,6 +302,101 @@ class LlmProviderOpenAiResponsesTest {
         var strictCaptor = ArgumentCaptor.forClass(Boolean.class);
         Mockito.verify(clientGenerator).newResponsesApiChatModel(any(), strictCaptor.capture());
         assertThat(strictCaptor.getValue()).isFalse();
+    }
+
+    @Test
+    void unwrapsOpenAiBadRequestExceptionWithSpecificCodeMappingToStatus() {
+        // openai-java's OpenAIServiceException carries statusCode, code, and type as typed fields —
+        // not in getMessage() — so the shared JSON-scan path can't read them. The provider must
+        // recognise the typed exception and produce a clean 4xx ErrorMessage with diagnostic text.
+        var provider = new LlmProviderOpenAiResponses(
+                Mockito.mock(OpenAIClientGenerator.class), Mockito.mock(LlmProviderClientApiConfig.class));
+
+        var ex = openAiBadRequest("Unsupported parameter: 'top_p' is not supported with this model.",
+                "unsupported_parameter", "invalid_request_error");
+
+        var result = provider.getLlmProviderError(ex);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getCode()).isEqualTo(400);
+        assertThat(result.get().getMessage()).contains("'top_p' is not supported");
+    }
+
+    @Test
+    void unwrapsOpenAiBadRequestExceptionFallsBackToTypeWhenCodeUnknown() {
+        // {code} is a brand-new value our OpenAiCompatStatusCodes doesn't know about. {type}
+        // ("invalid_request_error") is recognised → still surfaces as 400.
+        var provider = new LlmProviderOpenAiResponses(
+                Mockito.mock(OpenAIClientGenerator.class), Mockito.mock(LlmProviderClientApiConfig.class));
+
+        var ex = openAiBadRequest("Some new validation message",
+                "brand_new_code_we_dont_know_about", "invalid_request_error");
+
+        var result = provider.getLlmProviderError(ex);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getCode()).isEqualTo(400);
+    }
+
+    @Test
+    void unwrapsOpenAiBadRequestExceptionFallsBackToStatusCodeWhenCodeAndTypeUnknown() {
+        // Neither {code} nor {type} matches the map — fall back to the SDK exception's
+        // statusCode() (400 for BadRequestException) instead of degrading to a generic 500.
+        var provider = new LlmProviderOpenAiResponses(
+                Mockito.mock(OpenAIClientGenerator.class), Mockito.mock(LlmProviderClientApiConfig.class));
+
+        var ex = openAiBadRequest("Something else broke", "weird_specific", "weird_high_level");
+
+        var result = provider.getLlmProviderError(ex);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getCode()).isEqualTo(400);
+    }
+
+    @Test
+    void unwrapsNestedOpenAiException() {
+        // OpenAIServiceException can be wrapped inside reactor / langchain4j retry wrappers; the
+        // helper must walk the causal chain rather than only inspecting the top-level throwable.
+        var provider = new LlmProviderOpenAiResponses(
+                Mockito.mock(OpenAIClientGenerator.class), Mockito.mock(LlmProviderClientApiConfig.class));
+
+        var inner = openAiRateLimit("Too many requests", "rate_limit_exceeded", "rate_limit_error");
+        var wrapped = new RuntimeException("retry wrapper", inner);
+
+        var result = provider.getLlmProviderError(wrapped);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getCode()).isEqualTo(429);
+    }
+
+    private static BadRequestException openAiBadRequest(String message, String code, String type) {
+        // ErrorObject.builder() requires all four fields including param (per the openai-java SDK
+        // contract); pass an empty string for tests that don't care about it.
+        var error = ErrorObject.builder()
+                .message(message)
+                .code(code)
+                .type(type)
+                .param("")
+                .build();
+        return BadRequestException.builder()
+                .headers(Headers.builder().build())
+                .error(JsonField.of(error))
+                .build();
+    }
+
+    private static RateLimitException openAiRateLimit(String message, String code, String type) {
+        // ErrorObject.builder() requires all four fields including param (per the openai-java SDK
+        // contract); pass an empty string for tests that don't care about it.
+        var error = ErrorObject.builder()
+                .message(message)
+                .code(code)
+                .type(type)
+                .param("")
+                .build();
+        return RateLimitException.builder()
+                .headers(Headers.builder().build())
+                .error(JsonField.of(error))
+                .build();
     }
 
     /**
