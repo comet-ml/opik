@@ -1,4 +1,7 @@
-import { PlaygroundPromptType, PromptLibraryMetadata } from "@/types/playground";
+import {
+  PlaygroundPromptType,
+  PromptLibraryMetadata,
+} from "@/types/playground";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 export interface PromptVersionRef {
