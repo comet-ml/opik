@@ -260,9 +260,9 @@ class OAuthAuthorizeResourceTest {
         mockCookies(Map.of(
                 CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build(),
                 SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
-        when(authService.authorizeWorkspace(any(), any()))
-                .thenReturn(UserWorkspace.builder().userName("alice").workspaceId("ws-prod").workspaceName("production")
-                        .build());
+        UserWorkspace authorizedWorkspace = UserWorkspace.builder()
+                .userName("alice").workspaceId("ws-prod").workspaceName("production").build();
+        when(authService.authorizeWorkspace(any(), any())).thenReturn(authorizedWorkspace);
         when(mcpOAuthService.createAuthorizationCode(any(CreateOAuthCodeCommand.class))).thenReturn("code");
 
         resource.consent(buildConsent(), headers);
@@ -270,9 +270,9 @@ class OAuthAuthorizeResourceTest {
         ArgumentCaptor<CreateOAuthCodeCommand> captor = ArgumentCaptor.forClass(CreateOAuthCodeCommand.class);
         verify(mcpOAuthService).createAuthorizationCode(captor.capture());
         CreateOAuthCodeCommand cmd = captor.getValue();
-        assertThat(cmd.userName()).isEqualTo("alice");
-        assertThat(cmd.workspaceName()).isEqualTo("production");
-        assertThat(cmd.workspaceId()).isEqualTo("ws-prod");
+        assertThat(cmd.userName()).isEqualTo(authorizedWorkspace.userName());
+        assertThat(cmd.workspaceName()).isEqualTo(authorizedWorkspace.workspaceName());
+        assertThat(cmd.workspaceId()).isEqualTo(authorizedWorkspace.workspaceId());
         assertThat(cmd.codeChallenge()).isEqualTo(CODE_CHALLENGE);
     }
 
