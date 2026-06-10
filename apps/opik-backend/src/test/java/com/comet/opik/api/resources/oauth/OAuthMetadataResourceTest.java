@@ -37,7 +37,6 @@ class OAuthMetadataResourceTest {
 
     private static OpikConfiguration newConfig() {
         var config = new OpikConfiguration();
-        // Trailing slash is intentional: the issuer must be normalized by stripping it.
         config.getMcpOAuth().setBaseUrl(ISSUER + "/");
         return config;
     }
