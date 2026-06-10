@@ -36,13 +36,13 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
-import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.util.List;
 
@@ -51,6 +51,15 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.CSRF_COOKIE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_TARGET;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_RESPONSE_TYPE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CLIENT_ID;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CODE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CODE_CHALLENGE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CODE_CHALLENGE_METHOD;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_ERROR;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REDIRECT_URI;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_RESOURCE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_RESPONSE_TYPE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_STATE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.RESPONSE_TYPE_CODE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -70,20 +79,19 @@ public class OAuthAuthorizeResource {
     @Operation(operationId = "authorize", summary = "OAuth Authorization Endpoint", description = "OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the client and PKCE parameters, then redirects to the login or consent page", responses = {
             @ApiResponse(responseCode = "302", description = "Redirect to login, consent, or client redirect_uri with an error")})
     public Response authorize(
-            @QueryParam("client_id") @NotBlank String clientId,
-            @QueryParam("redirect_uri") @NotBlank String redirectUri,
-            @QueryParam("response_type") String responseType,
-            @QueryParam("code_challenge") String codeChallenge,
-            @QueryParam("code_challenge_method") String codeChallengeMethod,
-            @QueryParam("resource") String resource,
-            @QueryParam("state") String state,
+            @QueryParam(PARAM_CLIENT_ID) @NotBlank String clientId,
+            @QueryParam(PARAM_REDIRECT_URI) @NotBlank String redirectUri,
+            @QueryParam(PARAM_RESPONSE_TYPE) String responseType,
+            @QueryParam(PARAM_CODE_CHALLENGE) String codeChallenge,
+            @QueryParam(PARAM_CODE_CHALLENGE_METHOD) String codeChallengeMethod,
+            @QueryParam(PARAM_RESOURCE) String resource,
+            @QueryParam(PARAM_STATE) String state,
             @Context HttpHeaders headers,
             @Context UriInfo uriInfo) {
 
         McpOAuthConfig config = opikConfig.getMcpOAuth();
         clientService.resolveForRedirect(clientId, redirectUri);
 
-        // client and redirect_uri are now trusted, so protocol errors are reported back to the client via redirect.
         if (!RESPONSE_TYPE_CODE.equals(responseType)) {
             return errorRedirect(redirectUri, ERROR_UNSUPPORTED_RESPONSE_TYPE, state);
         }
@@ -101,17 +109,25 @@ public class OAuthAuthorizeResource {
         } catch (ClientErrorException e) {
             String rawQuery = uriInfo.getRequestUri().getRawQuery();
             String authorizeUrl = config.getBaseUrl() + "/oauth/authorize" + (rawQuery == null ? "" : "?" + rawQuery);
-            return redirect(config.getBaseUrl() + "/login?returnTo=" + enc(authorizeUrl));
+            URI loginUri = UriBuilder.fromUri(config.getBaseUrl())
+                    .path("/login")
+                    .queryParam("returnTo", authorizeUrl)
+                    .build();
+            return redirect(loginUri);
         }
 
-        String query = "client_id=" + enc(clientId)
-                + "&redirect_uri=" + enc(redirectUri)
-                + "&response_type=" + enc(responseType)
-                + "&code_challenge=" + enc(codeChallenge)
-                + "&code_challenge_method=" + enc(codeChallengeMethod)
-                + "&resource=" + enc(resource)
-                + (StringUtils.isBlank(state) ? "" : "&state=" + enc(state));
-        return redirect(config.getBaseUrl() + "/oauth/consent?" + query);
+        UriBuilder consentUri = UriBuilder.fromUri(config.getBaseUrl())
+                .path("/oauth/consent")
+                .queryParam(PARAM_CLIENT_ID, clientId)
+                .queryParam(PARAM_REDIRECT_URI, redirectUri)
+                .queryParam(PARAM_RESPONSE_TYPE, responseType)
+                .queryParam(PARAM_CODE_CHALLENGE, codeChallenge)
+                .queryParam(PARAM_CODE_CHALLENGE_METHOD, codeChallengeMethod)
+                .queryParam(PARAM_RESOURCE, resource);
+        if (StringUtils.isNotBlank(state)) {
+            consentUri.queryParam(PARAM_STATE, state);
+        }
+        return redirect(consentUri.build());
     }
 
     @GET
@@ -120,8 +136,8 @@ public class OAuthAuthorizeResource {
     @Operation(operationId = "getAuthorizeContext", summary = "Get Authorization Consent Context", description = "Get the client details, eligible workspaces, and a CSRF token used to render the consent screen", responses = {
             @ApiResponse(responseCode = "200", description = "Authorization consent context", content = @Content(schema = @Schema(implementation = AuthorizeContext.class)))})
     public Response context(
-            @QueryParam("client_id") @NotBlank String clientId,
-            @QueryParam("redirect_uri") @NotBlank String redirectUri,
+            @QueryParam(PARAM_CLIENT_ID) @NotBlank String clientId,
+            @QueryParam(PARAM_REDIRECT_URI) @NotBlank String redirectUri,
             @Context HttpHeaders headers) {
 
         McpOAuthClient client = clientService.resolveForRedirect(clientId, redirectUri);
@@ -180,28 +196,25 @@ public class OAuthAuthorizeResource {
                 .resource(request.resource())
                 .build());
 
-        String query = "code=" + enc(code)
-                + (StringUtils.isBlank(request.state()) ? "" : "&state=" + enc(request.state()));
+        UriBuilder redirectTo = UriBuilder.fromUri(request.redirectUri()).queryParam(PARAM_CODE, code);
+        if (StringUtils.isNotBlank(request.state())) {
+            redirectTo.queryParam(PARAM_STATE, request.state());
+        }
         return Response.ok(ConsentResponse.builder()
-                .redirectTo(appendQuery(request.redirectUri(), query))
+                .redirectTo(redirectTo.build().toString())
                 .build()).build();
     }
 
     private Response errorRedirect(String redirectUri, String error, String state) {
-        String query = "error=" + error + (StringUtils.isBlank(state) ? "" : "&state=" + enc(state));
-        return redirect(appendQuery(redirectUri, query));
+        UriBuilder builder = UriBuilder.fromUri(redirectUri).queryParam(PARAM_ERROR, error);
+        if (StringUtils.isNotBlank(state)) {
+            builder.queryParam(PARAM_STATE, state);
+        }
+        return redirect(builder.build());
     }
 
-    private static Response redirect(String location) {
-        return Response.status(Response.Status.FOUND).location(URI.create(location)).build();
-    }
-
-    private static String appendQuery(String base, String query) {
-        return base + (base.contains("?") ? "&" : "?") + query;
-    }
-
-    private static String enc(String value) {
-        return URLEncoder.encode(value, UTF_8);
+    private static Response redirect(URI location) {
+        return Response.status(Response.Status.FOUND).location(location).build();
     }
 
     private static boolean isSecureDeployment(McpOAuthConfig config) {

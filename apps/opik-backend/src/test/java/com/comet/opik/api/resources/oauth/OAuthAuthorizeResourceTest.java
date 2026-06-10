@@ -25,6 +25,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +51,8 @@ class OAuthAuthorizeResourceTest {
 
     private static final String CLIENT_ID = "test-client";
     private static final String REDIRECT_URI = "http://localhost:1234/cb";
-    private static final String RESOURCE_URI = "https://www.comet.com/opik/api/v1/mcp";
+    private static final String BASE_OPIK_URL = "https://www.comet.com/opik";
+    private static final String RESOURCE_URI = BASE_OPIK_URL + "/api/v1/mcp";
     private static final String CODE_CHALLENGE = "abc123challenge";
     private static final String STATE = "state-xyz";
     private static final String CSRF = "csrf-token-abc";
@@ -76,7 +79,7 @@ class OAuthAuthorizeResourceTest {
         resource = new OAuthAuthorizeResource(clientService, authService, mcpOAuthService, opikConfig);
         mcpConfig = new McpOAuthConfig();
         mcpConfig.setEnabled(true);
-        mcpConfig.setBaseUrl("https://www.comet.com/opik");
+        mcpConfig.setBaseUrl(BASE_OPIK_URL);
         mcpConfig.setMcpResourceUri(RESOURCE_URI);
     }
 
@@ -112,7 +115,7 @@ class OAuthAuthorizeResourceTest {
         assertThat(response.getStatus()).isEqualTo(Response.Status.FOUND.getStatusCode());
         URI location = response.getLocation();
         assertThat(location.toString())
-                .startsWith("https://www.comet.com/opik/oauth/consent?")
+                .startsWith(BASE_OPIK_URL + "/oauth/consent?")
                 .contains("client_id=" + CLIENT_ID)
                 .contains("code_challenge=" + CODE_CHALLENGE)
                 .contains("code_challenge_method=" + CODE_CHALLENGE_METHOD_S256)
@@ -139,7 +142,7 @@ class OAuthAuthorizeResourceTest {
     void authorize_blankCodeChallenge_redirectsWithError() {
         mockClientResolution();
 
-        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, "  ",
+        Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, " ",
                 CODE_CHALLENGE_METHOD_S256,
                 RESOURCE_URI, STATE, headers, uriInfo);
 
@@ -166,7 +169,7 @@ class OAuthAuthorizeResourceTest {
         when(opikConfig.getMcpOAuth()).thenReturn(mcpConfig);
         mockCookies(new HashMap<>());
         when(authService.listEligibleWorkspaces(any())).thenThrow(new ClientErrorException(401));
-        URI requestUri = URI.create("https://www.comet.com/opik/oauth/authorize?client_id=" + CLIENT_ID);
+        URI requestUri = URI.create(BASE_OPIK_URL + "/oauth/authorize?client_id=" + CLIENT_ID);
         when(uriInfo.getRequestUri()).thenReturn(requestUri);
 
         Response response = resource.authorize(CLIENT_ID, REDIRECT_URI, RESPONSE_TYPE_CODE, CODE_CHALLENGE,
@@ -174,12 +177,11 @@ class OAuthAuthorizeResourceTest {
                 RESOURCE_URI, STATE, headers, uriInfo);
 
         String location = response.getLocation().toString();
-        assertThat(location).startsWith("https://www.comet.com/opik/login?returnTo=");
-        String returnTo = java.net.URLDecoder.decode(
+        assertThat(location).startsWith(BASE_OPIK_URL + "/login?returnTo=");
+        String returnTo = URLDecoder.decode(
                 location.substring(location.indexOf("returnTo=") + "returnTo=".length()),
-                java.nio.charset.StandardCharsets.UTF_8);
-        // return_to must be the public authorize URL (with /opik prefix), not the nginx-internal path
-        assertThat(returnTo).startsWith("https://www.comet.com/opik/oauth/authorize?");
+                StandardCharsets.UTF_8);
+        assertThat(returnTo).startsWith(BASE_OPIK_URL + "/oauth/authorize?");
         assertThat(returnTo).contains("client_id=" + CLIENT_ID);
     }
 
@@ -227,15 +229,16 @@ class OAuthAuthorizeResourceTest {
         when(authService.authorizeWorkspace(any(), any()))
                 .thenReturn(UserWorkspace.builder().userName("admin").workspaceId("ws-1").workspaceName("default")
                         .build());
-        when(mcpOAuthService.createAuthorizationCode(any(CreateOAuthCodeCommand.class))).thenReturn("auth-code-xyz");
+        String randomCode = "auth-code-xyz";
+        when(mcpOAuthService.createAuthorizationCode(any(CreateOAuthCodeCommand.class))).thenReturn(randomCode);
 
-        Response response = resource.consent(buildConsent(CODE_CHALLENGE), headers);
+        Response response = resource.consent(buildConsent(), headers);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
         ConsentResponse body = (ConsentResponse) response.getEntity();
         assertThat(body.redirectTo())
                 .startsWith(REDIRECT_URI)
-                .contains("code=auth-code-xyz")
+                .contains("code=" + randomCode)
                 .contains("state=" + STATE);
     }
 
@@ -244,7 +247,7 @@ class OAuthAuthorizeResourceTest {
     void consent_missingCsrf_throwsForbidden() {
         mockCookies(new HashMap<>());
 
-        assertThatThrownBy(() -> resource.consent(buildConsent(CODE_CHALLENGE), headers))
+        assertThatThrownBy(() -> resource.consent(buildConsent(), headers))
                 .isInstanceOf(ForbiddenException.class);
         verify(mcpOAuthService, never()).createAuthorizationCode(any(CreateOAuthCodeCommand.class));
     }
@@ -257,27 +260,27 @@ class OAuthAuthorizeResourceTest {
         mockCookies(Map.of(
                 CSRF_COOKIE, new Cookie.Builder(CSRF_COOKIE).value(CSRF).build(),
                 SESSION_COOKIE_NAME, new Cookie.Builder(SESSION_COOKIE_NAME).value("sess").build()));
-        when(authService.authorizeWorkspace(any(), any()))
-                .thenReturn(UserWorkspace.builder().userName("alice").workspaceId("ws-prod").workspaceName("production")
-                        .build());
+        UserWorkspace authorizedWorkspace = UserWorkspace.builder()
+                .userName("alice").workspaceId("ws-prod").workspaceName("production").build();
+        when(authService.authorizeWorkspace(any(), any())).thenReturn(authorizedWorkspace);
         when(mcpOAuthService.createAuthorizationCode(any(CreateOAuthCodeCommand.class))).thenReturn("code");
 
-        resource.consent(buildConsent(CODE_CHALLENGE), headers);
+        resource.consent(buildConsent(), headers);
 
         ArgumentCaptor<CreateOAuthCodeCommand> captor = ArgumentCaptor.forClass(CreateOAuthCodeCommand.class);
         verify(mcpOAuthService).createAuthorizationCode(captor.capture());
         CreateOAuthCodeCommand cmd = captor.getValue();
-        assertThat(cmd.userName()).isEqualTo("alice");
-        assertThat(cmd.workspaceName()).isEqualTo("production");
-        assertThat(cmd.workspaceId()).isEqualTo("ws-prod");
+        assertThat(cmd.userName()).isEqualTo(authorizedWorkspace.userName());
+        assertThat(cmd.workspaceName()).isEqualTo(authorizedWorkspace.workspaceName());
+        assertThat(cmd.workspaceId()).isEqualTo(authorizedWorkspace.workspaceId());
         assertThat(cmd.codeChallenge()).isEqualTo(CODE_CHALLENGE);
     }
 
-    private ConsentRequest buildConsent(String codeChallenge) {
+    private ConsentRequest buildConsent() {
         return ConsentRequest.builder()
                 .clientId(CLIENT_ID)
                 .redirectUri(REDIRECT_URI)
-                .codeChallenge(codeChallenge)
+                .codeChallenge(OAuthAuthorizeResourceTest.CODE_CHALLENGE)
                 .codeChallengeMethod(CODE_CHALLENGE_METHOD_S256)
                 .resource(RESOURCE_URI)
                 .state(STATE)

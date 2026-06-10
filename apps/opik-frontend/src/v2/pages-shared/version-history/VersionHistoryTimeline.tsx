@@ -101,7 +101,7 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
                 <VersionTagList tags={item.tags} size="sm" maxWidth={200} />
                 <EnvironmentBadgeList
                   names={item.environments}
-                  size="sm"
+                  size="pill"
                   badgeClassName="max-w-[120px]"
                   withOverflow
                   maxWidth={160}

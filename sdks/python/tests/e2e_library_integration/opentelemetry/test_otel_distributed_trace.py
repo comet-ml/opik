@@ -150,3 +150,84 @@ def test_otel_distributed_trace_roundtrip__happyflow(opik_client: opik.Opik):
         "service-b-child-span not found in Opik backend"
     )
     assert attached_span_child.parent_span_id == attached_span.id
+
+
+def test_opik_track_with_otel_spans__single_merged_trace__happyflow(
+    opik_client: opik.Opik,
+):
+    """
+    Opik-native tracing composed with OTel through the backend (OPIK-6770).
+
+    No distributed headers, no attach_to_parent: an @opik.track entrypoint
+    opens the trace, and OTel spans started inside it are linked by
+    OpikSpanProcessor's in-process fallback. Guarantees that opik-native
+    logging and OTel ingestion land in a single trace, with the OTel spans
+    nested under the native entrypoint span — the main flow this fix enables.
+    """
+    config = opik_config.OpikConfig()
+    tracer, provider = _create_otel_tracer(config)
+    ID_STORAGE = {}
+
+    @opik.track(name="native-entrypoint")
+    def handler(request):
+        ID_STORAGE["trace_id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["entrypoint_span_id"] = opik_context.get_current_span_data().id
+        with tracer.start_as_current_span("otel-parent"):
+            with tracer.start_as_current_span("otel-child"):
+                pass
+        return "response"
+
+    handler("request")
+    opik.flush_tracker()
+    provider.force_flush()
+    provider.shutdown()
+
+    trace_id = ID_STORAGE["trace_id"]
+    entrypoint_span_id = ID_STORAGE["entrypoint_span_id"]
+
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace_id,
+        name="native-entrypoint",
+        input={"request": "request"},
+        output={"output": "response"},
+    )
+
+    if not synchronization.until(
+        lambda: len(
+            opik_client.search_spans(
+                project_name=opik_client.config.project_name, trace_id=trace_id
+            )
+        )
+        == 3,
+        max_try_seconds=15,
+    ):
+        raise AssertionError(
+            "Expected 3 spans (native entrypoint + 2 OTel spans) in a single trace "
+            "within timeout"
+        )
+
+    spans = opik_client.search_spans(
+        project_name=opik_client.config.project_name,
+        trace_id=trace_id,
+    )
+
+    # single merged trace — every span shares the native trace id
+    assert all(span.trace_id == trace_id for span in spans)
+
+    roots = [span for span in spans if span.parent_span_id is None]
+    assert len(roots) == 1
+    assert roots[0].id == entrypoint_span_id
+    assert roots[0].name == "native-entrypoint"
+
+    otel_parent = next(
+        (span for span in spans if span.parent_span_id == entrypoint_span_id), None
+    )
+    assert otel_parent is not None, "OTel parent span not nested under entrypoint"
+    assert otel_parent.name == "otel-parent"
+
+    otel_child = next(
+        (span for span in spans if span.parent_span_id == otel_parent.id), None
+    )
+    assert otel_child is not None, "OTel child span not chained under OTel parent"
+    assert otel_child.name == "otel-child"

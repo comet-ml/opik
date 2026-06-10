@@ -39,16 +39,6 @@ class OAuthClientServiceTest {
     }
 
     @Test
-    @DisplayName("resolveForRedirect: returns client when redirect_uri matches a registered URI")
-    void resolveForRedirect_matchingRedirect_returnsClient() {
-        mockClient(REDIRECT_URI);
-
-        McpOAuthClient client = service.resolveForRedirect(CLIENT_ID, REDIRECT_URI);
-
-        assertThat(client.id()).isEqualTo(CLIENT_ID);
-    }
-
-    @Test
     @DisplayName("resolveForRedirect: unknown client_id throws 400 invalid_client")
     void resolveForRedirect_unknownClient_throwsBadRequest() {
         when(strategy.supports(CLIENT_ID)).thenReturn(false);

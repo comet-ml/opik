@@ -5,6 +5,7 @@ import api, {
   QueryConfig,
 } from "@/api/api";
 import { Environment } from "@/types/environments";
+import { sortEnvironments } from "@/utils/environments";
 
 export type UseEnvironmentsListResponse = {
   content: Environment[];
@@ -20,7 +21,7 @@ const getEnvironmentsList = async ({ signal }: QueryFunctionContext) => {
     { signal },
   );
 
-  return data;
+  return { ...data, content: sortEnvironments(data.content ?? []) };
 };
 
 export default function useEnvironmentsList(
