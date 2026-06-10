@@ -8,12 +8,6 @@ import {
 } from "@/lib/prompt";
 import TextDiff from "./TextDiff";
 import { Tag } from "@/ui/tag";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/ui/accordion";
 
 type PromptDiffProps = {
   baseline: unknown;
@@ -62,7 +56,7 @@ const MessagesDiff: React.FC<{
   }, [baselineByRole, currentByRole]);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-2">
       {allRoles.map((role) => {
         const baseContent = baselineByRole.get(role) || "";
         const currContent = currentByRole.get(role) || "";
@@ -73,9 +67,11 @@ const MessagesDiff: React.FC<{
           ] || role;
 
         return (
-          <div key={role} className="rounded-md border p-3">
+          <div key={role} className="rounded-md border bg-muted/30 p-3">
             <div className="mb-2 flex items-center gap-2">
-              <span className="comet-body-s-accented">{roleName}</span>
+              <Tag variant="gray" size="sm" className="capitalize">
+                {roleName}
+              </Tag>
               {hasChanged && baseContent && currContent && (
                 <Tag variant="orange" size="sm">
                   Changed
@@ -92,7 +88,7 @@ const MessagesDiff: React.FC<{
                 </Tag>
               )}
             </div>
-            <div className="comet-code whitespace-pre-wrap break-words text-sm">
+            <div className="comet-body-s whitespace-pre-wrap break-words">
               {hasChanged ? (
                 <TextDiff
                   content1={baseContent}
@@ -100,7 +96,7 @@ const MessagesDiff: React.FC<{
                   mode="words"
                 />
               ) : (
-                <span className="text-muted-foreground">{currContent}</span>
+                <span>{currContent}</span>
               )}
             </div>
           </div>
@@ -114,29 +110,23 @@ const NamedPromptsDiff: React.FC<{
   baseline: NamedPrompts;
   current: NamedPrompts;
 }> = ({ baseline, current }) => {
-  const allNames = useMemo(() => {
-    const names = new Set([...Object.keys(baseline), ...Object.keys(current)]);
-    return Array.from(names).sort();
+  const names = useMemo(() => {
+    const s = new Set([...Object.keys(baseline), ...Object.keys(current)]);
+    return Array.from(s).sort();
   }, [baseline, current]);
 
   return (
-    <Accordion type="multiple" defaultValue={allNames} className="w-full">
-      {allNames.map((name) => {
-        const baseMessages = baseline[name] || [];
-        const currMessages = current[name] || [];
-
-        return (
-          <AccordionItem key={name} value={name}>
-            <AccordionTrigger className="hover:no-underline">
-              <span className="comet-body-s-accented">{name}</span>
-            </AccordionTrigger>
-            <AccordionContent>
-              <MessagesDiff baseline={baseMessages} current={currMessages} />
-            </AccordionContent>
-          </AccordionItem>
-        );
-      })}
-    </Accordion>
+    <div className="flex flex-col gap-4">
+      {names.map((name) => (
+        <div key={name}>
+          <p className="comet-body-s mb-1 text-muted-slate">{name}</p>
+          <MessagesDiff
+            baseline={baseline[name] ?? []}
+            current={current[name] ?? []}
+          />
+        </div>
+      ))}
+    </div>
   );
 };
 
