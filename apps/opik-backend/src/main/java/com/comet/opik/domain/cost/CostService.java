@@ -37,7 +37,8 @@ public class CostService {
             Map.entry("groq", "groq"),
             Map.entry("jina_ai", "jina_ai"),
             Map.entry("elastic", "elastic"),
-            Map.entry("microsoft", "azure"));
+            Map.entry("microsoft", "azure"),
+            Map.entry("mistral", "mistral"));
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
@@ -46,7 +47,9 @@ public class CostService {
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
-                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock);
+                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
+                    "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
+                    "gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle);
 
     static {
         try {

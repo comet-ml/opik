@@ -27,6 +27,7 @@ from .evaluation import (
     evaluate_experiment,
     evaluate_on_dict_items,
     evaluate_prompt,
+    evaluate_resume,
     run_tests,
 )
 from .integrations.sagemaker import auth as sagemaker_auth
@@ -59,6 +60,7 @@ __all__ = [
     "evaluate_prompt",
     "evaluate_experiment",
     "evaluate_on_dict_items",
+    "evaluate_resume",
     "run_tests",
     "ExperimentItemContent",
     "ExperimentItemReferences",
