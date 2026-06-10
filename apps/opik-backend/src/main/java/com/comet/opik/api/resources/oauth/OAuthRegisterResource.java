@@ -80,7 +80,7 @@ public class OAuthRegisterResource {
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
-        return Response.created(URI.create("/admin/mcp-oauth-clients/" + client.clientId()))
+        return Response.created(URI.create("/admin/mcp-oauth-clients/" + client.id()))
                 .entity(body)
                 .build();
     }

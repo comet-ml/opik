@@ -66,7 +66,7 @@ class OAuthRegisterResourceTest {
     void register_returns201WithLocationHeader() {
         String clientId = "client-123";
         McpOAuthClient minted = McpOAuthClient.builder()
-                .clientId(clientId)
+                .id(clientId)
                 .name("Test Client")
                 .redirectUris(Set.of("http://example.com/cb"))
                 .build();
@@ -96,7 +96,7 @@ class OAuthRegisterResourceTest {
     @DisplayName("register: response body always omits clientIdIssuedAt (not surfaced by the client model)")
     void register_clientIdIssuedAtAlwaysOmitted() {
         McpOAuthClient minted = McpOAuthClient.builder()
-                .clientId("client-456")
+                .id("client-456")
                 .name("No-Timestamp Client")
                 .redirectUris(Set.of("http://example.com/cb"))
                 .build();
