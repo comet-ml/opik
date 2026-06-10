@@ -87,7 +87,7 @@ const useFeedbackScoreBatchSetMutation = () => {
         variant: "destructive",
       });
     },
-    onSuccess: (_data, { projectId, entityType }) => {
+    onSuccess: (_data, { projectId }) => {
       // Invalidate list-level queries so counts and score columns refresh.
       void queryClient.invalidateQueries({
         queryKey: [TRACES_KEY, { projectId }],

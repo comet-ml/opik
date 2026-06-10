@@ -121,11 +121,18 @@ const AddAnnotationDialog: React.FC<AddAnnotationDialogProps> = ({
     if (!selectedDef || !isValueValid()) return;
 
     const numericValue = parseFloat(form.value);
+    const selectedCategoryName =
+      selectedDef.type === FEEDBACK_DEFINITION_TYPE.categorical
+        ? Object.entries(selectedDef.details.categories).find(
+            ([, value]) => value === numericValue,
+          )?.[0]
+        : undefined;
 
     const scores: FeedbackScoreBatchItem[] = rows.map((row) => ({
       id: row.id,
       name: selectedDef.name,
       value: numericValue,
+      ...(selectedCategoryName && { categoryName: selectedCategoryName }),
       ...(form.reason.trim() && { reason: form.reason.trim() }),
     }));
 
