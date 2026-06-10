@@ -22,6 +22,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
@@ -35,6 +36,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 
@@ -45,10 +47,12 @@ public interface ExperimentItemBulkIngestionService {
      * Ingests a batch of experiment items.
      *
      * @param experiment the experiment to add items to
+     * @param projectName the project for traces auto-created from items that provide evaluate_task_result
+     *                    (i.e. without an explicit trace); when blank, the default project is used
      * @param items the list of experiment items to ingest
      * @return a list of feedback score batch items
      */
-    Mono<Void> ingest(Experiment experiment, List<ExperimentItemBulkRecord> items);
+    Mono<Void> ingest(Experiment experiment, String projectName, List<ExperimentItemBulkRecord> items);
 }
 
 @Singleton
@@ -72,11 +76,18 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
      * @return a list of feedback score batch items
      */
     @Override
-    public Mono<Void> ingest(Experiment experiment, List<ExperimentItemBulkRecord> items) {
+    public Mono<Void> ingest(Experiment experiment, String projectName, List<ExperimentItemBulkRecord> items) {
 
         return Mono.deferContextual(ctx -> {
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            // Project applied to traces that don't carry their own project: traces auto-created from
+            // evaluate_task_result items, and explicit traces with a blank project_name. When the request
+            // does not specify one, fall back to the default project (deprecated behavior).
+            String bulkProjectName = StringUtils.isNotBlank(projectName)
+                    ? projectName
+                    : ProjectService.DEFAULT_PROJECT;
 
             return validateExperimentConsistency(experiment, workspaceId)
                     .then(experimentService.create(experiment))
@@ -85,11 +96,15 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         log.info("Using experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                                 experimentId, experiment.name(), experiment.datasetName(), workspaceId);
 
-                        // Collect unique project names from all traces
-                        List<String> projectNames = items.stream()
-                                .map(ExperimentItemBulkRecord::trace)
-                                .filter(Objects::nonNull)
-                                .map(Trace::projectName)
+                        // Collect unique project names: the bulk project (for auto-created traces and
+                        // traces without a project), plus any project specified on item-level traces.
+                        List<String> projectNames = Stream.concat(
+                                Stream.of(bulkProjectName),
+                                items.stream()
+                                        .map(ExperimentItemBulkRecord::trace)
+                                        .filter(Objects::nonNull)
+                                        .map(Trace::projectName)
+                                        .filter(StringUtils::isNotBlank))
                                 .distinct()
                                 .toList();
 
@@ -111,7 +126,8 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                                             experimentItems,
                                             spans,
                                             feedbackScores,
-                                            projectNameToIdMap);
+                                            projectNameToIdMap,
+                                            bulkProjectName);
 
                                     return experimentItemService.create(experimentItems)
                                             .then(saveAll(traces, spans, feedbackScores))
@@ -185,7 +201,8 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
             Set<ExperimentItem> experimentItems,
             List<Span> spans,
             List<FeedbackScoreBatchItem> feedbackScores,
-            Map<String, UUID> projectNameToIdMap) {
+            Map<String, UUID> projectNameToIdMap,
+            String bulkProjectName) {
 
         for (ExperimentItemBulkRecord item : items) {
             Trace trace;
@@ -195,7 +212,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 Instant now = Instant.now();
                 trace = Trace.builder()
                         .id(idGenerator.generateId())
-                        .projectName(ProjectService.DEFAULT_PROJECT)
+                        .projectName(bulkProjectName)
                         .output(item.evaluateTaskResult())
                         .startTime(now)
                         .endTime(now)
@@ -203,9 +220,13 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         .source(Source.EXPERIMENT)
                         .build();
             } else {
-                trace = item.trace().toBuilder()
-                        .source(Source.EXPERIMENT)
-                        .build();
+                var traceBuilder = item.trace().toBuilder()
+                        .source(Source.EXPERIMENT);
+                // An explicit trace without its own project inherits the bulk project.
+                if (StringUtils.isBlank(item.trace().projectName())) {
+                    traceBuilder.projectName(bulkProjectName);
+                }
+                trace = traceBuilder.build();
             }
 
             traces.add(trace);

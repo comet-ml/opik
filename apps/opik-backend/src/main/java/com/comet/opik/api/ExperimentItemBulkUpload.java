@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validation.ExperimentItemBulkUploadValidation;
 import com.comet.opik.api.validation.MaxRequestSize;
 import com.comet.opik.infrastructure.ratelimit.RateEventContainer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -25,6 +26,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @MaxRequestSize // 4MB limit
+@ExperimentItemBulkUploadValidation
 public record ExperimentItemBulkUpload(
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotBlank String experimentName,
@@ -33,6 +35,9 @@ public record ExperimentItemBulkUpload(
                 "provided, items will be added to the existing experiment and experimentName will be ignored. If not " +
                 "provided or experiment with that ID doesn't exist, a new experiment will be created with the given " +
                 "experimentName") UUID experimentId,
+        @JsonView({View.ExperimentItemBulkWriteView.class}) @Schema(description = "Project for traces auto-created " +
+                "from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default " +
+                "project is used; relying on this fallback is deprecated, please provide project_name explicitly.") String projectName,
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 1000, message = "Experiment items list size must be between 1 and 1000") @Valid List<ExperimentItemBulkRecord> items)
         implements
