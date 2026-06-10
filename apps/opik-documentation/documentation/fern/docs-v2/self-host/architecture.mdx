@@ -10,7 +10,7 @@ title: Platform Architecture
 
 Opik's architecture consists of multiple services that each handle a specific role, including:
 
-- **A Java backend service**: Java 21 + Dropwizard — REST API, authentication, business logic, and database migrations.
+- **A Java backend service**: Java 25 + Dropwizard — REST API, authentication, business logic, and database migrations.
 - **A Python backend service**: Flask + Gunicorn — evaluator execution, sandboxed code execution, and optimization workflows.
 - **A frontend application**: TypeScript + React SPA, served by Nginx which also reverse-proxies API requests to the backend.
 - **SDKs**: Python and TypeScript clients that batch telemetry data and send it to the backend via REST/HTTP.
@@ -28,7 +28,7 @@ Opik's architecture consists of multiple services that each handle a specific ro
 
 ## Java Backend Service
 
-Opik's main backend uses Java 21 LTS and Dropwizard, structured as a RESTful web service offering public API
+Opik's main backend uses Java 25 LTS and Dropwizard, structured as a RESTful web service offering public API
 endpoints for core functionality. Full API documentation is available [here](/reference/rest-api/overview).
 
 Key responsibilities:
