@@ -6,24 +6,13 @@ import { LaneView } from "./types";
 
 const MAX_RIBBON_WIDTH = 14;
 
-export const laneWeight = (lane: {
-  total_estimated_cost: number | null;
-  total_tokens: number;
-}): number => {
-  if (
-    typeof lane.total_estimated_cost === "number" &&
-    lane.total_estimated_cost > 0
-  ) {
-    return lane.total_estimated_cost;
-  }
-  return lane.total_tokens ?? 0;
-};
+export const laneWeight = (lane: { total_tokens: number }): number =>
+  lane.total_tokens ?? 0;
 
 export const toLaneView = (lane: AiSpendLaneApi): LaneView => ({
   key: lane.key,
   label: lane.label,
   tokens: lane.total_tokens ?? 0,
-  cost: lane.total_estimated_cost,
   hasBreakdown: lane.has_breakdown,
   weight: laneWeight(lane),
 });

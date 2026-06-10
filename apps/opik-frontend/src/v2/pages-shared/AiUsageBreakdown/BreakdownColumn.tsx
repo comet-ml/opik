@@ -1,14 +1,12 @@
 import React from "react";
-import { cn } from "@/lib/utils";
-import { formatCost } from "@/lib/money";
+import TokenCount from "@/shared/TokenCount/TokenCount";
 import LaneCard from "./LaneCard";
 import { sideWeightTotal as computeSideWeightTotal } from "./utils";
-import { LaneSide, LaneView } from "./types";
+import { LaneView } from "./types";
 
 interface BreakdownColumnProps {
   title: string;
-  side: LaneSide;
-  totalCost: number | null;
+  totalTokens: number;
   lanes: LaneView[];
   onLaneClick?: (laneKey: string) => void;
   onLaneHover?: (laneKey: string | null) => void;
@@ -24,8 +22,7 @@ interface BreakdownColumnProps {
 
 const BreakdownColumn: React.FC<BreakdownColumnProps> = ({
   title,
-  side,
-  totalCost,
+  totalTokens,
   lanes,
   onLaneClick,
   onLaneHover,
@@ -36,20 +33,15 @@ const BreakdownColumn: React.FC<BreakdownColumnProps> = ({
   registerRef,
 }) => {
   const weightTotal = computeSideWeightTotal(lanes);
-  const reverse = side === "output";
 
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className={cn(
-          "flex items-center justify-between gap-2",
-          reverse && "flex-row-reverse",
-        )}
-      >
+      <div className="flex items-center justify-between gap-2">
         <span className="comet-body-s text-foreground">{title}</span>
-        <span className="comet-body-s text-light-slate">
-          {formatCost(totalCost)}
-        </span>
+        <TokenCount
+          tokens={totalTokens}
+          className="comet-body-s text-light-slate"
+        />
       </div>
       {lanes.length === 0 ? (
         <div className="comet-body-xs rounded-md border border-dashed p-3 text-center text-muted-slate">
@@ -61,7 +53,6 @@ const BreakdownColumn: React.FC<BreakdownColumnProps> = ({
             <LaneCard
               ref={(el) => registerRef(index, el)}
               lane={lane}
-              side={side}
               sideWeightTotal={weightTotal}
               onLaneClick={onLaneClick}
               onLaneHover={onLaneHover}

@@ -16,6 +16,9 @@ import com.comet.opik.api.resources.utils.resources.AiSpendResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.api.spend.Impact;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
@@ -27,8 +30,10 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -47,11 +52,13 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.podam.PodamFactoryUtils.newPodamFactory;
@@ -182,6 +189,7 @@ class AiSpendResourceTest {
         var user = UUID.randomUUID().toString();
         createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
         createCostSpans(projectName, apiKey, workspaceName, currentTime, 4);
+        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
 
         var composition = aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -200,20 +208,140 @@ class AiSpendResourceTest {
         assertThat(inputTokens.get("prior_assistant")).isEqualTo(3000L);
         assertThat(inputTokens.get("tool_results")).isEqualTo(600L);
         assertThat(inputTokens.get("user_prompts")).isEqualTo(150L);
+        assertThat(inputTokens.get("skills_available")).isEqualTo(300L);
         assertThat(inputTokens.get("skills_loaded")).isEqualTo(2400L);
-        assertThat(inputTokens.get("mcp_servers")).isEqualTo(900L);
+        assertThat(inputTokens.get("tools")).isEqualTo(1140L); // (300 + 80) × 3
+        assertThat(inputTokens.get("memory")).isEqualTo(180L);
         assertThat(inputTokens.get("file_attachments")).isEqualTo(120L);
-        assertThat(inputTokens.get("static_overhead")).isEqualTo(720L); // (60 + 100 + 80) × 3
 
-        assertThat(outputTokens.get("thinking")).isEqualTo(450L);
-        assertThat(outputTokens.get("assistant_text")).isEqualTo(210L);
+        assertThat(outputTokens.get("thinking")).isEqualTo(150L);
+        assertThat(outputTokens.get("assistant_text")).isEqualTo(70L);
+        assertThat(outputTokens.get("built_in_tool_calls")).isEqualTo(30L);
+        assertThat(outputTokens.get("mcp_tool_calls")).isEqualTo(20L);
+        assertThat(outputTokens.get("skill_invocations")).isEqualTo(10L);
 
         assertThat(composition.input().totalTokens()).isEqualTo(7890L);
-        assertThat(composition.output().totalTokens()).isEqualTo(660L);
+        assertThat(composition.output().totalTokens()).isEqualTo(280L);
 
         assertThat(composition.harness()).hasSize(1);
         assertThat(composition.harness().getFirst().key()).isEqualTo("claude_code");
         assertThat(composition.harness().getFirst().totalEstimatedCost().doubleValue()).isCloseTo(8.0, within(0.0001));
+    }
+
+    @Test
+    @DisplayName("composition: user_id restricts the result to that user's traces")
+    void composition_filtersByUserId() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        var userA = UUID.randomUUID().toString();
+        var userB = UUID.randomUUID().toString();
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA, userB));
+
+        var composition = aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
+                .projectName(projectName)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .userId(userA)
+                .build(), apiKey, workspaceName);
+
+        Map<String, Long> inputTokens = composition.input().lanes().stream()
+                .collect(Collectors.toMap(SpendCompositionResponse.Lane::key,
+                        SpendCompositionResponse.Lane::totalTokens));
+        assertThat(inputTokens.get("prior_assistant")).isEqualTo(2000L);
+    }
+
+    @Test
+    @DisplayName("composition: rejects interval_start that is not before interval_end")
+    void composition_rejectsInvalidInterval() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(), USER);
+
+        Instant now = Instant.now();
+        aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
+                .projectName(RandomStringUtils.randomAlphabetic(10))
+                .intervalStart(now)
+                .intervalEnd(now.minus(Duration.ofMinutes(1)))
+                .build(), apiKey, workspaceName, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+    }
+
+    @Test
+    @DisplayName("composition: rejects request with neither project_id nor project_name")
+    void composition_rejectsMissingProject() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(), USER);
+
+        aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
+                .intervalStart(Instant.now().minus(Duration.ofMinutes(10)))
+                .intervalEnd(Instant.now())
+                .build(), apiKey, workspaceName, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+    }
+
+    @Test
+    @DisplayName("composition: 404 when the project does not exist")
+    void composition_notFoundForUnknownProject() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(), USER);
+
+        aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
+                .projectName(RandomStringUtils.randomAlphabetic(10))
+                .intervalStart(Instant.now().minus(Duration.ofMinutes(10)))
+                .intervalEnd(Instant.now())
+                .build(), apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("breakdown: 400 for an unknown lane key")
+    void breakdown_rejectsUnknownLane() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(), USER);
+
+        aiSpendResourceClient.getBreakdown("not_a_lane", SpendMetricRequest.builder()
+                .projectName(RandomStringUtils.randomAlphabetic(10))
+                .intervalStart(Instant.now().minus(Duration.ofMinutes(10)))
+                .intervalEnd(Instant.now())
+                .build(), apiKey, workspaceName, HttpStatus.SC_BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("users: rejects page below 1")
+    void users_rejectsInvalidPage() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(), USER);
+
+        aiSpendResourceClient.getUsers(SpendMetricRequest.builder()
+                .projectName(RandomStringUtils.randomAlphabetic(10))
+                .intervalStart(Instant.now().minus(Duration.ofMinutes(10)))
+                .intervalEnd(Instant.now())
+                .build(), 0, 25, null, apiKey, workspaceName, HttpStatus.SC_BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("users: rejects size above the cap")
+    void users_rejectsSizeAboveMax() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(), USER);
+
+        aiSpendResourceClient.getUsers(SpendMetricRequest.builder()
+                .projectName(RandomStringUtils.randomAlphabetic(10))
+                .intervalStart(Instant.now().minus(Duration.ofMinutes(10)))
+                .intervalEnd(Instant.now())
+                .build(), 1, 1001, null, apiKey, workspaceName, HttpStatus.SC_BAD_REQUEST);
     }
 
     @Test
@@ -236,8 +364,11 @@ class AiSpendResourceTest {
         Map<String, WorkspaceMetricsSummaryResponse.Result> byName = summary.results().stream()
                 .collect(Collectors.toMap(WorkspaceMetricsSummaryResponse.Result::name, Function.identity()));
 
+        assertThat(byName.get("total_spend").current()).isEqualTo(0.0);
         assertThat(byName.get("total_messages").current()).isEqualTo(0.0);
         assertThat(byName.get("active_users").current()).isEqualTo(0.0);
+        assertThat(byName.get("total_users").current()).isEqualTo(0.0);
+        assertThat(byName.get("avg_cost_per_user").current()).isNull();
     }
 
     @Test
@@ -266,6 +397,7 @@ class AiSpendResourceTest {
 
         assertThat(breakdown.laneKey()).isEqualTo("skills_loaded");
         assertThat(breakdown.title()).isEqualTo("Skills loaded");
+        assertThat(breakdown.subtitle()).isEqualTo("Tokens per loaded skill body");
         assertThat(breakdown.itemCount()).isEqualTo(2);
         assertThat(breakdown.totalTokens()).isEqualTo(2400L); // (500 + 300) × 3
 
@@ -274,6 +406,160 @@ class AiSpendResourceTest {
                         SpendBreakdownResponse.Item::totalTokens));
         assertThat(byLabel.get("opik-frontend")).isEqualTo(1500L);
         assertThat(byLabel.get("find-skills")).isEqualTo(900L);
+    }
+
+    @Test
+    @DisplayName("breakdown: tools lane adds a Built-in row so items sum to the lane total")
+    void breakdown_toolsMatchesLaneTotal() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        var user = UUID.randomUUID().toString();
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+
+        var breakdown = aiSpendResourceClient.getBreakdown("tools", SpendMetricRequest.builder()
+                .projectName(projectName)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), apiKey, workspaceName);
+
+        assertThat(breakdown.laneKey()).isEqualTo("tools");
+        assertThat(breakdown.totalTokens()).isEqualTo(1140L); // matches composition lane total
+
+        Map<String, Long> byLabel = breakdown.items().stream()
+                .collect(Collectors.toMap(SpendBreakdownResponse.Item::label,
+                        SpendBreakdownResponse.Item::totalTokens));
+        assertThat(byLabel.get("chrome-devtools")).isEqualTo(900L); // 300 × 3
+        assertThat(byLabel.get("Built-in tools")).isEqualTo(240L); // (380 - 300) × 3
+    }
+
+    @Test
+    @DisplayName("breakdown: output tool-call lanes group by tool/server/skill and sum to lane total")
+    void breakdown_outputToolCalls() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
+
+        var builtIn = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
+                "built_in_tool_calls");
+        assertThat(builtIn.totalTokens()).isEqualTo(30L);
+        assertThat(builtIn.itemCount()).isEqualTo(1);
+        assertThat(builtIn.items().getFirst().label()).isEqualTo("Bash");
+        assertThat(builtIn.items().getFirst().totalTokens()).isEqualTo(30L);
+
+        var mcp = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "mcp_tool_calls");
+        assertThat(mcp.totalTokens()).isEqualTo(20L);
+        assertThat(mcp.items().getFirst().label()).isEqualTo("chrome");
+
+        var skill = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "skill_invocations");
+        assertThat(skill.totalTokens()).isEqualTo(10L);
+        assertThat(skill.items().getFirst().label()).isEqualTo("diagram-generation");
+    }
+
+    @Test
+    @DisplayName("breakdown: thinking and assistant text break down by model")
+    void breakdown_outputByModel() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
+
+        var thinking = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "thinking");
+        assertThat(thinking.totalTokens()).isEqualTo(150L);
+        assertThat(thinking.itemCount()).isEqualTo(1);
+        assertThat(thinking.items().getFirst().label()).isEqualTo("claude-opus-4-8");
+        assertThat(thinking.items().getFirst().totalTokens()).isEqualTo(150L);
+
+        var text = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "assistant_text");
+        assertThat(text.totalTokens()).isEqualTo(70L);
+        assertThat(text.items().getFirst().label()).isEqualTo("claude-opus-4-8");
+    }
+
+    @Test
+    @DisplayName("breakdown: caps items at the limit and folds the remainder into an Other row")
+    void breakdown_truncatesWithOtherRow() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        createBuiltInToolSpans(projectName, apiKey, workspaceName, currentTime, 201);
+
+        var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
+                "built_in_tool_calls");
+
+        assertThat(breakdown.totalTokens()).isEqualTo(201L);
+        assertThat(breakdown.itemCount()).isEqualTo(201);
+        assertThat(breakdown.items()).hasSize(201);
+        assertThat(breakdown.items().stream().mapToLong(SpendBreakdownResponse.Item::totalTokens).sum())
+                .isEqualTo(201L);
+
+        var other = breakdown.items().getLast();
+        assertThat(other.label()).isEqualTo("Other (1 items)");
+        assertThat(other.totalTokens()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("breakdown: at exactly the item cap there is no Other row")
+    void breakdown_atCapHasNoOtherRow() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        createBuiltInToolSpans(projectName, apiKey, workspaceName, currentTime, 200);
+
+        var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
+                "built_in_tool_calls");
+
+        assertThat(breakdown.totalTokens()).isEqualTo(200L);
+        assertThat(breakdown.itemCount()).isEqualTo(200);
+        assertThat(breakdown.items()).hasSize(200);
+        assertThat(breakdown.items()).noneMatch(item -> item.label().startsWith("Other ("));
+        assertThat(breakdown.items().stream().mapToLong(SpendBreakdownResponse.Item::totalTokens).sum())
+                .isEqualTo(200L);
     }
 
     @Test
@@ -323,6 +609,56 @@ class AiSpendResourceTest {
     }
 
     @Test
+    @DisplayName("users: honors DB-side sorting and pagination")
+    void users_sortingAndPagination() {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+
+        var projectName = RandomStringUtils.randomAlphabetic(10);
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
+        Instant intervalEnd = Instant.now();
+        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
+
+        var userA = UUID.randomUUID().toString();
+        var userB = UUID.randomUUID().toString();
+
+        // userA: fewer requests (2) but high spend (2 costed spans); userB: more requests (3) but zero spend.
+        // Spend order and request order are deliberately opposite, so a sort change must reorder the rows.
+        var userATraces = createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
+        userATraces.forEach(traceId -> createLinkedSpan(projectName, apiKey, workspaceName, traceId, currentTime));
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB, userB, userB));
+
+        var request = SpendMetricRequest.builder()
+                .projectName(projectName)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build();
+
+        SpendUserPage bySpend = aiSpendResourceClient.getUsers(request, 1, 25, apiKey, workspaceName);
+        assertThat(bySpend.sortableBy())
+                .containsExactly("total_estimated_cost", "requests", "skills", "mcps", "mcp_calls");
+        assertThat(bySpend.content()).extracting(SpendUserRow::userUuid).containsExactly(userA, userB);
+
+        var byRequestsDesc = List.of(SortingField.builder().field("requests").direction(Direction.DESC).build());
+        SpendUserPage byRequests = aiSpendResourceClient.getUsers(request, 1, 25, byRequestsDesc, apiKey,
+                workspaceName);
+        assertThat(byRequests.content()).extracting(SpendUserRow::userUuid).containsExactly(userB, userA);
+        assertThat(byRequests.content().getFirst().requests()).isEqualTo(3);
+
+        SpendUserPage firstPage = aiSpendResourceClient.getUsers(request, 1, 1, byRequestsDesc, apiKey, workspaceName);
+        assertThat(firstPage.total()).isEqualTo(2);
+        assertThat(firstPage.content()).extracting(SpendUserRow::userUuid).containsExactly(userB);
+
+        SpendUserPage secondPage = aiSpendResourceClient.getUsers(request, 2, 1, byRequestsDesc, apiKey, workspaceName);
+        assertThat(secondPage.total()).isEqualTo(2);
+        assertThat(secondPage.content()).extracting(SpendUserRow::userUuid).containsExactly(userA);
+    }
+
+    @Test
     @DisplayName("recommendations: returns up to 3 judgment-based items for the current usage")
     void recommendations_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
@@ -340,6 +676,7 @@ class AiSpendResourceTest {
         var user = UUID.randomUUID().toString();
         createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
         createCostSpans(projectName, apiKey, workspaceName, currentTime, 4);
+        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
 
         var recommendations = aiSpendResourceClient.getRecommendations(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -347,19 +684,25 @@ class AiSpendResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), apiKey, workspaceName);
 
-        // thinking share 150/220 > 0.5 and mcp_servers > 0; prior_assistant share 1000/2630 < 0.4
+        // thinking share 150/280 > 0.5 and tools > 0; prior_assistant share 3000/7890 < 0.4
         List<String> ids = recommendations.items().stream()
                 .map(SpendRecommendationsResponse.Item::id)
                 .toList();
-        assertThat(ids).contains("thinking_effort", "fewer_mcps");
+        assertThat(ids).contains("thinking_effort", "fewer_tools");
         assertThat(ids).doesNotContain("compact_threshold");
         assertThat(recommendations.items()).hasSizeLessThanOrEqualTo(3);
         assertThat(recommendations.totalSavings().doubleValue()).isGreaterThan(0.0);
+
+        Map<String, Impact> impacts = recommendations.items().stream()
+                .collect(Collectors.toMap(SpendRecommendationsResponse.Item::id,
+                        SpendRecommendationsResponse.Item::impact));
+        assertThat(impacts.get("thinking_effort")).isEqualTo(Impact.MEDIUM);
+        assertThat(impacts.get("fewer_tools")).isEqualTo(Impact.LOW);
     }
 
     private List<UUID> createCcTraces(String projectName, String apiKey, String workspaceName, Instant time,
             List<String> userUuids) {
-        List<UUID> ids = new java.util.ArrayList<>();
+        List<UUID> ids = new ArrayList<>();
         for (String userUuid : userUuids) {
             UUID id = idGenerator.getTimeOrderedEpoch(time.toEpochMilli());
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -389,7 +732,7 @@ class AiSpendResourceTest {
     }
 
     private void createCostSpans(String projectName, String apiKey, String workspaceName, Instant time, int count) {
-        var spans = java.util.stream.IntStream.range(0, count)
+        var spans = IntStream.range(0, count)
                 .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
                         .startTime(time)
                         .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
@@ -402,7 +745,64 @@ class AiSpendResourceTest {
         spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
     }
 
-    private com.fasterxml.jackson.databind.JsonNode buildCcMetadata(String userUuid) {
+    private SpendBreakdownResponse getBreakdown(String projectName, String apiKey, String workspaceName,
+            Instant intervalStart, Instant intervalEnd, String laneKey) {
+        return aiSpendResourceClient.getBreakdown(laneKey, SpendMetricRequest.builder()
+                .projectName(projectName)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), apiKey, workspaceName);
+    }
+
+    private void createBuiltInToolSpans(String projectName, String apiKey, String workspaceName, Instant time,
+            int count) {
+        JsonNode metadata = JsonUtils.getJsonNodeFromString(
+                "{ \"cc\": { \"llm_call\": { \"block_kind\": \"tool_use\", \"attributed_output_tokens\": 1 } } }");
+        List<Span> spans = IntStream.range(0, count)
+                .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                        .startTime(time)
+                        .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                        .name("tool_" + i)
+                        .projectId(null)
+                        .projectName(projectName)
+                        .totalEstimatedCost(BigDecimal.ZERO)
+                        .metadata(metadata)
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+    }
+
+    private void createLlmCallSpans(String projectName, String apiKey, String workspaceName, Instant time) {
+        createLlmCallSpan(projectName, apiKey, workspaceName, time, "thinking", "Thinking", 150, null);
+        createLlmCallSpan(projectName, apiKey, workspaceName, time, "text", "Text", 70, null);
+        createLlmCallSpan(projectName, apiKey, workspaceName, time, "tool_use", "Bash", 30, null);
+        createLlmCallSpan(projectName, apiKey, workspaceName, time, "tool_use", "mcp__chrome__click", 20, null);
+        createLlmCallSpan(projectName, apiKey, workspaceName, time, "tool_use", "Skill", 10, "diagram-generation");
+    }
+
+    private void createLlmCallSpan(String projectName, String apiKey, String workspaceName, Instant time,
+            String blockKind, String name, long attributedTokens, String skill) {
+        String json = """
+                { "cc": { "llm_call": { "block_kind": "%s", "attributed_output_tokens": %d } } }
+                """.formatted(blockKind, attributedTokens);
+        var builder = factory.manufacturePojo(Span.class).toBuilder()
+                .startTime(time)
+                .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                .name(name)
+                .model("claude-opus-4-8")
+                .projectId(null)
+                .projectName(projectName)
+                .totalEstimatedCost(BigDecimal.ZERO)
+                .metadata(JsonUtils.getJsonNodeFromString(json))
+                .feedbackScores(null);
+        if (skill != null) {
+            builder.input(JsonUtils.getJsonNodeFromString("{ \"skill\": \"%s\" }".formatted(skill)));
+        }
+        spanResourceClient.batchCreateSpans(List.of(builder.build()), apiKey, workspaceName);
+    }
+
+    private JsonNode buildCcMetadata(String userUuid) {
         String json = """
                 {
                   "cc": {
@@ -412,7 +812,7 @@ class AiSpendResourceTest {
                     "tool_results": { "summary": { "total_tokens": 200, "count": 8 }, "by_tool": [ { "name": "Bash", "tokens": 200 } ] },
                     "user_prompts": { "summary": { "total_tokens": 50 } },
                     "skills": { "summary": { "loaded_tokens": 800, "menu_tokens": 100, "loaded_count": 2 }, "loaded": [ { "name": "opik-frontend", "body_tokens": 500 }, { "name": "find-skills", "body_tokens": 300 } ] },
-                    "tools": { "summary": { "by_source": { "mcp": { "schema_tokens": 300, "available_count": 1 }, "builtin": { "schema_tokens": 80 } }, "by_server": [ { "server": "chrome-devtools", "schema_tokens": 300 } ] } },
+                    "tools": { "summary": { "schema_tokens": 380, "by_source": { "mcp": { "schema_tokens": 300, "available_count": 1 }, "builtin": { "schema_tokens": 80 } }, "by_server": [ { "server": "chrome-devtools", "schema_tokens": 300 } ] } },
                     "file_attachments": { "summary": { "total_tokens": 40 }, "files": [ { "path": "a.png", "body_tokens": 40 } ] },
                     "memory": { "summary": { "total_tokens": 60 }, "files": [ { "path": "AGENTS.md", "body_tokens": 60 } ] },
                     "thinking": { "summary": { "total_tokens": 150 }, "by_model": [ { "model": "claude-opus-4-7", "tokens": 150 } ] },

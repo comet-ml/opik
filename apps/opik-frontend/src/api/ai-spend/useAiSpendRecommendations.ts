@@ -41,16 +41,7 @@ const getAiSpendRecommendations = async (
       project_name: projectName,
       interval_start: intervalStart,
       interval_end: intervalEnd,
-      ...(userUuid && {
-        filters: [
-          {
-            field: "metadata",
-            operator: "=",
-            key: "cc.identity.user_uuid",
-            value: userUuid,
-          },
-        ],
-      }),
+      ...(userUuid && { user_id: userUuid }),
     },
     {
       signal,

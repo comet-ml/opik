@@ -6,6 +6,7 @@ import { Card } from "@/ui/card";
 import { Skeleton } from "@/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/money";
+import AnthropicIcon from "@/icons/integrations/anthropic.svg?react";
 import BreakdownColumn from "./BreakdownColumn";
 import SankeyLinks, { RibbonPath } from "./SankeyLinks";
 import { getLaneMeta } from "./laneRegistry";
@@ -36,6 +37,10 @@ interface PathsState {
 }
 
 const EMPTY_PATHS: PathsState = { left: [], right: [], size: { w: 0, h: 0 } };
+
+const HARNESS_ICONS: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> = {
+  claude_code: AnthropicIcon,
+};
 
 const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
   projectName,
@@ -112,7 +117,7 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
     const stackTopY = bRect.top - cRect.top;
     const stackBotY = bRect.bottom - cRect.top;
     const stackHeight = stackBotY - stackTopY;
-    const pad = Math.min(18, stackHeight * 0.12);
+    const pad = Math.min(stackHeight * 0.8, 12);
     const usableTop = stackTopY + pad;
     const usableBot = stackBotY - pad;
     const fanY = (i: number, n: number) =>
@@ -227,8 +232,7 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
           <div className={cn("shrink-0", columnWidth)}>
             <BreakdownColumn
               title="Input"
-              side="input"
-              totalCost={data.input?.total_estimated_cost ?? null}
+              totalTokens={data.input?.total_tokens ?? 0}
               lanes={inputLanes}
               onLaneClick={onLaneClick}
               onLaneHover={handleHover}
@@ -242,59 +246,54 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
             />
           </div>
 
-          <div
-            ref={harnessBoxRef}
-            className={cn(
-              "flex shrink-0 flex-col gap-2 rounded-xl border p-3 bg-background",
-              columnWidth,
-            )}
-          >
-            <span className="comet-body-s text-center text-foreground">
-              Harness
-            </span>
-            {harness.map((entry) => {
-              const meta = getLaneMeta(entry.key, entry.label);
-              const Icon = meta.icon;
-              return (
-                <div
-                  key={entry.key}
-                  className="flex flex-col gap-0.5 rounded-md border bg-background p-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-white"
-                      style={{ backgroundColor: meta.color }}
-                    >
-                      <Icon className="size-2.5" />
+          <div className={cn("flex shrink-0 flex-col gap-2", columnWidth)}>
+            <span className="comet-body-s text-foreground">Harness</span>
+            <div ref={harnessBoxRef} className="flex flex-col gap-2">
+              {harness.map((entry) => {
+                const meta = getLaneMeta(entry.key, entry.label);
+                const Icon = meta.icon;
+                const Logo = HARNESS_ICONS[entry.key];
+                return (
+                  <div
+                    key={entry.key}
+                    className="flex flex-col gap-0.5 rounded-md border bg-background p-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-primary-foreground text-foreground">
+                        {Logo ? (
+                          <Logo className="size-3" />
+                        ) : (
+                          <Icon className="size-2.5" />
+                        )}
+                      </div>
+                      <span className="comet-body-xs-accented min-w-0 flex-1 truncate text-foreground">
+                        {entry.label || meta.labelFallback}
+                      </span>
                     </div>
-                    <span className="comet-body-xs-accented min-w-0 flex-1 truncate text-foreground">
-                      {entry.label || meta.labelFallback}
-                    </span>
+                    <div className="flex items-center gap-3 py-0.5">
+                      <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
+                        <PieChart className="size-3" />
+                        {lanePct(
+                          entry.total_estimated_cost ?? 0,
+                          harnessTotal,
+                        ).toFixed(0)}
+                        %
+                      </span>
+                      <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
+                        <Coins className="size-3" />
+                        {formatCost(entry.total_estimated_cost)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 py-0.5">
-                    <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
-                      <PieChart className="size-3" />
-                      {lanePct(
-                        entry.total_estimated_cost ?? 0,
-                        harnessTotal,
-                      ).toFixed(0)}
-                      %
-                    </span>
-                    <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
-                      <Coins className="size-3" />
-                      {formatCost(entry.total_estimated_cost)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           <div className={cn("shrink-0", columnWidth)}>
             <BreakdownColumn
               title="Output"
-              side="output"
-              totalCost={data.output?.total_estimated_cost ?? null}
+              totalTokens={data.output?.total_tokens ?? 0}
               lanes={outputLanes}
               onLaneClick={onLaneClick}
               onLaneHover={handleHover}

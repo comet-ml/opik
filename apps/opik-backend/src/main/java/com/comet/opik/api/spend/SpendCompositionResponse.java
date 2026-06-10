@@ -23,7 +23,6 @@ public record SpendCompositionResponse(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Side(
             Long totalTokens,
-            BigDecimal totalEstimatedCost,
             List<Lane> lanes) {
     }
 
@@ -34,7 +33,6 @@ public record SpendCompositionResponse(
             String key,
             String label,
             Long totalTokens,
-            BigDecimal totalEstimatedCost,
             boolean hasBreakdown) {
     }
 

@@ -1,12 +1,12 @@
 import React from "react";
-import { Coins, PieChart } from "lucide-react";
+import { PieChart } from "lucide-react";
 import useAiSpendLaneBreakdown from "@/api/ai-spend/useAiSpendLaneBreakdown";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Button } from "@/ui/button";
 import { Skeleton } from "@/ui/skeleton";
 import ProgressBar from "@/shared/ProgressBar/ProgressBar";
+import TokenCount from "@/shared/TokenCount/TokenCount";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { formatCost } from "@/lib/money";
 import { getLaneMeta } from "@/v2/pages-shared/AiUsageBreakdown/laneRegistry";
 import { laneWeight, lanePct } from "@/v2/pages-shared/AiUsageBreakdown/utils";
 
@@ -89,26 +89,30 @@ const PreviewBody: React.FC<{
         </span>
       </div>
       <div className="my-1 h-px w-full bg-border" />
-      <div className="grid grid-cols-[80px_auto_1fr] items-center gap-x-2 gap-y-1.5 px-2 py-1">
+      <div className="grid grid-cols-[minmax(0,160px)_minmax(48px,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-2 py-1">
         {top.map((item) => {
           const pct = lanePct(laneWeight(item), totalWeight);
           return (
             <React.Fragment key={item.label}>
               <TooltipWrapper content={item.label}>
-                <span className="comet-body-xs truncate text-foreground">
+                <span className="comet-body-xs min-w-0 truncate text-foreground">
                   {item.label}
                 </span>
               </TooltipWrapper>
-              <ProgressBar value={pct} color={barColor} />
+              <ProgressBar
+                value={pct}
+                color={barColor}
+                className="w-full max-w-[200px]"
+              />
               <div className="flex items-center justify-end gap-2">
                 <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
                   <PieChart className="size-3" />
                   {pct.toFixed(1)}%
                 </span>
-                <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
-                  <Coins className="size-3" />
-                  {formatCost(item.total_estimated_cost)}
-                </span>
+                <TokenCount
+                  tokens={item.total_tokens}
+                  className="comet-body-xs text-muted-slate"
+                />
               </div>
             </React.Fragment>
           );

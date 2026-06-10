@@ -1,13 +1,16 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.api.sorting.SpendUserSortingFactory;
+import com.comet.opik.api.spend.Impact;
+import com.comet.opik.api.spend.OutputLane;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
 import com.comet.opik.api.spend.SpendRecommendationsResponse;
 import com.comet.opik.api.spend.SpendUserPage;
-import com.comet.opik.api.spend.SpendUserRow;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -19,15 +22,12 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @ImplementedBy(AiSpendServiceImpl.class)
 public interface AiSpendService {
-
-    List<String> USER_SORTABLE_FIELDS = List.of("total_estimated_cost", "requests", "skills", "mcps", "mcp_calls");
 
     Mono<WorkspaceMetricsSummaryResponse> getSummary(SpendMetricRequest request);
 
@@ -35,7 +35,7 @@ public interface AiSpendService {
 
     Mono<SpendBreakdownResponse> getBreakdown(SpendMetricRequest request, String laneKey);
 
-    Mono<SpendUserPage> getUsers(SpendMetricRequest request, int page, int size);
+    Mono<SpendUserPage> getUsers(SpendMetricRequest request, List<SortingField> sortingFields, int page, int size);
 
     Mono<SpendRecommendationsResponse> getRecommendations(SpendMetricRequest request);
 }
@@ -46,10 +46,10 @@ public interface AiSpendService {
 class AiSpendServiceImpl implements AiSpendService {
 
     private static final String DOCS_URL = "https://www.comet.com/docs/opik/";
-    private static final double HIGH_SPEND_FACTOR = 2.0;
 
     private final @NonNull AiSpendDAO aiSpendDAO;
     private final @NonNull ProjectService projectService;
+    private final @NonNull SpendUserSortingFactory spendUserSortingFactory;
 
     @Override
     public Mono<WorkspaceMetricsSummaryResponse> getSummary(@NonNull SpendMetricRequest request) {
@@ -65,17 +65,25 @@ class AiSpendServiceImpl implements AiSpendService {
 
     @Override
     public Mono<SpendBreakdownResponse> getBreakdown(@NonNull SpendMetricRequest request, @NonNull String laneKey) {
-        SpendLane lane = SpendLane.fromKey(laneKey)
-                .filter(SpendLane::hasBreakdown)
+        Optional<SpendLane> inputLane = SpendLane.fromKey(laneKey).filter(SpendLane::hasBreakdown);
+        if (inputLane.isPresent()) {
+            return resolveProject(request).flatMap(resolved -> aiSpendDAO.getBreakdown(resolved, inputLane.get()));
+        }
+
+        OutputLane outputLane = OutputLane.fromKey(laneKey)
+                .filter(OutputLane::hasBreakdown)
                 .orElseThrow(() -> new BadRequestException("No breakdown available for lane: %s".formatted(laneKey)));
-        return resolveProject(request).flatMap(resolved -> aiSpendDAO.getBreakdown(resolved, lane));
+        return resolveProject(request).flatMap(resolved -> aiSpendDAO.getOutputBreakdown(resolved, outputLane));
     }
 
     @Override
-    public Mono<SpendUserPage> getUsers(@NonNull SpendMetricRequest request, int page, int size) {
+    public Mono<SpendUserPage> getUsers(@NonNull SpendMetricRequest request,
+            @NonNull List<SortingField> sortingFields, int page, int size) {
         return resolveProject(request)
-                .flatMap(aiSpendDAO::getUsers)
-                .map(users -> buildUserPage(users, page, size));
+                .flatMap(resolved -> aiSpendDAO.getUsers(resolved, sortingFields, page, size))
+                .map(userPage -> userPage.toBuilder()
+                        .sortableBy(spendUserSortingFactory.getSortableFields())
+                        .build());
     }
 
     @Override
@@ -90,103 +98,65 @@ class AiSpendServiceImpl implements AiSpendService {
                 .map(projectId -> request.toBuilder().resolvedProjectId(projectId).build());
     }
 
-    private SpendUserPage buildUserPage(List<SpendUserRow> users, int page, int size) {
-        double avgSpend = users.stream()
-                .map(SpendUserRow::totalEstimatedCost)
-                .filter(java.util.Objects::nonNull)
-                .mapToDouble(BigDecimal::doubleValue)
-                .average()
-                .orElse(0.0);
+    /**
+     * Placeholder rule set: each rule fires when its lane's share of its side exceeds {@code minShare}, and the
+     * estimated saving is a fraction ({@code factor}) of that lane's token-weighted slice of total cost. Tuned with
+     * product later.
+     */
+    private static final List<Rule> RECOMMENDATION_RULES = List.of(
+            new Rule("compact_threshold", "Tighten /compact threshold on long sessions",
+                    "Prior assistant context is the largest input lane. Compacting earlier re-sends less history per turn.",
+                    Impact.HIGH, SpendLane.Side.INPUT, "prior_assistant", 0.4, 0.25),
+            new Rule("thinking_effort", "Lower thinking effort on routine sessions",
+                    "Thinking dominates output tokens. Reducing effort on routine work cuts output cost with little quality impact.",
+                    Impact.MEDIUM, SpendLane.Side.OUTPUT, "thinking", 0.5, 0.3),
+            new Rule("fewer_tools", "Trim unused tool/MCP schemas",
+                    "Tool schemas (built-in and MCP) add overhead on every session whether used or not. Enabling only the tools you actually use reduces prompt cost.",
+                    Impact.LOW, SpendLane.Side.INPUT, "tools", 0.0, 0.5));
 
-        List<SpendUserRow> flagged = users.stream()
-                .map(user -> user.toBuilder().flags(computeFlags(user, avgSpend)).build())
-                .sorted(Comparator.comparing(
-                        (SpendUserRow user) -> Optional.ofNullable(user.totalEstimatedCost()).orElse(BigDecimal.ZERO))
-                        .reversed())
-                .toList();
-
-        int total = flagged.size();
-        int fromIndex = Math.min((page - 1) * size, total);
-        int toIndex = Math.min(fromIndex + size, total);
-        List<SpendUserRow> content = flagged.subList(fromIndex, toIndex);
-
-        return SpendUserPage.builder()
-                .page(page)
-                .size(content.size())
-                .total(total)
-                .content(content)
-                .sortableBy(USER_SORTABLE_FIELDS)
-                .build();
-    }
-
-    private List<String> computeFlags(SpendUserRow user, double avgSpend) {
-        double spend = Optional.ofNullable(user.totalEstimatedCost()).orElse(BigDecimal.ZERO).doubleValue();
-        if (avgSpend > 0 && spend >= avgSpend * HIGH_SPEND_FACTOR) {
-            return List.of("high_spend");
-        }
-        return List.of();
+    private record Rule(String id, String title, String body, Impact impact, SpendLane.Side side, String laneKey,
+            double minShare, double factor) {
     }
 
     private SpendRecommendationsResponse buildRecommendations(SpendCompositionResponse composition) {
-        long inputTotal = Optional.ofNullable(composition.input())
-                .map(SpendCompositionResponse.Side::totalTokens).orElse(0L);
-        long outputTotal = Optional.ofNullable(composition.output())
-                .map(SpendCompositionResponse.Side::totalTokens).orElse(0L);
+        long inputTotal = sideTotal(composition.input());
+        long outputTotal = sideTotal(composition.output());
+        long grandTotal = inputTotal + outputTotal;
         BigDecimal totalCost = composition.harness().stream()
                 .map(SpendCompositionResponse.HarnessEntry::totalEstimatedCost)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        long priorAssistant = laneTokens(composition.input(), "prior_assistant");
-        long thinking = laneTokens(composition.output(), "thinking");
-        long mcpServers = laneTokens(composition.input(), "mcp_servers");
-
-        List<SpendRecommendationsResponse.Item> items = new ArrayList<>();
-
-        if (inputTotal > 0 && ratio(priorAssistant, inputTotal) > 0.4) {
-            items.add(SpendRecommendationsResponse.Item.builder()
-                    .id("compact_threshold")
-                    .title("Tighten /compact threshold on long sessions")
-                    .body("Prior assistant context is the largest input lane. Compacting earlier re-sends less history per turn.")
-                    .impact("high")
-                    .estSaving(estimate(totalCost, priorAssistant, inputTotal + outputTotal, 0.25))
-                    .docsUrl(DOCS_URL)
-                    .relatedLaneKey("prior_assistant")
-                    .build());
-        }
-
-        if (outputTotal > 0 && ratio(thinking, outputTotal) > 0.5) {
-            items.add(SpendRecommendationsResponse.Item.builder()
-                    .id("thinking_effort")
-                    .title("Lower thinking effort on routine sessions")
-                    .body("Thinking dominates output tokens. Reducing effort on routine work cuts output cost with little quality impact.")
-                    .impact("medium")
-                    .estSaving(estimate(totalCost, thinking, inputTotal + outputTotal, 0.3))
-                    .docsUrl(DOCS_URL)
-                    .relatedLaneKey("thinking")
-                    .build());
-        }
-
-        if (mcpServers > 0) {
-            items.add(SpendRecommendationsResponse.Item.builder()
-                    .id("fewer_mcps")
-                    .title("Disable unused MCP servers")
-                    .body("MCP servers add schema overhead on every session whether used or not. Enabling only active servers reduces prompt cost.")
-                    .impact("low")
-                    .estSaving(estimate(totalCost, mcpServers, inputTotal + outputTotal, 0.5))
-                    .docsUrl(DOCS_URL)
-                    .relatedLaneKey("mcp_servers")
-                    .build());
-        }
+        List<SpendRecommendationsResponse.Item> items = RECOMMENDATION_RULES.stream()
+                .map(rule -> {
+                    var side = rule.side() == SpendLane.Side.INPUT ? composition.input() : composition.output();
+                    long sideTotal = rule.side() == SpendLane.Side.INPUT ? inputTotal : outputTotal;
+                    long laneTokens = laneTokens(side, rule.laneKey());
+                    if (ratio(laneTokens, sideTotal) <= rule.minShare()) {
+                        return null;
+                    }
+                    return SpendRecommendationsResponse.Item.builder()
+                            .id(rule.id())
+                            .title(rule.title())
+                            .body(rule.body())
+                            .impact(rule.impact())
+                            .estSaving(estimate(totalCost, laneTokens, grandTotal, rule.factor()))
+                            .docsUrl(DOCS_URL)
+                            .relatedLaneKey(rule.laneKey())
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .toList();
 
         BigDecimal totalSavings = items.stream()
                 .map(SpendRecommendationsResponse.Item::estSaving)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return SpendRecommendationsResponse.builder()
-                .totalSavings(totalSavings)
-                .items(items)
-                .build();
+        return SpendRecommendationsResponse.builder().totalSavings(totalSavings).items(items).build();
+    }
+
+    private long sideTotal(SpendCompositionResponse.Side side) {
+        return Optional.ofNullable(side).map(SpendCompositionResponse.Side::totalTokens).orElse(0L);
     }
 
     private long laneTokens(SpendCompositionResponse.Side side, String key) {
@@ -196,7 +166,7 @@ class AiSpendServiceImpl implements AiSpendService {
         return side.lanes().stream()
                 .filter(lane -> key.equals(lane.key()))
                 .map(SpendCompositionResponse.Lane::totalTokens)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(0L);
     }

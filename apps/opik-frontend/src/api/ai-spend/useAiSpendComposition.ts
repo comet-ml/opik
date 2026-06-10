@@ -6,13 +6,11 @@ export interface AiSpendLaneApi {
   key: string;
   label: string;
   total_tokens: number;
-  total_estimated_cost: number | null;
   has_breakdown: boolean;
 }
 
 export interface AiSpendSideApi {
   total_tokens: number;
-  total_estimated_cost: number | null;
   lanes: AiSpendLaneApi[];
 }
 
@@ -45,16 +43,7 @@ const buildBody = ({
   project_name: projectName,
   interval_start: intervalStart,
   interval_end: intervalEnd,
-  ...(userUuid && {
-    filters: [
-      {
-        field: "metadata",
-        operator: "=",
-        key: "cc.identity.user_uuid",
-        value: userUuid,
-      },
-    ],
-  }),
+  ...(userUuid && { user_id: userUuid }),
 });
 
 const getAiSpendComposition = async (

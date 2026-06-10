@@ -1,15 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Box,
-  ChevronsRight,
-  Coins,
-  PieChart,
-  TrendingDown,
-} from "lucide-react";
+import { Box, ChevronsRight, PieChart, TrendingDown } from "lucide-react";
 import useAiSpendLaneBreakdown from "@/api/ai-spend/useAiSpendLaneBreakdown";
 import useAiSpendRecommendations from "@/api/ai-spend/useAiSpendRecommendations";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ProgressBar from "@/shared/ProgressBar/ProgressBar";
+import TokenCount from "@/shared/TokenCount/TokenCount";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Skeleton } from "@/ui/skeleton";
 import { Tag } from "@/ui/tag";
@@ -157,7 +152,7 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
       );
     }
     return (
-      <div className="grid grid-cols-[160px_auto_1fr] items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,240px)_minmax(64px,1fr)_auto] items-center gap-x-4 gap-y-3">
         {breakdown.items.map((item) => {
           const weight = laneWeight(item);
           const pct = lanePct(weight, weightSum);
@@ -165,20 +160,24 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
           return (
             <React.Fragment key={item.label}>
               <TooltipWrapper content={item.label}>
-                <span className="comet-body-xs truncate text-foreground">
+                <span className="comet-body-xs min-w-0 truncate text-foreground">
                   {item.label}
                 </span>
               </TooltipWrapper>
-              <ProgressBar value={barPct} color={meta.color} />
+              <ProgressBar
+                value={barPct}
+                color={meta.color}
+                className="w-full max-w-[240px]"
+              />
               <div className="flex items-center justify-end gap-3">
                 <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
                   <PieChart className="size-3" />
                   {pct.toFixed(1)}%
                 </span>
-                <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
-                  <Coins className="size-3" />
-                  {formatCost(item.total_estimated_cost)}
-                </span>
+                <TokenCount
+                  tokens={item.total_tokens}
+                  className="comet-body-xs text-muted-slate"
+                />
               </div>
             </React.Fragment>
           );
@@ -205,10 +204,12 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
             </p>
           )}
           <div className="flex items-center gap-2">
-            <span className="comet-body-s flex items-center gap-1 text-muted-slate">
-              <Coins className="size-3.5" />
-              {formatCost(breakdown?.total_estimated_cost)}
-            </span>
+            <TokenCount
+              tokens={breakdown?.total_tokens ?? 0}
+              showLabel
+              className="comet-body-s text-muted-slate"
+              iconClassName="size-3.5"
+            />
             <span className="comet-body-s flex items-center gap-1 text-muted-slate">
               <Box className="size-3.5" />
               {breakdown?.item_count ?? 0} items

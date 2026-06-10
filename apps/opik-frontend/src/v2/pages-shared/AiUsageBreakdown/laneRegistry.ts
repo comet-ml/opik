@@ -1,15 +1,17 @@
 import {
   Bot,
+  BotMessageSquare,
   Brain,
-  History,
   Layers,
+  Library,
   type LucideIcon,
-  MessageCircleReply,
+  MessageCircle,
+  NotebookText,
   Paperclip,
   Plug,
+  ScrollText,
   Sparkles,
   Terminal,
-  User,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -22,77 +24,92 @@ export interface LaneMeta {
 
 const REGISTRY: Record<string, LaneMeta> = {
   prior_assistant: {
-    icon: History,
-    color: "hsl(217 89% 58%)",
+    icon: ScrollText,
+    color: "#6bdf93",
     labelFallback: "Prior assistant context",
   },
   tool_results: {
-    icon: Terminal,
-    color: "hsl(22 92% 55%)",
+    icon: Wrench,
+    color: "#89deff",
     labelFallback: "Tool results",
   },
   user_prompts: {
-    icon: User,
-    color: "hsl(165 75% 40%)",
+    icon: MessageCircle,
+    color: "#7c3aed",
     labelFallback: "User prompts",
+  },
+  skills_available: {
+    icon: Library,
+    color: "#f59e0b",
+    labelFallback: "Skills available",
   },
   skills_loaded: {
     icon: Sparkles,
-    color: "hsl(48 96% 50%)",
+    color: "#db46ef",
     labelFallback: "Skills loaded",
   },
-  mcp_servers: {
-    icon: Plug,
-    color: "hsl(265 70% 60%)",
-    labelFallback: "MCP servers",
+  tools: {
+    icon: Wrench,
+    color: "#06b6d4",
+    labelFallback: "Tools schema",
+  },
+  memory: {
+    icon: NotebookText,
+    color: "#64748b",
+    labelFallback: "Memory",
   },
   file_attachments: {
     icon: Paperclip,
-    color: "hsl(330 75% 60%)",
+    color: "#5155f5",
     labelFallback: "File attachments",
+  },
+  mcp_servers: {
+    icon: Plug,
+    color: "#ef4444",
+    labelFallback: "MCP servers",
   },
   static_overhead: {
     icon: Layers,
-    color: "hsl(225 14% 50%)",
+    color: "#19a979",
     labelFallback: "Static overhead",
   },
   claude_code: {
     icon: Bot,
-    color: "hsl(22 92% 55%)",
+    color: "#373d4d",
     labelFallback: "Claude Code",
   },
-  codex: { icon: Bot, color: "hsl(0 0% 20%)", labelFallback: "Codex" },
-  cursor: { icon: Bot, color: "hsl(0 0% 40%)", labelFallback: "Cursor" },
+  codex: { icon: Bot, color: "#0f172a", labelFallback: "Codex" },
+  cursor: { icon: Bot, color: "#64748b", labelFallback: "Cursor" },
   thinking: {
     icon: Brain,
-    color: "hsl(287 85% 56%)",
+    color: "#6bdf93",
     labelFallback: "Thinking",
   },
   assistant_text: {
-    icon: MessageCircleReply,
-    color: "hsl(165 75% 40%)",
+    icon: BotMessageSquare,
+    color: "#7c3aed",
     labelFallback: "Assistant text",
   },
   built_in_tool_calls: {
     icon: Wrench,
-    color: "hsl(22 92% 55%)",
+    color: "#89deff",
     labelFallback: "Built-in tool calls",
   },
   mcp_tool_calls: {
-    icon: Plug,
-    color: "hsl(265 70% 60%)",
+    icon: Terminal,
+    color: "#ef4444",
     labelFallback: "MCP tool calls",
   },
   skill_invocations: {
     icon: Sparkles,
-    color: "hsl(48 96% 50%)",
+    color: "#db46ef",
     labelFallback: "Skill invocations",
   },
 };
 
 const DEFAULT_META: LaneMeta = {
   icon: Zap,
-  color: "hsl(225 14% 50%)",
+  color: "#64748b",
   labelFallback: "",
 };
 

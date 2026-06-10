@@ -24,7 +24,7 @@ public record SpendRecommendationsResponse(
             String id,
             String title,
             String body,
-            String impact,
+            Impact impact,
             BigDecimal estSaving,
             String docsUrl,
             String relatedLaneKey) {

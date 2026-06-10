@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.api.sorting.SpendUserSortingFactory;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
@@ -21,6 +22,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
@@ -48,6 +50,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 public class AiSpendResource {
 
     private final @NonNull AiSpendService aiSpendService;
+    private final @NonNull SpendUserSortingFactory spendUserSortingFactory;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
@@ -120,12 +123,14 @@ public class AiSpendResource {
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response getSpendUsers(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("25") int size,
+            @QueryParam("size") @Min(1) @Max(1000) @DefaultValue("25") int size,
+            @QueryParam("sorting") String sorting,
             @RequestBody(content = @Content(schema = @Schema(implementation = SpendMetricRequest.class))) @NotNull @Valid SpendMetricRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Retrieve spend users on workspace_id '{}'", workspaceId);
-        var response = aiSpendService.getUsers(request, page, size)
+        var sortingFields = spendUserSortingFactory.newSorting(sorting);
+        var response = aiSpendService.getUsers(request, sortingFields, page, size)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved spend users on workspace_id '{}'", workspaceId);

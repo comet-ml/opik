@@ -23,7 +23,7 @@ const AiSpendHomePage: React.FC = () => {
   );
 
   return (
-    <div className="pt-6">
+    <div className="pb-6 pt-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="comet-title-l truncate break-words text-foreground">
           Home

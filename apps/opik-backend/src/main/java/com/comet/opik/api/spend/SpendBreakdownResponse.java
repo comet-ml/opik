@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
@@ -18,7 +17,6 @@ public record SpendBreakdownResponse(
         String title,
         String subtitle,
         Long totalTokens,
-        BigDecimal totalEstimatedCost,
         int itemCount,
         List<Item> items) {
 
@@ -27,7 +25,6 @@ public record SpendBreakdownResponse(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Item(
             String label,
-            Long totalTokens,
-            BigDecimal totalEstimatedCost) {
+            Long totalTokens) {
     }
 }

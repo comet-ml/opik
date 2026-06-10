@@ -1,18 +1,18 @@
 package com.comet.opik.api.spend;
 
-import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -22,7 +22,7 @@ public record SpendMetricRequest(
         String projectName,
         @NotNull Instant intervalStart,
         @NotNull Instant intervalEnd,
-        @Valid List<TraceFilter> filters,
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String userId,
         @JsonIgnore UUID resolvedProjectId) {
 
     @AssertTrue(message = "interval_start must be before interval_end") public boolean isStartBeforeEnd() {

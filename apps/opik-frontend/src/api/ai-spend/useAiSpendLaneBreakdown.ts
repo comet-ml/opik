@@ -5,14 +5,12 @@ import { useAiSpend } from "@/contexts/AiSpendContext";
 export interface AiSpendBreakdownItemApi {
   label: string;
   total_tokens: number;
-  total_estimated_cost: number | null;
 }
 
 export interface AiSpendBreakdownResponse {
   lane_key: string;
   title: string;
   subtitle?: string;
-  total_estimated_cost: number | null;
   total_tokens: number;
   item_count: number;
   items: AiSpendBreakdownItemApi[];
@@ -44,16 +42,7 @@ const getAiSpendLaneBreakdown = async (
       project_name: projectName,
       interval_start: intervalStart,
       interval_end: intervalEnd,
-      ...(userUuid && {
-        filters: [
-          {
-            field: "metadata",
-            operator: "=",
-            key: "cc.identity.user_uuid",
-            value: userUuid,
-          },
-        ],
-      }),
+      ...(userUuid && { user_id: userUuid }),
     },
     {
       signal,
