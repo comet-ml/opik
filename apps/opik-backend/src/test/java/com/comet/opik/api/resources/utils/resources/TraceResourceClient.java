@@ -43,6 +43,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -861,6 +862,28 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
+    }
+
+    public Trace.TracePage getTracesByPage(String apiKey, String workspaceName, String projectName,
+            List<SortingField> sortingFields, List<Trace.TraceField> exclude, int page, int size) {
+        Map<String, String> queryParams = new HashMap<>();
+        queryParams.put("project_name", projectName);
+        queryParams.put("page", String.valueOf(page));
+        queryParams.put("size", String.valueOf(size));
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            queryParams.put("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+        }
+
+        if (CollectionUtils.isNotEmpty(exclude)) {
+            queryParams.put("exclude", TestUtils.toURLEncodedQueryParam(exclude));
+        }
+
+        try (var response = callGetTracesWithQueryParams(apiKey, workspaceName, queryParams)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Trace.TracePage.class);
+        }
     }
 
     public Response callGetTraceThreadsWithQueryParams(String projectName, UUID projectId,

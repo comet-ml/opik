@@ -38,6 +38,7 @@ from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
+from .types.create_dataset_items_from_json_request_format import CreateDatasetItemsFromJsonRequestFormat
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -482,6 +483,71 @@ class RawDatasetsClient:
             data={
                 "file": file,
                 "dataset_id": dataset_id,
+            },
+            files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/datasets/items/from-json",
+            method="POST",
+            data={
+                "file": file,
+                "dataset_id": dataset_id,
+                "format": format,
             },
             files={},
             headers={
@@ -2581,6 +2647,71 @@ class AsyncRawDatasetsClient:
             data={
                 "file": file,
                 "dataset_id": dataset_id,
+            },
+            files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/datasets/items/from-json",
+            method="POST",
+            data={
+                "file": file,
+                "dataset_id": dataset_id,
+                "format": format,
             },
             files={},
             headers={

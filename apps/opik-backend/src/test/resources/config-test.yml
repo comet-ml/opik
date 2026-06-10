@@ -138,6 +138,36 @@ authentication:
   reactService:
     url: ''
 
+# OAuth 2.1 Authorization Server for hosted/local Opik MCP
+mcpOAuth:
+  # Default: false
+  # Description: Whether to enable the MCP OAuth Authorization Server endpoints
+  enabled: false
+  # Default: empty
+  # Description: Public base URL of this deployment; drives the RFC 8414 issuer and the default RFC 8707 resource audience (baseUrl + /api/v1/mcp)
+  baseUrl: ''
+  # Default: empty (derived from baseUrl + /api/v1/mcp)
+  # Description: Canonical MCP resource URI for the OAuth instance. Set to a distinct path (e.g. .../api/v2/mcp) to run the OAuth-based opik-mcp alongside the existing API-key opik-mcp during migration.
+  mcpResourceUri: ''
+  # Default: PT1H
+  # Description: Access token lifetime
+  accessTokenTtl: PT1H
+  # Default: P7D
+  # Description: Refresh token absolute lifetime (not sliding)
+  refreshTokenTtl: P7D
+  # Default: PT60S
+  # Description: Authorization code lifetime
+  codeTtl: PT60S
+  # Default: PT30S
+  # Description: Grace window during which a just-rotated refresh token is still accepted
+  refreshRotationGrace: PT30S
+  # Default: 20
+  # Description: Max dynamic client registrations (RFC 7591) accepted per source IP per window
+  registrationRateLimit: 20
+  # Default: PT1H
+  # Description: Window for the dynamic client registration rate limit
+  registrationRateLimitDuration: PT1H
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
@@ -630,14 +660,14 @@ serviceToggles:
   # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
   # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
   v2WorkspaceAllowlist: ""
-  # Default: disabled
+  # Default: version_2
   # Description: Forces ALL workspaces to a specific navigation version.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
   # Scope: Global — applies to all workspaces regardless of their entity state.
-  # Priority: Second highest — overridden by v2WorkspaceAllowlist for listed workspaces.
+  # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
-  # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
-  forceWorkspaceVersion: "disabled"
+  # Operational impact: Default is "version_2". Override to "disabled" (entity-based determination) or "version_1" if global enforcement is needed.
+  forceWorkspaceVersion: "version_2"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
