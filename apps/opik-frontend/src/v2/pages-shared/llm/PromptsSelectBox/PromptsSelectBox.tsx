@@ -266,13 +266,14 @@ const CompactLoadedPrompt: React.FC<CompactLoadedPromptProps> = ({
     data?.version_count,
   );
 
-  // Look up the selected version's tags so the stage badge reflects what's
-  // actually loaded; otherwise we'd show `latest_version.tags` for older picks.
+  // Look up the selected version's tags + environments so the chip reflects
+  // what's actually loaded; otherwise we'd show `latest_version` data for
+  // older picks.
   const { getDescriptor } = usePromptVersionsWithLabels(promptId, {
     enabled: Boolean(versionId),
   });
-  const selectedVersionTags = versionId
-    ? getDescriptor(versionId)?.version.tags
+  const selectedVersion = versionId
+    ? getDescriptor(versionId)?.version
     : undefined;
 
   return (
@@ -280,7 +281,10 @@ const CompactLoadedPrompt: React.FC<CompactLoadedPromptProps> = ({
       name={displayName}
       templateStructure={data?.template_structure}
       versionLabel={versionLabel}
-      versionTags={selectedVersionTags ?? data?.latest_version?.tags}
+      versionTags={selectedVersion?.tags ?? data?.latest_version?.tags}
+      versionEnvironments={
+        selectedVersion?.environments ?? data?.latest_version?.environments
+      }
       hasUnsavedChanges={hasUnsavedChanges}
       onClear={onClear}
     />
