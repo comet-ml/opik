@@ -19,6 +19,7 @@ import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LlmProviderOpenAiResponsesMapperTest {
 
@@ -352,6 +354,25 @@ class LlmProviderOpenAiResponsesMapperTest {
         }
 
         @Test
+        void rejectsNamedFunctionToolChoiceInsteadOfSilentlyDegrading() {
+            // Real wire shape: tool_choice = {"type":"function","function":{"name":"get_weather"}}.
+            // We reject because forcing a specific function has no langchain4j ToolChoice equivalent,
+            // and silently mapping to AUTO would lose the caller's intent.
+            var namedFunctionChoice = Map.of(
+                    "type", "function",
+                    "function", Map.of("name", "get_weather"));
+            var request = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .toolChoice((Object) namedFunctionChoice)
+                    .build();
+
+            assertThatThrownBy(() -> LlmProviderOpenAiResponsesMapper.toChatRequest(request))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("Named-function tool_choice is not supported");
+        }
+
+        @Test
         void translatesToolResultMessageForResume() {
             var request = ChatCompletionRequest.builder()
                     .model("gpt-4o-mini")
@@ -516,6 +537,50 @@ class LlmProviderOpenAiResponsesMapperTest {
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
             assertThat(actual.responseFormat()).isNull();
+        }
+
+        @Test
+        void extractRequestedStrictJsonSchemaReturnsTrueOnlyForExplicitStrictTrue() {
+            var strictTrue = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
+                            .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_SCHEMA)
+                            .jsonSchema(dev.langchain4j.model.openai.internal.chat.JsonSchema.builder()
+                                    .name("s")
+                                    .strict(true)
+                                    .schema(Map.of("type", "object"))
+                                    .build())
+                            .build())
+                    .build();
+            var strictFalse = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
+                            .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_SCHEMA)
+                            .jsonSchema(dev.langchain4j.model.openai.internal.chat.JsonSchema.builder()
+                                    .name("s")
+                                    .strict(false)
+                                    .schema(Map.of("type", "object"))
+                                    .build())
+                            .build())
+                    .build();
+            var jsonObject = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
+                            .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_OBJECT)
+                            .build())
+                    .build();
+            var noResponseFormat = ChatCompletionRequest.builder()
+                    .model("gpt-4o-mini")
+                    .addUserMessage("hi")
+                    .build();
+
+            assertThat(LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(strictTrue)).isTrue();
+            assertThat(LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(strictFalse)).isFalse();
+            assertThat(LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(jsonObject)).isFalse();
+            assertThat(LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(noResponseFormat)).isFalse();
         }
     }
 }

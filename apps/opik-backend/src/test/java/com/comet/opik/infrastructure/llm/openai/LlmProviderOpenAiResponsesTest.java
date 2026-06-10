@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -16,12 +17,16 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.Function;
 import dev.langchain4j.model.openai.internal.chat.FunctionCall;
+import dev.langchain4j.model.openai.internal.chat.JsonSchema;
+import dev.langchain4j.model.openai.internal.chat.ResponseFormat;
+import dev.langchain4j.model.openai.internal.chat.ResponseFormatType;
 import dev.langchain4j.model.openai.internal.chat.Tool;
 import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
@@ -31,6 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 
 /**
  * Integration-style coverage for {@link LlmProviderOpenAiResponses}: drives stub langchain4j
@@ -54,7 +61,7 @@ class LlmProviderOpenAiResponsesTest {
                         .build())
                 .build();
         var streamingModel = streamingModelEmitting(partials, finalResponse);
-        var provider = new LlmProviderOpenAiResponses(Mockito.mock(ChatModel.class), streamingModel);
+        var provider = providerWithStubs(Mockito.mock(ChatModel.class), streamingModel);
         var request = ChatCompletionRequest.builder()
                 .model("gpt-4o-mini")
                 .addUserMessage("hi")
@@ -97,7 +104,7 @@ class LlmProviderOpenAiResponsesTest {
     void streamingErrorRoutesToErrorHandlerWithoutCallingClose() {
         var failure = new RuntimeException("upstream blew up");
         var streamingModel = new StubStreamingChatModel((req, handler) -> handler.onError(failure));
-        var provider = new LlmProviderOpenAiResponses(Mockito.mock(ChatModel.class), streamingModel);
+        var provider = providerWithStubs(Mockito.mock(ChatModel.class), streamingModel);
         var request = ChatCompletionRequest.builder()
                 .model("gpt-4o-mini")
                 .addUserMessage("hi")
@@ -150,7 +157,7 @@ class LlmProviderOpenAiResponsesTest {
                     .anyMatch(ToolExecutionResultMessage.class::isInstance);
             return hasToolResult ? secondCallResponse : firstCallResponse;
         });
-        var provider = new LlmProviderOpenAiResponses(chatModel, Mockito.mock(StreamingChatModel.class));
+        var provider = providerWithStubs(chatModel, Mockito.mock(StreamingChatModel.class));
 
         // ─── turn 1: user question + tool spec ──────────────────────────────────────
         var weatherTool = Tool.from(Function.builder()
@@ -226,6 +233,84 @@ class LlmProviderOpenAiResponsesTest {
         assertThat(finalChoice.message().toolCalls()).isNullOrEmpty();
         assertThat(finalChoice.message().content()).isEqualTo("It's 21°C and sunny in Lisbon.");
         assertThat(secondResponse.usage().totalTokens()).isEqualTo(46);
+    }
+
+    @Test
+    void propagatesStrictJsonSchemaToChatModelWhenRequestAsksForIt() {
+        var chatModel = new StubChatModel(req -> ChatResponse.builder()
+                .aiMessage(AiMessage.from("{}"))
+                .metadata(ChatResponseMetadata.builder()
+                        .id("resp_strict")
+                        .modelName("gpt-4o-mini")
+                        .finishReason(FinishReason.STOP)
+                        .build())
+                .build());
+        var clientGenerator = Mockito.mock(OpenAIClientGenerator.class);
+        var config = Mockito.mock(LlmProviderClientApiConfig.class);
+        Mockito.when(clientGenerator.newResponsesApiChatModel(any(), anyBoolean())).thenReturn(chatModel);
+        var provider = new LlmProviderOpenAiResponses(clientGenerator, config);
+
+        var request = ChatCompletionRequest.builder()
+                .model("gpt-4o-mini")
+                .addUserMessage("classify")
+                .responseFormat(ResponseFormat.builder()
+                        .type(ResponseFormatType.JSON_SCHEMA)
+                        .jsonSchema(JsonSchema.builder()
+                                .name("classification")
+                                .strict(true)
+                                .schema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of("label", Map.of("type", "string")),
+                                        "required", List.of("label")))
+                                .build())
+                        .build())
+                .build();
+
+        provider.generate(request, "ws-1");
+
+        var strictCaptor = ArgumentCaptor.forClass(Boolean.class);
+        Mockito.verify(clientGenerator).newResponsesApiChatModel(any(), strictCaptor.capture());
+        assertThat(strictCaptor.getValue()).isTrue();
+    }
+
+    @Test
+    void buildsLooseModelWhenRequestHasNoResponseFormat() {
+        var chatModel = new StubChatModel(req -> ChatResponse.builder()
+                .aiMessage(AiMessage.from("hi back"))
+                .metadata(ChatResponseMetadata.builder()
+                        .id("resp_x")
+                        .modelName("gpt-4o-mini")
+                        .finishReason(FinishReason.STOP)
+                        .build())
+                .build());
+        var clientGenerator = Mockito.mock(OpenAIClientGenerator.class);
+        var config = Mockito.mock(LlmProviderClientApiConfig.class);
+        Mockito.when(clientGenerator.newResponsesApiChatModel(any(), anyBoolean())).thenReturn(chatModel);
+        var provider = new LlmProviderOpenAiResponses(clientGenerator, config);
+        var request = ChatCompletionRequest.builder()
+                .model("gpt-4o-mini")
+                .addUserMessage("hi")
+                .build();
+
+        provider.generate(request, "ws-1");
+
+        var strictCaptor = ArgumentCaptor.forClass(Boolean.class);
+        Mockito.verify(clientGenerator).newResponsesApiChatModel(any(), strictCaptor.capture());
+        assertThat(strictCaptor.getValue()).isFalse();
+    }
+
+    /**
+     * Builds a {@link LlmProviderOpenAiResponses} backed by mocked generator + config that return the
+     * supplied stub models regardless of the strict flag. Used by tests that exercise the request/
+     * response translation path without caring about strict-mode propagation.
+     */
+    private static LlmProviderOpenAiResponses providerWithStubs(ChatModel chatModel,
+            StreamingChatModel streamingChatModel) {
+        var generator = Mockito.mock(OpenAIClientGenerator.class);
+        var config = Mockito.mock(LlmProviderClientApiConfig.class);
+        Mockito.when(generator.newResponsesApiChatModel(any(), anyBoolean())).thenReturn(chatModel);
+        Mockito.when(generator.newResponsesApiStreamingChatModel(any(), anyBoolean())).thenReturn(streamingChatModel);
+        return new LlmProviderOpenAiResponses(generator, config);
     }
 
     /**

@@ -98,7 +98,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
         try {
             return ApiPipelineMode.valueOf(pipelineMode.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            log.warn("Unknown OpenAI '{}' value '{}', falling back to {}",
+            log.warn("Unknown OpenAI '{}' value '{}', falling back to '{}'",
                     CONFIG_KEY_PIPELINE_MODE, pipelineMode, ApiPipelineMode.CHAT_COMPLETIONS_API);
             return ApiPipelineMode.CHAT_COMPLETIONS_API;
         }
@@ -138,18 +138,30 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
      * Proxy-path overload — synthesizes placeholder judge parameters. The real model name is
      * supplied per request via {@code ChatRequest.parameters().modelName(...)}, so the placeholder
      * never reaches OpenAI; it only satisfies langchain4j's required-field validation at build time.
+     * <p>
+     * {@code strictJsonSchema} controls langchain4j's build-time strict mode for {@code json_schema}
+     * response formats. The Responses-API proxy peeks at the inbound
+     * {@code response_format.json_schema.strict} per request and picks the right variant here, since
+     * langchain4j has no per-request strict slot.
      */
-    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config) {
-        return newResponsesApiChatModel(config, LlmAsJudgeModelParameters.builder()
-                .name(PROXY_MODEL_NAME_PLACEHOLDER)
-                .build());
+    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config, boolean strictJsonSchema) {
+        return newResponsesApiChatModel(
+                config,
+                LlmAsJudgeModelParameters.builder().name(PROXY_MODEL_NAME_PLACEHOLDER).build(),
+                strictJsonSchema);
     }
 
     ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
+        return newResponsesApiChatModel(config, modelParameters, false);
+    }
+
+    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
+            @NonNull LlmAsJudgeModelParameters modelParameters, boolean strictJsonSchema) {
         var builder = OpenAiOfficialResponsesChatModel.builder()
                 .modelName(modelParameters.name())
-                .apiKey(config.apiKey());
+                .apiKey(config.apiKey())
+                .strictJsonSchema(strictJsonSchema);
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
@@ -173,15 +185,18 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     /**
-     * Proxy-path streaming counterpart to {@link #newResponsesApiChatModel(LlmProviderClientApiConfig)}.
+     * Proxy-path streaming counterpart to {@link #newResponsesApiChatModel(LlmProviderClientApiConfig, boolean)}.
      * Like the non-streaming variant, the real model name is supplied per request via
      * {@code ChatRequest.parameters().modelName(...)}; a placeholder is used at build time only to
-     * satisfy langchain4j's required-field validation.
+     * satisfy langchain4j's required-field validation. {@code strictJsonSchema} is a build-time
+     * setting on the langchain4j model — the proxy passes the per-request {@code strict} bit here.
      */
-    StreamingChatModel newResponsesApiStreamingChatModel(@NonNull LlmProviderClientApiConfig config) {
+    StreamingChatModel newResponsesApiStreamingChatModel(@NonNull LlmProviderClientApiConfig config,
+            boolean strictJsonSchema) {
         var builder = OpenAiOfficialResponsesStreamingChatModel.builder()
                 .modelName(PROXY_MODEL_NAME_PLACEHOLDER)
-                .apiKey(config.apiKey());
+                .apiKey(config.apiKey())
+                .strictJsonSchema(strictJsonSchema);
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));

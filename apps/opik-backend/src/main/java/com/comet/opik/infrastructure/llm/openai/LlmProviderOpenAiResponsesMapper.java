@@ -246,10 +246,12 @@ class LlmProviderOpenAiResponsesMapper {
     /**
      * Maps OpenAI's {@code tool_choice} to langchain4j's {@link ToolChoice}. Supports the three
      * string forms ("auto", "required", "none"). The named-function variant
-     * ({@code {"type":"function","function":{"name":"foo"}}}) is logged and falls back to AUTO,
-     * since langchain4j's enum has no equivalent — the model is still allowed to pick the named
-     * function, but other tools aren't excluded. Returns {@code null} when {@code toolChoice} is
-     * absent so the builder uses langchain4j's default.
+     * ({@code {"type":"function","function":{"name":"foo"}}}) is rejected with a {@link
+     * BadRequestException} because langchain4j's {@link ToolChoice} enum has no equivalent — a
+     * silent fallback to AUTO would lose the caller's intent (force a specific function) and let
+     * the model call other tools or none, which is materially different from what was asked.
+     * Returns {@code null} when {@code toolChoice} is absent so the builder uses langchain4j's
+     * default.
      */
     private ToolChoice toToolChoice(Object toolChoice) {
         if (toolChoice == null) {
@@ -263,23 +265,45 @@ class LlmProviderOpenAiResponsesMapper {
                 // tool" — same semantics OpenAI gives. Pass through.
                 case "none" -> ToolChoice.NONE;
                 default -> {
-                    log.warn("Unknown OpenAI tool_choice string '{}', falling back to AUTO", s);
+                    log.warn("Unknown OpenAI tool_choice string '{}', falling back to '{}'", s, ToolChoice.AUTO);
                     yield ToolChoice.AUTO;
                 }
             };
         }
-        log.info("Named-function tool_choice not supported by langchain4j ToolChoice enum; "
-                + "falling back to AUTO. tool_choice={}", toolChoice);
-        return ToolChoice.AUTO;
+        throw new BadRequestException(
+                "Named-function tool_choice is not supported by the OpenAI Responses proxy; "
+                        + "use 'auto', 'required', or 'none', or omit tool_choice to let the model decide. "
+                        + "Received tool_choice='" + toolChoice + "'");
+    }
+
+    /**
+     * Reads the {@code response_format.json_schema.strict} flag from the inbound request, used by
+     * the proxy provider to pick a strict-vs-loose {@code OpenAiOfficialResponsesChatModel} variant
+     * (langchain4j configures strict mode at model build time via {@code .strictJsonSchema(...)}, not
+     * per-request). Returns {@code true} only when the request explicitly sets {@code strict: true}
+     * on a {@code json_schema} response format; everything else (no {@code response_format}, text,
+     * json_object, json_schema with {@code strict} absent or false) returns {@code false}.
+     */
+    static boolean extractRequestedStrictJsonSchema(@NonNull ChatCompletionRequest request) {
+        var responseFormat = request.responseFormat();
+        if (responseFormat == null
+                || responseFormat.type() != dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_SCHEMA
+                || responseFormat.jsonSchema() == null) {
+            return false;
+        }
+        // Same Jackson roundtrip as toJsonSchemaResponseFormat — the openai-internal JsonSchema is
+        // opaque, so we read the strict bit through serialization.
+        Map<String, Object> raw = RESPONSE_FORMAT_MAPPER.convertValue(responseFormat.jsonSchema(), MAP_TYPE);
+        return Boolean.TRUE.equals(raw.get("strict"));
     }
 
     /**
      * Maps OpenAI's {@code response_format} to langchain4j's {@link ResponseFormat}. {@code text}
      * returns {@code null} (langchain4j's default). {@code json_object} → loose JSON mode.
-     * {@code json_schema} → strict structured-output mode with name + root schema. The {@code strict}
-     * flag from the request is NOT propagated — langchain4j's per-request {@link JsonSchema} has no
-     * strict slot; strict mode is configured at {@code OpenAiOfficialResponsesChatModel} build time
-     * via {@code .strictJsonSchema(...)}. Returns {@code null} when {@code responseFormat} is absent.
+     * {@code json_schema} → structured-output mode with name + root schema. The per-request
+     * {@code strict} flag is not represented on langchain4j's {@link JsonSchema} (it lives on the
+     * model builder via {@code .strictJsonSchema(...)}); see {@link #extractRequestedStrictJsonSchema}
+     * for the helper the provider uses to pick the right ChatModel variant per call.
      */
     private ResponseFormat toResponseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat inputFormat) {
         if (inputFormat == null || inputFormat.type() == null) {
