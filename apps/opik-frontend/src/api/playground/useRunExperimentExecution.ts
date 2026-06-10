@@ -37,6 +37,9 @@ const runExperimentExecution = async ({
 }: UseRunExperimentExecutionParams): Promise<ExperimentExecutionResponse> => {
   const promptVariants = prompts.map((prompt) => {
     const versionRefs = collectPromptVersionRefs(prompt);
+    const promptVersions = versionRefs.length
+      ? versionRefs.map((ref) => ({ id: ref.id, prompt_id: ref.promptId }))
+      : undefined;
 
     return {
       model: prompt.model,
@@ -45,10 +48,7 @@ const runExperimentExecution = async ({
         prompt.model,
         prompt.configs as Record<string, unknown>,
       ),
-      prompt_versions:
-        versionRefs.length > 0
-          ? versionRefs.map((ref) => ({ id: ref.id, prompt_id: ref.promptId }))
-          : undefined,
+      prompt_versions: promptVersions,
     };
   });
 
