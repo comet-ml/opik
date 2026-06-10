@@ -1,11 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   collectPromptVersionRefs,
   buildPromptLibraryMetadata,
+  resolvePromptVersionForLink,
 } from "./promptLinkage";
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLMMessage, LLM_MESSAGE_ROLE } from "@/types/llm";
-import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
 
 const message = (overrides: Partial<LLMMessage> = {}): LLMMessage => ({
   id: "m1",
@@ -44,6 +45,21 @@ describe("collectPromptVersionRefs", () => {
       }),
     );
     expect(result).toEqual([{ id: "V2", promptId: "P2" }]);
+  });
+
+  it("collects multiple message-level versions in order", () => {
+    const result = collectPromptVersionRefs(
+      prompt({
+        messages: [
+          message({ id: "m1", promptId: "PA", promptVersionId: "VA" }),
+          message({ id: "m2", promptId: "PB", promptVersionId: "VB" }),
+        ],
+      }),
+    );
+    expect(result).toEqual([
+      { id: "VA", promptId: "PA" },
+      { id: "VB", promptId: "PB" },
+    ]);
   });
 
   it("collects both CHAT and message-level versions, CHAT first", () => {
@@ -135,5 +151,65 @@ describe("buildPromptLibraryMetadata", () => {
       false,
     );
     expect(result.version.template).toBe("not { json");
+  });
+
+  it("includes version.metadata when present", () => {
+    const result = buildPromptLibraryMetadata(
+      { name: "n", id: "P1" },
+      { id: "V1", template: "t", metadata: { key: "val" } },
+      false,
+    );
+    expect(result.version.metadata).toEqual({ key: "val" });
+  });
+});
+
+describe("resolvePromptVersionForLink", () => {
+  const version = (id: string): PromptVersion =>
+    ({ id, template: "t", commit: id.slice(-8) }) as PromptVersion;
+
+  it("returns the explicitly requested version", async () => {
+    const fetchVersion = vi.fn(async ({ versionId }) => version(versionId));
+    const result = await resolvePromptVersionForLink(
+      { latest_version: version("LATEST") },
+      "EXPLICIT",
+      fetchVersion,
+    );
+    expect(fetchVersion).toHaveBeenCalledWith({ versionId: "EXPLICIT" });
+    expect(result?.id).toBe("EXPLICIT");
+  });
+
+  it("returns the embedded latest_version without fetching when no explicit version is supplied", async () => {
+    const fetchVersion = vi.fn(async ({ versionId }) => version(versionId));
+    const latest = version("LATEST");
+    const result = await resolvePromptVersionForLink(
+      { latest_version: latest },
+      undefined,
+      fetchVersion,
+    );
+    expect(fetchVersion).not.toHaveBeenCalled();
+    expect(result).toBe(latest);
+  });
+
+  it("returns undefined when an explicit version cannot be fetched", async () => {
+    const fetchVersion = vi.fn(async () => {
+      throw new Error("404");
+    });
+    const result = await resolvePromptVersionForLink(
+      { latest_version: version("LATEST") },
+      "EXPLICIT",
+      fetchVersion,
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it("returns undefined when there is no version to anchor to", async () => {
+    const fetchVersion = vi.fn();
+    const result = await resolvePromptVersionForLink(
+      {},
+      undefined,
+      fetchVersion,
+    );
+    expect(fetchVersion).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
   });
 });
