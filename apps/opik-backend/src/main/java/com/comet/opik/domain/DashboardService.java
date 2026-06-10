@@ -33,6 +33,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -192,8 +194,21 @@ class DashboardServiceImpl implements DashboardService {
             int offset = (page - 1) * size;
 
             long total = dao.findCount(workspaceId, nameTerm, projectId, scope.getValue(), filtersSql, filterMapping);
-            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, projectId, scope.getValue(), filtersSql,
-                    filterMapping, sortingFieldsSql, size, offset);
+
+            // Two-step fetch (OPIK-6482): order and paginate on id only, then load the page bodies and
+            // re-order them in memory. This keeps the large JSON `config` column out of every sort
+            // buffer, which otherwise triggers ER_OUT_OF_SORTMEMORY on the filesort.
+            List<UUID> pageIds = dao.findPageIdsSorted(workspaceId, nameTerm, projectId, scope.getValue(),
+                    filtersSql, filterMapping, sortingFieldsSql, size, offset);
+
+            List<Dashboard> dashboards;
+            if (pageIds.isEmpty()) {
+                dashboards = List.of();
+            } else {
+                Map<UUID, Dashboard> byId = dao.findByIds(pageIds, workspaceId).stream()
+                        .collect(Collectors.toMap(Dashboard::id, Function.identity()));
+                dashboards = pageIds.stream().map(byId::get).toList();
+            }
 
             log.info("Found '{}' dashboards with scope '{}' in workspace '{}'", total, scope, workspaceId);
             return DashboardPage.builder()
