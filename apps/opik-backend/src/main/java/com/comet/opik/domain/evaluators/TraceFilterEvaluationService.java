@@ -1,9 +1,11 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.domain.GuardrailResult;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -60,6 +62,8 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
             case NAME -> trace.name();
             case START_TIME -> trace.startTime();
             case END_TIME -> trace.endTime();
+            case CREATED_AT -> trace.createdAt();
+            case LAST_UPDATED_AT -> trace.lastUpdatedAt();
             case INPUT -> extractStringFromJson(trace.input());
             case OUTPUT -> extractStringFromJson(trace.output());
             case INPUT_JSON -> key != null ? extractNestedValue(trace.input(), key) : trace.input();
@@ -67,20 +71,56 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
             case METADATA -> key != null ? extractNestedValue(trace.metadata(), key) : trace.metadata();
             case TAGS -> trace.tags();
             case TOTAL_ESTIMATED_COST -> trace.totalEstimatedCost();
+            case LLM_SPAN_COUNT -> trace.llmSpanCount();
             case USAGE_COMPLETION_TOKENS -> extractUsageValue(trace.usage(), "completion_tokens");
             case USAGE_PROMPT_TOKENS -> extractUsageValue(trace.usage(), "prompt_tokens");
             case USAGE_TOTAL_TOKENS -> extractUsageValue(trace.usage(), "total_tokens");
             case FEEDBACK_SCORES ->
                 key != null ? extractFeedbackScore(trace.feedbackScores(), key) : trace.feedbackScores();
+            case SPAN_FEEDBACK_SCORES ->
+                key != null ? extractFeedbackScore(trace.spanFeedbackScores(), key) : trace.spanFeedbackScores();
             case DURATION -> calculateDuration(trace.startTime(), trace.endTime());
             case TTFT -> trace.ttft();
             case THREAD_ID -> trace.threadId();
+            case ERROR_INFO -> trace.errorInfo();
+            case ERROR_TYPE -> trace.errorInfo() != null ? trace.errorInfo().exceptionType() : null;
+            case GUARDRAILS -> normalizeGuardrailsResult(trace.guardrailsValidations());
+            case VISIBILITY_MODE -> trace.visibilityMode() != null ? trace.visibilityMode().getValue() : null;
+            case SOURCE -> trace.source() != null ? trace.source().getValue() : null;
+            case EXPERIMENT_ID -> trace.experiment() != null ? trace.experiment().id() : null;
             case CUSTOM -> extractCustomFieldValue(key, trace);
             default -> {
                 log.warn("Unsupported trace field for filter evaluation: {}", traceField);
                 yield null;
             }
         };
+    }
+
+    /**
+     * Normalizes a list of guardrails validations to the scalar string the analytics SQL produces.
+     *
+     * <p>The ClickHouse query aggregates per-trace guardrails with
+     * {@code if(has(groupArray(result), 'failed'), 'failed', 'passed')} and exposes the result as a
+     * single string that filters compare against (e.g. {@code GUARDRAILS = failed}). Returning the
+     * raw {@code List<GuardrailsValidation>} here would force {@code FilterEvaluationServiceBase}
+     * to compare via {@code toString()} on the list, which would never match the analytics-side
+     * scalar values. Mirror the SQL semantics so online scoring agrees with analytics.</p>
+     *
+     * @return {@code "failed"} if any check failed, {@code "passed"} if at least one check exists
+     *         and none failed, or {@code null} when no validations are present (so
+     *         {@code IS_EMPTY}/{@code IS_NOT_EMPTY} continue to behave correctly).
+     */
+    private String normalizeGuardrailsResult(List<GuardrailsValidation> validations) {
+        if (validations == null || validations.isEmpty()) {
+            return null;
+        }
+
+        boolean anyFailed = validations.stream()
+                .filter(validation -> validation.checks() != null)
+                .flatMap(validation -> validation.checks().stream())
+                .anyMatch(check -> check.result() == GuardrailResult.FAILED);
+
+        return anyFailed ? GuardrailResult.FAILED.getResult() : GuardrailResult.PASSED.getResult();
     }
 
     /**
