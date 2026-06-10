@@ -1,6 +1,7 @@
 package com.comet.opik;
 
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
+import com.comet.opik.api.resources.oauth.McpOAuthBundle;
 import com.comet.opik.api.resources.v1.events.tools.ToolsModule;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
@@ -95,7 +96,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .bundles(JdbiBundle
                         .<OpikConfiguration>forDatabase(
                                 (conf, env) -> FilterUtils.filterProperties(conf.getDatabase()))
-                        .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
+                        .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()),
+                        new McpOAuthBundle())
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
