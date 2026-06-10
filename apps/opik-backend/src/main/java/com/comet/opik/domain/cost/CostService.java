@@ -49,7 +49,8 @@ public class CostService {
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
-                    "gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle);
+                    "gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle,
+                    "vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic);
 
     static {
         try {
