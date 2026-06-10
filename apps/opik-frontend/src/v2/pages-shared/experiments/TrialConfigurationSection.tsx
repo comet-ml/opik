@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import isObject from "lodash/isObject";
+import isArray from "lodash/isArray";
 import isString from "lodash/isString";
 import get from "lodash/get";
 
