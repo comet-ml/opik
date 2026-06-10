@@ -138,6 +138,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
+      label: "Claude Fable 5",
+    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -252,6 +256,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET_THINKING,
       label: "anthropic/claude-3.7-sonnet:thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5,
+      label: "anthropic/claude-fable-5",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
@@ -2170,6 +2178,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_LATEST,
+      label: "~anthropic/claude-fable-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_LATEST,
