@@ -30,7 +30,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -208,7 +207,7 @@ class DashboardServiceImpl implements DashboardService {
             } else {
                 Map<UUID, Dashboard> byId = dao.findByIds(pageIds, workspaceId).stream()
                         .collect(Collectors.toMap(Dashboard::id, Function.identity()));
-                dashboards = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+                dashboards = pageIds.stream().map(byId::get).toList();
             }
 
             log.info("Found '{}' dashboards with scope '{}' in workspace '{}'", total, scope, workspaceId);
