@@ -28,6 +28,7 @@ import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCr
 import {
   createAIProviderFormSchema,
   AIProviderFormType,
+  DEFAULT_OPENAI_PIPELINE_MODE,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -136,7 +137,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey?.configuration?.suppress_default_auth === "true",
       openaiPipelineMode:
         providerKey?.configuration?.openai_pipeline_mode ??
-        "chat_completions_api",
+        DEFAULT_OPENAI_PIPELINE_MODE,
     } as AIProviderFormType,
   });
 
@@ -185,7 +186,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       queryParams: [],
       authHeaderName: "",
       suppressDefaultAuth: false,
-      openaiPipelineMode: "chat_completions_api",
+      openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
     });
     setStep("select");
   }, [form]);
@@ -242,7 +243,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       form.setValue(
         "openaiPipelineMode",
         providerData?.configuration?.openai_pipeline_mode ??
-          "chat_completions_api",
+          DEFAULT_OPENAI_PIPELINE_MODE,
       );
 
       form.setValue("provider", providerType);
@@ -299,7 +300,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     // responses_api value untouched).
     const openaiPipelineMode = form.getValues("openaiPipelineMode");
     const openaiPipelineModeValue = isOpenAi
-      ? openaiPipelineMode ?? "chat_completions_api"
+      ? openaiPipelineMode ?? DEFAULT_OPENAI_PIPELINE_MODE
       : undefined;
 
     const configuration =

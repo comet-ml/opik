@@ -7,6 +7,7 @@ import { PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/shared/EyeInput/EyeInput";
 import {
   AIProviderFormType,
+  DEFAULT_OPENAI_PIPELINE_MODE,
   OpenAiPipelineMode,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
@@ -88,7 +89,7 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
             <FormItem className="mt-2">
               <Label htmlFor="openaiPipelineMode">Pipeline mode</Label>
               <Select
-                value={field.value ?? "chat_completions_api"}
+                value={field.value ?? DEFAULT_OPENAI_PIPELINE_MODE}
                 onValueChange={(value: OpenAiPipelineMode) =>
                   field.onChange(value)
                 }
