@@ -36,7 +36,9 @@ export interface PythonSdkClient {
     max?: number;
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
-  deleteFeedbackDefinition(args: { id: string; workspace?: string }): Promise<void>;
+  // Workspace is resolved from the bridge's env (OPIK_WORKSPACE), the same as
+  // createFeedbackDefinition, so both operate on one workspace per run.
+  deleteFeedbackDefinition(args: { id: string }): Promise<void>;
   createDataset(args: {
     name: string;
     project_name: string;

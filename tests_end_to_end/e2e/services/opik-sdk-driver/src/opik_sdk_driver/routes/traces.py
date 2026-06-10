@@ -86,12 +86,12 @@ def create_nested_trace(
             if span_seed.parent_index is None:
                 parent = trace
             else:
-                if span_seed.parent_index >= index:
+                if not (0 <= span_seed.parent_index < index):
                     raise HTTPException(
                         status_code=422,
                         detail=(
                             f"span[{index}] parent_index {span_seed.parent_index} "
-                            "must reference an earlier span"
+                            "must reference an earlier span (0 <= parent_index < index)"
                         ),
                     )
                 parent = created[span_seed.parent_index]
@@ -114,16 +114,19 @@ def create_nested_trace(
             created.append(span)
 
         opik.flush_tracker()
+        # Confirm visibility by the trace's own id (unique), not by name — trace
+        # names are not unique within a project, so a name filter could return a
+        # different, older trace and make the response point at the wrong spans.
         traces = client.search_traces(
             project_name=body.project_name,
-            filter_string=f'name = "{body.name}"',
+            filter_string=f'id = "{trace.id}"',
             max_results=1,
             wait_for_at_least=1,
         )
         if not traces:
             raise HTTPException(
                 status_code=500,
-                detail=f"Trace {body.name} not visible after create + flush",
+                detail=f"Trace {trace.id} not visible after create + flush",
             )
         found = traces[0]
         # Block until every span is queryable, not just the trace. The trace row

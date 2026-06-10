@@ -50,11 +50,12 @@ def create_feedback_definition(
 def delete_feedback_definition(
     definition_id: str,
     x_opik_api_key: str | None = Header(default=None),
-    workspace: str | None = Header(default=None, alias="X-Opik-Workspace"),
 ) -> dict[str, bool]:
-    # Returns a JSON body (not 204) so the TS bridge client, which parses every
-    # successful response as JSON, doesn't choke on an empty body.
-    client = make_opik_client(workspace=workspace, api_key=x_opik_api_key)
+    # Workspace is resolved from the bridge env (same as create), so the delete
+    # always targets the workspace the definition was created in. Returns a JSON
+    # body (not 204) so the TS client, which parses every success as JSON,
+    # doesn't choke on an empty body.
+    client = make_opik_client(api_key=x_opik_api_key)
     try:
         client._rest_client.feedback_definitions.delete_feedback_definition_by_id(
             definition_id
