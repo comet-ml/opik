@@ -44,6 +44,7 @@ public class OpenTelemetryMappingRule {
         MODEL, // Attribute sets the model field
         PROVIDER, // Attribute sets the provider field
         USAGE, // Attribute contributes to usage map
+        COST, // Attribute sets the span's total estimated cost directly (authoritative, bypasses cost calculation)
         TAGS, // Attribute contributes to tag set
         THREAD_ID, // Attribute sets the threadId for trace grouping (e.g., gen_ai.conversation.id)
         DROP // Attribute should be ignored

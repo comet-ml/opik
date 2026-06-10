@@ -8,6 +8,7 @@ og:site_name: Opik Documentation
 og:title: Optimize Prompts with Opik - Tool Optimization
 subtitle: Optimize prompts that use external tools and function calls
 title: Tool Optimization (MCP & Function Calling)
+canonical-url: https://www.comet.com/docs/opik/development/optimization-runs/algorithms/tool_optimization
 ---
 
 Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is supported by all optimizers **except** `FewShotBayesianOptimizer`, `ParameterOptimizer`, and `GepaOptimizer`.
@@ -207,8 +208,7 @@ Always cite your sources and be thorough in your research."""
 
 # Initialize the optimizer
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-5-nano",
-    reasoning_model="openai/gpt-5.2"
+    model="openai/gpt-5-nano"
 )
 
 # Define evaluation metric
@@ -224,7 +224,7 @@ result = optimizer.optimize_prompt(
     dataset=research_dataset,
     metric=research_quality_metric,
     n_samples=100,
-    max_rounds=5
+    max_trials=5
 )
 
 print("Optimized prompt with tools:")

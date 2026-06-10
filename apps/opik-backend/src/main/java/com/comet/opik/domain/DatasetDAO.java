@@ -34,6 +34,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(Dataset.class)
 @RegisterConstructorMapper(BiInformationResponse.BiInformation.class)
+@RegisterConstructorMapper(EligibleDatasetWorkspace.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 @RegisterArgumentFactory(DatasetTypeMapper.class)
@@ -266,4 +267,74 @@ public interface DatasetDAO {
     int updateStatus(@Bind("workspace_id") String workspaceId,
             @Bind("id") UUID id,
             @Bind("status") DatasetStatus status);
+
+    /**
+     * Returns workspaces with at least one V1 dataset (project_id IS NULL), ordered by smallest
+     * count first. {@code FORCE INDEX} and the {@code workspace_id NOT IN (...)} predicate are
+     * only emitted when {@code excludedWorkspaceIds} is non-empty: without the hint, the {@code
+     * NOT IN} predicate makes the planner fall back to a full table scan; forcing the
+     * {@code (workspace_id, name)} uniqueness index turns it into a range scan — validated
+     * against prod (220k → 170k rows, 1.4s → 0.35s).
+     */
+    @SqlQuery("""
+            SELECT workspace_id, COUNT(*) AS datasets_count
+            FROM datasets <if(excludedWorkspaceIds)>FORCE INDEX (datasets_workspace_id_name_uk)<endif>
+            WHERE project_id IS NULL
+            AND name NOT IN (<demoDatasetNames>)
+            <if(excludedWorkspaceIds)> AND workspace_id NOT IN (<excludedWorkspaceIds>) <endif>
+            GROUP BY workspace_id
+            ORDER BY datasets_count ASC, workspace_id ASC
+            LIMIT :limit
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<EligibleDatasetWorkspace> findEligibleDatasetMigrationWorkspaces(
+            @BindList("demoDatasetNames") List<String> demoDatasetNames,
+            @Define("excludedWorkspaceIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "excludedWorkspaceIds") Collection<String> excludedWorkspaceIds,
+            @Bind("limit") int limit);
+
+    @SqlBatch("""
+            UPDATE datasets SET project_id = :projectId, last_updated_by = :userName
+            WHERE id = :datasetId AND workspace_id = :workspaceId AND project_id IS NULL
+            """)
+    int[] batchSetProjectId(
+            @BindMethods List<DatasetProjectMapping> mappings,
+            @Bind("workspaceId") String workspaceId,
+            @Bind("userName") String userName);
+
+    // V1 dataset IDs in the workspace (excludes demo names). Service uses this to detect the
+    // no-inference bucket — orphans present here but absent from the CH inference result.
+    @SqlQuery("""
+            SELECT id FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND project_id IS NULL
+            AND name NOT IN (<demoDatasetNames>)
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Set<UUID> findOrphanDatasetIdsInWorkspace(
+            @Bind("workspace_id") String workspaceId,
+            @BindList("demoDatasetNames") List<String> demoDatasetNames);
+
+    /**
+     * Bulk lookup of {@code (dataset_id, project_id)} pairs scoped to a workspace. Returns one row
+     * per matching dataset_id; datasets whose {@code project_id} is still {@code NULL} are
+     * <b>omitted</b>, so callers detect them by diffing against their candidate set.
+     *
+     * <p>Used by {@code OptimizationProjectMigrationService} for Path B inference: orphan
+     * optimizations that Path A (experiments) does not classify look up their dataset's
+     * {@code project_id} here in a single round-trip per workspace cycle.
+     */
+    @SqlQuery("""
+            SELECT id, project_id FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND id IN (<ids>)
+            AND project_id IS NOT NULL
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    @RegisterConstructorMapper(DatasetProjectIdRow.class)
+    List<DatasetProjectIdRow> findProjectIdsByDatasetIds(
+            @Bind("workspace_id") String workspaceId,
+            @BindList("ids") Set<UUID> ids);
 }

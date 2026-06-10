@@ -38,6 +38,48 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
+    @Test
+    void calculateCostUsesAnthropicCacheCalculatorForClaudeOnVertexAI() {
+        // Claude models hosted on Google Vertex AI ship under the litellm_provider
+        // "vertex_ai-anthropic_models" (canonical provider "anthropic_vertexai"), separate from
+        // the bare-Anthropic and Bedrock paths. Without an entry in PROVIDERS_CACHE_COST_CALCULATOR
+        // these requests fell through to textGenerationCost, so prompt-cache tokens were billed
+        // at the full input rate instead of the configured cache-read rate.
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 100,
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 100,
+                "original_usage.cache_read_input_tokens", 200,
+                "original_usage.cache_creation_input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("vertex_ai/claude-haiku-4-5", "anthropic_vertexai", usage, null);
+
+        // vertex_ai/claude-haiku-4-5 (vertex_ai-anthropic_models):
+        // input 1e-6, output 5e-6, cache_read 1e-7, cache_creation 1.25e-6
+        // Anthropic shape: prompt_tokens EXCLUDES cached tokens, so we sum each bucket at its own rate.
+        // 1000*1e-6 + 100*5e-6 + 50*1.25e-6 + 200*1e-7
+        // = 0.001 + 0.0005 + 0.0000625 + 0.00002 = 0.0015825
+        assertThat(cost).isEqualByComparingTo("0.0015825");
+    }
+
+    @Test
+    void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 100,
+                "original_usage.prompt_token_count", 1000,
+                "original_usage.candidates_token_count", 100,
+                "original_usage.cached_content_token_count", 400);
+
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-flash", "google_vertexai", usage, null);
+
+        // gemini-2.5-flash: input 3e-7, output 2.5e-6, cache_read 3e-8
+        // non-cached input = 1000 - 400 = 600 -> 600*3e-7 + 100*2.5e-6 + 400*3e-8
+        // = 0.00018 + 0.00025 + 0.000012 = 0.000442
+        assertThat(cost).isEqualByComparingTo("0.000442");
+    }
+
     @ParameterizedTest
     @MethodSource("provideAudioSpeechModels")
     void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
@@ -255,7 +297,39 @@ class CostServiceTest {
                 Arguments.of("elser_model_2", "elastic"),
                 Arguments.of("gemini-3-flash", "google_ai"),
                 Arguments.of("gemini-3.1-pro", "google_ai"),
-                Arguments.of("gemini-embedding-002", "google_ai"));
+                Arguments.of("gemini-embedding-002", "google_ai"),
+                Arguments.of("mistral-medium-3-5", "mistral"),
+                Arguments.of("mistral-small-2603", "mistral"));
+    }
+
+    /**
+     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
+     * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
+     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
+     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     */
+    @ParameterizedTest
+    @MethodSource("provideMistralModels")
+    void calculateCostForMistralModels(String model, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1_000_000, "completion_tokens", 1_000_000);
+
+        BigDecimal cost = CostService.calculateCost(model, "mistral", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideMistralModels() {
+        return Stream.of(
+                // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
+                Arguments.of("mistral-small-latest", "0.24"),
+                // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
+                Arguments.of("mistral-large-3", "2.00"),
+                // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
+                Arguments.of("codestral-2508", "1.20"),
+                // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
+                Arguments.of("mistral-medium-3-5", "9.00"),
+                // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
+                Arguments.of("mistral-small-2603", "0.75"));
     }
 
     /**

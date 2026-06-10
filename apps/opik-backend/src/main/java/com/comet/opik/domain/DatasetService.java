@@ -51,6 +51,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
@@ -79,6 +80,14 @@ public interface DatasetService {
     void verifyVisibilityIfExists(UUID id, String workspaceId, Visibility visibility);
 
     List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
+
+    /**
+     * Bulk lookup of {@code (dataset_id → project_id)} for non-null project assignments. Used by
+     * {@code OptimizationProjectMigrationService} Path B inference: datasets whose {@code
+     * project_id} is still {@code NULL} are <b>omitted</b> from the map so callers can detect the
+     * no-inference bucket by diffing against their candidate set.
+     */
+    Map<UUID, UUID> findProjectIdsByDatasetIds(Set<UUID> ids, String workspaceId);
 
     Dataset findByNameDetailed(DatasetIdentifier identifier, Visibility visibility);
 
@@ -325,6 +334,16 @@ class DatasetServiceImpl implements DatasetService {
             log.info("Found datasets with ids '{}', workspaceId '{}'", ids, workspaceId);
             return datasets;
         });
+    }
+
+    @Override
+    public Map<UUID, UUID> findProjectIdsByDatasetIds(Set<UUID> ids, @NonNull String workspaceId) {
+        if (CollectionUtils.isEmpty(ids)) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(DatasetDAO.class)
+                .findProjectIdsByDatasetIds(workspaceId, ids).stream()
+                .collect(Collectors.toMap(DatasetProjectIdRow::id, DatasetProjectIdRow::projectId)));
     }
 
     private Dataset findByNameNoContext(String workspaceId, String name, UUID projectId, Visibility visibility) {

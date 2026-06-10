@@ -35,12 +35,17 @@ import {
 import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { BasePrompt, PROMPT_SYNC_TIMEOUT_MS } from "@/prompt/BasePrompt";
 import { PromptTemplateStructure, type CreateChatPromptOptions, type CommonPromptOptions } from "@/prompt/types";
-import { PromptTemplateStructureMismatch } from "@/prompt/errors";
+import {
+  EnvironmentNotFoundError,
+  PromptNotFoundError,
+  PromptTemplateStructureMismatch,
+} from "@/prompt/errors";
 import {
   fetchLatestPromptVersion,
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
 import { getOrFetch as promptCacheGetOrFetch, getGlobalCache } from "@/prompt/promptCache";
+import { getActiveMaskForPrompt } from "@/prompt/maskContext";
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
@@ -69,7 +74,10 @@ import {
 import { trackStorage, getTrackContext } from "@/decorators/track";
 import { UpdateService } from "@/tracer/UpdateService";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
-import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
+import {
+  EnvironmentAlreadyExistsError,
+  EnvironmentConfigurationError,
+} from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
@@ -1360,13 +1368,23 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a text prompt by name and optional version.
+   * Retrieves a text prompt by name, optionally targeting a specific `version`.
    * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
-   * default 300s). Pinned commits are cached indefinitely. When called inside a track()
-   * context the prompt reference is injected into the active trace/span metadata.
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin or environment
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
    * @returns Promise resolving to Prompt or null if not found
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
    */
   public getPrompt = async (
@@ -1382,13 +1400,23 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a chat prompt by name and optional version.
+   * Retrieves a chat prompt by name, optionally targeting a specific `version`.
    * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
-   * default 300s). Pinned commits are cached indefinitely. When called inside a track()
-   * context the prompt reference is injected into the active trace/span metadata.
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
    *
-   * @param options - Prompt name and optional commit hash
+   * @param options - Prompt name and optional version pin or environment
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
    * @returns Promise resolving to ChatPrompt or null if not found
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
    *
    * @example
@@ -1421,42 +1449,90 @@ export class OpikClient {
     ) => T,
     logContext: string
   ): Promise<T | null> => {
+    // Validate mutual exclusivity synchronously, before touching any async work.
+    if (options.commit && options.version) {
+      throw new Error(
+        "Provide either `commit` or `version`, not both. " +
+          "Prefer `version` — `commit` is deprecated."
+      );
+    }
+
     logger.debug(`Getting ${logContext}`, options);
+
+    if (options.commit && options.environment) {
+      throw new Error(
+        "'commit' and 'environment' are mutually exclusive; pass at most one.",
+      );
+    }
+
+    if (options.version && options.environment) {
+      throw new Error(
+        "'version' and 'environment' are mutually exclusive; pass at most one.",
+      );
+    }
 
     const resolvedProjectName = this.resolveProjectName(options.projectName);
 
-    const fetchFn = async (): Promise<T | null> => {
+    const fetchFn = async (maskId?: string | null): Promise<T | null> => {
       try {
-        const resolvedOptions = { ...options, projectName: resolvedProjectName };
+        let promptData: OpikApi.PromptPublic | undefined;
+        let versionData: OpikApi.PromptVersionDetail;
 
-        let projectId: string | undefined;
-        try {
-          projectId = await this.getProjectIdByName(resolvedProjectName);
-        } catch {
-          // Project doesn't exist yet — search without project filter
+        if (maskId) {
+          versionData = await this.api.prompts.getPromptVersionById(
+            maskId,
+            {},
+            this.api.requestOptions
+          );
+          if (!versionData.promptId) {
+            return null;
+          }
+          promptData = await this.api.prompts.getPromptById(
+            versionData.promptId,
+            {},
+            this.api.requestOptions
+          );
+        } else {
+          let projectId: string | undefined;
+          try {
+            projectId = await this.getProjectIdByName(resolvedProjectName);
+          } catch {
+            // Project doesn't exist yet — search without project filter
+          }
+
+          const searchResponse = await this.api.prompts.getPrompts(
+            {
+              filters: JSON.stringify([
+                { field: "name", operator: "=", value: options.name },
+              ]),
+              size: 1,
+              ...(projectId && { projectId }),
+            },
+            this.api.requestOptions
+          );
+
+          promptData = searchResponse.content?.[0];
+          if (!promptData) {
+            logger.debug(`${logContext.charAt(0).toUpperCase() + logContext.slice(1)} not found`, { name: options.name });
+            return null;
+          }
+
+          // Build the REST request body explicitly so we never leak SDK-only
+          // fields (such as `version` — the wire format calls it `versionNumber`).
+          const retrieveRequest: OpikApi.PromptVersionRetrieveDetail = {
+            name: options.name,
+            projectName: resolvedProjectName,
+            ...(options.commit ? { commit: options.commit } : {}),
+            ...(options.version ? { versionNumber: options.version } : {}),
+            ...(options.environment ? { environment: options.environment } : {}),
+          };
+
+          versionData = await this.api.prompts.retrievePromptVersion(
+            retrieveRequest,
+            this.api.requestOptions
+          );
         }
 
-        const searchResponse = await this.api.prompts.getPrompts(
-          {
-            filters: JSON.stringify([
-              { field: "name", operator: "=", value: options.name },
-            ]),
-            size: 1,
-            ...(projectId && { projectId }),
-          },
-          this.api.requestOptions
-        );
-
-        const promptData = searchResponse.content?.[0];
-        if (!promptData) {
-          logger.debug(`${logContext.charAt(0).toUpperCase() + logContext.slice(1)} not found`, { name: options.name });
-          return null;
-        }
-
-        const versionData = await this.api.prompts.retrievePromptVersion(
-          resolvedOptions,
-          this.api.requestOptions
-        );
 
         const templateStructure = versionData.templateStructure;
         if (expectedStructure === PromptTemplateStructure.Text) {
@@ -1487,14 +1563,33 @@ export class OpikClient {
       }
     };
 
-    const result = await promptCacheGetOrFetch<T>(
+    const unmasked = await promptCacheGetOrFetch<T>(
       options.name,
       options.commit,
       resolvedProjectName,
       expectedStructure,
-      fetchFn,
-      this.config.promptCacheTtlSeconds
+      () => fetchFn(),
+      this.config.promptCacheTtlSeconds,
+      undefined,
+      options.version,
+      options.environment
     );
+
+    const activeMaskId = unmasked?.id
+      ? getActiveMaskForPrompt(unmasked.id)
+      : null;
+    const result = activeMaskId
+      ? await promptCacheGetOrFetch<T>(
+          options.name,
+          options.commit,
+          resolvedProjectName,
+          expectedStructure,
+          () => fetchFn(activeMaskId),
+          this.config.promptCacheTtlSeconds,
+          activeMaskId,
+          options.version
+        )
+      : unmasked;
 
     if (result !== null) {
       const ctx = getTrackContext();
@@ -1657,6 +1752,82 @@ export class OpikClient {
       logger.error("Failed to delete prompts", { count: ids.length, error });
       throw error;
     }
+  };
+
+  /**
+   * Assigns a prompt version to an environment, or clears the assignment.
+   *
+   * Replace the full set of environments owned by a prompt version. The
+   * provided list becomes the resolved version's complete set of environments.
+   * Pass an empty array to clear all environments. Any other version of the
+   * same prompt that previously owned one of the listed environments is
+   * cleared. Existing prompt objects already in memory are not mutated —
+   * re-fetch with `client.getPrompt(...)` to see the change.
+   *
+   * @param options.promptName - Name of the prompt
+   * @param options.environments - Environments to assign. Each must already be registered in the workspace. Pass `[]` to clear.
+   * @param options.version - Sequential version selector in the wire format `"v<N>"` (e.g. `"v3"`). Defaults to the latest version.
+   * @param options.projectName - Project the prompt belongs to. Defaults to the client's project.
+   *
+   * @throws {PromptNotFoundError} The prompt name (or the supplied `version`) does not exist in the resolved project.
+   * @throws {EnvironmentNotFoundError} One of `environments` is not registered in the workspace.
+   */
+  public setPromptEnvironments = async (
+    options: {
+      promptName: string;
+      environments: string[];
+      version?: string;
+      projectName?: string;
+    },
+  ): Promise<void> => {
+    let resolvedVersion;
+    try {
+      resolvedVersion = await this.api.prompts.retrievePromptVersion(
+        {
+          name: options.promptName,
+          versionNumber: options.version,
+          projectName: this.resolveProjectName(options.projectName),
+        },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        if (options.version !== undefined) {
+          throw new PromptNotFoundError(
+            `No version '${options.version}' found for prompt '${options.promptName}'.`,
+          );
+        }
+        throw new PromptNotFoundError(
+          `No prompt found with name '${options.promptName}'.`,
+        );
+      }
+      throw error;
+    }
+
+    const target = Array.from(new Set(options.environments));
+    try {
+      await this.api.prompts.setPromptVersionEnvironment(
+        resolvedVersion.id!,
+        { environments: target },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError) {
+        // The backend reports unknown environments as 404 (not found) or 409
+        // (conflict, when the name collides with the workspace registry check).
+        if (error.statusCode === 404 || error.statusCode === 409) {
+          throw new EnvironmentNotFoundError(
+            `One or more environments in [${target.join(", ")}] are not registered in this workspace.`,
+          );
+        }
+}
+      throw error;
+    }
+
+    getGlobalCache().invalidateForPrompt(
+      options.promptName,
+      this.resolveProjectName(options.projectName),
+    );
   };
 
   /**
@@ -1987,10 +2158,25 @@ export class OpikClient {
     return page.content ?? [];
   };
 
+  private static readonly BUILTIN_ENVIRONMENT_NAMES = new Set([
+    "production",
+    "staging",
+    "development",
+  ]);
+
   public updateEnvironment = async (
     name: string,
     options?: { description?: string; color?: string }
   ): Promise<OpikApi.EnvironmentPublic> => {
+    if (
+      options?.color !== undefined &&
+      OpikClient.BUILTIN_ENVIRONMENT_NAMES.has(name)
+    ) {
+      throw new EnvironmentConfigurationError(
+        `Cannot change the colour of the built-in environment '${name}'. ` +
+          "Colour updates are not allowed for 'production', 'staging', or 'development'."
+      );
+    }
     const existing = await this._findEnvironmentByName(name, true);
     await this.api.environments.updateEnvironment(existing!.id!, {
       description: options?.description,

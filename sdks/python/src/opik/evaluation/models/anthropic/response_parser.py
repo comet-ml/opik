@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import List, Optional, TYPE_CHECKING, Union, cast
+from typing import Iterable, List, Optional, Set, TYPE_CHECKING, Union, cast
 
 from opik import exceptions
 
@@ -15,7 +15,10 @@ if TYPE_CHECKING:
     _ContentBlock = Union[TextBlock, ToolUseBlock]
 
 
-def parse_assistant_message(response: "Message") -> base_model.ConversationDict:
+def parse_assistant_message(
+    response: "Message",
+    registered_tool_names: Optional[Iterable[str]] = None,
+) -> base_model.ConversationDict:
     """Convert an Anthropic ``Message`` into an OpenAI-shape assistant turn.
 
     Text blocks are concatenated into ``content``. ``tool_use`` blocks are
@@ -24,6 +27,17 @@ def parse_assistant_message(response: "Message") -> base_model.ConversationDict:
     ``tool_use`` block with no text, its arguments are surfaced via ``content``
     so downstream JSON-parsing callers don't need to special-case structured
     output.
+
+    Disambiguation between real tool calls and structured-output finalizer:
+    Anthropic's ``messages.parse`` represents both as ``tool_use`` blocks.
+    Without context the two are indistinguishable, and promoting a real
+    tool call to ``content`` breaks the agentic loop (the loop sees no
+    ``tool_calls``, can't execute the tool, and feeds the tool's *arguments*
+    to the JSON parser as if they were the structured output). When the
+    caller passes ``registered_tool_names``, any ``tool_use`` whose name
+    matches a registered tool is kept as a real tool call; only unknown-
+    named ``tool_use`` blocks (i.e. the structured-output finalizer) get
+    promoted to ``content``.
     """
     text_parts: List[str] = []
     tool_calls: List[base_model.ToolCall] = []
@@ -42,12 +56,20 @@ def parse_assistant_message(response: "Message") -> base_model.ConversationDict:
 
     content: Optional[str] = "".join(text_parts) if text_parts else None
 
+    known_tool_names: Set[str] = (
+        set(registered_tool_names) if registered_tool_names else set()
+    )
+
     if content is None and len(tool_calls) == 1:
-        # Anthropic's ``messages.parse`` (with ``output_format``) emits the
-        # structured output as a tool_use block. Promote those arguments back
-        # into ``content`` so callers using response_format keep working.
-        content = tool_calls[0]["function"]["arguments"]
-        tool_calls = []
+        only_call_name = tool_calls[0]["function"]["name"]
+        # If the single tool_use names a real registered tool, leave it
+        # as a tool call so the agentic loop can execute it. Otherwise
+        # treat it as the structured-output finalizer.
+        if only_call_name in known_tool_names:
+            pass
+        else:
+            content = tool_calls[0]["function"]["arguments"]
+            tool_calls = []
 
     if content is None and not tool_calls:
         raise exceptions.BaseLLMError(

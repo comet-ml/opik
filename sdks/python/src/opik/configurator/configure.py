@@ -8,7 +8,12 @@ import opik.config
 import urllib.parse
 from opik.api_objects.opik_client import get_current_client_raw
 from opik import config
-from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
+from opik.configurator.interactive_helpers import (
+    ask_user_for_approval,
+    ask_user_for_approval_default_no,
+    is_interactive,
+)
+from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
@@ -32,6 +37,7 @@ class OpikConfigurator:
         self_hosted_comet: bool = False,
         automatic_approvals: bool = False,
         project_name: Optional[str] = None,
+        install_mcp: Optional[bool] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -41,6 +47,7 @@ class OpikConfigurator:
         self.self_hosted_comet = self_hosted_comet
         self.automatic_approvals = automatic_approvals
         self.project_name = project_name
+        self.install_mcp = install_mcp
 
         # Handle URL
         #
@@ -76,6 +83,47 @@ class OpikConfigurator:
         else:
             # LOCAL OPIK DEPLOYMENT
             self._configure_local()
+
+        self._maybe_setup_mcp_server()
+
+    def _maybe_setup_mcp_server(self) -> None:
+        if not self._should_setup_mcp_server():
+            return
+
+        mcp.setup_mcp_server(
+            api_key=self.api_key,
+            workspace=self.workspace,
+            base_url=self.base_url,
+            api_url=self.api_url,
+            use_local=self.use_local,
+            self_hosted_comet=self.self_hosted_comet,
+        )
+
+    def _should_setup_mcp_server(self) -> bool:
+        """Decide whether to offer registering the Opik MCP server.
+
+        - ``install_mcp is False`` or a non-interactive session: skip.
+        - ``install_mcp is True``: proceed without asking.
+        - ``automatic_approvals`` (the ``-y`` / preflight path): skip, since this
+          mutates configuration files owned by external tools.
+        - Otherwise: ask the user, defaulting to "no".
+        """
+        if self.install_mcp is False:
+            return False
+
+        if not is_interactive():
+            return False
+
+        if self.install_mcp is True:
+            return True
+
+        if self.automatic_approvals:
+            return False
+
+        return ask_user_for_approval_default_no(
+            "Set up the Opik MCP server for an AI assistant "
+            "(Claude Code, Cursor, VS Code)? (y/N) "
+        )
 
     def _configure_cloud(self) -> None:
         """
@@ -616,6 +664,7 @@ def configure(
     automatic_approvals: Optional[bool] = None,
     url_override: Optional[str] = None,
     project_name: Optional[str] = None,
+    install_mcp: Optional[bool] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -632,6 +681,8 @@ def configure(
                without user confirmation if `automatic_approvals` is not set to `False`.
         automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
         project_name: The name of the project to configure. If not provided, the default project will be used.
+        install_mcp: If True, register the Opik MCP server with detected AI hosts; if False, skip the step.
+            If None, the user is prompted in interactive sessions.
 
     Raises:
         ConfigurationError
@@ -653,5 +704,6 @@ def configure(
         if automatic_approvals is not None
         else force,
         project_name=project_name,
+        install_mcp=install_mcp,
     )
     client.configure()

@@ -52,6 +52,7 @@ from opik.evaluation.metrics import (
     StructuredOutputCompliance,
 )
 from opik.evaluation.metrics.score_result import ScoreResult
+from opik.evaluation.models.litellm.litellm_chat_model import LiteLLMChatModel
 
 from opik_backend.executor import CodeExecutorBase
 
@@ -350,12 +351,14 @@ def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callabl
         _has_template_placeholders(eval_criteria_template)
     )
     
+    llm_model = LiteLLMChatModel(model_name=model, stream=False)
+
     if not needs_interpolation:
         # No placeholders - create single reusable GEval instance (original behavior)
         geval_metric = GEval(
             task_introduction=task_intro_template,
             evaluation_criteria=eval_criteria_template,
-            model=model
+            model=llm_model
         )
         
         def metric_fn(dataset_item, llm_output):
@@ -384,7 +387,7 @@ def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callabl
         geval_metric = GEval(
             task_introduction=task_intro,
             evaluation_criteria=eval_criteria,
-            model=model
+            model=llm_model
         )
         
         # Note: GEval.score() only accepts 'output' - dataset_item context is already
@@ -412,8 +415,9 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str, **kw
     """
     schema_key = params.get("schema_key", "json_schema")
     
+    llm_model = LiteLLMChatModel(model_name=model, stream=False)
     structured_metric = StructuredOutputCompliance(
-        model=model,
+        model=llm_model,
         name="json_schema_validator"
     )
     

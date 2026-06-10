@@ -125,7 +125,10 @@ const PlaygroundOutputs = ({
             total={total}
             isLoadingTotal={isProcessing}
           />
-          <div className="flex w-full flex-col pb-4 pt-0">
+          <div
+            data-testid="playground-results-table"
+            className="flex w-full flex-col pb-4 pt-0"
+          >
             {isProcessing && (
               <StatusMessage
                 icon={Loader2}

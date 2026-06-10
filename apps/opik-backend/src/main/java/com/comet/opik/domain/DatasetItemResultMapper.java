@@ -63,6 +63,7 @@ public class DatasetItemResultMapper {
                             .traceId(UUID.fromString(experimentItem.get(3).toString()))
                             .input(getJsonNodeOrNull(experimentItem.get(4)))
                             .output(getJsonNodeOrNull(experimentItem.get(5)))
+                            .traceMetadata(getJsonNodeOrNull(experimentItem.get(16)))
                             .feedbackScores(getFeedbackScores(experimentItem.get(6)))
                             .createdAt(Instant.parse(experimentItem.get(7).toString()))
                             .lastUpdatedAt(Instant.parse(experimentItem.get(8).toString()))

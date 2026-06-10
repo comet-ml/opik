@@ -1425,6 +1425,7 @@ class TestGetPromptAutoInjectionDedup:
         info = {"id": prompt_id, "commit": commit, "name": name, "version": {}}
         p = Mock()
         p.__internal_api__to_info_dict__ = Mock(return_value=info)
+        p.__internal_api__prompt_id__ = prompt_id
         return p
 
     def _get_prompt(self, client_, mock_prompt):

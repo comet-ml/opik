@@ -5,8 +5,8 @@ from unittest import mock
 import pytest
 
 import opik
-from opik import evaluation, exceptions, url_helpers
-from opik.api_objects import opik_client
+from opik import evaluation, exceptions, rest_api, url_helpers, PromptType
+from opik.api_objects import opik_client, prompt
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.evaluation import (
@@ -57,6 +57,8 @@ def create_mock_experiment() -> tuple[mock.Mock, mock.Mock, mock.Mock]:
         Tuple of (mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id)
     """
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
+    mock_experiment.id = "exp-mock-id"
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -164,6 +166,7 @@ def test_evaluate__happyflow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -192,7 +195,7 @@ def test_evaluate__happyflow(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=experiment_tags,
         dataset_version_id=None,
@@ -244,6 +247,7 @@ def test_evaluate__happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -323,6 +327,7 @@ def test_evaluate__happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -369,6 +374,145 @@ def test_evaluate__happyflow(
         EXPECTED_TRACE_TREES, fake_backend.trace_trees
     ):
         assert_equal(expected_trace, actual_trace)
+
+
+def test_evaluate__prompts_are_attached_to_each_trace(fake_backend):
+    """When prompts are passed to `evaluate`, every trace produced by the
+    evaluation run must carry them in `metadata["opik_prompts"]` so the
+    backend can show prompt linkage on each trace (not only on the
+    experiment row)."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                input={"message": "say bye"},
+                reference="bye",
+            ),
+        ]
+    )
+
+    prompts = [
+        prompt.Prompt.from_fern_prompt_version(
+            name="system_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="You are a helpful assistant.",
+                commit="abc123",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+        prompt.Prompt.from_fern_prompt_version(
+            name="user_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="Say what the user asks.",
+                commit="def456",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+    ]
+    expected_prompts_metadata = [p.__internal_api__to_info_dict__() for p in prompts]
+
+    def say_task(item: Dict[str, Any]):
+        if item["input"]["message"] == "say hello":
+            return {"output": "hello"}
+        return {"output": "bye"}
+
+    (
+        mock_experiment,
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ) = create_mock_experiment()
+    # The engine reads prompts off the experiment object it receives, so the
+    # mocked experiment must expose them (create_experiment is mocked here).
+    mock_experiment.prompts = prompts
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="experiment-with-prompts",
+            scoring_metrics=[metrics.Equals()],
+            prompts=prompts,
+            task_threads=1,
+        )
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="experiment-with-prompts",
+        experiment_config=mock.ANY,
+        prompts=prompts,
+        tags=None,
+        dataset_version_id=None,
+        project_name=None,
+    )
+
+    assert len(fake_backend.trace_trees) == 2
+    for actual_trace in fake_backend.trace_trees:
+        assert actual_trace.metadata is not None, (
+            "Trace metadata must not be None when prompts are passed to evaluate"
+        )
+        assert actual_trace.metadata.get("opik_prompts") == expected_prompts_metadata
+
+
+def test_evaluate_prompt__prompt_attached_to_each_trace(fake_backend):
+    """`evaluate_prompt` should also attach the prompt to each generated trace."""
+    MODEL_NAME = "gpt-3.5-turbo"
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+        ]
+    )
+
+    prompt_obj = prompt.Prompt.from_fern_prompt_version(
+        name="single_prompt",
+        prompt_version=rest_api.PromptVersionDetail(
+            template="LLM response: {{question}}",
+            commit="cafe01",
+            type=PromptType.MUSTACHE,
+        ),
+    )
+    expected_prompt_metadata = [prompt_obj.__internal_api__to_info_dict__()]
+
+    (
+        mock_experiment,
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ) = create_mock_experiment()
+    # The engine reads prompts off the experiment object it receives, so the
+    # mocked experiment must expose them (create_experiment is mocked here).
+    mock_experiment.prompts = [prompt_obj]
+    mock_models_factory_get, _ = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get=mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[{"role": "user", "content": "LLM response: {{question}}"}],
+            experiment_name="prompt-experiment",
+            model=MODEL_NAME,
+            prompt=prompt_obj,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+        )
+
+    assert len(fake_backend.trace_trees) == 1
+    actual_trace = fake_backend.trace_trees[0]
+    assert actual_trace.metadata is not None
+    assert actual_trace.metadata.get("opik_prompts") == expected_prompt_metadata
 
 
 def test_evaluate_with_scoring_key_mapping(
@@ -419,6 +563,7 @@ def test_evaluate_with_scoring_key_mapping(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -448,7 +593,7 @@ def test_evaluate_with_scoring_key_mapping(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -500,6 +645,7 @@ def test_evaluate_with_scoring_key_mapping(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -583,6 +729,7 @@ def test_evaluate_with_scoring_key_mapping(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -678,6 +825,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -738,6 +886,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         raise Exception("some-error-message")
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -765,7 +914,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -888,6 +1037,7 @@ def test_evaluate__with_random_sampler__happy_flow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -918,7 +1068,7 @@ def test_evaluate__with_random_sampler__happy_flow(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -998,6 +1148,7 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1090,6 +1241,7 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1187,6 +1339,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1313,6 +1466,7 @@ def test_evaluate_prompt_happyflow(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1357,15 +1511,22 @@ def test_evaluate_prompt_happyflow(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": "gpt-3.5-turbo",
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=experiment_tags,
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
 
     mock_experiment.insert.assert_has_calls(
         [
@@ -1416,6 +1577,7 @@ def test_evaluate_prompt_happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input=ANY_BUT_NONE,
                     output=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
@@ -1475,6 +1637,7 @@ def test_evaluate_prompt_happyflow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input=ANY_BUT_NONE,
                     output=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
@@ -1547,6 +1710,7 @@ def test_evaluate__aggregated_metric__happy_flow(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1583,7 +1747,7 @@ def test_evaluate__aggregated_metric__happy_flow(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -1635,6 +1799,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -1760,6 +1925,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     id=ANY_BUT_NONE,
                     type="general",
                     name="metrics_calculation",
+                    tags=["__opik_eval_internal__"],
                     input={
                         "test_case_": ANY_BUT_NONE,
                         "trial_id": 0,
@@ -1913,6 +2079,7 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -1959,15 +2126,22 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": "gpt-3.5-turbo",
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == MODEL_NAME
 
     mock_experiment.insert.assert_has_calls(
         [
@@ -2047,6 +2221,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
         raise Exception
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2073,7 +2248,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -2202,6 +2377,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
     )
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2244,15 +2420,22 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config={
-            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
-            "model": "some-model-name",
-        },
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
         project_name=None,
     )
+
+    # ``evaluate_prompt`` is contractually required to auto-populate
+    # ``prompt_template`` and ``model`` into ``experiment_config``. The
+    # resume blob coexists under a separate key, so we pin the prompt
+    # contract by drilling in rather than asserting whole-dict equality.
+    forwarded_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert forwarded_config["prompt_template"] == [
+        {"role": "user", "content": "LLM response: {{input}}"}
+    ]
+    assert forwarded_config["model"] == "some-model-name"
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
     mock_experiment.insert.assert_has_calls(
@@ -2477,6 +2660,7 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_experiment.id = "experiment-id"
     mock_experiment.name = "test-experiment"
     mock_create_experiment = mock.Mock()
@@ -2815,6 +2999,7 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2880,6 +3065,7 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -2951,6 +3137,7 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -3028,6 +3215,7 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
+    mock_experiment.prompts = None
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
@@ -3523,6 +3711,7 @@ def test_evaluate_optimization_trial__trace_tree_source_experiment_and_spans_sou
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="metrics_calculation",
+                tags=["__opik_eval_internal__"],
                 type="general",
                 input=ANY_BUT_NONE,
                 output=ANY_BUT_NONE,
@@ -3617,7 +3806,7 @@ def test_evaluate__dataset_has_project_name__caller_override_ignored_and_warning
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="project-override-test",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -3667,7 +3856,7 @@ def test_evaluate__dataset_has_no_project_name__caller_value_preserved(fake_back
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="project-fallback-test",
-        experiment_config=None,
+        experiment_config=mock.ANY,
         prompts=None,
         tags=None,
         dataset_version_id=None,
@@ -3846,9 +4035,19 @@ def test_evaluate_optimization_trial__dataset_has_no_project_name__caller_value_
 # =============================================================================
 
 
-def test_evaluate__experiment_config_not_set__none_metadata_sent(fake_backend):
-    """When experiment_config is omitted the SDK sends experiment_config=None
-    to create_experiment (does not auto-populate empty metadata)."""
+def test_evaluate__experiment_config_not_set__only_resume_state_added(
+    fake_backend,
+):
+    """When experiment_config is omitted the SDK still embeds resume state.
+
+    This test's mock dataset has no version (``get_version_info`` returns
+    ``None``), so the embedded state marks the experiment non-resumable —
+    resume requires a pinned dataset version. The key point is that the
+    ``_opik_resume`` blob is still the only thing added to the config; the
+    SDK does not auto-populate other keys.
+    """
+    from opik.evaluation import resume
+
     mock_dataset = create_mock_dataset(
         items=[
             dataset_item.DatasetItem(
@@ -3868,7 +4067,13 @@ def test_evaluate__experiment_config_not_set__none_metadata_sent(fake_backend):
             verbose=0,
         )
 
-    assert mock_create_experiment.call_args.kwargs["experiment_config"] is None
+    import json as _json
+
+    sent_config = mock_create_experiment.call_args.kwargs["experiment_config"]
+    assert list(sent_config.keys()) == [resume.RESUME_METADATA_KEY]
+    blob = _json.loads(sent_config[resume.RESUME_METADATA_KEY])
+    assert blob["resumable"] is False
+    assert "pinned dataset version" in blob["non_resumable_reason"]
 
 
 def test_evaluate__no_scoring_metrics__completes_and_writes_no_feedback_scores(

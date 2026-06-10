@@ -1,0 +1,25 @@
+package com.comet.opik.domain;
+
+import lombok.Builder;
+import lombok.NonNull;
+
+import java.util.UUID;
+
+/**
+ * Result of {@link ExperimentDAO#computeDatasetProjectMapping(java.util.Set)}: one row per
+ * referenced dataset, holding the inferred {@code projectId} to assign. {@code distinctProjectCount}
+ * is the number of projects the dataset's experiments reference; when it is greater than one,
+ * {@code projectId} is the dominant project, chosen by
+ * {@code (count DESC, last_activity DESC, project_id ASC)}.
+ *
+ * <p>{@code projectBreakdown} lists the per-project experiment counts in the same order (for
+ * example {@code "p1=5,p2=3,p3=1"}) and is included in the log entry written for each dominant
+ * assignment. It is empty for the rows the service builds for Default Project assignments.
+ */
+@Builder(toBuilder = true)
+public record DatasetProjectMapping(
+        @NonNull UUID datasetId,
+        @NonNull UUID projectId,
+        long distinctProjectCount,
+        @NonNull String projectBreakdown) {
+}

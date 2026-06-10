@@ -38,6 +38,7 @@ from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
+from .types.create_dataset_items_from_json_request_format import CreateDatasetItemsFromJsonRequestFormat
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -67,6 +68,11 @@ class RawDatasetsClient:
         - Returns 409 Conflict if baseVersion is stale and override is not set
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
 
         Parameters
         ----------
@@ -374,12 +380,18 @@ class RawDatasetsClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
+        copy_from_dataset_id: typing.Optional[str] = OMIT,
+        copy_from_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -400,6 +412,12 @@ class RawDatasetsClient:
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
+        copy_from_dataset_id : typing.Optional[str]
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
+
+        copy_from_version_id : typing.Optional[str]
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -419,6 +437,8 @@ class RawDatasetsClient:
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
                 "batch_group_id": batch_group_id,
+                "copy_from_dataset_id": copy_from_dataset_id,
+                "copy_from_version_id": copy_from_version_id,
             },
             headers={
                 "content-type": "application/json",
@@ -463,6 +483,71 @@ class RawDatasetsClient:
             data={
                 "file": file,
                 "dataset_id": dataset_id,
+            },
+            files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/datasets/items/from-json",
+            method="POST",
+            data={
+                "file": file,
+                "dataset_id": dataset_id,
+                "format": format,
             },
             files={},
             headers={
@@ -2148,6 +2233,11 @@ class AsyncRawDatasetsClient:
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
 
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
+
         Parameters
         ----------
         id : str
@@ -2454,12 +2544,18 @@ class AsyncRawDatasetsClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
+        copy_from_dataset_id: typing.Optional[str] = OMIT,
+        copy_from_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -2480,6 +2576,12 @@ class AsyncRawDatasetsClient:
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
+        copy_from_dataset_id : typing.Optional[str]
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
+
+        copy_from_version_id : typing.Optional[str]
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2499,6 +2601,8 @@ class AsyncRawDatasetsClient:
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
                 "batch_group_id": batch_group_id,
+                "copy_from_dataset_id": copy_from_dataset_id,
+                "copy_from_version_id": copy_from_version_id,
             },
             headers={
                 "content-type": "application/json",
@@ -2543,6 +2647,71 @@ class AsyncRawDatasetsClient:
             data={
                 "file": file,
                 "dataset_id": dataset_id,
+            },
+            files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/datasets/items/from-json",
+            method="POST",
+            data={
+                "file": file,
+                "dataset_id": dataset_id,
+                "format": format,
             },
             files={},
             headers={

@@ -380,6 +380,87 @@ class AlertResourceTest {
                 assertThat(actualResponse.hasEntity()).isTrue();
             }
         }
+
+        @Test
+        @DisplayName("Success: should round-trip group_index on trigger configs")
+        void createAlert__whenGroupIndexedConfigs__thenRoundTrips() {
+            var mock = prepareMockWorkspace();
+
+            var alert = generateAlert();
+            var trigger = feedbackScoreTriggerWithGroups(
+                    AlertEventType.TRACE_FEEDBACK_SCORE, null,
+                    List.of(
+                            new GroupedScoreSpec(0, "hallucination", "0.7", "3600",
+                                    MetricsAlertJob.Operator.GREATER_THAN),
+                            new GroupedScoreSpec(0, "answer_relevance", "0.5", "3600",
+                                    MetricsAlertJob.Operator.LESS_THAN),
+                            new GroupedScoreSpec(1, "faithfulness", "0.8", "3600",
+                                    MetricsAlertJob.Operator.GREATER_THAN)));
+            alert = alert.toBuilder().triggers(List.of(trigger)).build();
+
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var fetched = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var fetchedConfigs = fetched.triggers().getFirst().triggerConfigs();
+            assertThat(fetchedConfigs).hasSize(3);
+            assertThat(fetchedConfigs)
+                    .extracting(AlertTriggerConfig::groupIndex)
+                    .containsExactlyInAnyOrder(0, 0, 1);
+        }
+
+        @Test
+        @DisplayName("when group_index is negative, then return bad request")
+        void createAlert__whenGroupIndexNegative__thenReturnBadRequest() {
+            var mock = prepareMockWorkspace();
+
+            var alert = generateAlert();
+            var trigger = feedbackScoreTriggerWithGroups(
+                    AlertEventType.TRACE_FEEDBACK_SCORE, null,
+                    List.of(new GroupedScoreSpec(-1, "quality", "0.5", "3600",
+                            MetricsAlertJob.Operator.LESS_THAN)));
+            alert = alert.toBuilder().triggers(List.of(trigger)).build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("when group_index set on scope:project, then return bad request")
+        void createAlert__whenGroupIndexOnScopeProject__thenReturnBadRequest() {
+            var mock = prepareMockWorkspace();
+
+            var scopeWithGroup = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .groupIndex(0)
+                    .configValue(Map.of(PROJECT_IDS_CONFIG_KEY,
+                            JsonUtils.writeValueAsString(Set.of(UUID.randomUUID()))))
+                    .build();
+            var threshold = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .groupIndex(0)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, "0.5",
+                            WINDOW_CONFIG_KEY, "3600",
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+            var trigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .triggerConfigs(List.of(threshold, scopeWithGroup))
+                    .build();
+
+            var alert = generateAlert().toBuilder().triggers(List.of(trigger)).build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
     }
 
     @Nested
@@ -1490,6 +1571,123 @@ class AlertResourceTest {
 
             alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NO_CONTENT);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("AND group: webhook fires only when all conditions in the group cross their thresholds")
+        void whenFeedbackScoreAndGroupCrosses__thenSingleWebhookFires(boolean allCross) {
+            var mock = prepareMockWorkspace();
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Two feedback scores on the same trace. When allCross is true, both predicates fire;
+            // when false, the second predicate fails, so the AND group must not fire.
+            BigDecimal hallucinationValue = BigDecimal.valueOf(0.9);
+            BigDecimal relevanceValue = allCross ? BigDecimal.valueOf(0.3) : BigDecimal.valueOf(0.8);
+            traceResourceClient.feedbackScore(trace.id(),
+                    factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                            .name("hallucination").value(hallucinationValue).source(ScoreSource.SDK).build(),
+                    mock.getRight(), mock.getLeft());
+            traceResourceClient.feedbackScore(trace.id(),
+                    factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                            .name("answer_relevance").value(relevanceValue).source(ScoreSource.SDK).build(),
+                    mock.getRight(), mock.getLeft());
+
+            var trigger = feedbackScoreTriggerWithGroups(
+                    AlertEventType.TRACE_FEEDBACK_SCORE, projectId,
+                    List.of(
+                            new GroupedScoreSpec(0, "hallucination", "0.7", "60",
+                                    MetricsAlertJob.Operator.GREATER_THAN),
+                            new GroupedScoreSpec(0, "answer_relevance", "0.5", "60",
+                                    MetricsAlertJob.Operator.LESS_THAN)));
+            var alert = createAlertForEvent(trigger);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            if (allCross) {
+                var payload = verifyWebhookCalledAndGetPayload(alert);
+                MetricsAlertPayload metricsPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
+                assertThat(metricsPayload.groupIndex()).isEqualTo(0);
+                assertThat(metricsPayload.conditions()).hasSize(2);
+                assertThat(metricsPayload.conditions())
+                        .extracting(MetricsAlertPayload.Condition::feedbackScoreName)
+                        .containsExactlyInAnyOrder("hallucination", "answer_relevance");
+            } else {
+                Awaitility.await()
+                        .pollDelay(java.time.Duration.ofSeconds(2))
+                        .atMost(java.time.Duration.ofSeconds(3))
+                        .untilAsserted(() -> {
+                            var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                            assertThat(requests).isEmpty();
+                        });
+            }
+
+            alertResourceClient.deleteAlertBatch(BatchDelete.builder().ids(Set.of(alertId)).build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("OR across groups: each crossing group fires its own consolidated webhook")
+        void whenFeedbackScoreOrGroups__thenIndependentWebhooks() {
+            var mock = prepareMockWorkspace();
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Both scores cross their respective thresholds, but they belong to different OR-groups,
+            // so each group must produce its own webhook (two total).
+            traceResourceClient.feedbackScore(trace.id(),
+                    factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                            .name("hallucination").value(BigDecimal.valueOf(0.9)).source(ScoreSource.SDK).build(),
+                    mock.getRight(), mock.getLeft());
+            traceResourceClient.feedbackScore(trace.id(),
+                    factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                            .name("faithfulness").value(BigDecimal.valueOf(0.95)).source(ScoreSource.SDK).build(),
+                    mock.getRight(), mock.getLeft());
+
+            var trigger = feedbackScoreTriggerWithGroups(
+                    AlertEventType.TRACE_FEEDBACK_SCORE, projectId,
+                    List.of(
+                            new GroupedScoreSpec(0, "hallucination", "0.7", "60",
+                                    MetricsAlertJob.Operator.GREATER_THAN),
+                            new GroupedScoreSpec(1, "faithfulness", "0.8", "60",
+                                    MetricsAlertJob.Operator.GREATER_THAN)));
+            var alert = createAlertForEvent(trigger);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            Awaitility.await().untilAsserted(() -> {
+                var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                assertThat(requests).hasSize(2);
+            });
+
+            var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+            Set<Integer> firedGroupIndices = requests.stream()
+                    .map(req -> {
+                        WebhookEvent<Map<String, Object>> event = JsonUtils.readValue(req.getBodyAsString(),
+                                WebhookEvent.class);
+                        @SuppressWarnings("unchecked")
+                        List<Object> metadata = (List<Object>) event.getPayload().get("metadata");
+                        String payloadJson = JsonUtils.writeValueAsString(metadata.getFirst());
+                        return JsonUtils.readValue(payloadJson, MetricsAlertPayload.class).groupIndex();
+                    })
+                    .collect(Collectors.toSet());
+            assertThat(firedGroupIndices).containsExactlyInAnyOrder(0, 1);
+
+            alertResourceClient.deleteAlertBatch(BatchDelete.builder().ids(Set.of(alertId)).build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
         }
 
         static Stream<Arguments> feedbackScoreThresholdProvider() {
@@ -2913,7 +3111,8 @@ class AlertResourceTest {
     private static AlertTriggerConfig sanitizeTriggerConfig(AlertTriggerConfig config) {
         var builder = config.toBuilder()
                 .createdBy(null)
-                .createdAt(null);
+                .createdAt(null)
+                .groupIndex(null);
         if (config.type() == AlertTriggerConfigType.SCOPE_PROJECT
                 && config.configValue() != null
                 && config.configValue().containsKey(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY)) {
@@ -3042,6 +3241,36 @@ class AlertResourceTest {
         return AlertTrigger.builder()
                 .eventType(eventType)
                 .triggerConfigs(triggerConfigs)
+                .build();
+    }
+
+    private record GroupedScoreSpec(Integer groupIndex, String name, String threshold, String window,
+            MetricsAlertJob.Operator operator) {
+    }
+
+    private static AlertTrigger feedbackScoreTriggerWithGroups(AlertEventType eventType, UUID projectId,
+            List<GroupedScoreSpec> specs) {
+        List<AlertTriggerConfig> configs = new ArrayList<>(specs.stream()
+                .map(s -> AlertTriggerConfig.builder()
+                        .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                        .groupIndex(s.groupIndex())
+                        .configValue(Map.of(
+                                NAME_CONFIG_KEY, s.name(),
+                                THRESHOLD_CONFIG_KEY, s.threshold(),
+                                WINDOW_CONFIG_KEY, s.window(),
+                                OPERATOR_CONFIG_KEY, s.operator().getValue()))
+                        .build())
+                .toList());
+        if (projectId != null) {
+            configs.add(AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .configValue(Map.of(PROJECT_IDS_CONFIG_KEY,
+                            JsonUtils.writeValueAsString(Set.of(projectId))))
+                    .build());
+        }
+        return AlertTrigger.builder()
+                .eventType(eventType)
+                .triggerConfigs(configs)
                 .build();
     }
 

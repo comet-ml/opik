@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.Environment;
@@ -4432,6 +4433,30 @@ class TracesResourceTest {
     class TraceComment {
 
         @Test
+        void createCommentReturnsIdInResponseBody() {
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY, TEST_WORKSPACE);
+            Comment comment = Comment.builder().text("test comment").build();
+
+            try (var response = client.target("%s/v1/private/traces".formatted(baseURI))
+                    .path(traceId.toString())
+                    .path("comments")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(comment))) {
+
+                assertThat(response.getStatus()).isEqualTo(201);
+
+                var body = response.readEntity(CreateCommentResponse.class);
+                assertThat(body.id()).isNotNull();
+
+                var fetched = traceResourceClient.getCommentById(body.id(), traceId, API_KEY, TEST_WORKSPACE, 200);
+                assertThat(fetched.id()).isEqualTo(body.id());
+            }
+        }
+
+        @Test
         void createCommentForNonExistingTraceFail() {
             traceResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
         }
@@ -6345,6 +6370,31 @@ class TracesResourceTest {
     class ThreadComment {
 
         @Test
+        void createCommentReturnsIdInResponseBody() {
+            var thread = createThread();
+            Comment comment = Comment.builder().text("test comment").build();
+
+            try (var response = client.target("%s/v1/private/traces/threads".formatted(baseURI))
+                    .path(thread.threadModelId().toString())
+                    .path("comments")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(comment))) {
+
+                assertThat(response.getStatus()).isEqualTo(201);
+
+                var body = response.readEntity(CreateCommentResponse.class);
+                assertThat(body.id()).isNotNull();
+
+                var fetched = threadCommentResourceClient.getCommentById(body.id(), thread.threadModelId(), API_KEY,
+                        TEST_WORKSPACE, 200);
+                assertThat(fetched.id()).isEqualTo(body.id());
+            }
+        }
+
+        @Test
         void createCommentForNonExistingThreadFail() {
             threadCommentResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
         }
@@ -7682,6 +7732,94 @@ class TracesResourceTest {
                     filters, List.of(), 10, Map.of());
 
             TraceAssertions.assertTraces(page.content(), List.of(custom), List.of(dev, staging, prod), USER);
+        }
+    }
+
+    @Nested
+    @DisplayName("Filter traces by created_at / last_updated_at")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FilterTracesByTimestamp {
+
+        private List<Trace> createPersistedTraces(String projectName, int count) {
+            List<Trace> persisted = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .build();
+                UUID id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+                persisted.add(traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY));
+            }
+            return persisted;
+        }
+
+        private Instant timestamp(Trace trace, TraceField field) {
+            return field == TraceField.CREATED_AT ? trace.createdAt() : trace.lastUpdatedAt();
+        }
+
+        Stream<Arguments> timestampFilterCases() {
+            return Stream.of(TraceField.CREATED_AT, TraceField.LAST_UPDATED_AT)
+                    .flatMap(field -> Stream.of(
+                            arguments(field, Operator.GREATER_THAN_EQUAL, List.of(2, 1)),
+                            arguments(field, Operator.GREATER_THAN, List.of(2)),
+                            arguments(field, Operator.LESS_THAN, List.of(0)),
+                            arguments(field, Operator.LESS_THAN_EQUAL, List.of(1, 0)),
+                            arguments(field, Operator.EQUAL, List.of(1)),
+                            arguments(field, Operator.NOT_EQUAL, List.of(2, 0))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("timestampFilterCases")
+        @DisplayName("honors all comparison operators against the persisted timestamp")
+        void filterByTimestampField(TraceField field, Operator operator, List<Integer> expectedIndexes) {
+            var projectName = "timestamp-filter-%s-%s-%s".formatted(field.name(), operator.name(), UUID.randomUUID());
+
+            var traces = createPersistedTraces(projectName, 3);
+            var boundary = timestamp(traces.get(1), field);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(operator)
+                    .value(boundary.toString())
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            var expected = expectedIndexes.stream().map(traces::get).toList();
+            var unexpected = IntStream.range(0, traces.size())
+                    .filter(i -> !expectedIndexes.contains(i))
+                    .mapToObj(traces::get)
+                    .toList();
+
+            TraceAssertions.assertTraces(page.content(), expected, unexpected, USER);
+        }
+
+        @Test
+        @DisplayName("supports a last_updated_at window combining lower and upper bounds")
+        void filterByLastUpdatedAtWindow() {
+            var projectName = "last-updated-window-" + UUID.randomUUID();
+
+            var traces = createPersistedTraces(projectName, 3);
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.LAST_UPDATED_AT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(traces.get(1).lastUpdatedAt().toString())
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.LAST_UPDATED_AT)
+                            .operator(Operator.LESS_THAN)
+                            .value(traces.get(2).lastUpdatedAt().toString())
+                            .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(traces.get(1)),
+                    List.of(traces.get(0), traces.get(2)), USER);
         }
     }
 

@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
@@ -35,6 +36,8 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
@@ -75,6 +78,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -95,13 +99,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class ExperimentAggregatesIntegrationTest {
 
-    // Fields to ignore in recursive comparison: id is a lookup key,
-    // timestamps differ due to timing, and the remaining fields are not stored
-    // in experiment_aggregates (they are computed/joined in the raw FIND path).
-    // The not-stored fields are explicitly asserted as null below.
+    /**
+     *  Fields ignored in recursive comparison: id (lookup key), createdAt/lastUpdatedAt
+     *  (precision drift between table schemas), projectId (label can diverge between raw and
+     *  aggregates paths — asserted explicitly via isIn(...) instead), and the remaining fields
+     *  which are computed/joined in the raw FIND path and not stored in experiment_aggregates.
+     *  The non-stored fields are explicitly asserted as null in assertExperimentMatches.
+     */
     private static final String[] EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE = new String[]{
             "id", "createdAt", "lastUpdatedAt",
-            "datasetName", "projectName", "promptVersion",
+            "datasetName", "projectId", "projectName", "promptVersion",
             "datasetVersionSummary", "datasetItemCount",
     };
 
@@ -124,7 +131,7 @@ class ExperimentAggregatesIntegrationTest {
             "lastUpdatedBy", "comments", "projectName", "executionPolicy"};
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension app;
 
     private final WireMockUtils.WireMockRuntime wireMock;
 
@@ -139,8 +146,18 @@ class ExperimentAggregatesIntegrationTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .redisUrl(REDIS.getRedisURI())
+                        .customConfigs(List.of(
+                                // Override to a small value so the multi-project test (which creates ~15 traces)
+                                // covers the cursor-paginated expand() loop across several batches,
+                                // instead of completing in one.
+                                new CustomConfig("experimentAggregates.batchSize", "5")))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -239,13 +256,12 @@ class ExperimentAggregatesIntegrationTest {
                 });
 
         // Populate aggregates
-        experiments.parallelStream().forEach(experiment -> {
-            experimentAggregatesService.populateAggregations(experiment.id())
-                    .contextWrite(ctx -> ctx
-                            .put(RequestContext.USER_NAME, USER)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .block();
-        });
+        experiments.parallelStream()
+                .forEach(experiment -> experimentAggregatesService.populateAggregations(experiment.id())
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
 
         // Build criteria using the provided function
         var testData = new CountTestData(
@@ -478,34 +494,81 @@ class ExperimentAggregatesIntegrationTest {
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                 .block();
 
-        // Then: Verify raw calculation matches stored aggregates using recursive comparison
-        assertThat(experimentFromAggregates).as("Experiment from aggregates should not be null").isNotNull();
+        assertExperimentMatches(rawExperiment, experimentFromAggregates, projects.getFirst().id());
+    }
 
-        assertThat(experimentFromAggregates)
-                .usingRecursiveComparison(
-                        RecursiveComparisonConfiguration.builder()
-                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                                .build())
-                .ignoringFields(EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE)
-                .ignoringCollectionOrderInFields("experimentScores", "feedbackScores")
-                .isEqualTo(rawExperiment);
+    /**
+     * Multi-project correctness for the aggregation pipeline: one experiment whose
+     * {@code experiment_items} reference traces in two distinct projects, deliberately
+     * asymmetric (≈2:1 split), must produce an aggregate row where every metric covers
+     * traces from both projects — not just the larger side's subset. The {@code project_id}
+     * label is one of the referenced projects (raw and aggregates may pick different valid
+     * members). Compared against the raw FIND path via {@link #assertExperimentMatches}.
+     */
+    @Test
+    @DisplayName("Multi-project experiment aggregates cover every referenced project")
+    void multiProjectExperimentAggregatesCoverAllReferencedProjects() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        // Fields not stored in experiment_aggregates table are expected to be null
-        assertThat(experimentFromAggregates.datasetName())
-                .as("datasetName is not stored in aggregates")
-                .isNull();
-        assertThat(experimentFromAggregates.projectName())
-                .as("projectName is not stored in aggregates")
-                .isNull();
-        assertThat(experimentFromAggregates.promptVersion())
-                .as("promptVersion is not stored in aggregates")
-                .isNull();
-        assertThat(experimentFromAggregates.datasetVersionSummary())
-                .as("datasetVersionSummary is not stored in aggregates")
-                .isNull();
-        assertThat(experimentFromAggregates.datasetItemCount())
-                .as("datasetItemCount is not stored in aggregates")
-                .isNull();
+        var projectA = createProject(apiKey, workspaceName);
+        var projectB = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        // Asymmetric split (two batches in projectA, one in projectB) so the test fails
+        // distinctly if the aggregation pipeline were to silently drop the minority side.
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        var itemsA1 = createExperimentItemWithData(
+                experiment.id(), dataset.id(), projectA.name(), feedbackScores, apiKey, workspaceName);
+        var itemsA2 = createExperimentItemWithData(
+                experiment.id(), dataset.id(), projectA.name(), feedbackScores, apiKey, workspaceName);
+        var itemsB = createExperimentItemWithData(
+                experiment.id(), dataset.id(), projectB.name(), feedbackScores, apiKey, workspaceName);
+        long projectACount = itemsA1.size() + itemsA2.size();
+        long projectBCount = itemsB.size();
+        long expectedTraceCount = projectACount + projectBCount;
+        assertThat(projectACount)
+                .as("test setup must create asymmetric counts to exercise the multi-project fix")
+                .isGreaterThan(projectBCount);
+
+        // Raw FIND path: ground truth that already accounts for both projects' traces.
+        var searchCriteria = ExperimentSearchCriteria.builder()
+                .experimentIds(Set.of(experiment.id()))
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build();
+
+        var beforeAggregation = experimentService.find(1, 10, searchCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(beforeAggregation).isNotNull();
+        assertThat(beforeAggregation.content()).hasSize(1);
+        var rawExperiment = beforeAggregation.content().getFirst();
+        assertThat(rawExperiment.traceCount())
+                .as("raw FIND path must already cover traces from both projects")
+                .isEqualTo(expectedTraceCount);
+
+        // Populate aggregates and read them back.
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var experimentFromAggregates = experimentAggregatesService
+                .getExperimentFromAggregates(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertExperimentMatches(rawExperiment, experimentFromAggregates, projectA.id(), projectB.id());
     }
 
     @ParameterizedTest(name = "Group by {0}")
@@ -536,13 +599,11 @@ class ExperimentAggregatesIntegrationTest {
 
         // Create experiment items for each experiment
         List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-        IntStream.range(0, numberOfItems).parallel().forEach(i -> {
-            createExperimentItemWithData(
-                    experiments.get(i).id(),
-                    datasets.get(i).id(),
-                    projects.get(i).name(),
-                    feedbackScores, apiKey, workspaceName);
-        });
+        IntStream.range(0, numberOfItems).parallel().forEach(i -> createExperimentItemWithData(
+                experiments.get(i).id(),
+                datasets.get(i).id(),
+                projects.get(i).name(),
+                feedbackScores, apiKey, workspaceName));
 
         // Populate aggregates for all experiments
         experiments.parallelStream()
@@ -611,13 +672,11 @@ class ExperimentAggregatesIntegrationTest {
 
         // Create experiment items for each experiment
         List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-        IntStream.range(0, numberOfItems).parallel().forEach(i -> {
-            createExperimentItemWithData(
-                    experiments.get(i).id(),
-                    datasets.get(i).id(),
-                    projects.get(i).name(),
-                    feedbackScores, apiKey, workspaceName);
-        });
+        IntStream.range(0, numberOfItems).parallel().forEach(i -> createExperimentItemWithData(
+                experiments.get(i).id(),
+                datasets.get(i).id(),
+                projects.get(i).name(),
+                feedbackScores, apiKey, workspaceName));
 
         // Populate aggregates for all experiments
         experiments.forEach(experiment -> experimentAggregatesService.populateAggregations(experiment.id())
@@ -1024,8 +1083,7 @@ class ExperimentAggregatesIntegrationTest {
             DatasetItemCountTestData testData) {
     }
 
-    private AggregatesTestContext setupAggregatesTestData(
-            Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
+    private AggregatesTestContext setupAggregatesTestData() {
         var workspaceName = UUID.randomUUID().toString();
         var apiKey = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -1089,7 +1147,7 @@ class ExperimentAggregatesIntegrationTest {
     void testDatasetItemCountWithAggregates(String scenarioName,
             Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
 
-        var ctx = setupAggregatesTestData(criteriaBuilder);
+        var ctx = setupAggregatesTestData();
         var criteria = criteriaBuilder.apply(ctx.testData());
 
         // When: Get count from original service method
@@ -1265,7 +1323,7 @@ class ExperimentAggregatesIntegrationTest {
             String scenarioName,
             Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
 
-        var ctx = setupAggregatesTestData(criteriaBuilder);
+        var ctx = setupAggregatesTestData();
         var criteria = criteriaBuilder.apply(ctx.testData());
 
         // When: Get items from original service method
@@ -1329,6 +1387,13 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(page.content()).isNotEmpty();
     }
 
+    private void assertPageMetadataMatches(Page<?> actual, Page<?> expected) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields("content")
+                .isEqualTo(expected);
+    }
+
     private void assertPageNotEmpty(ExperimentGroupResponse response) {
         assertThat(response).isNotNull();
         assertThat(response.content()).isNotEmpty();
@@ -1378,7 +1443,7 @@ class ExperimentAggregatesIntegrationTest {
     void getExperimentItemsStatsFromAggregates(String scenarioName,
             Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
 
-        var ctx = setupAggregatesTestData(criteriaBuilder);
+        var ctx = setupAggregatesTestData();
         var criteria = criteriaBuilder.apply(ctx.testData());
 
         @SuppressWarnings("unchecked")
@@ -1608,6 +1673,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -1695,6 +1762,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -1704,7 +1773,7 @@ class ExperimentAggregatesIntegrationTest {
         var project = createProject(API_KEY, TEST_WORKSPACE);
         var dataset = createDataset(API_KEY, TEST_WORKSPACE);
 
-        // Create an test_suite experiment
+        // Create a test_suite experiment
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetId(dataset.id())
                 .datasetName(dataset.name())
@@ -1721,7 +1790,7 @@ class ExperimentAggregatesIntegrationTest {
         // Log assertion scores with category_name="suite_assertion" on the first trace
         var traceId = experimentItems.getFirst().traceId();
         var assertionScores = List.of(
-                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .id(traceId)
                         .projectName(project.name())
                         .name("assertion-grounded")
@@ -1729,7 +1798,7 @@ class ExperimentAggregatesIntegrationTest {
                         .value(BigDecimal.ONE)
                         .source(ScoreSource.SDK)
                         .build(),
-                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .id(traceId)
                         .projectName(project.name())
                         .name("assertion-concise")
@@ -2066,6 +2135,8 @@ class ExperimentAggregatesIntegrationTest {
 
         assertThat(afterAggregation).isNotNull();
 
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2202,7 +2273,7 @@ class ExperimentAggregatesIntegrationTest {
 
         var traceId = experimentItems.getFirst().traceId();
         var assertionScores = List.of(
-                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .id(traceId)
                         .projectName(project.name())
                         .name("assertion-grounded")
@@ -2211,7 +2282,7 @@ class ExperimentAggregatesIntegrationTest {
                         .reason("Grounded in context")
                         .source(ScoreSource.SDK)
                         .build(),
-                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .id(traceId)
                         .projectName(project.name())
                         .name("assertion-concise")
@@ -2291,7 +2362,7 @@ class ExperimentAggregatesIntegrationTest {
 
         var traceId = experimentItems.getFirst().traceId();
         var assertionScores = List.of(
-                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .id(traceId)
                         .projectName(project.name())
                         .name("assertion-grounded")
@@ -2300,7 +2371,7 @@ class ExperimentAggregatesIntegrationTest {
                         .reason("Grounded in context")
                         .source(ScoreSource.SDK)
                         .build(),
-                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .id(traceId)
                         .projectName(project.name())
                         .name("assertion-concise")
@@ -2332,6 +2403,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, API_KEY, TEST_WORKSPACE);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2368,6 +2441,8 @@ class ExperimentAggregatesIntegrationTest {
         var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
 
         experimentService.delete(Set.of(experiment.id()))
@@ -2430,6 +2505,8 @@ class ExperimentAggregatesIntegrationTest {
         var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
 
         // Delete HALF of the experiment items (partial delete), using ids captured from the raw query
@@ -2442,7 +2519,7 @@ class ExperimentAggregatesIntegrationTest {
 
         experimentResourceClient.deleteExperimentItems(deletedItemIds, apiKey, workspaceName);
 
-        TestUtils.waitForMillis(1000); // Wait for the delete to be processed and the ExperimentItemsDeleted event to be published
+        TestUtils.waitForMillis(1000); // Wait for the deletion to be processed and the ExperimentItemsDeleted event to be published
 
         // Expected: beforeAggregation content with the deleted experiment items stripped out
         var expectedAfterDelete = beforeAggregation.content().stream()
@@ -2634,6 +2711,8 @@ class ExperimentAggregatesIntegrationTest {
                 .as("Filtered total should match before/after aggregation for filter %s %s %s",
                         field, operator, value)
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2679,6 +2758,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("Searched total should match before/after aggregation for term '%s'", searchTerm)
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2723,6 +2804,8 @@ class ExperimentAggregatesIntegrationTest {
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
 
         assertPageNotEmpty(afterAggregation);
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2748,7 +2831,7 @@ class ExperimentAggregatesIntegrationTest {
                 .field("duration")
                 .direction(Direction.ASC)
                 .build());
-        var filters = List.<ExperimentsComparisonFilter>of(ExperimentsComparisonFilter.builder()
+        var filters = List.of(ExperimentsComparisonFilter.builder()
                 .field("duration")
                 .type(FieldType.NUMBER)
                 .operator(Operator.GREATER_THAN)
@@ -2773,6 +2856,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("Filtered+sorted total should match before/after aggregation")
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2806,7 +2891,7 @@ class ExperimentAggregatesIntegrationTest {
         // and exercises the `FROM dataset_item_versions FINAL` dedup across multiple
         // resolved versions, without relying on any per-item field generated randomly
         // by PodamFactory.
-        var filters = List.<ExperimentsComparisonFilter>of(ExperimentsComparisonFilter.builder()
+        var filters = List.of(ExperimentsComparisonFilter.builder()
                 .field("id")
                 .type(FieldType.STRING_EXACT)
                 .operator(Operator.NOT_EQUAL)
@@ -2836,6 +2921,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("Filtered total should match before/after aggregation across multiple dataset versions")
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2856,7 +2943,7 @@ class ExperimentAggregatesIntegrationTest {
         // setup of multiVersionExperimentsFilterConsistentBeforeAndAfterAggregates above
         // but exercises an EIA-side (experiment_item_aggregates) filter rather than a
         // DI-side filter on `dataset_items_filtered_ids`. Catches regressions in the
-        // path OPIK-6311 optimised: experiment_item_filters clause + push_top_limit's
+        // path OPIK-6311 optimized: experiment_item_filters clause + push_top_limit's
         // top_dataset_items CTE rendering EIA filters with skip-index pushdown.
         var experiment1 = createExperimentPinnedToFreshDatasetVersion(dataset, project, feedbackScoreNames, apiKey,
                 workspaceName);
@@ -2869,7 +2956,7 @@ class ExperimentAggregatesIntegrationTest {
         // <if(experiment_item_filters)> clause to render in both top_dataset_items and the
         // outer SELECT, exercising eia.duration > 0 directly against the column (skip-index
         // friendly post-OPIK-6177 stable-id migration).
-        var filters = List.<ExperimentsComparisonFilter>of(ExperimentsComparisonFilter.builder()
+        var filters = List.of(ExperimentsComparisonFilter.builder()
                 .field(ExperimentsComparisonValidKnownField.DURATION.getQueryParamField())
                 .operator(Operator.GREATER_THAN)
                 .value("0")
@@ -2899,6 +2986,8 @@ class ExperimentAggregatesIntegrationTest {
         assertThat(afterAggregation.total())
                 .as("EIA-filtered total should match before/after aggregation across multiple dataset versions")
                 .isEqualTo(beforeAggregation.total());
+        assertPageMetadataMatches(afterAggregation, beforeAggregation);
+
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
@@ -2986,4 +3075,52 @@ class ExperimentAggregatesIntegrationTest {
         return experiment;
     }
 
+    /**
+     * Verify the aggregates-path Experiment matches the raw-FIND-path Experiment: row exists,
+     * stored metrics match (recursive comparison ignoring
+     * {@link #EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE}), and each ignored field is asserted
+     * explicitly: {@code id} equals the raw experiment's id; {@code projectId} is in
+     * {@code expectedProjectIdRange} (raw and aggregates use different valid heuristics and
+     * may pick different members of the referenced project set); {@code createdAt}/
+     * {@code lastUpdatedAt} are non-null (precision drift vs raw is tolerated); the rest are
+     * null (not stored in aggregates).
+     */
+    private void assertExperimentMatches(
+            Experiment rawExperiment, Experiment aggregatedExperiment, UUID... expectedProjectIdRange) {
+        assertThat(aggregatedExperiment)
+                .as("Aggregated Experiment should not be null")
+                .isNotNull();
+
+        assertThat(aggregatedExperiment)
+                .usingRecursiveComparison(
+                        RecursiveComparisonConfiguration.builder()
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                .build())
+                .ignoringFields(EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE)
+                .ignoringCollectionOrderInFields("experimentScores", "feedbackScores")
+                .isEqualTo(rawExperiment);
+
+        assertThat(aggregatedExperiment.id())
+                .as("id must match the experiment we populated")
+                .isEqualTo(rawExperiment.id());
+        assertThat(aggregatedExperiment.createdAt())
+                .as("createdAt is stored in aggregates (precision drift vs raw is tolerated)")
+                .isNotNull();
+        assertThat(aggregatedExperiment.lastUpdatedAt())
+                .as("lastUpdatedAt is stored in aggregates (precision drift vs raw is tolerated)")
+                .isNotNull();
+        assertThat(aggregatedExperiment.datasetName())
+                .as("datasetName is not stored in aggregates").isNull();
+        assertThat(aggregatedExperiment.projectName())
+                .as("projectName is not stored in aggregates").isNull();
+        assertThat(aggregatedExperiment.promptVersion())
+                .as("promptVersion is not stored in aggregates").isNull();
+        assertThat(aggregatedExperiment.datasetVersionSummary())
+                .as("datasetVersionSummary is not stored in aggregates").isNull();
+        assertThat(aggregatedExperiment.datasetItemCount())
+                .as("datasetItemCount is not stored in aggregates").isNull();
+        assertThat(aggregatedExperiment.projectId())
+                .as("label projectId must be one of the referenced projects")
+                .isIn(Arrays.stream(expectedProjectIdRange).toList());
+    }
 }

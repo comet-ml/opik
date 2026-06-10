@@ -8,11 +8,11 @@ export const PromptVersionEnvironmentUpdate: core.serialization.Schema<
     serializers.PromptVersionEnvironmentUpdate.Raw,
     OpikApi.PromptVersionEnvironmentUpdate
 > = core.serialization.object({
-    environment: core.serialization.string().optional(),
+    environments: core.serialization.list(core.serialization.string()),
 });
 
 export declare namespace PromptVersionEnvironmentUpdate {
     export interface Raw {
-        environment?: string | null;
+        environments: string[];
     }
 }

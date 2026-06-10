@@ -9,10 +9,6 @@ og:title: Optimize Prompts with Opik Agent Optimizer
 title: Quickstart
 ---
 
-<Note>
-  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
-</Note>
-
 **Opik Agent Optimizer Quickstart** gives you the fastest path from “hello world” to a successful optimization run. If you already walked through the main [Opik Quickstart](/quickstart) (tracing + evaluation), this is the next stop—it layers on the `opik-optimizer` SDK so you can automatically improve prompts and agents. Prefer a UI workflow? Use [Optimization Studio](/development/optimization-runs/optimization_studio) instead.
 
 ## Why Opik Agent Optimizer?
@@ -36,7 +32,10 @@ title: Quickstart
 ```bash
 pip install --upgrade opik opik-optimizer
 opik configure  # paste your API key
+export OPIK_PROJECT_NAME="optimization-quickstart"
 ```
+
+Setting `OPIK_PROJECT_NAME` ensures all traces, experiments, and optimization runs are logged to the same project without having to pass `project_name` to every SDK call.
 
 ## 2. Create a dataset and metric
 
@@ -45,7 +44,7 @@ import opik
 from opik.evaluation.metrics import LevenshteinRatio
 
 client = opik.Opik()
-dataset = client.get_or_create_dataset(name="agent-opt-quickstart", project_name="my-project")
+dataset = client.get_or_create_dataset(name="agent-opt-quickstart")
 dataset.insert([
     {"question": "What is Opik?", "answer": "Opik is an LLM observability and optimization platform."},
     {"question": "How do I reduce hallucinations?", "answer": "Use evaluations and prompt optimization to enforce grounding."},

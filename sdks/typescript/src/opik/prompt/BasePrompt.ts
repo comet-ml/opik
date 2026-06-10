@@ -15,6 +15,7 @@ export interface BasePromptData {
   versionId?: string;
   name: string;
   commit?: string;
+  version?: string;
   metadata?: OpikApi.JsonNode;
   type?: PromptType;
   changeDescription?: string;
@@ -23,6 +24,8 @@ export interface BasePromptData {
   templateStructure?: PromptTemplateStructure;
   synced?: boolean;
   projectName?: string;
+  /** Optional environments that own this prompt version. */
+  environments?: string[];
 }
 
 /**
@@ -33,10 +36,12 @@ export abstract class BasePrompt {
   private _id: string | undefined;
   private _versionId: string | undefined;
   private _commit: string | undefined;
+  private _version: string | undefined;
   private _synced: boolean;
   private _changeDescription: string | undefined;
 
   private _projectName: string | undefined;
+  private _environments: string[];
 
   public readonly type: PromptType;
   public readonly templateStructure: PromptTemplateStructure;
@@ -55,16 +60,23 @@ export abstract class BasePrompt {
   get id(): string | undefined { return this._id; }
   get versionId(): string | undefined { return this._versionId; }
   get commit(): string | undefined { return this._commit; }
+  get version(): string | undefined { return this._version; }
   /** Whether the prompt has been successfully synced with the backend. */
   get synced(): boolean { return this._synced; }
   get changeDescription(): string | undefined { return this._changeDescription; }
   get projectName(): string | undefined { return this._projectName; }
+  /**
+   * The environments that own this prompt version. Returns an empty array
+   * if the version is not associated with any environment.
+   */
+  get environments(): readonly string[] { return Object.freeze([...this._environments]); }
 
 
   constructor(data: BasePromptData, opik?: OpikClient) {
     this._id = data.promptId;
     this._versionId = data.versionId;
     this._commit = data.commit;
+    this._version = data.version;
     this.type = data.type ?? "mustache";
     this._changeDescription = data.changeDescription;
     this.templateStructure = data.templateStructure ?? "text";
@@ -75,6 +87,7 @@ export abstract class BasePrompt {
     this._metadata = data.metadata;
     this.opik = opik ?? getGlobalClient();
     this._projectName = data.projectName;
+    this._environments = data.environments ? [...data.environments] : [];
   }
 
   /**
@@ -84,13 +97,16 @@ export abstract class BasePrompt {
     promptId?: string;
     versionId?: string;
     commit?: string;
+    version?: string;
     changeDescription?: string;
     tags?: string[];
     projectName?: string;
+    environments?: string[];
   }): void {
     this._id = result.promptId;
     this._versionId = result.versionId;
     this._commit = result.commit;
+    this._version = result.version;
     this._changeDescription = result.changeDescription;
     if (result.tags) {
       this._tags = result.tags;
@@ -98,6 +114,7 @@ export abstract class BasePrompt {
     if (result.projectName !== undefined) {
       this._projectName = result.projectName;
     }
+    this._environments = result.environments ? [...result.environments] : [];
     this._synced = true;
   }
 
@@ -144,9 +161,11 @@ export abstract class BasePrompt {
           promptId: result.id,
           versionId: result.versionId,
           commit: result.commit,
+          version: result.version,
           changeDescription: result.changeDescription,
           tags: result.tags ? Array.from(result.tags) : undefined,
           projectName: result.projectName,
+          environments: result.environments ? Array.from(result.environments) : undefined,
         });
       } else {
         logger.warn(
@@ -354,18 +373,27 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Helper method to retrieve a version by commit hash.
-   * Used by subclasses in their getVersion implementations.
+   * Helper method to retrieve a version by its sequential version identifier
+   * (e.g. `"v3"`) or, for backwards compatibility, by its commit hash.
    *
-   * @param commit - Commit hash (8-char short form or full)
+   * Input matching `/^v\d+$/` is dispatched to the `versionNumber` endpoint;
+   * anything else is treated as a commit hash. Commit-based fetching is
+   * deprecated — pass a `"v<N>"` identifier instead.
+   *
+   * @param version - Sequential version (`"v3"`) or commit hash (deprecated)
    * @returns Promise resolving to the API response or null if not found
    */
-  protected async retrieveVersionByCommit(
-    commit: string,
+  protected async retrieveVersion(
+    version: string,
   ): Promise<OpikApi.PromptVersionDetail | null> {
+    const isVersionNumber = /^v\d+$/.test(version);
+    const request = isVersionNumber
+      ? { name: this.name, versionNumber: version }
+      : { name: this.name, commit: version };
+
     try {
       const response = await this.opik.api.prompts.retrievePromptVersion(
-        { name: this.name, commit },
+        request,
         this.opik.api.requestOptions,
       );
       return response;
@@ -382,7 +410,7 @@ export abstract class BasePrompt {
 
       logger.error("Failed to retrieve prompt version", {
         promptName: this.name,
-        commit,
+        version,
         error,
       });
       throw error;
@@ -403,13 +431,14 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Get a specific version by commit hash.
-   * Returns a new instance of the appropriate prompt type.
+   * Get a specific version by its sequential version identifier (e.g. `"v3"`)
+   * or, for backwards compatibility, by its commit hash. Returns a new instance
+   * of the appropriate prompt type.
    *
-   * @param commit - Commit hash (8-char short form or full)
+   * @param version - Sequential version (`"v<N>"`) — preferred; or commit hash (deprecated)
    * @returns Promise resolving to prompt instance or null if not found
    */
-  abstract getVersion(commit: string): Promise<BasePrompt | null>;
+  abstract getVersion(version: string): Promise<BasePrompt | null>;
 
   /**
    * Restores a specific version by creating a new version with content from the specified version.

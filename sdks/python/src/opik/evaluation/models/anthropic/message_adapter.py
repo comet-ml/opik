@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
@@ -9,7 +10,28 @@ import pydantic
 
 LOGGER = logging.getLogger(__name__)
 
-# Parameters accepted by anthropic.messages.create()
+# Parameters accepted by anthropic.messages.create().
+#
+# Notable omission — `reasoning_effort` (OpenAI-shape extended-thinking
+# knob). It's deliberately not listed, so `filter_unsupported_params`
+# drops it silently. The LiteLLM path translates `reasoning_effort` →
+# `thinking={"type": "enabled", "budget_tokens": N}` (and applies a
+# conditional drop when an explicit non-1 `temperature` would conflict —
+# see `LiteLLMChatModel._remove_unnecessary_not_supported_params`). The
+# native path here intentionally does NOT mirror that translation: the
+# effort→budget mapping is LiteLLM's convention, not Anthropic's, so
+# encoding it here would tie us to LiteLLM's choices.
+#
+# Practical consequence — for users who want extended thinking on the
+# native adapter, pass `thinking={...}` directly (you'd also need to
+# add it to this set so it isn't filtered) instead of relying on
+# `reasoning_effort`. Same-model, swap-adapters behavior therefore
+# diverges when the caller sets `reasoning_effort` with a non-
+# conflicting temperature: native drops it, LiteLLM keeps it. See the
+# discussion on the `temperature=0` rationale in
+# `suite_evaluators/agentic/loop.py` for why this hasn't surfaced via
+# the agentic judge (the loop pins `temperature=0`, which forces both
+# paths into the drop branch and hides the asymmetry).
 _SUPPORTED_PARAMS: frozenset[str] = frozenset(
     {
         "model",
@@ -25,6 +47,121 @@ _SUPPORTED_PARAMS: frozenset[str] = frozenset(
         "metadata",
     }
 )
+
+
+def _parse_tool_call_arguments(arguments: Any) -> Dict[str, Any]:
+    """Decode an OpenAI tool call's `arguments` field into a dict.
+
+    OpenAI emits `arguments` as a JSON-encoded string; Anthropic's
+    `tool_use.input` is specified as a JSON object — top-level
+    arrays, scalars, or nulls are rejected by the API. This helper
+    only returns dicts:
+
+    - Dict in → dict out.
+    - JSON-encoded dict string → decoded dict.
+    - Anything else (top-level list/scalar/null, malformed JSON,
+      non-string non-dict values) → empty dict.
+
+    We fall back to `{}` rather than raising. The Anthropic SDK will
+    surface a schema-mismatch error against the tool's `input_schema`
+    if the call actually needed structured arguments, which is more
+    actionable than "your tool arguments aren't an object." Forwarding
+    a list/scalar here, on the other hand, would short-circuit the
+    SDK's validation with an opaque 400.
+    """
+    if isinstance(arguments, dict):
+        return arguments
+    if isinstance(arguments, str):
+        try:
+            decoded = json.loads(arguments)
+        except (TypeError, ValueError):
+            return {}
+        if isinstance(decoded, dict):
+            return decoded
+    return {}
+
+
+def normalize_messages(
+    messages: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Translate OpenAI-shape conversation history to Anthropic shape.
+
+    Two transformations are required for any history that includes
+    tool round-trips (i.e. the agentic loop's follow-up turns):
+
+    1. `{"role": "tool", "tool_call_id": X, "content": ...}` becomes a
+       `{"type": "tool_result", "tool_use_id": X, "content": ...}`
+       block inside a user message. Anthropic rejects the `tool` role
+       outright ("Allowed roles are 'user' or 'assistant'").
+
+    2. `{"role": "assistant", "content": ..., "tool_calls": [...]}`
+       becomes an assistant message whose `content` is a list of
+       blocks — optional `text` block first, then one `tool_use` block
+       per call (with the JSON-decoded `input`).
+
+    Consecutive tool messages are coalesced into a single user message
+    with multiple `tool_result` blocks — Anthropic requires this when
+    the prior assistant turn emitted multiple `tool_use` blocks. The
+    rest of the message shapes (system, plain user, assistant text)
+    pass through unchanged so the diff against pre-loop callers stays
+    small.
+    """
+    result: List[Dict[str, Any]] = []
+    pending_tool_results: List[Dict[str, Any]] = []
+
+    def flush_tool_results() -> None:
+        if pending_tool_results:
+            result.append({"role": "user", "content": list(pending_tool_results)})
+            pending_tool_results.clear()
+
+    for msg in messages:
+        role = msg.get("role")
+        if role == "tool":
+            pending_tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": msg.get("tool_call_id"),
+                    "content": msg.get("content", ""),
+                }
+            )
+            continue
+
+        flush_tool_results()
+
+        if role == "assistant":
+            tool_calls = msg.get("tool_calls") or []
+            text_content = msg.get("content")
+            if not tool_calls:
+                # Pure text assistant message — keep the simple
+                # string-content shape Anthropic accepts.
+                result.append({"role": "assistant", "content": text_content})
+                continue
+            blocks: List[Dict[str, Any]] = []
+            if isinstance(text_content, str) and text_content:
+                blocks.append({"type": "text", "text": text_content})
+            for call in tool_calls:
+                function = call.get("function") or {}
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": call.get("id"),
+                        "name": function.get("name"),
+                        "input": _parse_tool_call_arguments(
+                            function.get("arguments", "{}")
+                        ),
+                    }
+                )
+            result.append({"role": "assistant", "content": blocks})
+            continue
+
+        # Pass-through for any other role (`user`, plus anything
+        # `extract_system_messages` left in place — system is normally
+        # split off before this runs, but it's not catastrophic if it
+        # ends up here).
+        result.append(msg)
+
+    flush_tool_results()
+    return result
 
 
 def extract_system_messages(
@@ -84,3 +221,118 @@ def filter_unsupported_params(
             )
             already_warned.add(key)
     return filtered
+
+
+# OpenAI accepts `tool_choice` as a bare string ("auto" / "none" /
+# "required") or as an object naming a specific function; Anthropic
+# requires the object form in all cases and uses different keys. The
+# agentic loop emits OpenAI-style values because that's the dominant
+# convention, so we translate at the adapter seam rather than
+# threading provider awareness up through the caller.
+#
+# Mapping rationale:
+# - "auto" → {"type": "auto"} (let the model decide)
+# - "none" → {"type": "none"} (forbid tool use)
+# - "required" → {"type": "any"} (force *some* tool, no specific one)
+# - {"type": "function", "function": {"name": X}} → {"type": "tool",
+#   "name": X} (force a specific tool by name)
+_OPENAI_TO_ANTHROPIC_TOOL_CHOICE_STR: Dict[str, Dict[str, str]] = {
+    "auto": {"type": "auto"},
+    "none": {"type": "none"},
+    "required": {"type": "any"},
+}
+
+
+def _normalize_one_tool(tool: Any) -> Any:
+    """Translate one OpenAI-style tool spec to Anthropic's shape.
+
+    OpenAI:
+        {"type": "function", "function": {
+            "name": ..., "description": ..., "parameters": {...}
+        }}
+    Anthropic (`type: "custom"` discriminator required by the newer
+    schema; the `function` value is rejected by the API):
+        {"type": "custom", "name": ..., "description": ...,
+         "input_schema": {...}}
+
+    Already-Anthropic-shaped tools (anything that isn't OpenAI's
+    `type=function` wrapper) pass through unchanged so callers who
+    hand-build the native spec aren't disturbed.
+    """
+    if not isinstance(tool, dict):
+        return tool
+    if tool.get("type") != "function":
+        return tool
+    function = tool.get("function") or {}
+    name = function.get("name")
+    if not isinstance(name, str):
+        # Malformed OpenAI spec — let the SDK surface the error
+        # rather than silently rewriting it into something Anthropic
+        # would also reject.
+        return tool
+    translated: Dict[str, Any] = {
+        "type": "custom",
+        "name": name,
+    }
+    if "description" in function:
+        translated["description"] = function["description"]
+    if "parameters" in function:
+        translated["input_schema"] = function["parameters"]
+    return translated
+
+
+def extract_tool_names(tools: Any) -> List[str]:
+    """Pull the `name` field out of each tool spec.
+
+    Tolerates both OpenAI shape (`tool["function"]["name"]`) and the
+    Anthropic-native shape (`tool["name"]`) so callers can use this
+    before or after `normalize_tools` runs. Skips entries missing a
+    name rather than raising — the SDK will surface those errors via
+    its own validation.
+    """
+    if not isinstance(tools, list):
+        return []
+    names: List[str] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        if tool.get("type") == "function":
+            function = tool.get("function") or {}
+            name = function.get("name")
+        else:
+            name = tool.get("name")
+        if isinstance(name, str):
+            names.append(name)
+    return names
+
+
+def normalize_tools(tools: Any) -> Any:
+    """Translate a list of OpenAI-style tool specs to Anthropic shape.
+
+    Non-list values pass through untouched so callers passing `None`
+    or other sentinel-ish values aren't surprised.
+    """
+    if not isinstance(tools, list):
+        return tools
+    return [_normalize_one_tool(t) for t in tools]
+
+
+def normalize_tool_choice(value: Any) -> Any:
+    """Translate OpenAI-style `tool_choice` values into Anthropic's
+    object form. Pass-through for already-correct shapes and for
+    unrecognized values (let the SDK surface the error rather than
+    silently dropping it).
+    """
+    if isinstance(value, str):
+        return _OPENAI_TO_ANTHROPIC_TOOL_CHOICE_STR.get(value, value)
+    if isinstance(value, dict):
+        # OpenAI's "force this specific function" shape:
+        #   {"type": "function", "function": {"name": "read"}}
+        # Anthropic equivalent:
+        #   {"type": "tool", "name": "read"}
+        if value.get("type") == "function":
+            function = value.get("function") or {}
+            name = function.get("name")
+            if isinstance(name, str):
+                return {"type": "tool", "name": name}
+    return value

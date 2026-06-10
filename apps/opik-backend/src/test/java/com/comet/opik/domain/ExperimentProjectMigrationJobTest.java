@@ -20,7 +20,6 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -42,7 +41,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -57,9 +55,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class ExperimentProjectMigrationJobTest {
-
-    private static final String EXCLUDED_WORKSPACE_ID_1 = UUID.randomUUID().toString();
-    private static final String EXCLUDED_WORKSPACE_ID_2 = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -90,11 +85,10 @@ class ExperimentProjectMigrationJobTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
+                                // Entity-based determination required so the migration's V1 -> V2 transition
+                                // is observable.
+                                new CustomConfig("serviceToggles.forceWorkspaceVersion", "disabled"),
                                 new CustomConfig("experimentProjectMigration.enabled", "true"),
-                                // Buffer so the first cycle fires after the initial seed+prime.
-                                new CustomConfig("experimentProjectMigration.startupDelay", "3s"),
-                                new CustomConfig("migration.excludedWorkspaceIds",
-                                        "%s,%s".formatted(EXCLUDED_WORKSPACE_ID_1, EXCLUDED_WORKSPACE_ID_2)),
                                 // Cache enabled with the production TTL so only the migration's
                                 // evictCache can flip a cached V1 to V2 within the test windows.
                                 new CustomConfig("cacheManager.enabled", "true"),
@@ -122,221 +116,27 @@ class ExperimentProjectMigrationJobTest {
     }
 
     @Test
-    void migrateEligibleExperimentsAcrossWorkspaces() {
-        // Workspace A: one eligible experiment (smallest first per FIND_ELIGIBLE ordering).
-        var apiKeyA = randomName("api-key");
-        var workspaceNameA = randomName("workspace");
-        var workspaceIdA = UUID.randomUUID().toString();
-        mockTargetWorkspace(wireMock.server(), apiKeyA, workspaceNameA, workspaceIdA, randomName("user"));
-        var projectNameA = randomName("project");
-        var seededA = seedCertainExperiment(apiKeyA, workspaceNameA, projectNameA);
-        var experimentIdA = seededA.getLeft();
-        var projectIdA = seededA.getRight();
-        var beforeA = experimentResourceClient.getExperiment(experimentIdA, apiKeyA, workspaceNameA);
+    void scheduledJobMigratesEligibleWorkspaceToV2() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        // Workspace B: two eligible experiments in the same project (multi-experiment per workspace).
-        var apiKeyB = randomName("api-key");
-        var workspaceNameB = randomName("workspace");
-        var workspaceIdB = UUID.randomUUID().toString();
-        mockTargetWorkspace(wireMock.server(), apiKeyB, workspaceNameB, workspaceIdB, randomName("user"));
-        var projectNameB = randomName("project");
-        var projectIdB = createProject(apiKeyB, workspaceNameB, projectNameB);
-        var datasetNameB = randomName("dataset");
-        createDatasetWithProject(apiKeyB, workspaceNameB, datasetNameB, projectIdB);
-        var experimentIdsB = new ArrayList<UUID>();
-        for (int i = 0; i < 2; i++) {
-            var traceId = createTrace(apiKeyB, workspaceNameB, projectNameB);
-            var experimentId = createOrphanExperiment(apiKeyB, workspaceNameB, datasetNameB);
-            linkExperimentToTraces(apiKeyB, workspaceNameB, experimentId, traceId);
-            experimentIdsB.add(experimentId);
-        }
-        var beforesB = new ArrayList<Experiment>();
-        for (var id : experimentIdsB) {
-            beforesB.add(experimentResourceClient.getExperiment(id, apiKeyB, workspaceNameB));
-        }
+        var projectName = randomName("project");
+        var seededA = seedCertainExperiment(apiKey, workspaceName, projectName);
+        var experimentId = seededA.getLeft();
+        var projectId = seededA.getRight();
+        var before = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
 
         // Prime the workspace_version cache to V1 before the first migration cycle fires.
         // This forces the post-migration V2 read to depend on evictWorkspaceVersionCache
         // actually clearing the cached V1, exercising the evictCache path end-to-end.
-        assertWorkspaceVersion(apiKeyA, workspaceNameA, OpikVersion.VERSION_1);
-        assertWorkspaceVersion(apiKeyB, workspaceNameB, OpikVersion.VERSION_1);
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1);
 
-        // A single cycle picks up both workspaces (workspacesPerRun=20 default) and
-        // FIND_ELIGIBLE_EXPERIMENT_WORKSPACES orders smallest-first; both should reach V2.
-        assertWorkspaceVersion2(apiKeyA, workspaceNameA);
-        assertWorkspaceVersion2(apiKeyB, workspaceNameB);
-
-        assertExperimentMigrated(apiKeyA, workspaceNameA, experimentIdA, beforeA, projectIdA, projectNameA);
-        for (int i = 0; i < experimentIdsB.size(); i++) {
-            assertExperimentMigrated(apiKeyB, workspaceNameB, experimentIdsB.get(i),
-                    beforesB.get(i), projectIdB, projectNameB);
-        }
-    }
-
-    /**
-     * Single workspace covering all non-eligible filter points in one cycle:
-     * <ul>
-     *   <li>"ambiguous" experiment is filtered at {@code COMPUTE_MAPPING}
-     *       ({@code HAVING count(DISTINCT t.project_id) = 1}).</li>
-     *   <li>"deleted-project" experiment reaches {@code COMPUTE_MAPPING} but is filtered at
-     *       {@code projectService.findByIds} ({@code skippedDeleted > 0} branch in
-     *       {@code migrateValidatedMappings}).</li>
-     *   <li>"demo" experiment is eligible-shaped (one trace in a single live project) but
-     *       filtered by {@code WHERE e.name NOT IN :demo_experiment_names} in both
-     *       {@code FIND_ELIGIBLE} and {@code COMPUTE_MAPPING}. Demo data is invisible to the
-     *       workspace V1 entity check, so this gap can only be detected at the experiment level.</li>
-     * </ul>
-     * Workspace stays V1 because the ambiguous and deleted-project orphans keep it V1; the
-     * eligible one migrates to its inferred project; the demo experiment's empty project_id is
-     * preserved.
-     */
-    @Test
-    void mixedWorkspaceMigratesEligibleAndKeepsNonEligibleAsV1() {
-        var apiKey = randomName("api-key");
-        var workspaceName = randomName("workspace");
-        var workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
-
-        // Eligible: one trace in a single alive project => migrates.
-        var eligibleProjectName = randomName("project");
-        var eligibleProjectId = createProject(apiKey, workspaceName, eligibleProjectName);
-        var datasetName = randomName("dataset");
-        createDatasetWithProject(apiKey, workspaceName, datasetName, eligibleProjectId);
-        var eligibleTraceId = createTrace(apiKey, workspaceName, eligibleProjectName);
-        var eligibleExperimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
-        linkExperimentToTraces(apiKey, workspaceName, eligibleExperimentId, eligibleTraceId);
-
-        // Ambiguous: two traces in two different projects => filtered at COMPUTE_MAPPING.
-        var ambiguousProjectName1 = randomName("project");
-        var ambiguousProjectName2 = randomName("project");
-        createProject(apiKey, workspaceName, ambiguousProjectName1);
-        createProject(apiKey, workspaceName, ambiguousProjectName2);
-        var ambiguousTrace1Id = createTrace(apiKey, workspaceName, ambiguousProjectName1);
-        var ambiguousTrace2Id = createTrace(apiKey, workspaceName, ambiguousProjectName2);
-        var ambiguousExperimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
-        linkExperimentToTraces(apiKey, workspaceName, ambiguousExperimentId,
-                ambiguousTrace1Id, ambiguousTrace2Id);
-
-        // Deleted-project: one trace in a single project that gets deleted in MySQL after seeding.
-        // Reaches COMPUTE_MAPPING (single project), gets filtered at projectService.findByIds.
-        var deletedProjectName = randomName("project");
-        var deletedProjectId = createProject(apiKey, workspaceName, deletedProjectName);
-        var deletedTraceId = createTrace(apiKey, workspaceName, deletedProjectName);
-        var deletedExperimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
-        linkExperimentToTraces(apiKey, workspaceName, deletedExperimentId, deletedTraceId);
-        projectResourceClient.deleteProject(deletedProjectId, apiKey, workspaceName);
-
-        // Demo: eligible-shaped (single trace in the live eligible project) but filtered by
-        // demo-name exclusion in both FIND_ELIGIBLE and COMPUTE_MAPPING.
-        var demoTraceId = createTrace(apiKey, workspaceName, eligibleProjectName);
-        var demoExperimentId = experimentResourceClient.create(
-                experimentResourceClient.createPartialExperiment()
-                        .id(null)
-                        .name(DemoData.EXPERIMENTS.getFirst())
-                        .datasetName(datasetName)
-                        .build(),
-                apiKey, workspaceName);
-        linkExperimentToTraces(apiKey, workspaceName, demoExperimentId, demoTraceId);
-
-        var eligibleBefore = experimentResourceClient.getExperiment(eligibleExperimentId, apiKey, workspaceName);
-        var ambiguousBefore = experimentResourceClient.getExperiment(ambiguousExperimentId, apiKey, workspaceName);
-        var deletedBefore = experimentResourceClient.getExperiment(deletedExperimentId, apiKey, workspaceName);
-        var demoBefore = experimentResourceClient.getExperiment(demoExperimentId, apiKey, workspaceName);
-
-        assertWorkspaceVersion1(apiKey, workspaceName);
-
-        assertExperimentMigrated(apiKey, workspaceName, eligibleExperimentId, eligibleBefore,
-                eligibleProjectId, eligibleProjectName);
-        assertExperimentUnchanged(apiKey, workspaceName, ambiguousExperimentId, ambiguousBefore);
-        assertExperimentUnchanged(apiKey, workspaceName, deletedExperimentId, deletedBefore);
-        assertExperimentUnchanged(apiKey, workspaceName, demoExperimentId, demoBefore);
-    }
-
-    @Test
-    void skipExperimentWhenInferredProjectWasDeleted(WorkspacesService workspacesService) {
-        var apiKey = randomName("api-key");
-        var workspaceName = randomName("workspace");
-        var workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
-
-        var projectName = randomName("project");
-        var projectId = createProject(apiKey, workspaceName, projectName);
-        var datasetName = randomName("dataset");
-        createDatasetWithProject(apiKey, workspaceName, datasetName, projectId);
-        var traceId = createTrace(apiKey, workspaceName, projectName);
-        var experimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
-        linkExperimentToTraces(apiKey, workspaceName, experimentId, traceId);
-
-        projectResourceClient.deleteProject(projectId, apiKey, workspaceName);
-
-        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
-
-        assertWorkspaceVersion1(apiKey, workspaceName);
-
-        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
-
-        // Trapped workspaces persist via the workspaces.migration_skipped_at column; the next
-        // cycle reads that list to assemble its exclusion set, so the workspace must appear here.
-        Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
-                () -> assertThat(workspacesService.findMigrationSkippedWorkspaceIds()).contains(workspaceId));
-    }
-
-    @Test
-    void skipExperimentWithNoTraceLinks() {
-        var apiKey = randomName("api-key");
-        var workspaceName = randomName("workspace");
-        var workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
-
-        var projectName = randomName("project");
-        var projectId = createProject(apiKey, workspaceName, projectName);
-        var datasetName = randomName("dataset");
-        createDatasetWithProject(apiKey, workspaceName, datasetName, projectId);
-        var experimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
-
-        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
-
-        assertWorkspaceVersion1(apiKey, workspaceName);
-
-        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
-    }
-
-    @Test
-    void skipPreMarkedTrappedWorkspaces(WorkspacesService workspacesService) {
-        // Pre-mark a workspace as skipped via the workspaces table BEFORE seeding any experiments.
-        // The cycle's exclusion set is the union of migration.excludedWorkspaceIds config and
-        // findMigrationSkippedWorkspaceIds(), so this workspace must be omitted — proven by the
-        // eligible experiment never getting migrated.
-        var apiKey = randomName("api-key");
-        var workspaceName = randomName("workspace");
-        var workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
-
-        var seeded = seedCertainExperiment(apiKey, workspaceName, randomName("project"));
-        var experimentId = seeded.getLeft();
-        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
-
-        workspacesService.markMigrationSkipped(workspaceId, "test-pre-marked-trap");
-
-        assertWorkspaceVersion1(apiKey, workspaceName);
-
-        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
-    }
-
-    @Test
-    void skipExcludedWorkspaces() {
-        var apiKey = randomName("api-key");
-        var workspaceName = randomName("workspace");
-        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, EXCLUDED_WORKSPACE_ID_1, randomName("user"));
-
-        var projectName = randomName("project");
-        var seeded = seedCertainExperiment(apiKey, workspaceName, projectName);
-        var experimentId = seeded.getLeft();
-        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
-
-        assertWorkspaceVersion1(apiKey, workspaceName);
-
-        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
+        // The scheduler fires the job, the job invokes the cycle, the cycle promotes the
+        // workspace. We don't assert which bucket — just that the wiring eventually works.
+        assertWorkspaceVersion2(apiKey, workspaceName);
+        assertExperimentMigrated(apiKey, workspaceName, experimentId, before, projectId, projectName);
     }
 
     private Pair<UUID, UUID> seedCertainExperiment(String apiKey, String workspaceName, String projectName) {
@@ -413,14 +213,13 @@ class ExperimentProjectMigrationJobTest {
                         () -> assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2));
     }
 
-    private void assertWorkspaceVersion1(String apiKey, String workspaceName) {
-        Awaitility.await().atMost(15, TimeUnit.SECONDS).during(12, TimeUnit.SECONDS).untilAsserted(
-                () -> assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1));
-    }
-
     private void assertExperimentMigrated(
-            String apiKey, String workspaceName, UUID experimentId,
-            Experiment beforeMigration, UUID expectedProjectId, String expectedProjectName) {
+            String apiKey,
+            String workspaceName,
+            UUID experimentId,
+            Experiment beforeMigration,
+            UUID expectedProjectId,
+            String expectedProjectName) {
         var actual = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
         var expected = beforeMigration.toBuilder()
                 .projectId(expectedProjectId)
@@ -429,12 +228,5 @@ class ExperimentProjectMigrationJobTest {
                 .build();
         assertExperimentEqual(actual, expected);
         assertThat(actual.lastUpdatedAt()).isAfter(beforeMigration.lastUpdatedAt());
-    }
-
-    private void assertExperimentUnchanged(
-            String apiKey, String workspaceName, UUID experimentId, Experiment beforeMigration) {
-        var actual = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
-        assertExperimentEqual(actual, beforeMigration);
-        assertThat(actual.lastUpdatedAt()).isEqualTo(beforeMigration.lastUpdatedAt());
     }
 }

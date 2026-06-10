@@ -1,5 +1,5 @@
 # Multi-stage build to reduce final image size
-FROM docker:29.2.1 AS builder
+FROM docker:29.5.1 AS builder
 
 # Build dependencies (only needed during pip install)
 RUN apk add --no-cache tini python3 py3-pip build-base python3-dev musl-dev gcc libffi-dev && \
@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ##############################################################
 # Runtime stage - minimal packages only
-FROM docker:29.2.1
+FROM docker:29.5.1
 
 # First upgrading to latest available versions to mitigate CVEs
 RUN apk add --no-cache --upgrade libexpat

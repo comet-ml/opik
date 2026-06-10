@@ -19,34 +19,21 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Separator } from "@/ui/separator";
 import { Input } from "@/ui/input";
 import SelectBox from "@/shared/SelectBox/SelectBox";
-import { DropdownOption } from "@/types/shared";
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
+import { WINDOW_OPTIONS } from "./constants";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { cn } from "@/lib/utils";
 import FeedbackScoreConditions, {
-  DEFAULT_FEEDBACK_SCORE_CONDITION,
+  DEFAULT_FEEDBACK_SCORE_CONDITION_GROUP,
 } from "./FeedbackScoreConditions";
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
   projectId: string;
 };
-
-const WINDOW_OPTIONS: DropdownOption<string>[] = [
-  { label: "5 minutes", value: "300" },
-  { label: "15 minutes", value: "900" },
-  { label: "30 minutes", value: "1800" },
-  { label: "1 hour", value: "3600" },
-  { label: "6 hours", value: "21600" },
-  { label: "12 hours", value: "43200" },
-  { label: "24 hours", value: "86400" },
-  { label: "7 days", value: "604800" },
-  { label: "15 days", value: "1296000" },
-  { label: "30 days", value: "2592000" },
-];
 
 function getThresholdLabel(eventType: ALERT_EVENT_TYPE): string {
   switch (eventType) {
@@ -104,7 +91,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
         eventType,
         ...(isFeedbackScoreTrigger
           ? {
-              conditions: [DEFAULT_FEEDBACK_SCORE_CONDITION],
+              groups: [DEFAULT_FEEDBACK_SCORE_CONDITION_GROUP],
             }
           : {}),
       });
@@ -341,7 +328,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                             field.eventType,
                           )}
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-start pt-0.5">
                         <Button
                           type="button"
                           variant="minimal"

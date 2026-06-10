@@ -112,6 +112,7 @@ class AnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -135,6 +136,8 @@ class AnnotationQueuesClient:
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
 
+        annotators_per_item : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -157,6 +160,7 @@ class AnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
             request_options=request_options,
         )
         return _response.data
@@ -256,6 +260,7 @@ class AnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -274,6 +279,8 @@ class AnnotationQueuesClient:
         comments_enabled : typing.Optional[bool]
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        annotators_per_item : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -295,6 +302,7 @@ class AnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
             request_options=request_options,
         )
         return _response.data
@@ -432,6 +440,7 @@ class AsyncAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -454,6 +463,8 @@ class AsyncAnnotationQueuesClient:
         comments_enabled : typing.Optional[bool]
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        annotators_per_item : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -480,6 +491,7 @@ class AsyncAnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
             request_options=request_options,
         )
         return _response.data
@@ -588,6 +600,7 @@ class AsyncAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -606,6 +619,8 @@ class AsyncAnnotationQueuesClient:
         comments_enabled : typing.Optional[bool]
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        annotators_per_item : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -630,6 +645,7 @@ class AsyncAnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
             request_options=request_options,
         )
         return _response.data

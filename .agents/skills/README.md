@@ -5,13 +5,16 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 | Skill | Path | Description |
 |-------|------|-------------|
 | analytics-instrumentation | `analytics-instrumentation/` | Add analytics events to Opik features. Use when wiring PostHog events on the frontend or backend for product analytics tracking. |
+| debugging-e2e-tests | `debugging-e2e-tests/` | Investigate a failed Opik E2E test and propose a fix (read-only). Use when a test goes red in CI, a TestOps launch, or locally — gathers the trace + history, classifies regression vs. flake, proposes a fix. |
 | diagram-generation | `diagram-generation/` | Generate self-contained HTML architecture diagrams. Use when creating visual diagrams for PRs, task plans, or architectural explanations. |
 | documentation | `documentation/` | Feature documentation and release notes patterns. Use when documenting changes, writing PR descriptions, or preparing releases. |
 | local-dev | `local-dev/` | Local development environment setup and commands. Use when helping with dev server, Docker, or local testing. |
 | opik-backend | `opik-backend/` | Java backend patterns for Opik. Use when working in `apps/opik-backend`, designing APIs, database operations, or services. |
 | opik-frontend | `opik-frontend/` | React frontend patterns for Opik. Use when working in `apps/opik-frontend`, on components, state, or data fetching. |
 | playwright-e2e | `playwright-e2e/` | Playwright E2E test generation workflow. Use when generating, fixing, or planning automated tests in `tests_end_to_end/`. |
+| playwright-pom-discovery | `playwright-pom-discovery/` | Choose stable selectors against the live UI when building a Page Object Model for the E2E suite (`tests_end_to_end/e2e/pom/`). Used as the discovery sub-step by `writing-e2e-tests`. |
 | python-sdk | `python-sdk/` | Python SDK patterns for Opik. Use when working in `sdks/python`, on SDK APIs, integrations, or message processing. |
 | typescript-sdk | `typescript-sdk/` | TypeScript SDK patterns for Opik. Use when working in `sdks/typescript`. |
+| writing-e2e-tests | `writing-e2e-tests/` | Add an end-to-end test for an Opik feature in `tests_end_to_end/e2e/`. Use when a developer wants to write a test for a feature, page, or branch — runs the full loop: analyze, explore the live UI, write the POM + spec, and run it locally until green. |
 
 Each skill directory contains a `SKILL.md` entry point plus supporting documents (testing, code quality, patterns, etc.).

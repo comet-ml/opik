@@ -116,6 +116,70 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         with self._rlock:
             self._active = active
 
+    def get_trace(self, trace_id: str) -> Optional[models.TraceModel]:
+        """Return the stored trace by id, or None if not present.
+
+        Flat lookup — does not trigger tree-building side effects.
+        `feedback_scores` and `attachments` on the returned model are only
+        populated after `trace_trees` has run; callers needing them should
+        read `_trace_to_feedback_scores` / `_trace_to_attachments` via the
+        dedicated accessors instead.
+        """
+        with self._rlock:
+            return self._trace_observations.get(trace_id)
+
+    def get_span(self, span_id: str) -> Optional[models.SpanModel]:
+        """Return the stored span by id, or None if not present.
+
+        Flat lookup. The returned model's `.spans` list reflects whatever
+        `_build_spans_tree` has stitched together so far; treat it as
+        possibly stale and walk the tree via `spans_for_trace` if a
+        consistent view is required.
+        """
+        with self._rlock:
+            return self._span_observations.get(span_id)
+
+    def trace_id_for_span(self, span_id: str) -> Optional[str]:
+        """Return the trace id associated with `span_id`, or None.
+
+        The span-to-trace mapping is populated at message-process time,
+        so this is a flat lookup with no tree-build side effect.
+        """
+        with self._rlock:
+            return self._span_to_trace.get(span_id)
+
+    def parent_span_ids_for_trace(self, trace_id: str) -> Dict[str, Optional[str]]:
+        """Return `{span_id: parent_span_id}` for every span in `trace_id`.
+
+        Authoritative parent links straight from the span-to-parent map
+        populated at message-process time. Callers should prefer this over
+        walking `SpanModel.spans`, because that nested-children list is only
+        populated as a side effect of `trace_trees` / `_build_spans_tree`.
+        """
+        with self._rlock:
+            return {
+                span_id: self._span_to_parent_span.get(span_id)
+                for span_id, span_trace_id in self._span_to_trace.items()
+                if span_trace_id == trace_id
+            }
+
+    def spans_for_trace(self, trace_id: str) -> List[models.SpanModel]:
+        """Return all spans associated with `trace_id`, sorted by start_time.
+
+        Flat list — no parent/child nesting, no tree rebuild. Uses the
+        span-to-trace mapping populated at message-process time, so the
+        result is consistent without needing `trace_trees`.
+        """
+        with self._rlock:
+            spans = [
+                span
+                for span_id, span_trace_id in self._span_to_trace.items()
+                if span_trace_id == trace_id
+                and (span := self._span_observations.get(span_id)) is not None
+            ]
+            spans.sort(key=lambda s: s.start_time)
+            return spans
+
     @property
     def trace_trees(self) -> List[models.TraceModel]:
         """
@@ -149,7 +213,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 )
 
             if missing_trace_ids:
-                LOGGER.warning(
+                LOGGER.debug(
                     "Skipping %d orphan span-to-trace link(s) with missing trace observation(s): %s",
                     len(missing_trace_ids),
                     ", ".join(sorted(missing_trace_ids)[:5]),

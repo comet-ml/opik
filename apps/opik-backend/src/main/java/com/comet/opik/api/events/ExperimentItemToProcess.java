@@ -1,6 +1,7 @@
 package com.comet.opik.api.events;
 
 import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.OpikPromptEntry;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Builder;
 import lombok.NonNull;
@@ -20,5 +21,6 @@ public record ExperimentItemToProcess(
         @NonNull String projectName,
         @NonNull String workspaceId,
         @NonNull String userName,
-        @NonNull List<UUID> allExperimentIds) {
+        @NonNull List<UUID> allExperimentIds,
+        List<OpikPromptEntry> opikPrompts) {
 }

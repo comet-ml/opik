@@ -88,7 +88,7 @@ const TraceDataSkeleton: React.FC = () => (
   </div>
 );
 
-type TraceDetailsPanelProps = {
+export type TraceDetailsPanelProps = {
   projectId?: string;
   traceId: string;
   spanId: string;
@@ -101,6 +101,7 @@ type TraceDetailsPanelProps = {
   onRowChange?: (shift: number) => void;
   container?: HTMLElement | null;
   refetchInterval?: number | false;
+  hideAnnotateActions?: boolean;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -116,6 +117,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onRowChange,
   container,
   refetchInterval,
+  hideAnnotateActions,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -358,6 +360,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 dataToView={dataToView}
                 setActiveSection={setActiveSection}
                 isLoading={isLoading}
+                hideAnnotateActions={hideAnnotateActions}
               />
               <div className="relative flex-auto overflow-hidden">
                 {isLoading || !dataToView ? (

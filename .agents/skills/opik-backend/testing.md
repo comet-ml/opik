@@ -68,6 +68,34 @@ var expectedOrder = originalEntities.stream()
 assertThat(actualOrder).isEqualTo(expectedOrder);
 ```
 
+## Sorting / Pagination / Field-Exclusion SQL Changes — Coverage Bar
+
+When you change query SQL that backs **sorting, pagination, or field exclusion** (e.g. the
+two-phase `page_ids`/`page_wide` CTEs, deferred wide columns, `EXCEPT`/`exclude_fields`,
+`sort_needs_wide`, dynamic `sort_fields`), the test MUST:
+
+- **Assert the whole page content, not just IDs.** Reuse the existing full-page assertion
+  helpers (the per-test-class `getAndAssertPage` → `TraceAssertions.assertTraces` /
+  `SpanAssertions.assertSpan`) so every field is verified. ID-only assertions are too weak — they can't catch a row that
+  returns the right id with wrong/empty data.
+- **Cover custom/dynamic `sort_fields`**, not only static columns — sort by a wide text column
+  (`input`/`output`/`metadata`) AND by a regular column, in both directions.
+- **Cover the sort × field-exclusion combination.** Sorting by a field while excluding that
+  same field (and while excluding a *different* wide field) is the case that regresses when the
+  deferred-wide-column pre-filter doesn't carry the sort key. Build expected via
+  `EXCLUDE_FUNCTIONS.get(field)` and pass the `exclude` set to `getAndAssertPage`.
+- **Exercise both spans and traces** — they share the same query shape; a fix on one usually
+  needs the mirror test on the other.
+
+```java
+// ✅ GOOD - sort × exclude, full-page assertion (deferred-wide path)
+var expected = traces.stream().sorted(comparator)
+        .map(t -> TraceAssertions.EXCLUDE_FUNCTIONS.get(excludeField).apply(t))
+        .toList();
+getAndAssertPage(workspaceName, projectName, null, List.of(), traces, expected, List.of(),
+        apiKey, List.of(sortingField), Set.of(excludeField));
+```
+
 ## Parameterized Tests
 
 ```java
@@ -129,3 +157,27 @@ assertThatThrownBy(() -> service.create(invalid))
     .isInstanceOf(BadRequestException.class)
     .hasMessageContaining("Name is required");
 ```
+
+## Don't Run Two ClickHouse-Migrating Test Classes in One `mvn` Reactor
+
+Each resource test class that touches ClickHouse runs its own Liquibase migration against the
+Testcontainers instance. Running two such classes in a single `mvn` invocation (e.g. spans + traces
+together, or a wildcard that matches both) makes the second migration fail with
+`REPLICA_ALREADY_EXISTS` (the replicated table from migration `000017` already exists) — a confusing
+failure that looks like a product bug but is purely a test-harness collision.
+
+When a change spans both spans and traces (the usual case for shared query SQL), run each class in a
+**separate** `mvn` invocation:
+
+```bash
+# ✅ GOOD - separate invocations
+mvn test -o -Dtest='FindSpansResourceTest$FindSpans#whenFilterSortExcludeAcrossPages*'
+mvn test -o -Dtest='GetTracesByProjectResourceTest$FindTraces#getTracesByProject__whenFilterSortExcludeAcrossPages*'
+
+# ❌ BAD - one reactor migrates ClickHouse twice -> REPLICA_ALREADY_EXISTS
+mvn test -o -Dtest='FindSpansResourceTest,GetTracesByProjectResourceTest'
+```
+
+Surefire selectors for `@Nested` + parameterized tests: use `OuterClass$NestedClass#methodPattern`,
+and prefer a `*wildcard*` over the exact (long) method name — exact long names silently match 0 tests.
+Combine methods within a class with `+`, classes with `,` (but see the ClickHouse caveat above).
