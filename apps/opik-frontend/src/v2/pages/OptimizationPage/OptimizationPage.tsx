@@ -117,6 +117,8 @@ const OptimizationPage: React.FC = () => {
 
   const { columnsDef, columns } = useOptimizationColumns({
     candidates,
+    experiments,
+    baselineExperiment,
     columnsOrder,
     selectedColumns,
     sortableBy,
@@ -139,12 +141,8 @@ const OptimizationPage: React.FC = () => {
     optimization?.status &&
     !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
 
-  const isTrialsTab = activeTab === OPTIMIZATION_TAB.TRIALS;
-
   return (
-    <div
-      className={`flex flex-col pt-4 ${isTrialsTab ? "h-full" : "min-h-full"}`}
-    >
+    <div className="flex min-h-full flex-col pt-4">
       <div className="shrink-0 pb-4">
         <OptimizationHeader
           optimization={optimization}
@@ -158,7 +156,7 @@ const OptimizationPage: React.FC = () => {
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="flex min-h-0 flex-1 flex-col"
+        className="flex flex-col"
       >
         <TabsList variant="underline" className="shrink-0">
           <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.OVERVIEW}>
@@ -214,11 +212,8 @@ const OptimizationPage: React.FC = () => {
           )}
         </TabsContent>
 
-        <TabsContent
-          value={OPTIMIZATION_TAB.TRIALS}
-          className="mt-0 flex min-h-0 flex-1 flex-col pt-4"
-        >
-          <div className="flex shrink-0 items-center justify-end pb-4">
+        <TabsContent value={OPTIMIZATION_TAB.TRIALS} className="mt-0 pt-4">
+          <div className="flex items-center justify-end pb-4">
             <OptimizationTrialsControls
               onRefresh={handleRefresh}
               isFetching={isExperimentsFetching}
@@ -232,7 +227,7 @@ const OptimizationPage: React.FC = () => {
             />
           </div>
 
-          <div className="flex min-w-0 flex-1 overflow-auto">
+          <div className="pb-6">
             <OptimizationTrialsTable
               columns={columns}
               rows={rows}
