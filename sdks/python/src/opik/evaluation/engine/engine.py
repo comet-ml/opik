@@ -296,7 +296,7 @@ class EvaluationEngine:
             trace_data=trace_data,
             client=self._client,
             execution_policy=execution_policy_dict or None,
-        ):
+        ) as eval_state:
             if experiment_ is not None and experiment_.prompts:
                 for prompt_obj in experiment_.prompts:
                     opik_context.attach_prompt_to_current_trace(prompt_obj)
@@ -364,6 +364,13 @@ class EvaluationEngine:
                     for s in test_result_.score_results
                 ],
             )
+
+            # Happy-path-only line: tells the surrounding context manager
+            # to keep ``trace_data.output`` on the persisted trace.
+            # Any failure before here leaves the flag unset, the
+            # ``finally`` strips ``output`` back to ``None``, and
+            # ``evaluate_resume`` reads ``output is None`` as "replay".
+            eval_state.evaluation_completed = True
 
         return test_result_
 

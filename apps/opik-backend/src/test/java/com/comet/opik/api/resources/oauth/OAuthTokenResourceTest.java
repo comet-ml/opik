@@ -49,7 +49,7 @@ class OAuthTokenResourceTest {
     private OAuthTokenResource resource;
 
     private McpOAuthClient validClient() {
-        return McpOAuthClient.builder().clientId(CLIENT_ID).name("c").redirectUris(Set.of(REDIRECT_URI)).build();
+        return McpOAuthClient.builder().id(CLIENT_ID).name("c").redirectUris(Set.of(REDIRECT_URI)).build();
     }
 
     private TokenResponse minted() {

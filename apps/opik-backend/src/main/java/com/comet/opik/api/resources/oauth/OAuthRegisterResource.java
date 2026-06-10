@@ -8,6 +8,11 @@ import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -30,6 +35,7 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.RATE_LIMIT_BUCKET_PR
 
 @Path("/oauth/register")
 @Timed
+@Tag(name = "MCP OAuth", description = "MCP OAuth 2.1 Authorization Server resources")
 public class OAuthRegisterResource {
 
     private final @NonNull OAuthClientService clientService;
@@ -55,6 +61,9 @@ public class OAuthRegisterResource {
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "registerOAuthClient", summary = "OAuth Dynamic Client Registration Endpoint", description = "OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public client for the MCP OAuth flow; throttled per source IP", responses = {
+            @ApiResponse(responseCode = "201", description = "Registered client metadata", content = @Content(schema = @Schema(implementation = ClientRegistrationResponse.class))),
+            @ApiResponse(responseCode = "429", description = "Registration rate limit exceeded", content = @Content(schema = @Schema(implementation = OAuthError.class)))})
     public Response register(@NonNull @Valid ClientRegistrationRequest request,
             @Context HttpServletRequest httpRequest) {
 
@@ -80,7 +89,7 @@ public class OAuthRegisterResource {
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
-        return Response.created(URI.create("/admin/mcp-oauth-clients/" + client.clientId()))
+        return Response.created(URI.create("/admin/mcp-oauth-clients/" + client.id()))
                 .entity(body)
                 .build();
     }

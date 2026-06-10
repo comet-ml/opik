@@ -12,6 +12,11 @@ import com.comet.opik.infrastructure.auth.AuthService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.UserWorkspace;
 import com.comet.opik.infrastructure.auth.WorkspaceInfo;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -40,11 +45,9 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.util.List;
-import java.util.Optional;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CSRF_COOKIE;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_TARGET;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_RESPONSE_TYPE;
@@ -54,6 +57,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Path("/oauth")
 @Timed
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+@Tag(name = "MCP OAuth", description = "MCP OAuth 2.1 Authorization Server resources")
 public class OAuthAuthorizeResource {
 
     private final @NonNull OAuthClientService clientService;
@@ -63,6 +67,8 @@ public class OAuthAuthorizeResource {
 
     @GET
     @Path("/authorize")
+    @Operation(operationId = "authorize", summary = "OAuth Authorization Endpoint", description = "OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the client and PKCE parameters, then redirects to the login or consent page", responses = {
+            @ApiResponse(responseCode = "302", description = "Redirect to login, consent, or client redirect_uri with an error")})
     public Response authorize(
             @QueryParam("client_id") @NotBlank String clientId,
             @QueryParam("redirect_uri") @NotBlank String redirectUri,
@@ -75,7 +81,7 @@ public class OAuthAuthorizeResource {
             @Context UriInfo uriInfo) {
 
         McpOAuthConfig config = opikConfig.getMcpOAuth();
-        McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
+        clientService.resolveForRedirect(clientId, redirectUri);
 
         // client and redirect_uri are now trusted, so protocol errors are reported back to the client via redirect.
         if (!RESPONSE_TYPE_CODE.equals(responseType)) {
@@ -111,12 +117,14 @@ public class OAuthAuthorizeResource {
     @GET
     @Path("/authorize/context")
     @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "getAuthorizeContext", summary = "Get Authorization Consent Context", description = "Get the client details, eligible workspaces, and a CSRF token used to render the consent screen", responses = {
+            @ApiResponse(responseCode = "200", description = "Authorization consent context", content = @Content(schema = @Schema(implementation = AuthorizeContext.class)))})
     public Response context(
             @QueryParam("client_id") @NotBlank String clientId,
             @QueryParam("redirect_uri") @NotBlank String redirectUri,
             @Context HttpHeaders headers) {
 
-        McpOAuthClient client = requireClientWithRedirect(clientId, redirectUri);
+        McpOAuthClient client = clientService.resolveForRedirect(clientId, redirectUri);
 
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
         List<WorkspaceInfo> workspaces = authService.listEligibleWorkspaces(session);
@@ -143,6 +151,8 @@ public class OAuthAuthorizeResource {
     @Path("/authorize")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "consent", summary = "Submit Authorization Consent", description = "Submit the user's consent, issue an authorization code, and return the client redirect target", responses = {
+            @ApiResponse(responseCode = "200", description = "Consent response with the client redirect target", content = @Content(schema = @Schema(implementation = ConsentResponse.class)))})
     public Response consent(@NotNull @Valid ConsentRequest request, @Context HttpHeaders headers) {
 
         Cookie csrfCookie = headers.getCookies().get(CSRF_COOKIE);
@@ -152,13 +162,9 @@ public class OAuthAuthorizeResource {
         }
 
         McpOAuthConfig config = opikConfig.getMcpOAuth();
-        requireClientWithRedirect(request.clientId(), request.redirectUri());
+        clientService.resolveForRedirect(request.clientId(), request.redirectUri());
         if (!config.getMcpResourceUri().equals(request.resource())) {
             throw new BadRequestException(ERROR_INVALID_TARGET);
-        }
-        if (StringUtils.isBlank(request.codeChallenge())
-                || !CODE_CHALLENGE_METHOD_S256.equals(request.codeChallengeMethod())) {
-            throw new BadRequestException(ERROR_INVALID_REQUEST);
         }
 
         Cookie session = headers.getCookies().get(RequestContext.SESSION_COOKIE);
@@ -181,20 +187,6 @@ public class OAuthAuthorizeResource {
                 .build()).build();
     }
 
-    private McpOAuthClient requireClientWithRedirect(String clientId, String redirectUri) {
-        Optional<McpOAuthClient> client = clientService.resolve(clientId);
-        if (client.isEmpty()) {
-            throw new BadRequestException(ERROR_INVALID_CLIENT);
-        }
-        // RFC 6749 §3.1.2: the redirection endpoint URI MUST NOT include a fragment, otherwise appended
-        // code/error/state query params would land inside the fragment and be unreadable by the client.
-        if (redirectUri == null || redirectUri.contains("#")
-                || !clientService.matchesRedirectUri(client.get(), redirectUri)) {
-            throw new BadRequestException("invalid redirect_uri");
-        }
-        return client.get();
-    }
-
     private Response errorRedirect(String redirectUri, String error, String state) {
         String query = "error=" + error + (StringUtils.isBlank(state) ? "" : "&state=" + enc(state));
         return redirect(appendQuery(redirectUri, query));
@@ -213,7 +205,6 @@ public class OAuthAuthorizeResource {
     }
 
     private static boolean isSecureDeployment(McpOAuthConfig config) {
-        String baseUrl = config.getBaseUrl();
-        return baseUrl != null && baseUrl.startsWith("https://");
+        return StringUtils.startsWith(config.getBaseUrl(), "https://");
     }
 }

@@ -3,6 +3,11 @@ package com.comet.opik.api.resources.oauth;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -24,11 +29,14 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.RESPONSE_TYPE_CODE;
 @Produces(MediaType.APPLICATION_JSON)
 @Timed
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+@Tag(name = "MCP OAuth", description = "MCP OAuth 2.1 Authorization Server resources")
 public class OAuthMetadataResource {
 
     private final @NonNull OpikConfiguration opikConfig;
 
     @GET
+    @Operation(operationId = "getOAuthAuthorizationServerMetadata", summary = "Get OAuth Authorization Server Metadata", description = "Get OAuth 2.1 Authorization Server Metadata (RFC 8414)", responses = {
+            @ApiResponse(responseCode = "200", description = "Authorization Server Metadata", content = @Content(schema = @Schema(implementation = AuthorizationServerMetadata.class)))})
     public Response metadata() {
         McpOAuthConfig config = opikConfig.getMcpOAuth();
         String issuer = config.getIssuer();
