@@ -255,7 +255,39 @@ class CostServiceTest {
                 Arguments.of("elser_model_2", "elastic"),
                 Arguments.of("gemini-3-flash", "google_ai"),
                 Arguments.of("gemini-3.1-pro", "google_ai"),
-                Arguments.of("gemini-embedding-002", "google_ai"));
+                Arguments.of("gemini-embedding-002", "google_ai"),
+                Arguments.of("mistral-medium-3-5", "mistral"),
+                Arguments.of("mistral-small-2603", "mistral"));
+    }
+
+    /**
+     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
+     * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
+     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
+     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     */
+    @ParameterizedTest
+    @MethodSource("provideMistralModels")
+    void calculateCostForMistralModels(String model, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1_000_000, "completion_tokens", 1_000_000);
+
+        BigDecimal cost = CostService.calculateCost(model, "mistral", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideMistralModels() {
+        return Stream.of(
+                // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
+                Arguments.of("mistral-small-latest", "0.24"),
+                // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
+                Arguments.of("mistral-large-3", "2.00"),
+                // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
+                Arguments.of("codestral-2508", "1.20"),
+                // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
+                Arguments.of("mistral-medium-3-5", "9.00"),
+                // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
+                Arguments.of("mistral-small-2603", "0.75"));
     }
 
     /**
