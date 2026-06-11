@@ -8,6 +8,8 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useActiveProjectInitializer } from "@/hooks/useActiveProjectInitializer";
 import ProjectSidebarContent from "@/v2/layout/SideBar/ProjectSidebarContent";
 import WorkspaceSidebarContent from "@/v2/layout/SideBar/WorkspaceSidebarContent";
+import AiSpendSidebarContent from "@/v2/layout/SideBar/AiSpendSidebarContent";
+import { isAiSpendRoute } from "@/lib/aiSpend";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -28,6 +30,10 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const isProjectRoute = useRouterState({
     select: (state) =>
       state.matches.some((match) => "projectId" in match.params),
+  });
+
+  const isAiSpend = useRouterState({
+    select: (state) => isAiSpendRoute(state.location.pathname),
   });
 
   const logo = <Logo expanded={expanded} />;
@@ -75,7 +81,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       </div>
       <div className="relative flex h-[calc(100%-var(--header-height))]">
         <div className="flex min-h-0 grow flex-col justify-between overflow-auto p-3">
-          {isProjectRoute ? (
+          {isAiSpend ? (
+            <AiSpendSidebarContent expanded={expanded} />
+          ) : isProjectRoute ? (
             <ProjectSidebarContent expanded={expanded} />
           ) : (
             <WorkspaceSidebarContent expanded={expanded} />
