@@ -44,14 +44,14 @@ class AiSpendQueryBuilder {
     private static final int BREAKDOWN_ITEM_LIMIT = 200;
 
     private static final Map<SpendLane, String> TOKEN_EXPRESSIONS = new EnumMap<>(Map.of(
-            SpendLane.PRIOR_ASSISTANT, "JSONExtractInt(cc, 'prior_assistant', 'summary', 'total_tokens')",
-            SpendLane.TOOL_RESULTS, "JSONExtractInt(cc, 'tool_results', 'summary', 'total_tokens')",
-            SpendLane.USER_PROMPTS, "JSONExtractInt(cc, 'user_prompts', 'summary', 'total_tokens')",
-            SpendLane.SKILLS_AVAILABLE, "JSONExtractInt(cc, 'skills', 'summary', 'menu_tokens')",
-            SpendLane.SKILLS_LOADED, "JSONExtractInt(cc, 'skills', 'summary', 'loaded_tokens')",
-            SpendLane.TOOLS, "JSONExtractInt(cc, 'tools', 'summary', 'schema_tokens')",
-            SpendLane.MEMORY, "JSONExtractInt(cc, 'memory', 'summary', 'total_tokens')",
-            SpendLane.FILE_ATTACHMENTS, "JSONExtractInt(cc, 'file_attachments', 'summary', 'total_tokens')"));
+            SpendLane.PRIOR_ASSISTANT, "cc.prior_assistant.summary.total_tokens",
+            SpendLane.TOOL_RESULTS, "cc.tool_results.summary.total_tokens",
+            SpendLane.USER_PROMPTS, "cc.user_prompts.summary.total_tokens",
+            SpendLane.SKILLS_AVAILABLE, "cc.skills.summary.menu_tokens",
+            SpendLane.SKILLS_LOADED, "cc.skills.summary.loaded_tokens",
+            SpendLane.TOOLS, "cc.tools.summary.schema_tokens",
+            SpendLane.MEMORY, "cc.memory.summary.total_tokens",
+            SpendLane.FILE_ATTACHMENTS, "cc.file_attachments.summary.total_tokens"));
 
     private static final Map<SpendLane, BreakdownSpec> BREAKDOWN_SPECS = new EnumMap<>(Map.of(
             SpendLane.TOOL_RESULTS, new BreakdownSpec("'cc', 'tool_results', 'by_tool'", "name", "tokens"),
@@ -109,7 +109,14 @@ class AiSpendQueryBuilder {
             SELECT
                 %1$s
             FROM (
-                SELECT JSONExtractRaw(metadata, 'cc') AS cc
+                SELECT JSONExtract(metadata, 'cc',
+                    'Tuple(prior_assistant Tuple(summary Tuple(total_tokens Int64)),
+                           tool_results Tuple(summary Tuple(total_tokens Int64)),
+                           user_prompts Tuple(summary Tuple(total_tokens Int64)),
+                           skills Tuple(summary Tuple(menu_tokens Int64, loaded_tokens Int64)),
+                           tools Tuple(summary Tuple(schema_tokens Int64)),
+                           memory Tuple(summary Tuple(total_tokens Int64)),
+                           file_attachments Tuple(summary Tuple(total_tokens Int64)))') AS cc
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
