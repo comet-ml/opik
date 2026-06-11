@@ -32,6 +32,7 @@ type UseDatasetFormParams = {
   hideUpload?: boolean;
   csvRequired?: boolean;
   skipEvaluationCriteria?: boolean;
+  appendDateToAutoName?: boolean;
   datasetType: DATASET_TYPE;
   onNameConflict?: () => void;
   onCreateSuccess?: (dataset: Dataset, navigate: () => void) => void;
@@ -45,6 +46,7 @@ const useDatasetForm = ({
   hideUpload,
   csvRequired = false,
   skipEvaluationCriteria = false,
+  appendDateToAutoName = false,
   datasetType,
   onNameConflict,
   onCreateSuccess,
@@ -376,10 +378,16 @@ const useDatasetForm = ({
       setUploadFile(result.file);
       setUploadFormat(result.format);
       if (!name.trim()) {
-        setName(getDatasetUploadFilenameWithoutExtension(result.file.name));
+        const base = getDatasetUploadFilenameWithoutExtension(result.file.name);
+        // en-CA renders the user's *local* date as YYYY-MM-DD (avoids the UTC
+        // off-by-one that toISOString would introduce).
+        const suffix = appendDateToAutoName
+          ? `_${new Date().toLocaleDateString("en-CA")}`
+          : "";
+        setName(`${base}${suffix}`);
       }
     },
-    [fileSizeLimit, name],
+    [fileSizeLimit, name, appendDateToAutoName],
   );
 
   return {
@@ -392,6 +400,9 @@ const useDatasetForm = ({
     assertions,
     setAssertions,
     runsPerItem,
+    setRunsPerItem,
+    passThreshold,
+    setPassThreshold,
     runsInput,
     thresholdInput,
     uploadFile,

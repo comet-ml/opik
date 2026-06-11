@@ -44,7 +44,7 @@ public class OAuthClientService {
         return client;
     }
 
-    private boolean matchesRedirectUri(@NonNull McpOAuthClient client, @NonNull String requestedRedirectUri) {
+    private boolean matchesRedirectUri(McpOAuthClient client, String requestedRedirectUri) {
         Set<String> allowed = client.redirectUris();
         if (allowed == null) {
             return false;

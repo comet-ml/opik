@@ -13,7 +13,6 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,14 +27,15 @@ class OAuthClientServiceTest {
     @InjectMocks
     private OAuthClientService service;
 
-    private void mockClient(String... redirectUris) {
+    private McpOAuthClient mockClient(String... redirectUris) {
         McpOAuthClient client = McpOAuthClient.builder()
                 .id(CLIENT_ID)
                 .name("Test Client")
                 .redirectUris(Set.of(redirectUris))
                 .build();
-        lenient().when(strategy.supports(CLIENT_ID)).thenReturn(true);
-        lenient().when(strategy.resolve(CLIENT_ID)).thenReturn(Optional.of(client));
+        when(strategy.supports(CLIENT_ID)).thenReturn(true);
+        when(strategy.resolve(CLIENT_ID)).thenReturn(Optional.of(client));
+        return client;
     }
 
     @Test
@@ -81,10 +81,10 @@ class OAuthClientServiceTest {
     @Test
     @DisplayName("resolveForRedirect: loopback redirect matches on any port (RFC 8252 §7.3)")
     void resolveForRedirect_loopbackDifferentPort_matches() {
-        mockClient("http://127.0.0.1:1111/cb");
+        McpOAuthClient expected = mockClient("http://127.0.0.1:1111/cb");
 
         McpOAuthClient client = service.resolveForRedirect(CLIENT_ID, "http://127.0.0.1:54321/cb");
 
-        assertThat(client.id()).isEqualTo(CLIENT_ID);
+        assertThat(client).isEqualTo(expected);
     }
 }

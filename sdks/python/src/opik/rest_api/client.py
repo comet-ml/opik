@@ -24,6 +24,7 @@ from .insights_views.client import AsyncInsightsViewsClient, InsightsViewsClient
 from .llm_models.client import AsyncLlmModelsClient, LlmModelsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient, LlmProviderKeyClient
 from .manual_evaluation.client import AsyncManualEvaluationClient, ManualEvaluationClient
+from .mcp_o_auth.client import AsyncMcpOAuthClient, McpOAuthClient
 from .ollama.client import AsyncOllamaClient, OllamaClient
 from .ollie_state.client import AsyncOllieStateClient, OllieStateClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient, OpenTelemetryIngestionClient
@@ -103,6 +104,7 @@ class OpikApi:
             timeout=_defaulted_timeout,
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
+        self.mcp_o_auth = McpOAuthClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
@@ -252,6 +254,7 @@ class AsyncOpikApi:
             timeout=_defaulted_timeout,
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
+        self.mcp_o_auth = AsyncMcpOAuthClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
