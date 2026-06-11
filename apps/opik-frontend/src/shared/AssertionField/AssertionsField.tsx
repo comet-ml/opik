@@ -90,6 +90,7 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
               No assertions added yet
             </span>
             <Button
+              type="button"
               variant="tableLink"
               size="2xs"
               className="h-auto px-0"

@@ -379,8 +379,10 @@ const useDatasetForm = ({
       setUploadFormat(result.format);
       if (!name.trim()) {
         const base = getDatasetUploadFilenameWithoutExtension(result.file.name);
+        // en-CA renders the user's *local* date as YYYY-MM-DD (avoids the UTC
+        // off-by-one that toISOString would introduce).
         const suffix = appendDateToAutoName
-          ? `_${new Date().toISOString().slice(0, 10)}`
+          ? `_${new Date().toLocaleDateString("en-CA")}`
           : "";
         setName(`${base}${suffix}`);
       }

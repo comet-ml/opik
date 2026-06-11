@@ -52,7 +52,7 @@ const DatasetEmptyState: React.FC<DatasetEmptyStateProps> = ({
                   key={mode}
                   type="button"
                   onClick={() => onSelect(mode)}
-                  className="flex flex-col gap-1 rounded-lg border border-border bg-background p-4 text-left transition-colors hover:border-primary hover:bg-[#F3F4FE] dark:hover:bg-primary-foreground"
+                  className="flex flex-col gap-1 rounded-lg border border-border bg-background p-4 text-left transition-colors hover:border-primary hover:bg-toggle-outline-active"
                 >
                   <div className="flex items-center gap-2">
                     <Icon className={`size-4 shrink-0 ${iconClassName}`} />

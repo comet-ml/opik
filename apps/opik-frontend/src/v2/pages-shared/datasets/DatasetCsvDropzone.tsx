@@ -67,7 +67,7 @@ const DatasetCsvDropzone: React.FC<DatasetCsvDropzoneProps> = ({
   if (showChip) {
     return (
       <div>
-        <div className="flex items-center gap-1.5 rounded-md border border-[#BAE6FD99] bg-[#BAE6FD1A] px-2 py-1 dark:border-[#38BDF833] dark:bg-[#38BDF814]">
+        <div className="flex items-center gap-1.5 rounded-md border border-[var(--upload-chip-border)] bg-[var(--upload-chip-bg)] px-2 py-1">
           <button
             type="button"
             onClick={clearFile}
@@ -76,7 +76,7 @@ const DatasetCsvDropzone: React.FC<DatasetCsvDropzoneProps> = ({
           >
             <X className="size-3.5" />
           </button>
-          <div className="flex size-4 shrink-0 items-center justify-center rounded bg-[#89DEFF] dark:bg-[#0EA5E9]">
+          <div className="flex size-4 shrink-0 items-center justify-center rounded bg-[var(--upload-chip-icon-bg)]">
             <FileTerminal className="size-2.5 text-foreground" />
           </div>
           <span className="comet-body-s truncate text-foreground">
@@ -84,7 +84,10 @@ const DatasetCsvDropzone: React.FC<DatasetCsvDropzoneProps> = ({
           </span>
         </div>
         {uploadError && (
-          <div className="comet-body-xs mt-1.5 flex items-center text-destructive">
+          <div
+            role="alert"
+            className="comet-body-xs mt-1.5 flex items-center text-destructive"
+          >
             <TriangleAlert className="mr-1 size-3 shrink-0" />
             {uploadError}
           </div>
@@ -99,10 +102,9 @@ const DatasetCsvDropzone: React.FC<DatasetCsvDropzoneProps> = ({
         "group flex min-h-[280px] flex-col items-center justify-center rounded-md border border-dashed border-border p-6 text-foreground transition-colors",
         {
           "cursor-not-allowed opacity-50": disabled,
-          "cursor-pointer hover:border-primary hover:bg-[#F3F4FE] dark:hover:bg-primary-foreground":
+          "cursor-pointer hover:border-primary hover:bg-toggle-outline-active":
             !disabled,
-          "border-primary bg-[#F3F4FE] dark:bg-primary-foreground":
-            isDragOver && !disabled,
+          "border-primary bg-toggle-outline-active": isDragOver && !disabled,
         },
       )}
       onClick={disabled ? undefined : browse}

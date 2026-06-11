@@ -171,6 +171,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
     name.length > 0 ||
     description.length > 0 ||
     uploadFile !== undefined ||
+    uploadError !== undefined ||
     assertions.length > 0;
 
   const canSubmit =
@@ -256,8 +257,12 @@ const CreateDatasetSidebar: React.FunctionComponent<
         uploadError={uploadError}
         onFileSelect={handleFileSelect}
         onUseSdk={() => {
-          // Defensive: never carry a selected file into the code-only flow.
+          // Defensive: never carry upload-only state (file or evaluation
+          // criteria) into the code-only flow.
           handleFileSelect(undefined);
+          setAssertions([]);
+          setRunsPerItem(1);
+          setPassThreshold(1);
           setActiveMode("sdk");
         }}
       />
