@@ -59,6 +59,7 @@ export * from "./AudioUrl.js";
 export * from "./AudioUrlPublic.js";
 export * from "./AudioUrlWrite.js";
 export * from "./AuthDetailsHolder.js";
+export * from "./AuthorizationServerMetadata.js";
 export * from "./AutomationRuleEvaluator.js";
 export * from "./AutomationRuleEvaluatorAction.js";
 export * from "./AutomationRuleEvaluatorLlmAsJudge.js";
