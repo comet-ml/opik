@@ -23,7 +23,7 @@ public class OAuthExceptionMapper implements ExceptionMapper<OAuthException> {
 
     @Override
     public Response toResponse(OAuthException exception) {
-        log.warn("MCP OAuth request rejected [error={}]", exception.getError());
+        log.warn("MCP OAuth request rejected '{}'", exception.getError());
         return Response.status(Response.Status.BAD_REQUEST)
                 .type(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL_NO_STORE)
