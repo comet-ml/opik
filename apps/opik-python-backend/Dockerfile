@@ -17,10 +17,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Bytecode-only deps (-o 2, -b = fastest layout); strip source/stubs + package
 # managers. src/ keeps its .py; *.dist-info kept for importlib.metadata.
+# datasets + opik_optimizer keep their .py: both call inspect.getsource() at
+# import time (datasets' packaged-module registry; opik_optimizer SDK-version
+# probe), which raises OSError on a .pyc-only layout and breaks optimizer jobs.
 RUN set -eux; \
     PY_SITE="$(/opt/venv/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"; \
     PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b "$PY_SITE"; \
-    find "$PY_SITE" -name '*.py' -delete; \
+    find "$PY_SITE" \
+         -path "$PY_SITE/datasets/*" -prune -o \
+         -path "$PY_SITE/opik_optimizer/*" -prune -o \
+         -name '*.py' -type f -print | xargs -r rm -f; \
     find "$PY_SITE" -type d -name '__pycache__' -prune -exec rm -rf {} +; \
     find "$PY_SITE" -name '*.pyi' -delete; \
     pip uninstall -y pip setuptools wheel || true; \
