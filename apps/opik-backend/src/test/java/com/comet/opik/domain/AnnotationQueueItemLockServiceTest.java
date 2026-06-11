@@ -9,15 +9,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.redisson.api.RMapCacheNativeReactive;
+import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.codec.Codec;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.Duration;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,20 +44,31 @@ class AnnotationQueueItemLockServiceTest {
     @Mock
     private LockService lockService;
     @Mock
-    private RMapCacheNativeReactive<String, String> mapCache;
+    private RMapReactive<String, String> mapCache;
 
     private AnnotationQueueItemLockServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new AnnotationQueueItemLockServiceImpl(redisClient, lockService);
-        lenient().when(redisClient.<String, String>getMapCacheNative(anyString(), any(Codec.class)))
+        lenient().when(redisClient.<String, String>getMap(anyString(), any(Codec.class)))
                 .thenReturn(mapCache);
-        lenient().when(mapCache.expire(any(Duration.class))).thenReturn(Mono.just(true));
     }
 
     private String field(UUID itemId, String userName) {
         return itemId + ":" + userName;
+    }
+
+    private String packValue(String permitId, long expiryMs) {
+        return permitId + ":" + expiryMs;
+    }
+
+    private long futureExpiry() {
+        return System.currentTimeMillis() + 60_000;
+    }
+
+    private long pastExpiry() {
+        return System.currentTimeMillis() - 1000;
     }
 
     @Nested
@@ -82,7 +91,7 @@ class AnnotationQueueItemLockServiceTest {
         void shouldAcquireWhenEmpty() {
             when(mapCache.get(anyString())).thenReturn(Mono.empty());
             when(lockService.tryAcquireSlot(any(), eq(1), any())).thenReturn(Mono.just(PERMIT_ID));
-            when(mapCache.fastPutIfAbsent(anyString(), anyString(), any(Duration.class)))
+            when(mapCache.fastPutIfAbsent(anyString(), anyString()))
                     .thenReturn(Mono.just(true));
 
             var expected = LockResponse.builder()
@@ -106,9 +115,10 @@ class AnnotationQueueItemLockServiceTest {
         @Test
         @DisplayName("should refresh lease when user already holds a permit (heartbeat)")
         void shouldRefreshWhenUserAlreadyHoldsPermit() {
-            when(mapCache.get(field(ITEM_ID, USER_ALICE))).thenReturn(Mono.just(PERMIT_ID));
+            when(mapCache.get(field(ITEM_ID, USER_ALICE)))
+                    .thenReturn(Mono.just(packValue(PERMIT_ID, futureExpiry())));
             when(lockService.refreshSlot(any(), eq(PERMIT_ID), any())).thenReturn(Mono.just(true));
-            when(mapCache.fastPut(anyString(), anyString(), any(Duration.class)))
+            when(mapCache.fastPut(anyString(), anyString()))
                     .thenReturn(Mono.just(true));
 
             StepVerifier.create(service.tryLock(
@@ -122,11 +132,11 @@ class AnnotationQueueItemLockServiceTest {
         @Test
         @DisplayName("should fall through to acquire when existing permit expired")
         void shouldFallThroughWhenPermitExpired() {
-            when(mapCache.get(field(ITEM_ID, USER_ALICE))).thenReturn(Mono.just(PERMIT_ID));
-            when(lockService.refreshSlot(any(), eq(PERMIT_ID), any())).thenReturn(Mono.just(false));
+            when(mapCache.get(field(ITEM_ID, USER_ALICE)))
+                    .thenReturn(Mono.just(packValue(PERMIT_ID, pastExpiry())));
 
             when(lockService.tryAcquireSlot(any(), eq(1), any())).thenReturn(Mono.just("new-permit"));
-            when(mapCache.fastPutIfAbsent(anyString(), anyString(), any(Duration.class)))
+            when(mapCache.fastPutIfAbsent(anyString(), anyString()))
                     .thenReturn(Mono.just(true));
 
             StepVerifier.create(service.tryLock(
@@ -175,7 +185,7 @@ class AnnotationQueueItemLockServiceTest {
         void shouldReleaseDuplicateOnRace() {
             when(mapCache.get(anyString())).thenReturn(Mono.empty());
             when(lockService.tryAcquireSlot(any(), eq(1), any())).thenReturn(Mono.just(PERMIT_ID));
-            when(mapCache.fastPutIfAbsent(anyString(), anyString(), any(Duration.class)))
+            when(mapCache.fastPutIfAbsent(anyString(), anyString()))
                     .thenReturn(Mono.just(false));
             when(lockService.releaseSlot(any(), eq(PERMIT_ID))).thenReturn(Mono.just(true));
 
@@ -193,27 +203,30 @@ class AnnotationQueueItemLockServiceTest {
     class GetLocksForQueue {
 
         @Test
-        @DisplayName("should return active locks grouped by item")
+        @DisplayName("should return active locks grouped by item, filtering expired")
         void shouldReturnActiveLocksGroupedByItem() {
             var itemId2 = UUID.randomUUID();
+            long future = futureExpiry();
+            long past = pastExpiry();
             when(mapCache.readAllMap()).thenReturn(Mono.just(Map.of(
-                    field(ITEM_ID, USER_ALICE), PERMIT_ID,
-                    field(ITEM_ID, USER_BOB), "permit-456",
-                    field(itemId2, USER_ALICE), "permit-789")));
+                    field(ITEM_ID, USER_ALICE), packValue(PERMIT_ID, future),
+                    field(ITEM_ID, USER_BOB), packValue("permit-456", future),
+                    field(itemId2, USER_ALICE), packValue("permit-789", past))));
+            when(mapCache.fastRemove(any(String[].class))).thenReturn(Mono.just(1L));
 
             StepVerifier.create(service.getLocksForQueue(WORKSPACE_ID, QUEUE_ID))
                     .assertNext(locks -> {
-                        assertThat(locks).hasSize(2);
+                        assertThat(locks).hasSize(1);
 
                         var itemLock = locks.get(ITEM_ID);
                         assertThat(itemLock.activeLocks()).isEqualTo(2);
                         assertThat(itemLock.lockedBy()).containsExactlyInAnyOrder(USER_ALICE, USER_BOB);
 
-                        var item2Lock = locks.get(itemId2);
-                        assertThat(item2Lock.activeLocks()).isEqualTo(1);
-                        assertThat(item2Lock.lockedBy()).containsExactly(USER_ALICE);
+                        assertThat(locks.get(itemId2)).isNull();
                     })
                     .verifyComplete();
+
+            verify(mapCache).fastRemove(any(String[].class));
         }
 
         @Test
@@ -241,27 +254,29 @@ class AnnotationQueueItemLockServiceTest {
         }
 
         @Test
-        @DisplayName("should call addSlotPermits for each active item")
+        @DisplayName("should call addSlotPermits for each active item, skipping expired")
         void shouldUpdatePermitsForEachItem() {
             var itemId2 = UUID.randomUUID();
-            when(mapCache.readAllKeySet()).thenReturn(Mono.just(Set.of(
-                    field(ITEM_ID, USER_ALICE),
-                    field(ITEM_ID, USER_BOB),
-                    field(itemId2, USER_ALICE))));
+            long future = futureExpiry();
+            long past = pastExpiry();
+            when(mapCache.readAllMap()).thenReturn(Mono.just(Map.of(
+                    field(ITEM_ID, USER_ALICE), packValue(PERMIT_ID, future),
+                    field(ITEM_ID, USER_BOB), packValue("permit-456", future),
+                    field(itemId2, USER_ALICE), packValue("permit-789", past))));
             when(lockService.addSlotPermits(any(), eq(1))).thenReturn(Mono.empty());
 
             StepVerifier.create(service.updateCapacity(WORKSPACE_ID, QUEUE_ID, 1))
                     .verifyComplete();
 
-            // 2 distinct items, so 2 calls
-            verify(lockService, times(2)).addSlotPermits(any(), eq(1));
+            // Only 1 distinct item with active locks (itemId2 is expired)
+            verify(lockService, times(1)).addSlotPermits(any(), eq(1));
         }
 
         @Test
         @DisplayName("should handle negative delta")
         void shouldHandleNegativeDelta() {
-            when(mapCache.readAllKeySet()).thenReturn(Mono.just(Set.of(
-                    field(ITEM_ID, USER_ALICE))));
+            when(mapCache.readAllMap()).thenReturn(Mono.just(Map.of(
+                    field(ITEM_ID, USER_ALICE), packValue(PERMIT_ID, futureExpiry()))));
             when(lockService.addSlotPermits(any(), eq(-1))).thenReturn(Mono.empty());
 
             StepVerifier.create(service.updateCapacity(WORKSPACE_ID, QUEUE_ID, -1))
@@ -273,7 +288,7 @@ class AnnotationQueueItemLockServiceTest {
         @Test
         @DisplayName("should do nothing when no active locks")
         void shouldDoNothingWhenNoActiveLocks() {
-            when(mapCache.readAllKeySet()).thenReturn(Mono.just(Set.of()));
+            when(mapCache.readAllMap()).thenReturn(Mono.just(Map.of()));
 
             StepVerifier.create(service.updateCapacity(WORKSPACE_ID, QUEUE_ID, 1))
                     .verifyComplete();
