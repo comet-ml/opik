@@ -30,8 +30,12 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.URI;
 import java.time.Duration;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.CLIENT_CONFIG_PATH_PREFIX;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_DESC_REGISTRATION_RATE_LIMIT;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_TOO_MANY_REQUESTS;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.RATE_LIMIT_BUCKET;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.RATE_LIMIT_BUCKET_PREFIX;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.X_FORWARDED_FOR_HEADER;
 
 @Path("/oauth/register")
 @Timed
@@ -81,15 +85,15 @@ public class OAuthRegisterResource {
                     .type(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.RETRY_AFTER, retryAfterSeconds)
                     .entity(OAuthError.builder()
-                            .error("too_many_requests")
-                            .errorDescription("registration rate limit exceeded")
+                            .error(ERROR_TOO_MANY_REQUESTS)
+                            .errorDescription(ERROR_DESC_REGISTRATION_RATE_LIMIT)
                             .build())
                     .build();
         }
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
-        return Response.created(URI.create("/admin/mcp-oauth-clients/" + client.id()))
+        return Response.created(URI.create(CLIENT_CONFIG_PATH_PREFIX + client.id()))
                 .entity(body)
                 .build();
     }
@@ -101,7 +105,7 @@ public class OAuthRegisterResource {
      * Falls back to the direct remote address when the header is absent.
      */
     private static String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
+        String forwarded = request.getHeader(X_FORWARDED_FOR_HEADER);
         if (StringUtils.isNotBlank(forwarded)) {
             String[] hops = forwarded.split(",");
             return hops[hops.length - 1].trim();
