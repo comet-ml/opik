@@ -35,12 +35,33 @@ public class DummyLockService implements LockService {
         return action;
     }
 
+    @Override
     public Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration) {
         return Mono.just(true);
     }
 
+    @Override
     public Mono<Void> unlockUsingToken(Lock lock) {
         return Mono.just("ok").then();
     }
 
+    @Override
+    public Mono<String> tryAcquireSlot(Lock lock, int totalSlots, Duration leaseTime) {
+        return Mono.just("dummy-permit");
+    }
+
+    @Override
+    public Mono<Boolean> refreshSlot(Lock lock, String permitId, Duration leaseTime) {
+        return Mono.just(true);
+    }
+
+    @Override
+    public Mono<Boolean> releaseSlot(Lock lock, String permitId) {
+        return Mono.just(true);
+    }
+
+    @Override
+    public Mono<Void> addSlotPermits(Lock lock, int delta) {
+        return Mono.empty();
+    }
 }

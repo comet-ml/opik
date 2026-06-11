@@ -4,10 +4,11 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
-import com.comet.opik.api.AnnotationQueueItemLock;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.LockResponse;
+import com.comet.opik.api.LocksResponse;
 import com.comet.opik.api.filter.AnnotationQueueFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
@@ -288,7 +289,7 @@ public class AnnotationQueuesResource {
     @PUT
     @Path("/{queueId}/items/{itemId}/lock")
     @Operation(operationId = "lockAnnotationQueueItem", summary = "Create or extend annotation queue item lock", description = "Claim an annotation queue item for the current user, or extend an existing lock", responses = {
-            @ApiResponse(responseCode = "200", description = "Lock result", content = @Content(schema = @Schema(implementation = AnnotationQueueItemLock.LockResponse.class)))
+            @ApiResponse(responseCode = "200", description = "Lock result", content = @Content(schema = @Schema(implementation = LockResponse.class)))
     })
     @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_ANNOTATE)
     public Response lockItem(
@@ -305,7 +306,7 @@ public class AnnotationQueuesResource {
     @GET
     @Path("/{queueId}/locks")
     @Operation(operationId = "getAnnotationQueueLocks", summary = "Get all active locks for an annotation queue", description = "Returns lock status for all actively locked items in the queue", responses = {
-            @ApiResponse(responseCode = "200", description = "Queue locks", content = @Content(schema = @Schema(implementation = AnnotationQueueItemLock.LocksResponse.class)))
+            @ApiResponse(responseCode = "200", description = "Queue locks", content = @Content(schema = @Schema(implementation = LocksResponse.class)))
     })
     @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_ANNOTATE)
     public Response getQueueLocks(@PathParam("queueId") UUID queueId) {
@@ -316,7 +317,7 @@ public class AnnotationQueuesResource {
                 .block();
 
         return Response.ok()
-                .entity(AnnotationQueueItemLock.LocksResponse.builder().locks(locks).build())
+                .entity(LocksResponse.builder().locks(locks).build())
                 .build();
     }
 }

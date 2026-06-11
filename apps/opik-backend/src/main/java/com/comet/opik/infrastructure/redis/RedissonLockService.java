@@ -207,4 +207,32 @@ class RedissonLockService implements LockService {
         log.warn("Failed to acquire lock, executing fallback action", exception);
         return failToAcquireLockAction;
     }
+
+    // --- Slot-based capacity locking ---
+
+    @Override
+    public Mono<String> tryAcquireSlot(@NonNull Lock lock, int totalSlots, @NonNull Duration leaseTime) {
+        var semaphore = slotSemaphore(lock);
+        return semaphore.trySetPermits(totalSlots)
+                .then(Mono.defer(() -> semaphore.tryAcquire(0L, leaseTime.toMillis(), TimeUnit.MILLISECONDS)));
+    }
+
+    @Override
+    public Mono<Boolean> refreshSlot(@NonNull Lock lock, @NonNull String permitId, @NonNull Duration leaseTime) {
+        return slotSemaphore(lock).updateLeaseTime(permitId, leaseTime.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public Mono<Boolean> releaseSlot(@NonNull Lock lock, @NonNull String permitId) {
+        return slotSemaphore(lock).tryRelease(permitId);
+    }
+
+    @Override
+    public Mono<Void> addSlotPermits(@NonNull Lock lock, int delta) {
+        return slotSemaphore(lock).addPermits(delta);
+    }
+
+    private RPermitExpirableSemaphoreReactive slotSemaphore(Lock lock) {
+        return redisClient.getPermitExpirableSemaphore(CommonOptions.name(lock.key()));
+    }
 }

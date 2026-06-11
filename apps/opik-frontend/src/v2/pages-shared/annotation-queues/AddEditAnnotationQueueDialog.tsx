@@ -35,7 +35,7 @@ import {
 } from "@/types/annotation-queues";
 import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotationQueueCreateMutation";
 import useAnnotationQueueUpdateMutation from "@/api/annotation-queues/useAnnotationQueueUpdateMutation";
-import { DEFAULT_LOCK_TIMEOUT_MINUTES } from "@/lib/annotation-queues";
+import { DEFAULT_LOCK_TIMEOUT_SECONDS } from "@/lib/annotation-queues";
 import { Separator } from "@/ui/separator";
 import { Description } from "@/ui/description";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -70,7 +70,7 @@ const formSchema = z.object({
     .int()
     .min(1)
     .max(60)
-    .default(DEFAULT_LOCK_TIMEOUT_MINUTES),
+    .default(DEFAULT_LOCK_TIMEOUT_SECONDS / 60),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -111,7 +111,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       comments_enabled: defaultQueue?.comments_enabled || true,
       annotators_per_item: defaultQueue?.annotators_per_item || 1,
       lock_timeout_minutes:
-        defaultQueue?.lock_timeout_minutes || DEFAULT_LOCK_TIMEOUT_MINUTES,
+        (defaultQueue?.lock_timeout_seconds ?? DEFAULT_LOCK_TIMEOUT_SECONDS) /
+        60,
     },
   });
 
@@ -128,9 +129,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   const getQueue = useCallback(() => {
     const formData = form.getValues();
+    const { lock_timeout_minutes, ...rest } = formData;
     return {
-      ...formData,
+      ...rest,
       project_id: formData.project_id,
+      lock_timeout_seconds: lock_timeout_minutes * 60,
     };
   }, [form]);
 

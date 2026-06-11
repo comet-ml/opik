@@ -1,168 +1,199 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.AnnotationQueueItemLock;
+import com.comet.opik.api.ItemLockInfo;
+import com.comet.opik.api.LockResponse;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RMapCacheReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.codec.StringCodec;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @ImplementedBy(AnnotationQueueItemLockServiceImpl.class)
 public interface AnnotationQueueItemLockService {
 
-    Mono<AnnotationQueueItemLock.LockResponse> tryLock(
-            @NonNull String workspaceId,
-            @NonNull UUID queueId,
-            @NonNull UUID itemId,
-            @NonNull String userName,
+    Mono<LockResponse> tryLock(
+            String workspaceId,
+            UUID queueId,
+            UUID itemId,
+            String userName,
             int annotatorsPerItem,
             int scoredCount,
-            int lockTimeoutMinutes);
+            int lockTimeoutSeconds);
 
-    Mono<Map<UUID, AnnotationQueueItemLock.ItemLockInfo>> getLocksForQueue(
-            @NonNull String workspaceId,
-            @NonNull UUID queueId);
+    Mono<Map<UUID, ItemLockInfo>> getLocksForQueue(
+            String workspaceId,
+            UUID queueId);
+
+    Mono<Void> updateCapacity(
+            String workspaceId,
+            UUID queueId,
+            int delta);
 }
 
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockService {
 
-    private static final String HASH_KEY_PREFIX = "aq:locks:";
-    private static final String LOCK_NAME = "aq_claim";
+    private static final String USER_MAP_PREFIX = "aq:locks:";
+    private static final String SLOT_KEY_PREFIX = "aq:slots:";
 
-    private final RedissonReactiveClient redisClient;
-    private final LockService lockService;
-
-    @Inject
-    AnnotationQueueItemLockServiceImpl(
-            @NonNull RedissonReactiveClient redisClient,
-            @NonNull LockService lockService) {
-        this.redisClient = redisClient;
-        this.lockService = lockService;
-    }
+    private final @NonNull RedissonReactiveClient redisClient;
+    private final @NonNull LockService lockService;
 
     @Override
-    public Mono<AnnotationQueueItemLock.LockResponse> tryLock(
+    public Mono<LockResponse> tryLock(
             @NonNull String workspaceId,
             @NonNull UUID queueId,
             @NonNull UUID itemId,
             @NonNull String userName,
             int annotatorsPerItem,
             int scoredCount,
-            int lockTimeoutMinutes) {
+            int lockTimeoutSeconds) {
 
-        String hashKey = buildHashKey(workspaceId, queueId);
-        String field = itemId + ":" + userName;
-        String itemPrefix = itemId + ":";
-        long now = System.currentTimeMillis();
-        long expiryMs = now + (long) lockTimeoutMinutes * 60 * 1000;
+        long expiryMs = System.currentTimeMillis() + (long) lockTimeoutSeconds * 1000;
 
-        // Distributed mutex on the item ensures only one tryLock runs at a time per item
-        return lockService.executeWithLock(
-                new LockService.Lock(itemId, LOCK_NAME),
-                Mono.defer(() -> {
-                    var map = redisClient.<String, String>getMap(hashKey, StringCodec.INSTANCE);
-                    return map.readAllMap()
-                            .flatMap(entries -> {
-                                // User already holds a lock on this item — refresh expiry (heartbeat)
-                                String existing = entries.get(field);
-                                if (existing != null && Long.parseLong(existing) > now) {
-                                    return map.put(field, String.valueOf(expiryMs))
-                                            .thenReturn(true);
-                                }
+        if (scoredCount >= annotatorsPerItem) {
+            return Mono.just(buildResponse(false, itemId, userName, expiryMs));
+        }
 
-                                // Count active (non-expired) locks for this item
-                                int activeLocks = 0;
-                                for (var entry : entries.entrySet()) {
-                                    if (entry.getKey().startsWith(itemPrefix)
-                                            && Long.parseLong(entry.getValue()) > now) {
-                                        activeLocks++;
-                                    }
-                                }
+        var slotLock = new LockService.Lock(buildSlotKey(workspaceId, queueId, itemId));
+        Duration lease = Duration.ofSeconds(lockTimeoutSeconds);
+        long leaseMs = lease.toMillis();
+        String field = field(itemId, userName);
+        int effectiveCapacity = annotatorsPerItem - scoredCount;
+        var userMap = userMap(workspaceId, queueId);
 
-                                // All annotator slots taken — lock not acquired
-                                if (scoredCount + activeLocks >= annotatorsPerItem) {
-                                    return Mono.just(false);
-                                }
+        log.debug("tryLock item '{}' for user '{}' in queue '{}' (effectiveCapacity={})",
+                itemId, userName, queueId, effectiveCapacity);
 
-                                // Slot available — create the lock
-                                return map.put(field, String.valueOf(expiryMs))
-                                        .thenReturn(true);
-                            });
-                }))
-                .map(acquired -> AnnotationQueueItemLock.LockResponse.builder()
-                        .acquired(acquired)
-                        .itemId(itemId)
-                        .lockedBy(userName)
-                        .expiresAt(acquired ? Instant.ofEpochMilli(expiryMs) : null)
-                        .build());
+        // Heartbeat: if user already holds a permit, refresh its lease
+        Mono<Boolean> heartbeat = userMap.get(field)
+                .flatMap(existingPermitId -> lockService.refreshSlot(slotLock, existingPermitId, lease)
+                        .flatMap(refreshed -> Boolean.TRUE.equals(refreshed)
+                                ? userMap.fastPut(field, existingPermitId, leaseMs, TimeUnit.MILLISECONDS)
+                                        .thenReturn(true)
+                                : Mono.empty()));
+
+        return heartbeat
+                .switchIfEmpty(Mono.defer(() ->
+                // Fresh acquire: atomic semaphore tryAcquire, then store permitId in map
+                lockService.tryAcquireSlot(slotLock, effectiveCapacity, lease)
+                        .flatMap(newPermitId -> userMap
+                                .fastPutIfAbsent(field, newPermitId, leaseMs, TimeUnit.MILLISECONDS, 0,
+                                        TimeUnit.MILLISECONDS)
+                                .flatMap(stored -> Boolean.TRUE.equals(stored)
+                                        ? Mono.just(true)
+                                        : lockService.releaseSlot(slotLock, newPermitId).thenReturn(true)))
+                        .defaultIfEmpty(false)))
+                .map(acquired -> buildResponse(acquired, itemId, userName, expiryMs));
     }
 
     @Override
-    public Mono<Map<UUID, AnnotationQueueItemLock.ItemLockInfo>> getLocksForQueue(
+    public Mono<Map<UUID, ItemLockInfo>> getLocksForQueue(
             @NonNull String workspaceId,
             @NonNull UUID queueId) {
 
-        String hashKey = buildHashKey(workspaceId, queueId);
-        long now = System.currentTimeMillis();
-
-        return redisClient.<String, String>getMap(hashKey, StringCodec.INSTANCE)
+        // RMapCache filters out TTL-expired entries on read
+        return userMap(workspaceId, queueId)
                 .readAllMap()
                 .map(entries -> {
-                    Map<UUID, List<String>> activeLocksByItem = new HashMap<>();
-                    List<String> expiredFields = new ArrayList<>();
-
+                    Map<UUID, List<String>> byItem = new HashMap<>();
                     for (var entry : entries.entrySet()) {
-                        String field = entry.getKey();
-                        long expiry = Long.parseLong(entry.getValue());
-
-                        if (expiry <= now) {
-                            expiredFields.add(field);
-                            continue;
-                        }
-
-                        int separatorIdx = field.lastIndexOf(':');
-                        UUID itemId = UUID.fromString(field.substring(0, separatorIdx));
-                        String lockedByUser = field.substring(separatorIdx + 1);
-
-                        activeLocksByItem
-                                .computeIfAbsent(itemId, k -> new ArrayList<>())
-                                .add(lockedByUser);
+                        UUID itemId = extractItemId(entry.getKey());
+                        String user = extractUserName(entry.getKey());
+                        byItem.computeIfAbsent(itemId, k -> new ArrayList<>()).add(user);
                     }
 
-                    Map<UUID, AnnotationQueueItemLock.ItemLockInfo> result = new HashMap<>();
-                    for (var entry : activeLocksByItem.entrySet()) {
-                        List<String> lockedBy = entry.getValue();
-                        result.put(entry.getKey(), AnnotationQueueItemLock.ItemLockInfo.builder()
-                                .activeLocks(lockedBy.size())
-                                .lockedBy(lockedBy)
+                    Map<UUID, ItemLockInfo> result = new HashMap<>();
+                    for (var entry : byItem.entrySet()) {
+                        List<String> users = entry.getValue();
+                        result.put(entry.getKey(), ItemLockInfo.builder()
+                                .activeLocks(users.size())
+                                .lockedBy(users)
                                 .build());
                     }
-
-                    // Lazy cleanup of all expired entries
-                    if (!expiredFields.isEmpty()) {
-                        redisClient.<String, String>getMap(hashKey, StringCodec.INSTANCE)
-                                .fastRemove(expiredFields.toArray(String[]::new))
-                                .subscribe();
-                    }
-
                     return result;
                 });
     }
 
-    private String buildHashKey(String workspaceId, UUID queueId) {
-        return HASH_KEY_PREFIX + workspaceId + ":" + queueId;
+    @Override
+    public Mono<Void> updateCapacity(
+            @NonNull String workspaceId,
+            @NonNull UUID queueId,
+            int delta) {
+
+        if (delta == 0) {
+            return Mono.empty();
+        }
+
+        log.debug("Updating capacity for queue '{}' by delta={}", queueId, delta);
+
+        return userMap(workspaceId, queueId)
+                .readAllKeySet()
+                .flatMap(keys -> {
+                    var itemIds = keys.stream()
+                            .map(field -> extractItemId(field))
+                            .distinct()
+                            .toList();
+
+                    if (itemIds.isEmpty()) {
+                        return Mono.empty();
+                    }
+
+                    return Flux.fromIterable(itemIds)
+                            .flatMap(itemId -> {
+                                var slotLock = new LockService.Lock(buildSlotKey(workspaceId, queueId, itemId));
+                                return lockService.addSlotPermits(slotLock, delta);
+                            })
+                            .then();
+                });
+    }
+
+    private RMapCacheReactive<String, String> userMap(String workspaceId, UUID queueId) {
+        return redisClient.getMapCache(USER_MAP_PREFIX + workspaceId + ":" + queueId, StringCodec.INSTANCE);
+    }
+
+    private String buildSlotKey(String workspaceId, UUID queueId, UUID itemId) {
+        return SLOT_KEY_PREFIX + workspaceId + ":" + queueId + ":" + itemId;
+    }
+
+    private String field(UUID itemId, String userName) {
+        return itemId + ":" + userName;
+    }
+
+    private UUID extractItemId(String field) {
+        int separatorIdx = field.lastIndexOf(':');
+        return UUID.fromString(field.substring(0, separatorIdx));
+    }
+
+    private String extractUserName(String field) {
+        return field.substring(field.lastIndexOf(':') + 1);
+    }
+
+    private LockResponse buildResponse(boolean acquired, UUID itemId, String userName,
+            long expiryMs) {
+        return LockResponse.builder()
+                .acquired(acquired)
+                .itemId(itemId)
+                .lockedBy(userName)
+                .expiresAt(acquired ? Instant.ofEpochMilli(expiryMs) : null)
+                .build();
     }
 }

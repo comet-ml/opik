@@ -8,7 +8,7 @@ import { CommentItem, CommentItems } from "@/types/comment";
 import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
 import { formatDate } from "@/lib/date";
 
-export const DEFAULT_LOCK_TIMEOUT_MINUTES = 5;
+export const DEFAULT_LOCK_TIMEOUT_SECONDS = 300;
 
 export const hashCode = (str: string): number => {
   let hash = 0;
