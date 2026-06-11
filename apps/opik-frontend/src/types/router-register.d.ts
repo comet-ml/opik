@@ -6,6 +6,7 @@ declare module "@tanstack/react-router" {
     title?: string;
     param?: string;
     paramValue?: string;
+    hideRoot?: boolean;
   }
   interface Register {
     router: AnyRouter;

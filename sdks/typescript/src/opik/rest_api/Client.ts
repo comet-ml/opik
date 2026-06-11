@@ -18,6 +18,7 @@ import { InsightsViewsClient } from "./api/resources/insightsViews/client/Client
 import { LlmModelsClient } from "./api/resources/llmModels/client/Client.js";
 import { LlmProviderKeyClient } from "./api/resources/llmProviderKey/client/Client.js";
 import { ManualEvaluationClient } from "./api/resources/manualEvaluation/client/Client.js";
+import { McpOAuthClient } from "./api/resources/mcpOAuth/client/Client.js";
 import { OllamaClient } from "./api/resources/ollama/client/Client.js";
 import { OllieStateClient } from "./api/resources/ollieState/client/Client.js";
 import { OpenTelemetryIngestionClient } from "./api/resources/openTelemetryIngestion/client/Client.js";
@@ -51,6 +52,7 @@ export declare namespace OpikApiClient {
 
 export class OpikApiClient {
     protected readonly _options: NormalizedClientOptions<OpikApiClient.Options>;
+    protected _mcpOAuth: McpOAuthClient | undefined;
     protected _systemUsage: SystemUsageClient | undefined;
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _alerts: AlertsClient | undefined;
@@ -89,6 +91,10 @@ export class OpikApiClient {
 
     constructor(options: OpikApiClient.Options = {}) {
         this._options = normalizeClientOptions(options);
+    }
+
+    public get mcpOAuth(): McpOAuthClient {
+        return (this._mcpOAuth ??= new McpOAuthClient(this._options));
     }
 
     public get systemUsage(): SystemUsageClient {
