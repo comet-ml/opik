@@ -138,8 +138,8 @@ const DatasetCsvDropzone: React.FC<DatasetCsvDropzoneProps> = ({
             Browse files
           </button>
         </p>
-        <p className="comet-body-xs text-light-slate">
-          JSON or CSV up to 1,000 rows.{" "}
+        <p className="comet-body-xs text-muted-slate">
+          CSV or JSON. Prefer to use code instead?{" "}
           <button
             type="button"
             className="underline hover:text-foreground"
@@ -148,7 +148,7 @@ const DatasetCsvDropzone: React.FC<DatasetCsvDropzoneProps> = ({
               onUseSdk();
             }}
           >
-            Use SDK for larger files
+            Use SDK
           </button>
         </p>
       </div>

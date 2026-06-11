@@ -19,6 +19,8 @@ import CodeHighlighter, {
 } from "@/shared/CodeHighlighter/CodeHighlighter";
 
 import { Spinner } from "@/ui/spinner";
+import { useToast } from "@/ui/use-toast";
+import { ToastAction } from "@/ui/toast";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
@@ -26,7 +28,6 @@ import DatasetCsvDropzone from "@/v2/pages-shared/datasets/DatasetCsvDropzone";
 import useDatasetForm from "@/v2/pages-shared/datasets/AddEditDatasetDialog/useDatasetForm";
 import useProjectById from "@/api/projects/useProjectById";
 import { useActiveProjectId } from "@/store/AppStore";
-import CreatedSuccess from "./CreatedSuccess";
 import { Dataset, DATASET_TYPE, DatasetListType } from "@/types/datasets";
 
 export type CreateDatasetMode = "upload" | "sdk";
@@ -62,16 +63,12 @@ const CreateDatasetSidebar: React.FunctionComponent<
     config.entityName[0].toLowerCase() + config.entityName.slice(1);
 
   const [activeMode, setActiveMode] = useState<CreateDatasetMode>(mode);
-  const [showSuccess, setShowSuccess] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [createdName, setCreatedName] = useState("");
-  const [navigateToEntity, setNavigateToEntity] = useState<(() => void) | null>(
-    null,
-  );
   const [sdkLanguage, setSdkLanguage] = useState<"python" | "typescript">(
     "python",
   );
 
+  const { toast } = useToast();
   const activeProjectId = useActiveProjectId();
   const { data: activeProject } = useProjectById(
     { projectId: activeProjectId! },
@@ -81,11 +78,25 @@ const CreateDatasetSidebar: React.FunctionComponent<
 
   const handleCreateSuccess = useCallback(
     (dataset: Dataset, navigate: () => void) => {
-      setCreatedName(dataset.name);
-      setNavigateToEntity(() => navigate);
-      setShowSuccess(true);
+      setOpen(false);
+      toast({
+        title: `${config.entityName} created`,
+        description: `"${dataset.name}" is ready to use.`,
+        actions: [
+          <ToastAction
+            key="view"
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText={`Go to ${entityLabel}`}
+            onClick={navigate}
+          >
+            Go to {entityLabel}
+          </ToastAction>,
+        ],
+      });
     },
-    [],
+    [setOpen, toast, config.entityName, entityLabel],
   );
 
   const {
@@ -145,10 +156,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
   useEffect(() => {
     if (!open) {
       const timeout = setTimeout(() => {
-        setShowSuccess(false);
         setAdvancedOpen(false);
-        setCreatedName("");
-        setNavigateToEntity(null);
         setSdkLanguage("python");
       }, 200);
       return () => clearTimeout(timeout);
@@ -160,43 +168,15 @@ const CreateDatasetSidebar: React.FunctionComponent<
   const hasValidUpload = uploadFile !== undefined && !uploadError;
 
   const isDirty =
-    !showSuccess &&
-    (name.length > 0 ||
-      description.length > 0 ||
-      uploadFile !== undefined ||
-      assertions.length > 0);
+    name.length > 0 ||
+    description.length > 0 ||
+    uploadFile !== undefined ||
+    assertions.length > 0;
 
   const canSubmit =
     activeMode === "upload"
       ? hasValidUpload && name.trim().length > 0
       : name.trim().length > 0;
-
-  const handleGoToEntity = useCallback(() => {
-    navigateToEntity?.();
-  }, [navigateToEntity]);
-
-  const handleCreateAnother = useCallback(() => {
-    // "Create another" keeps the panel open, so the form hook's close-reset
-    // never fires — reset every field-backing piece of state here.
-    setShowSuccess(false);
-    setAdvancedOpen(false);
-    setCreatedName("");
-    setNavigateToEntity(null);
-    setName("");
-    setDescription("");
-    setAssertions([]);
-    setRunsPerItem(1);
-    setPassThreshold(1);
-    handleFileSelect(undefined);
-    setSdkLanguage("python");
-  }, [
-    setName,
-    setDescription,
-    setAssertions,
-    setRunsPerItem,
-    setPassThreshold,
-    handleFileSelect,
-  ]);
 
   const renderNameField = () => (
     <div className="flex flex-col gap-1.5">
@@ -282,13 +262,16 @@ const CreateDatasetSidebar: React.FunctionComponent<
         }}
       />
       {hasValidUpload && (
-        <div className="mt-4 flex flex-col gap-3">
-          {renderNameField()}
-          {renderDescriptionField()}
+        <div className="mt-4">
+          <div className="flex flex-col gap-3">
+            {renderNameField()}
+            {renderDescriptionField()}
+          </div>
           {type === "test_suite" && (
             <Accordion
               type="single"
               collapsible
+              className="mt-4"
               value={advancedOpen ? "advanced" : ""}
               onValueChange={(v) => setAdvancedOpen(v === "advanced")}
             >
@@ -372,7 +355,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
       entity={typeLabel}
       open={open}
       onClose={handleClose}
-      initialWidth={0.35}
+      initialWidth={0.5}
       minWidth={450}
       blockOverlayClose={isDirty}
       header={
@@ -383,35 +366,20 @@ const CreateDatasetSidebar: React.FunctionComponent<
           }
           onClose={handleClose}
         >
-          {!showSuccess && (
-            <Button variant="outline" size="2xs" asChild>
-              <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
-                Docs
-                <ArrowUpRight className="ml-1 size-3 shrink-0" />
-              </a>
-            </Button>
-          )}
+          <Button variant="outline" size="2xs" asChild>
+            <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+              Docs
+              <ArrowUpRight className="ml-1 size-3 shrink-0" />
+            </a>
+          </Button>
         </ResizableSidePanelTopBar>
       }
     >
       <div className="flex size-full flex-col">
-        <div className="flex-1 overflow-y-auto p-6 pt-4">
-          {showSuccess ? (
-            <CreatedSuccess
-              entityName={config.entityName}
-              name={createdName}
-              onGoToEntity={handleGoToEntity}
-              onCreateAnother={handleCreateAnother}
-            />
-          ) : activeMode === "upload" ? (
-            renderUploadMode()
-          ) : (
-            renderSdkMode()
-          )}
+        <div className="flex-1 overflow-y-auto pb-6 pl-9 pr-4 pt-4">
+          {activeMode === "upload" ? renderUploadMode() : renderSdkMode()}
         </div>
-        {!showSuccess && (
-          <div className="border-t px-6 py-4">{renderFooter()}</div>
-        )}
+        <div className="border-t py-4 pl-9 pr-4">{renderFooter()}</div>
       </div>
     </ResizableSidePanel>
   );

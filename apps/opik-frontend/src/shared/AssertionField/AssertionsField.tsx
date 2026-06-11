@@ -5,6 +5,7 @@ import OpikLeaf from "@/icons/opik-leaf.svg?react";
 import OpikLeafDark from "@/icons/opik-leaf-dark.svg?react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
+import { Button } from "@/ui/button";
 import AssertionField from "./AssertionField";
 
 type AssertionsVariant = "item" | "global";
@@ -83,20 +84,20 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
 
       <div className="flex flex-col gap-2 pt-1.5">
         {!hasEditable && (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 p-4"
-          >
+          <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background p-4">
             <LeafIcon className="size-8" />
             <span className="comet-body-xs text-muted-slate">
               No assertions added yet
             </span>
-            <span className="comet-body-xs-accented inline-flex items-center text-primary">
-              <Plus className="mr-0.5 size-3" />
-              Assertion
-            </span>
-          </button>
+            <Button
+              variant="tableLink"
+              size="2xs"
+              className="h-auto px-0"
+              onClick={onAdd}
+            >
+              Add assertion
+            </Button>
+          </div>
         )}
 
         {hasEditable && (
