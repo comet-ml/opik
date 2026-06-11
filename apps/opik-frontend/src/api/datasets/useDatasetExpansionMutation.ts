@@ -10,6 +10,7 @@ import { useToast } from "@/ui/use-toast";
 
 type UseDatasetExpansionMutationParams = {
   datasetId: string;
+  entityName?: string;
 } & DatasetExpansionRequest;
 
 const useDatasetExpansionMutation = () => {
@@ -21,20 +22,22 @@ const useDatasetExpansionMutation = () => {
     AxiosError,
     UseDatasetExpansionMutationParams
   >({
-    mutationFn: async ({ datasetId, ...data }) => {
+    mutationFn: async ({ datasetId, entityName: _, ...data }) => {
+      void _;
       const { data: response } = await api.post(
         `${DATASETS_REST_ENDPOINT}${datasetId}/expansions`,
         data,
       );
       return response;
     },
-    onSuccess: () => {
+    onSuccess: (_, { entityName = "dataset" }) => {
+      const label = entityName.charAt(0).toUpperCase() + entityName.slice(1);
       toast({
-        title: "Test suite expansion successful",
+        title: `${label} expansion successful`,
         description: "Synthetic samples have been generated successfully",
       });
     },
-    onError: (error) => {
+    onError: (error, { entityName = "dataset" }) => {
       const errorData = error?.response?.data as {
         message?: string;
         detail?: string;
@@ -43,7 +46,7 @@ const useDatasetExpansionMutation = () => {
       let message =
         errorData?.message ||
         errorData?.detail ||
-        "Failed to expand test suite";
+        `Failed to expand ${entityName}`;
 
       // Handle specific model not supported error
       if (message.includes("model not supported")) {
@@ -52,8 +55,9 @@ const useDatasetExpansionMutation = () => {
         message = `The ${modelName} is not supported by the backend. Please select a different model from the dropdown.`;
       }
 
+      const label = entityName.charAt(0).toUpperCase() + entityName.slice(1);
       toast({
-        title: "Test suite expansion failed",
+        title: `${label} expansion failed`,
         description: message,
         variant: "destructive",
       });
