@@ -350,6 +350,70 @@ class SpanFilterEvaluationServiceTest {
     }
 
     @Nested
+    @DisplayName("Timestamp Field Filtering")
+    class TimestampFieldFiltering {
+
+        @Test
+        void matchesFilterWhenCreatedAtAfter() {
+            // Given
+            var createdAt = Instant.parse("2024-01-15T10:00:00Z");
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .createdAt(createdAt)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CREATED_AT)
+                    .operator(Operator.GREATER_THAN)
+                    .value("2024-01-01T00:00:00Z")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenLastUpdatedAtBefore() {
+            // Given
+            var lastUpdatedAt = Instant.parse("2024-06-01T12:00:00Z");
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .lastUpdatedAt(lastUpdatedAt)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.LAST_UPDATED_AT)
+                    .operator(Operator.LESS_THAN)
+                    .value("2024-12-31T23:59:59Z")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenCreatedAtIsNull() {
+            // Given
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .createdAt(null)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CREATED_AT)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("Tags Field Filtering")
     class TagsFieldFiltering {
 
