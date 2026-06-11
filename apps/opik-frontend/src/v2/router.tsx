@@ -26,7 +26,6 @@ import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
-import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
@@ -161,7 +160,17 @@ const homeRoute = createRoute({
 const workspaceRoute = createRoute({
   path: "/$workspaceName",
   getParentRoute: () => workspaceGuardRoute,
-  component: WorkspacePage,
+});
+
+const workspaceIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => workspaceRoute,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 // ----------- quickstart
@@ -672,6 +681,7 @@ const routeTree = rootRoute.addChildren([
       aiSpendLeaderboardRoute,
     ]),
     workspaceRoute.addChildren([
+      workspaceIndexRoute,
       // Projects: workspace-level list + project-scoped routes
       projectsRoute.addChildren([
         projectsListRoute,
