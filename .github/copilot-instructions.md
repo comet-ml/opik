@@ -63,10 +63,10 @@ git commit -m "[OPIK-1234] Add project custom metrics UI dashboard"
 ## 2. Backend (Java) Review Guidelines
 
 ### Technology Stack
-- **Language**: Java 21
-- **Framework**: Dropwizard 4.0.14
-- **Database**: MySQL 9.3.0, ClickHouse 0.9.0
-- **Build Tool**: Maven with Spotless 2.46.0
+- **Language**: Java 25
+- **Framework**: Dropwizard 5.0.0
+- **Database**: MySQL 9.7.0, ClickHouse 0.9.0
+- **Build Tool**: Maven with Spotless 3.5.1
 - **Testing**: JUnit 5, Testcontainers, WireMock
 
 ### Architecture Requirements
@@ -423,10 +423,10 @@ const Component: React.FunctionComponent<ComponentProps> = ({
 ### Technology-Specific Dependencies
 
 #### Backend (Java)
-- **Core**: Dropwizard 4.0.14, JDBI3, MySQL 9.3.0, ClickHouse 0.9.0
-- **Build**: Maven, Spotless 2.46.0
+- **Core**: Dropwizard 5.0.0, JDBI3, MySQL 9.7.0, ClickHouse 0.9.0
+- **Build**: Maven, Spotless 3.5.1
 - **Testing**: JUnit 5, Testcontainers, WireMock
-- **Observability**: OpenTelemetry 2.18.0
+- **Observability**: OpenTelemetry 2.28.1
 
 #### Frontend (TypeScript)
 - **Core**: React 18.3.1, TypeScript 5.4.5, Vite 5.2.11
