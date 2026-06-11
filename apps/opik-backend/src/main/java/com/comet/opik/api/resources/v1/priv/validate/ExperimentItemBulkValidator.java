@@ -11,7 +11,7 @@ public class ExperimentItemBulkValidator {
     public static void validate(ExperimentItemBulkRecord item) {
         if (item.trace() == null && !CollectionUtils.isEmpty(item.spans())) {
             throw new BadRequestException("Trace is required when spans are provided");
-        } else if (item.trace() != null && hasMatchingTraceId(item)) {
+        } else if (item.trace() != null && !CollectionUtils.isEmpty(item.spans()) && hasMatchingTraceId(item)) {
             throw new BadRequestException("Trace ID must match the span's trace ID");
         }
     }
