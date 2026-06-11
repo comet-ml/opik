@@ -280,7 +280,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             >
               Feedback scores
               <ExplainerIcon
-                className="ml-1"
+                className="ml-1 size-3"
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
               />
             </TabsTrigger>
