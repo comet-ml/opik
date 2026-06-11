@@ -45,6 +45,10 @@ class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
     private static final String NOT_LOGGED_USER = "Please login first";
 
+    // GenericType instances are thread-safe and expensive to build, so reuse a single instance.
+    private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
+    };
+
     private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = new HashMap<>() {
         {
             // Private projects related endpoints
@@ -185,7 +189,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
+    public List<WorkspaceInfo> listEligibleWorkspaces(@NonNull Cookie sessionToken) {
         requireSession(sessionToken);
         try (var response = client.target(URI.create(reactServiceUrl.url()))
                 .path("workspaces")
@@ -199,8 +203,7 @@ class RemoteAuthService implements AuthService {
             if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
                 throw toSessionAuthException(response);
             }
-            return response.readEntity(new GenericType<List<WorkspaceIdNameResponse>>() {
-            }).stream()
+            return response.readEntity(WORKSPACE_LIST_TYPE).stream()
                     .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
                     .map(workspace -> WorkspaceInfo.builder()
                             .id(workspace.workspaceId())
@@ -211,7 +214,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo) {
+    public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
         try (var response = client.target(URI.create(reactServiceUrl.url()))
                 .path("opik")
@@ -231,7 +234,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
+    public UserWorkspace authorizeWorkspace(@NonNull Cookie sessionToken, @NonNull String workspaceName) {
         requireSession(sessionToken);
         if (isDefaultWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
@@ -253,7 +256,7 @@ class RemoteAuthService implements AuthService {
     }
 
     private void requireSession(Cookie sessionToken) {
-        if (sessionToken == null || StringUtils.isBlank(sessionToken.getValue())) {
+        if (StringUtils.isBlank(sessionToken.getValue())) {
             throw new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
         }
     }
@@ -263,8 +266,27 @@ class RemoteAuthService implements AuthService {
                 || response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             return new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
         }
-        log.error("Unexpected error while listing workspaces, received status code: {}", response.getStatus());
-        throw new InternalServerErrorException();
+        throw unexpectedRemoteError("listing workspaces", response);
+    }
+
+    /**
+     * Logs the remote response (status and best-effort body, for production debugging) and builds an
+     * {@link InternalServerErrorException} carrying a custom message that identifies the failing operation. The body is
+     * only logged, never surfaced to the caller, so no internal/remote detail bubbles up to the endpoint.
+     */
+    private InternalServerErrorException unexpectedRemoteError(String operation, Response response) {
+        log.error("Unexpected error while {}, received status code: {}, body: '{}'",
+                operation, response.getStatus(), readBodySafely(response));
+        return new InternalServerErrorException("Unexpected error while " + operation);
+    }
+
+    private static String readBodySafely(Response response) {
+        try {
+            return response.hasEntity() ? response.readEntity(String.class) : "";
+        } catch (RuntimeException e) {
+            log.warn("Failed to read remote response body for debugging: {}", e.getMessage());
+            return "";
+        }
     }
 
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path,
@@ -351,8 +373,7 @@ class RemoteAuthService implements AuthService {
             var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
             throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
-        log.error("Unexpected error while authenticating user, received status code: {}", response.getStatus());
-        throw new InternalServerErrorException();
+        throw unexpectedRemoteError("authenticating user", response);
     }
 
     private void setCredentialIntoContext(
@@ -413,7 +434,6 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
 
-        log.warn("Unexpected error while getting workspace id: {}", response.getStatus());
-        throw new InternalServerErrorException();
+        throw unexpectedRemoteError("getting workspace id", response);
     }
 }
