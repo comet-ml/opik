@@ -84,9 +84,9 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
   const handleSelect = useCallback(
     (selection: PromptLibrarySelection) => {
       onSelect(selection);
-      setOpen(false);
+      handleOpenChange(false);
     },
-    [onSelect],
+    [onSelect, handleOpenChange],
   );
 
   return (
@@ -109,6 +109,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
             setSearchText={setSearch}
             placeholder="Search"
             variant="ghost"
+            dimension="sm"
           />
         </div>
         <Separator className="my-1" />
@@ -174,7 +175,7 @@ const PromptRow: React.FC<PromptRowProps> = ({
           size="sm"
           withOverflow
           compact
-          maxWidth={80}
+          maxWidth={60}
         />
         {enableVersionSelect && (
           <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
@@ -266,17 +267,12 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
             role="button"
             tabIndex={0}
             className={cn(
-              "comet-body-s flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-primary-foreground",
+              "comet-body-s flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 hover:bg-primary-foreground",
               isActive && "bg-primary-100 text-primary",
             )}
             onClick={() => onSelect(version.id)}
           >
-            <span
-              className={cn(
-                "comet-body-s-accented shrink-0",
-                isActive && "text-primary",
-              )}
-            >
+            <span className={cn("shrink-0", isActive && "text-primary")}>
               {label}
             </span>
             {stage && <StageTag value={stage} size="xs" />}
@@ -285,7 +281,7 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
               size="sm"
               withOverflow
               compact
-              maxWidth={80}
+              maxWidth={60}
             />
             <TooltipWrapper
               content={`${formatDate(version.created_at, {

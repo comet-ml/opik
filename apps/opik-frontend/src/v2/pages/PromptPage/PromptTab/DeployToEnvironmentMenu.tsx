@@ -3,7 +3,8 @@ import {
   ChevronDown,
   Check,
   CircleFadingArrowUp,
-  SlidersHorizontal,
+  Settings2,
+  X,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
@@ -53,10 +54,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
     useSetPromptVersionEnvironmentMutation();
 
   const environments = useMemo(
-    () =>
-      (environmentsData?.content ?? [])
-        .slice()
-        .sort((a, b) => a.position - b.position),
+    () => environmentsData?.content ?? [],
     [environmentsData?.content],
   );
 
@@ -137,7 +135,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px]">
         {environments.length === 0 ? (
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem size="sm" disabled>
             No environments configured
           </DropdownMenuItem>
         ) : (
@@ -151,6 +149,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
             return (
               <DropdownMenuItem
                 key={env.id}
+                size="sm"
                 onSelect={(e) => {
                   e.preventDefault();
                   handleToggle(env.name);
@@ -174,19 +173,20 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
         {activeEnvironments.length > 0 && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={handleClearAll}>
-              Remove from all environments
+            <DropdownMenuItem size="sm" onSelect={handleClearAll}>
+              <X className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+              Remove from all
             </DropdownMenuItem>
           </>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem size="sm" asChild>
           <Link
             to="/$workspaceName/configuration"
             params={{ workspaceName }}
             search={{ tab: CONFIGURATION_TABS.ENVIRONMENTS }}
           >
-            <SlidersHorizontal className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+            <Settings2 className="mr-2 size-3.5 shrink-0 text-muted-slate" />
             Manage environments
           </Link>
         </DropdownMenuItem>

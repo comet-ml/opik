@@ -28,6 +28,7 @@ import isNumber from "lodash/isNumber";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
+import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
 import { getTextFromMessageContent } from "@/lib/llm";
 
 export interface DatasetItemPromptCombination {
@@ -219,13 +220,14 @@ const usePromptDatasetItemCombination = ({
           transformMessageIntoProviderMessage(m, datasetItemData),
         );
 
-        const promptLibraryVersions = (
-          prompt.messages
-            .map((m) => m.promptVersionId)
-            .filter(Boolean) as string[]
-        ).map((id) => ({
-          id,
-        }));
+        // Single source of truth shared with the execute path: includes the
+        // CHAT prompt version (loadedChatPromptVersionId) that the old
+        // message-only collection silently dropped — the root cause of
+        // OPIK-6838 #1 (empty "Prompt commit" column) and #3 (dataset
+        // experiments missing from the prompt's Experiments tab).
+        const promptLibraryVersions = collectPromptVersionRefs(prompt).map(
+          (ref) => ({ id: ref.id }),
+        );
 
         // Calculate prompt library metadata at execution time
         // This checks React Query cache to determine if prompt is unchanged from library
