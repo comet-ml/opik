@@ -64,7 +64,7 @@ public class AuthTestUtils {
                 post(urlPathEqualTo("/opik/auth"))
                         .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                         .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
-                        .withRequestBody(matchingJsonPath("$.path", matching("/v1/private/.*")))
+                        .withRequestBody(matchingJsonPath("$.path", matching("/v1/(private|internal)/.*")))
                         .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(user, workspaceId, workspaceName,
                                 quotas, opikVersion))));
     }

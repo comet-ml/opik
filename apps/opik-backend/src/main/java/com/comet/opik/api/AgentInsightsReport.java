@@ -1,0 +1,40 @@
+package com.comet.opik.api;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
+import lombok.Builder;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
+@Builder(toBuilder = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+public record AgentInsightsReport(
+        @NotNull UUID projectId,
+        @NotNull LocalDate reportDay,
+        @NotEmpty @Valid List<ReportedIssue> issues) {
+
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ReportedIssue(
+            @NotBlank @Size(max = 255) String name,
+            String description,
+            String query,
+            @NotNull @PositiveOrZero Long count,
+            @NotNull @PositiveOrZero Long totalCount,
+            @NotNull @PositiveOrZero Long usersImpacted,
+            @NotNull @PositiveOrZero Long totalUsers,
+            JsonNode metadata) {
+    }
+}
