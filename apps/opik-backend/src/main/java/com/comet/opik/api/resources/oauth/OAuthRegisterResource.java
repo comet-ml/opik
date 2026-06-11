@@ -75,9 +75,6 @@ public class OAuthRegisterResource {
 
         log.info("MCP OAuth client registration request [client_name={}]", request.clientName());
 
-        // Throttle directly via RateLimitService rather than @RateLimited: this protection is
-        // intentionally independent of the global rateLimit.enabled flag, since DCR is unauthenticated
-        // and the per-IP cap is its only abuse control.
         String bucket = RATE_LIMIT_BUCKET.formatted(clientIp(httpRequest));
         boolean exceeded = Boolean.TRUE.equals(rateLimitService
                 .isLimitExceeded(1, bucket, limitConfig)
