@@ -73,7 +73,7 @@ public class OAuthRegisterResource {
     public Response register(@NonNull @Valid ClientRegistrationRequest request,
             @Context HttpServletRequest httpRequest) {
 
-        log.info("MCP OAuth client registration request [client_name={}]", request.clientName());
+        log.info("MCP OAuth client registration request '{}'", request.clientName());
 
         String bucket = RATE_LIMIT_BUCKET.formatted(clientIp(httpRequest));
         boolean exceeded = Boolean.TRUE.equals(rateLimitService
@@ -82,7 +82,7 @@ public class OAuthRegisterResource {
         if (exceeded) {
             long retryAfterSeconds = Math.max(
                     Duration.ofMillis(rateLimitService.getRemainingTTL(bucket, limitConfig).block()).toSeconds(), 1);
-            log.warn("MCP OAuth client registration rate limit exceeded [retry_after_seconds={}]", retryAfterSeconds);
+            log.warn("MCP OAuth client registration rate limit exceeded '{}'", retryAfterSeconds);
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
                     .type(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.RETRY_AFTER, retryAfterSeconds)
@@ -95,7 +95,7 @@ public class OAuthRegisterResource {
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
-        log.info("MCP OAuth client registered [client_id={}]", client.id());
+        log.info("MCP OAuth client registered '{}'", client.id());
         return Response.created(URI.create(CLIENT_CONFIG_PATH_PREFIX + client.id()))
                 .entity(body)
                 .build();
