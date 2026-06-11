@@ -344,6 +344,7 @@ const AgentRunnerPromptCard = forwardRef<
               return (
                 <DropdownMenuItem
                   key={version.id}
+                  size="sm"
                   selected={isActive}
                   onClick={() => setPickedVersionId(version.id)}
                   className="flex items-center gap-2"

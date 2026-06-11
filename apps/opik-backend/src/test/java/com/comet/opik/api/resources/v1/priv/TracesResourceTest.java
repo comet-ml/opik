@@ -798,6 +798,44 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource("publicCredentials")
+        void getTraceThreadByProjectName__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
+                    .visibility(visibility).build();
+            projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            create(trace, okApikey, workspaceName);
+
+            // Resolving the thread by project name must enforce visibility just like resolving by project id,
+            // otherwise unauthenticated public requests could read threads from non-public projects.
+            try (var actualResponse = traceResourceClient.callRetrieveThreadResponse(
+                    TraceThreadIdentifier.builder().projectName(DEFAULT_PROJECT).threadId(threadId).build(),
+                    apiKey, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(DEFAULT_PROJECT));
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
         void get__whenApiKeyIsPresent__thenReturnSearchTrace(String apiKey,
                 Visibility visibility, int expectedCode) {
 
@@ -1196,6 +1234,40 @@ class TracesResourceTest {
                 if (expectedCode == 404) {
                     assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
                             .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void getTraceThreadByProjectName__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(project.name())
+                    .build();
+            create(trace, API_KEY, workspaceName);
+
+            // Resolving the thread by project name must enforce visibility just like resolving by project id.
+            try (var actualResponse = traceResourceClient.callRetrieveThreadResponseWithCookie(
+                    TraceThreadIdentifier.builder().projectName(project.name()).threadId(threadId).build(),
+                    sessionToken, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(project.name()));
                 }
             }
         }

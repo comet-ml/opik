@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Settings2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import {
@@ -35,7 +35,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
   const { data } = useEnvironmentsList();
 
   const environments = useMemo<Environment[]>(
-    () => (data?.content ?? []).slice().sort((a, b) => a.position - b.position),
+    () => data?.content ?? [],
     [data?.content],
   );
 
@@ -72,12 +72,14 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
         className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
       >
         <DropdownMenuItem
+          size="sm"
           selected={value === ALL_ENVIRONMENTS_VALUE}
           onSelect={() => onChange(ALL_ENVIRONMENTS_VALUE)}
         >
           {ALL_ENVIRONMENTS_LABEL}
         </DropdownMenuItem>
         <DropdownMenuItem
+          size="sm"
           selected={value === ENVIRONMENT_UNTAGGED_VALUE}
           onSelect={() => onChange(ENVIRONMENT_UNTAGGED_VALUE)}
         >
@@ -88,6 +90,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
           {environments.map((env) => (
             <DropdownMenuItem
               key={env.id}
+              size="sm"
               selected={value === env.name}
               onSelect={() => onChange(env.name)}
             >
@@ -99,13 +102,13 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
           ))}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem size="sm" asChild>
           <Link
             to="/$workspaceName/configuration"
             params={{ workspaceName }}
             search={{ tab: CONFIGURATION_TABS.ENVIRONMENTS }}
           >
-            <SlidersHorizontal className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+            <Settings2 className="mr-2 size-3.5 shrink-0 text-muted-slate" />
             Manage environments
           </Link>
         </DropdownMenuItem>

@@ -107,6 +107,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
+  CLAUDE_FABLE_5 = "claude-fable-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -137,6 +138,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_3_5_SONNET = "anthropic/claude-3.5-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET = "anthropic/claude-3.7-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET_THINKING = "anthropic/claude-3.7-sonnet:thinking",
+  ANTHROPIC_CLAUDE_FABLE_5 = "anthropic/claude-fable-5",
   ANTHROPIC_CLAUDE_HAIKU_4_5 = "anthropic/claude-haiku-4.5",
   ANTHROPIC_CLAUDE_OPUS_4 = "anthropic/claude-opus-4",
   ANTHROPIC_CLAUDE_OPUS_4_1 = "anthropic/claude-opus-4.1",
@@ -617,6 +619,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_TURBO = "z-ai/glm-5-turbo",
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
+  ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
   ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
   ANTHROPIC_CLAUDE_SONNET_LATEST = "~anthropic/claude-sonnet-latest",

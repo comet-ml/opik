@@ -63,6 +63,7 @@ from .audio_url import AudioUrl
 from .audio_url_public import AudioUrlPublic
 from .audio_url_write import AudioUrlWrite
 from .auth_details_holder import AuthDetailsHolder
+from .authorization_server_metadata import AuthorizationServerMetadata
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
@@ -744,6 +745,7 @@ __all__ = [
     "AudioUrlPublic",
     "AudioUrlWrite",
     "AuthDetailsHolder",
+    "AuthorizationServerMetadata",
     "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorAction",
     "AutomationRuleEvaluatorLlmAsJudge",

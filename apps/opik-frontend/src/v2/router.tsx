@@ -26,7 +26,6 @@ import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
-import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
@@ -65,6 +64,9 @@ import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
+import AiSpend from "@/v2/pages/AiSpend/AiSpend";
+import AiSpendHomePage from "@/v2/pages/AiSpendHomePage/AiSpendHomePage";
+import AiSpendLeaderboardPage from "@/v2/pages/AiSpendLeaderboardPage/AiSpendLeaderboardPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -158,7 +160,17 @@ const homeRoute = createRoute({
 const workspaceRoute = createRoute({
   path: "/$workspaceName",
   getParentRoute: () => workspaceGuardRoute,
-  component: WorkspacePage,
+});
+
+const workspaceIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => workspaceRoute,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 // ----------- quickstart
@@ -594,6 +606,46 @@ const homeSMERoute = createRoute({
   component: lazy(() => import("@/v2/pages/SMEFlowPage/SMEFlowPage")),
 });
 
+// ----------- Cost Intelligence (reuses PageLayout via workspaceGuardRoute)
+const aiSpendRoute = createRoute({
+  path: "/$workspaceName/ai-spend",
+  getParentRoute: () => workspaceGuardRoute,
+  component: AiSpend,
+  staticData: {
+    title: "Cost Intelligence",
+    hideRoot: true,
+  },
+});
+
+const aiSpendIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => aiSpendRoute,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/ai-spend/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
+});
+
+const aiSpendHomeRoute = createRoute({
+  path: "/home",
+  getParentRoute: () => aiSpendRoute,
+  component: AiSpendHomePage,
+  staticData: {
+    title: "Home",
+  },
+});
+
+const aiSpendLeaderboardRoute = createRoute({
+  path: "/leaderboard",
+  getParentRoute: () => aiSpendRoute,
+  component: AiSpendLeaderboardPage,
+  staticData: {
+    title: "User leaderboard",
+  },
+});
+
 // ----------- Automation logs
 const automationLogsRoute = createRoute({
   path: "/$workspaceName/automation-logs",
@@ -623,7 +675,13 @@ const routeTree = rootRoute.addChildren([
   workspaceGuardRoute.addChildren([
     baseRoute,
     homeRoute,
+    aiSpendRoute.addChildren([
+      aiSpendIndexRoute,
+      aiSpendHomeRoute,
+      aiSpendLeaderboardRoute,
+    ]),
     workspaceRoute.addChildren([
+      workspaceIndexRoute,
       // Projects: workspace-level list + project-scoped routes
       projectsRoute.addChildren([
         projectsListRoute,

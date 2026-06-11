@@ -153,6 +153,8 @@ anthropic:
   - id: "claude-opus-4-1-20250805"
     label: "Claude Opus 4.1"
     structuredOutput: true
+  - id: "claude-fable-5"
+    label: "Claude Fable 5"
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
     structuredOutput: true
@@ -320,6 +322,8 @@ openrouter:
   - id: "anthropic/claude-3.7-sonnet:thinking"
     label: "anthropic/claude-3.7-sonnet:thinking"
     reasoning: true
+  - id: "anthropic/claude-fable-5"
+    label: "anthropic/claude-fable-5"
   - id: "anthropic/claude-haiku-4.5"
     label: "anthropic/claude-haiku-4.5"
   - id: "anthropic/claude-opus-4"
@@ -1381,6 +1385,8 @@ openrouter:
     label: "z-ai/glm-5.1"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
+  - id: "~anthropic/claude-fable-latest"
+    label: "~anthropic/claude-fable-latest"
   - id: "~anthropic/claude-haiku-latest"
     label: "~anthropic/claude-haiku-latest"
   - id: "~anthropic/claude-opus-latest"

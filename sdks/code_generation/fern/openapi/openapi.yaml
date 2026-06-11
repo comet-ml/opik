@@ -34,6 +34,8 @@ servers:
 - url: https://www.comet.com/opik/api
   description: Opik Cloud
 tags:
+- name: MCP OAuth
+  description: MCP OAuth 2.1 Authorization Server resources
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
@@ -106,6 +108,20 @@ tags:
 - name: Redirect
   description: Redirects for SDK generated links
 paths:
+  /.well-known/oauth-authorization-server:
+    get:
+      tags:
+      - MCP OAuth
+      summary: Get OAuth Authorization Server Metadata
+      description: Get OAuth 2.1 Authorization Server Metadata (RFC 8414)
+      operationId: getOAuthAuthorizationServerMetadata
+      responses:
+        "200":
+          description: Authorization Server Metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationServerMetadata"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -8502,6 +8518,35 @@ paths:
             application/json: {}
 components:
   schemas:
+    AuthorizationServerMetadata:
+      type: object
+      properties:
+        issuer:
+          type: string
+        authorization_endpoint:
+          type: string
+        token_endpoint:
+          type: string
+        revocation_endpoint:
+          type: string
+        registration_endpoint:
+          type: string
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
     BiInformation:
       type: object
       properties:

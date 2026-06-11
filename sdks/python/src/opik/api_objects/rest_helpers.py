@@ -9,6 +9,14 @@ from ..rate_limit import rate_limit
 LOGGER = logging.getLogger(__name__)
 
 
+def _sleep(seconds: float) -> None:
+    # Indirection over time.sleep so tests can stub the rate-limit retry delay
+    # without patching the global time.sleep — patching the global one turns the
+    # pacing sleep of background daemon threads (e.g. QueueConsumer) into a busy
+    # loop, which can starve the interpreter and hang the suite.
+    time.sleep(seconds)
+
+
 def ensure_rest_api_call_respecting_rate_limit(
     rest_callable: Callable[[], Any],
     operation_name: Optional[str] = None,
@@ -47,14 +55,14 @@ def ensure_rest_api_call_respecting_rate_limit(
                             label,
                             retry_after,
                         )
-                        time.sleep(retry_after)
+                        _sleep(retry_after)
                         continue
 
                 LOGGER.warning(
                     "Rate limited (HTTP 429)%s with no retry-after header, continuing in 1 second",
                     label,
                 )
-                time.sleep(1)
+                _sleep(1)
                 continue
 
             raise
