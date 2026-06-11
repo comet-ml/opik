@@ -36,6 +36,11 @@ public class OAuthConstants {
     public static final String TOKEN_TYPE_BEARER = "Bearer";
     public static final String BEARER_PREFIX = TOKEN_TYPE_BEARER + " ";
 
+    // RFC 6749 §5.1 — token-endpoint responses must not be cached
+    public static final String HEADER_PRAGMA = "Pragma";
+    public static final String CACHE_CONTROL_NO_STORE = "no-store";
+    public static final String PRAGMA_NO_CACHE = "no-cache";
+
     // Header used by opik-backend → comet-backend /opik/auth-by-username to carry the OAuth-resolved userName.
     public static final String OAUTH_USERNAME_HEADER = "X-Opik-OAuth-Username";
 
