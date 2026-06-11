@@ -115,8 +115,8 @@ class AuthServiceImplTest {
         authService.authorizeOAuth(token, infoHolder);
 
         // Then
-        verify(requestContext).setUserName("oauth-user");
-        verify(requestContext).setWorkspaceId("ws-id");
-        verify(requestContext).setWorkspaceName("ws-name");
+        verify(requestContext).setUserName(token.userName());
+        verify(requestContext).setWorkspaceId(token.workspaceId());
+        verify(requestContext).setWorkspaceName(token.workspaceName());
     }
 }

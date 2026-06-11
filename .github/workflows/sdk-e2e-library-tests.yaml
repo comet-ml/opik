@@ -16,6 +16,7 @@ on:
             - adk
             - litellm
             - opentelemetry
+            - pydantic_ai
     schedule:
       - cron: "0 0 */2 * *"
     pull_request:
@@ -144,6 +145,13 @@ jobs:
         with:
           python_version: ${{ matrix.python_version }}
           library_name: opentelemetry
+
+      - name: PydanticAI Tests Python ${{ matrix.python_version }}
+        if: contains(fromJSON('["pydantic_ai", "all"]'), env.LIBS)
+        uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
+        with:
+          python_version: ${{ matrix.python_version }}
+          library_name: pydantic_ai
 
       - name: Stop opik server
         run: |

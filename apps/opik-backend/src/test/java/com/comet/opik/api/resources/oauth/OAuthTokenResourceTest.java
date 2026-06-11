@@ -161,10 +161,12 @@ class OAuthTokenResourceTest {
     @Test
     @DisplayName("POST /revoke: valid token returns 200 OK and revokes")
     void revoke_validToken_returnsOk() {
-        Response response = resource.revoke(ACCESS_PREFIX + "xxx", "access_token", CLIENT_ID);
+        String accessToken = ACCESS_PREFIX + "xxx";
+
+        Response response = resource.revoke(accessToken, CLIENT_ID);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-        verify(mcpOAuthService).revoke(ACCESS_PREFIX + "xxx");
+        verify(mcpOAuthService).revoke(accessToken);
     }
 
     @Test
@@ -172,7 +174,7 @@ class OAuthTokenResourceTest {
     void revoke_serviceThrows_stillReturnsOk() {
         org.mockito.Mockito.doThrow(new RuntimeException("db down")).when(mcpOAuthService).revoke(any());
 
-        Response response = resource.revoke(ACCESS_PREFIX + "zzz", null, CLIENT_ID);
+        Response response = resource.revoke(ACCESS_PREFIX + "zzz", CLIENT_ID);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
     }
@@ -180,7 +182,7 @@ class OAuthTokenResourceTest {
     @Test
     @DisplayName("POST /revoke: blank token short-circuits to 200 without hitting the service")
     void revoke_blankToken_skipsService() {
-        Response response = resource.revoke("  ", null, CLIENT_ID);
+        Response response = resource.revoke("  ", CLIENT_ID);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
         verify(mcpOAuthService, never()).revoke(any());

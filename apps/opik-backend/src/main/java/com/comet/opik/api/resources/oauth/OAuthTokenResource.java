@@ -30,6 +30,13 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUES
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_UNSUPPORTED_GRANT_TYPE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_CODE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CLIENT_ID;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CODE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CODE_VERIFIER;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_GRANT_TYPE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REDIRECT_URI;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REFRESH_TOKEN;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_TOKEN;
 
 /**
  * OAuth token and revocation endpoints (RFC 6749 / RFC 7009).
@@ -65,12 +72,12 @@ public class OAuthTokenResource {
             @ApiResponse(responseCode = "200", description = "Token response", content = @Content(schema = @Schema(implementation = TokenResponse.class))),
             @ApiResponse(responseCode = "400", description = "OAuth error (RFC 6749 §5.2)", content = @Content(schema = @Schema(implementation = OAuthError.class)))})
     public Response token(
-            @FormParam("grant_type") String grantType,
-            @FormParam("code") String code,
-            @FormParam("redirect_uri") String redirectUri,
-            @FormParam("client_id") String clientId,
-            @FormParam("code_verifier") String codeVerifier,
-            @FormParam("refresh_token") String refreshToken) {
+            @FormParam(PARAM_GRANT_TYPE) String grantType,
+            @FormParam(PARAM_CODE) String code,
+            @FormParam(PARAM_REDIRECT_URI) String redirectUri,
+            @FormParam(PARAM_CLIENT_ID) String clientId,
+            @FormParam(PARAM_CODE_VERIFIER) String codeVerifier,
+            @FormParam(PARAM_REFRESH_TOKEN) String refreshToken) {
 
         if (GRANT_AUTHORIZATION_CODE.equals(grantType)) {
             if (StringUtils.isBlank(code) || StringUtils.isBlank(redirectUri) || StringUtils.isBlank(clientId)
@@ -112,9 +119,8 @@ public class OAuthTokenResource {
     @Operation(operationId = "revoke", summary = "OAuth Token Revocation Endpoint", description = "OAuth 2.0 token revocation endpoint (RFC 7009). Always returns 200, whether the token was revoked, never existed, or was invalid", responses = {
             @ApiResponse(responseCode = "200", description = "Revocation acknowledged")})
     public Response revoke(
-            @FormParam("token") String token,
-            @FormParam("token_type_hint") String tokenTypeHint,
-            @FormParam("client_id") String clientId) {
+            @FormParam(PARAM_TOKEN) String token,
+            @FormParam(PARAM_CLIENT_ID) String clientId) {
 
         // RFC 7009 §2.2: the AS returns 200 whether the token was revoked, never existed, or was invalid.
         if (!StringUtils.isBlank(token)) {
