@@ -11,12 +11,13 @@ public class ExperimentItemBulkValidator {
     public static void validate(ExperimentItemBulkRecord item) {
         if (item.trace() == null && !CollectionUtils.isEmpty(item.spans())) {
             throw new BadRequestException("Trace is required when spans are provided");
-        } else if (item.trace() != null && !CollectionUtils.isEmpty(item.spans()) && hasMatchingTraceId(item)) {
+        } else if (item.trace() != null && hasMismatchingTraceId(item)) {
             throw new BadRequestException("Trace ID must match the span's trace ID");
         }
     }
 
-    private static boolean hasMatchingTraceId(ExperimentItemBulkRecord item) {
-        return item.spans().stream().anyMatch(span -> !item.trace().id().equals(span.traceId()));
+    private static boolean hasMismatchingTraceId(ExperimentItemBulkRecord item) {
+        return !CollectionUtils.isEmpty(item.spans())
+                && item.spans().stream().anyMatch(span -> !item.trace().id().equals(span.traceId()));
     }
 }
