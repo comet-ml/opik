@@ -6,8 +6,6 @@ import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -59,23 +57,8 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
         var strictJsonSchema = LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(request);
         var streamingChatModel = clientGenerator.newResponsesApiStreamingChatModel(config, strictJsonSchema);
         var chatRequest = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
-        streamingChatModel.chat(chatRequest, new StreamingChatResponseHandler() {
-            @Override
-            public void onPartialResponse(String partial) {
-                handleMessage.accept(LlmProviderOpenAiResponsesMapper.toPartialChunk(partial, request));
-            }
-
-            @Override
-            public void onCompleteResponse(ChatResponse response) {
-                handleMessage.accept(LlmProviderOpenAiResponsesMapper.toFinalChunk(response, request));
-                handleClose.run();
-            }
-
-            @Override
-            public void onError(Throwable error) {
-                handleError.accept(error);
-            }
-        });
+        streamingChatModel.chat(chatRequest,
+                new OpenAiResponsesStreamingHandler(request, handleMessage, handleClose, handleError));
     }
 
     @Override
