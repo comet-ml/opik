@@ -9,7 +9,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RMapCacheReactive;
+import org.redisson.api.RMapCacheNativeReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Flux;
@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @ImplementedBy(AnnotationQueueItemLockServiceImpl.class)
 public interface AnnotationQueueItemLockService {
@@ -75,7 +74,6 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
 
         var slotLock = new LockService.Lock(buildSlotKey(workspaceId, queueId, itemId));
         Duration lease = Duration.ofSeconds(lockTimeoutSeconds);
-        long leaseMs = lease.toMillis();
         String field = field(itemId, userName);
         int effectiveCapacity = annotatorsPerItem - scoredCount;
         var userMap = userMap(workspaceId, queueId);
@@ -87,7 +85,7 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
         Mono<Boolean> heartbeat = userMap.get(field)
                 .flatMap(existingPermitId -> lockService.refreshSlot(slotLock, existingPermitId, lease)
                         .flatMap(refreshed -> Boolean.TRUE.equals(refreshed)
-                                ? userMap.fastPut(field, existingPermitId, leaseMs, TimeUnit.MILLISECONDS)
+                                ? userMap.fastPut(field, existingPermitId, lease)
                                         .then(userMap.expire(lease))
                                         .thenReturn(true)
                                 : Mono.empty()));
@@ -97,8 +95,7 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
                 // Fresh acquire: atomic semaphore tryAcquire, then store permitId in map
                 lockService.tryAcquireSlot(slotLock, effectiveCapacity, lease)
                         .flatMap(newPermitId -> userMap
-                                .fastPutIfAbsent(field, newPermitId, leaseMs, TimeUnit.MILLISECONDS, 0,
-                                        TimeUnit.MILLISECONDS)
+                                .fastPutIfAbsent(field, newPermitId, lease)
                                 .flatMap(stored -> Boolean.TRUE.equals(stored)
                                         ? userMap.expire(lease).thenReturn(true)
                                         : lockService.releaseSlot(slotLock, newPermitId).thenReturn(true)))
@@ -111,7 +108,7 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
             @NonNull String workspaceId,
             @NonNull UUID queueId) {
 
-        // RMapCache filters out TTL-expired entries on read
+        // Expired entries are excluded — Redis evicts them natively via HEXPIRE
         return userMap(workspaceId, queueId)
                 .readAllMap()
                 .map(entries -> {
@@ -167,8 +164,8 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
                 });
     }
 
-    private RMapCacheReactive<String, String> userMap(String workspaceId, UUID queueId) {
-        return redisClient.getMapCache(USER_MAP_PREFIX + workspaceId + ":" + queueId, StringCodec.INSTANCE);
+    private RMapCacheNativeReactive<String, String> userMap(String workspaceId, UUID queueId) {
+        return redisClient.getMapCacheNative(USER_MAP_PREFIX + workspaceId + ":" + queueId, StringCodec.INSTANCE);
     }
 
     private String buildSlotKey(String workspaceId, UUID queueId, UUID itemId) {

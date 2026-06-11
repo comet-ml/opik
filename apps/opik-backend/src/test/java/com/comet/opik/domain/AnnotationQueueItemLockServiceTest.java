@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.redisson.api.RMapCacheReactive;
+import org.redisson.api.RMapCacheNativeReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.codec.Codec;
 import reactor.core.publisher.Mono;
@@ -19,12 +19,10 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -48,14 +46,14 @@ class AnnotationQueueItemLockServiceTest {
     @Mock
     private LockService lockService;
     @Mock
-    private RMapCacheReactive<String, String> mapCache;
+    private RMapCacheNativeReactive<String, String> mapCache;
 
     private AnnotationQueueItemLockServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new AnnotationQueueItemLockServiceImpl(redisClient, lockService);
-        lenient().when(redisClient.<String, String>getMapCache(anyString(), any(Codec.class)))
+        lenient().when(redisClient.<String, String>getMapCacheNative(anyString(), any(Codec.class)))
                 .thenReturn(mapCache);
         lenient().when(mapCache.expire(any(Duration.class))).thenReturn(Mono.just(true));
     }
@@ -84,8 +82,7 @@ class AnnotationQueueItemLockServiceTest {
         void shouldAcquireWhenEmpty() {
             when(mapCache.get(anyString())).thenReturn(Mono.empty());
             when(lockService.tryAcquireSlot(any(), eq(1), any())).thenReturn(Mono.just(PERMIT_ID));
-            when(mapCache.fastPutIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class), anyLong(),
-                    any(TimeUnit.class)))
+            when(mapCache.fastPutIfAbsent(anyString(), anyString(), any(Duration.class)))
                     .thenReturn(Mono.just(true));
 
             var expected = LockResponse.builder()
@@ -111,7 +108,7 @@ class AnnotationQueueItemLockServiceTest {
         void shouldRefreshWhenUserAlreadyHoldsPermit() {
             when(mapCache.get(field(ITEM_ID, USER_ALICE))).thenReturn(Mono.just(PERMIT_ID));
             when(lockService.refreshSlot(any(), eq(PERMIT_ID), any())).thenReturn(Mono.just(true));
-            when(mapCache.fastPut(anyString(), anyString(), anyLong(), any(TimeUnit.class)))
+            when(mapCache.fastPut(anyString(), anyString(), any(Duration.class)))
                     .thenReturn(Mono.just(true));
 
             StepVerifier.create(service.tryLock(
@@ -129,8 +126,7 @@ class AnnotationQueueItemLockServiceTest {
             when(lockService.refreshSlot(any(), eq(PERMIT_ID), any())).thenReturn(Mono.just(false));
 
             when(lockService.tryAcquireSlot(any(), eq(1), any())).thenReturn(Mono.just("new-permit"));
-            when(mapCache.fastPutIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class), anyLong(),
-                    any(TimeUnit.class)))
+            when(mapCache.fastPutIfAbsent(anyString(), anyString(), any(Duration.class)))
                     .thenReturn(Mono.just(true));
 
             StepVerifier.create(service.tryLock(
@@ -179,8 +175,7 @@ class AnnotationQueueItemLockServiceTest {
         void shouldReleaseDuplicateOnRace() {
             when(mapCache.get(anyString())).thenReturn(Mono.empty());
             when(lockService.tryAcquireSlot(any(), eq(1), any())).thenReturn(Mono.just(PERMIT_ID));
-            when(mapCache.fastPutIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class), anyLong(),
-                    any(TimeUnit.class)))
+            when(mapCache.fastPutIfAbsent(anyString(), anyString(), any(Duration.class)))
                     .thenReturn(Mono.just(false));
             when(lockService.releaseSlot(any(), eq(PERMIT_ID))).thenReturn(Mono.just(true));
 

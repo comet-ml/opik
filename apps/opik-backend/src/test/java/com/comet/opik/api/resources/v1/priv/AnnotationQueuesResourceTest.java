@@ -1191,7 +1191,7 @@ class AnnotationQueuesResourceTest {
 
         @Test
         @DisplayName("should create annotation queue with explicit lockTimeoutSeconds and return it on get")
-        void createAnnotationQueueWithLockTimeoutMinutes() {
+        void createAnnotationQueueWithLockTimeoutSeconds() {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
@@ -1216,7 +1216,7 @@ class AnnotationQueuesResourceTest {
 
         @Test
         @DisplayName("should default lockTimeoutSeconds to 300 when omitted")
-        void createAnnotationQueueWithoutLockTimeoutMinutes() {
+        void createAnnotationQueueWithoutLockTimeoutSeconds() {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
