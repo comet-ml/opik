@@ -16,6 +16,7 @@ type PluginStore = {
   PermissionsProvider: React.ComponentType<{
     children: React.ReactNode;
   }> | null;
+  AiSpendProvider: React.ComponentType<{ children: React.ReactNode }> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
@@ -45,6 +46,7 @@ const PLUGIN_NAMES = [
   "GoogleColabCard",
   "WorkspacePreloader",
   "PermissionsProvider",
+  "AiSpendProvider",
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
@@ -66,6 +68,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GoogleColabCard: null,
   WorkspacePreloader: null,
   PermissionsProvider: null,
+  AiSpendProvider: null,
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
