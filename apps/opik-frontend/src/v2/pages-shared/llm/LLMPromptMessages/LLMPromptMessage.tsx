@@ -343,7 +343,7 @@ const LLMPromptMessage = forwardRef<
               <Loader className="min-h-32" />
             ) : (
               <div className="flex flex-col gap-1 pl-[7px] pr-1">
-                <div className="relative">
+                <div className="relative" data-testid="playground-message-editor">
                   <div
                     className={
                       compact && !isExpanded

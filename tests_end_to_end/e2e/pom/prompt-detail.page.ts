@@ -49,7 +49,7 @@ export class PromptDetailPage {
       const sheet = this.page.getByRole('dialog');
       await sheet.waitFor({ state: 'visible' });
       const firstMessageRow = sheet.getByTestId('playground-message-row').first();
-      const editor = firstMessageRow.locator('.cm-content').first();
+      const editor = firstMessageRow.getByTestId('playground-message-editor').locator('.cm-content').first();
       await editor.click();
       await editor.press('ControlOrMeta+a');
       await editor.pressSequentially(newContent);

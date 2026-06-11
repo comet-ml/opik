@@ -42,7 +42,7 @@ export class PromptsPage {
       }
       await this.page.getByLabel('Name').fill(name);
       const firstMessageRow = this.page.getByTestId('playground-message-row').first();
-      const messageEditor = firstMessageRow.locator('.cm-content').first();
+      const messageEditor = firstMessageRow.getByTestId('playground-message-editor').locator('.cm-content').first();
       await messageEditor.click();
       await messageEditor.fill(messageContent);
       await this.page.getByRole('button', { name: 'Create prompt' }).click();
