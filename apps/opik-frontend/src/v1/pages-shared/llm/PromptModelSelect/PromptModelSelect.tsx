@@ -26,7 +26,6 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ManageAIProviderDialog from "@/v1/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { parseComposedProviderType } from "@/lib/provider";
-import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useModelOptions } from "./useModelOptions";
 
@@ -91,14 +90,6 @@ const PromptModelSelect = ({
     modelProviderMapRef,
   } = useModelOptions(configuredProvidersList, providerModels, filterValue);
 
-  const selectedValue = useMemo(
-    () =>
-      value && provider
-        ? getRoutableProviderModelValue(provider, value)
-        : value,
-    [provider, value],
-  );
-
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
       const modelProvider = openProviderMenu
@@ -130,7 +121,7 @@ const PromptModelSelect = ({
     if (
       freeModelOption &&
       provider === PROVIDER_TYPE.OPIK_FREE &&
-      selectedValue === freeModelOption.value
+      value === freeModelOption.value
     ) {
       return { icon: freeModelOption.icon, title: freeModelOption.label };
     }
@@ -139,8 +130,7 @@ const PromptModelSelect = ({
       (o) => o.composedProviderType === provider,
     );
     const modelName =
-      selectedGroup?.options?.find((m) => m.value === selectedValue)?.label ??
-      value;
+      selectedGroup?.options?.find((m) => m.value === value)?.label ?? value;
 
     return {
       icon: selectedGroup?.icon,
@@ -148,7 +138,7 @@ const PromptModelSelect = ({
         selectedGroup?.label ? selectedGroup.label + " " : ""
       }${modelName}`,
     };
-  }, [freeModelOption, provider, selectedValue, value, groupOptions]);
+  }, [freeModelOption, provider, value, groupOptions]);
 
   const renderOptions = () => {
     const hasNoProviders =
@@ -311,7 +301,7 @@ const PromptModelSelect = ({
   return (
     <>
       <Select
-        value={selectedValue || ""}
+        value={value || ""}
         onValueChange={handleOnChange}
         onOpenChange={handleSelectOpenChange}
         disabled={disabled}

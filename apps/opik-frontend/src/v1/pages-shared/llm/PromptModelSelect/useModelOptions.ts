@@ -8,7 +8,6 @@ import {
   ProviderObject,
 } from "@/types/providers";
 import { getProviderDisplayName, getProviderIcon } from "@/lib/provider";
-import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 
 interface ModelOption {
   label: string;
@@ -103,12 +102,8 @@ export function useModelOptions(
 
     Object.entries(filteredByConfiguredProviders).forEach(
       ([pn, providerModels]) => {
-        const composedProviderType = pn as COMPOSED_PROVIDER_TYPE;
-
         providerModels.forEach(({ value }) => {
-          modelProviderMapRef.current[
-            getRoutableProviderModelValue(composedProviderType, value)
-          ] = composedProviderType;
+          modelProviderMapRef.current[value] = pn;
         });
       },
     );
@@ -125,10 +120,7 @@ export function useModelOptions(
           providerModels,
         ).map((providerModel) => ({
           label: providerModel.label,
-          value: getRoutableProviderModelValue(
-            composedProviderType,
-            providerModel.value,
-          ),
+          value: providerModel.value,
         }));
 
         if (!options.length) return null;

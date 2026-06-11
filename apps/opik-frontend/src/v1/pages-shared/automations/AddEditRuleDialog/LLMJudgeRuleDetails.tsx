@@ -110,7 +110,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     (provider: COMPOSED_PROVIDER_TYPE) => {
       const model =
         (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
-      const currentProvider = calculateModelProvider(model, provider);
+      const currentProvider = calculateModelProvider(model);
       if (currentProvider === provider) {
         form.setValue("llmJudgeDetails.model", "");
       }
@@ -186,16 +186,17 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 <div className="flex h-10 items-center justify-center gap-2">
                   <PromptModelSelect
                     value={model}
-                    onChange={(m, selectedProvider) => {
+                    onChange={(m) => {
                       if (m) {
                         field.onChange(m);
                         // Update config to ensure reasoning models have temperature >= 1.0
+                        const newProvider = calculateModelProvider(m);
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
                         );
                         const adjustedConfig = updateProviderConfig(
                           currentConfig,
-                          { model: m, provider: selectedProvider },
+                          { model: m, provider: newProvider },
                         );
                         if (
                           adjustedConfig &&
