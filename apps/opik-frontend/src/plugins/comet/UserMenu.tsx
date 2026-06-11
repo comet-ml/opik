@@ -12,6 +12,7 @@ import {
   Sparkles,
   UserPlus,
 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
@@ -51,6 +52,7 @@ import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
+import useAiSpendManager from "@/plugins/comet/useAiSpendManager";
 
 const UserMenu = () => {
   const { toast } = useToast();
@@ -84,6 +86,8 @@ const UserMenu = () => {
   );
 
   const { canInviteMembers } = useUserPermission();
+  const navigate = useNavigate();
+  const { hasAccess: hasAiSpendAccess } = useAiSpendManager();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
 
@@ -285,19 +289,38 @@ const UserMenu = () => {
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
-          {!isLLMOnlyOrganization && (
+          {(hasAiSpendAccess || !isLLMOnlyOrganization) && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={handleSwitchToEM}
-              >
-                <span className="mr-2 flex size-4 items-center justify-center rounded bg-[var(--feature-experiment-management)] text-[6px] font-medium text-white">
-                  EM
-                </span>
-                <span className="truncate">Experiment Management</span>
-                <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
-              </DropdownMenuItem>
+              {hasAiSpendAccess && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() =>
+                    navigate({
+                      to: "/$workspaceName/ai-spend/home",
+                      params: { workspaceName },
+                    })
+                  }
+                >
+                  <span className="mr-2 flex size-5 shrink-0 items-center justify-center rounded bg-chart-green text-[10px] font-medium text-white">
+                    CI
+                  </span>
+                  <span className="truncate">Cost Intelligence</span>
+                  <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
+                </DropdownMenuItem>
+              )}
+              {!isLLMOnlyOrganization && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={handleSwitchToEM}
+                >
+                  <span className="mr-2 flex size-5 shrink-0 items-center justify-center rounded bg-[var(--feature-experiment-management)] text-[10px] font-medium text-white">
+                    EM
+                  </span>
+                  <span className="truncate">Experiment Management</span>
+                  <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
+                </DropdownMenuItem>
+              )}
             </>
           )}
           <DropdownMenuItem
