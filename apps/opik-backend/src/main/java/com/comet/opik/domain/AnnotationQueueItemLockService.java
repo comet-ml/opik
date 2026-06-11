@@ -9,7 +9,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RMapCacheNativeReactive;
+import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Flux;
@@ -52,6 +52,7 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
 
     private static final String USER_MAP_PREFIX = "aq:locks:";
     private static final String SLOT_KEY_PREFIX = "aq:slots:";
+    private static final String SEPARATOR = ":";
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull LockService lockService;
@@ -66,7 +67,8 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
             int scoredCount,
             int lockTimeoutSeconds) {
 
-        long expiryMs = System.currentTimeMillis() + (long) lockTimeoutSeconds * 1000;
+        long now = System.currentTimeMillis();
+        long expiryMs = now + (long) lockTimeoutSeconds * 1000;
 
         if (scoredCount >= annotatorsPerItem) {
             return Mono.just(buildResponse(false, itemId, userName, expiryMs));
@@ -83,20 +85,27 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
 
         // Heartbeat: if user already holds a permit, refresh its lease
         Mono<Boolean> heartbeat = userMap.get(field)
-                .flatMap(existingPermitId -> lockService.refreshSlot(slotLock, existingPermitId, lease)
-                        .flatMap(refreshed -> Boolean.TRUE.equals(refreshed)
-                                ? userMap.fastPut(field, existingPermitId, lease)
-                                        .then(userMap.expire(lease))
-                                        .thenReturn(true)
-                                : Mono.empty()));
+                .flatMap(existing -> {
+                    String existingPermitId = extractPermitId(existing);
+                    long existingExpiry = extractExpiry(existing);
+                    if (existingExpiry <= now) {
+                        return Mono.empty();
+                    }
+                    return lockService.refreshSlot(slotLock, existingPermitId, lease)
+                            .flatMap(refreshed -> refreshed
+                                    ? userMap.fastPut(field, packValue(existingPermitId, expiryMs))
+                                            .then(userMap.expire(lease))
+                                            .thenReturn(true)
+                                    : Mono.empty());
+                });
 
         return heartbeat
                 .switchIfEmpty(Mono.defer(() ->
                 // Fresh acquire: atomic semaphore tryAcquire, then store permitId in map
                 lockService.tryAcquireSlot(slotLock, effectiveCapacity, lease)
                         .flatMap(newPermitId -> userMap
-                                .fastPutIfAbsent(field, newPermitId, lease)
-                                .flatMap(stored -> Boolean.TRUE.equals(stored)
+                                .fastPutIfAbsent(field, packValue(newPermitId, expiryMs))
+                                .flatMap(stored -> stored
                                         ? userMap.expire(lease).thenReturn(true)
                                         : lockService.releaseSlot(slotLock, newPermitId).thenReturn(true)))
                         .defaultIfEmpty(false)))
@@ -108,12 +117,21 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
             @NonNull String workspaceId,
             @NonNull UUID queueId) {
 
-        // Expired entries are excluded — Redis evicts them natively via HEXPIRE
-        return userMap(workspaceId, queueId)
+        long now = System.currentTimeMillis();
+        var userMap = userMap(workspaceId, queueId);
+
+        return userMap
                 .readAllMap()
-                .map(entries -> {
+                .flatMap(entries -> {
                     Map<UUID, List<String>> byItem = new HashMap<>();
+                    List<String> expiredFields = new ArrayList<>();
+
                     for (var entry : entries.entrySet()) {
+                        long expiry = extractExpiry(entry.getValue());
+                        if (expiry <= now) {
+                            expiredFields.add(entry.getKey());
+                            continue;
+                        }
                         UUID itemId = extractItemId(entry.getKey());
                         String user = extractUserName(entry.getKey());
                         byItem.computeIfAbsent(itemId, k -> new ArrayList<>()).add(user);
@@ -127,7 +145,15 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
                                 .lockedBy(users)
                                 .build());
                     }
-                    return result;
+
+                    // Lazy cleanup of expired entries
+                    if (!expiredFields.isEmpty()) {
+                        return userMap
+                                .fastRemove(expiredFields.toArray(String[]::new))
+                                .thenReturn(result);
+                    }
+
+                    return Mono.just(result);
                 });
     }
 
@@ -141,13 +167,15 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
             return Mono.empty();
         }
 
+        long now = System.currentTimeMillis();
         log.debug("Updating capacity for queue '{}' by delta={}", queueId, delta);
 
         return userMap(workspaceId, queueId)
-                .readAllKeySet()
-                .flatMap(keys -> {
-                    var itemIds = keys.stream()
-                            .map(field -> extractItemId(field))
+                .readAllMap()
+                .flatMap(entries -> {
+                    var itemIds = entries.entrySet().stream()
+                            .filter(e -> extractExpiry(e.getValue()) > now)
+                            .map(e -> extractItemId(e.getKey()))
                             .distinct()
                             .toList();
 
@@ -164,8 +192,8 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
                 });
     }
 
-    private RMapCacheNativeReactive<String, String> userMap(String workspaceId, UUID queueId) {
-        return redisClient.getMapCacheNative(USER_MAP_PREFIX + workspaceId + ":" + queueId, StringCodec.INSTANCE);
+    private RMapReactive<String, String> userMap(String workspaceId, UUID queueId) {
+        return redisClient.getMap(USER_MAP_PREFIX + workspaceId + ":" + queueId, StringCodec.INSTANCE);
     }
 
     private String buildSlotKey(String workspaceId, UUID queueId, UUID itemId) {
@@ -173,16 +201,28 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
     }
 
     private String field(UUID itemId, String userName) {
-        return itemId + ":" + userName;
+        return itemId + SEPARATOR + userName;
+    }
+
+    private String packValue(String permitId, long expiryMs) {
+        return permitId + SEPARATOR + expiryMs;
+    }
+
+    private String extractPermitId(String value) {
+        return value.substring(0, value.lastIndexOf(SEPARATOR));
+    }
+
+    private long extractExpiry(String value) {
+        return Long.parseLong(value.substring(value.lastIndexOf(SEPARATOR) + 1));
     }
 
     private UUID extractItemId(String field) {
-        int separatorIdx = field.lastIndexOf(':');
+        int separatorIdx = field.lastIndexOf(SEPARATOR);
         return UUID.fromString(field.substring(0, separatorIdx));
     }
 
     private String extractUserName(String field) {
-        return field.substring(field.lastIndexOf(':') + 1);
+        return field.substring(field.lastIndexOf(SEPARATOR) + 1);
     }
 
     private LockResponse buildResponse(boolean acquired, UUID itemId, String userName,
