@@ -4,6 +4,7 @@ import com.comet.opik.domain.mcpoauth.CreateOAuthCodeCommand;
 import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
+import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -83,9 +84,11 @@ class OAuthAuthorizeResourceTest {
     @BeforeEach
     void setUp() {
         reset(clientService, authService, mcpOAuthService);
-        opikConfig.getMcpOAuth().setEnabled(true);
-        opikConfig.getMcpOAuth().setBaseUrl(BASE_OPIK_URL);
-        opikConfig.getMcpOAuth().setMcpResourceUri(RESOURCE_URI);
+        opikConfig.setMcpOAuth(McpOAuthConfig.builder()
+                .enabled(true)
+                .baseUrl(BASE_OPIK_URL)
+                .mcpResourceUri(RESOURCE_URI)
+                .build());
     }
 
     private McpOAuthClient validClient() {

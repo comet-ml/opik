@@ -189,7 +189,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
+    public List<WorkspaceInfo> listEligibleWorkspaces(@NonNull Cookie sessionToken) {
         requireSession(sessionToken);
         try (var response = client.target(URI.create(reactServiceUrl.url()))
                 .path("workspaces")
@@ -214,7 +214,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo) {
+    public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
         try (var response = client.target(URI.create(reactServiceUrl.url()))
                 .path("opik")
@@ -234,7 +234,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
+    public UserWorkspace authorizeWorkspace(@NonNull Cookie sessionToken, @NonNull String workspaceName) {
         requireSession(sessionToken);
         if (isDefaultWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
@@ -256,7 +256,7 @@ class RemoteAuthService implements AuthService {
     }
 
     private void requireSession(Cookie sessionToken) {
-        if (sessionToken == null || StringUtils.isBlank(sessionToken.getValue())) {
+        if (StringUtils.isBlank(sessionToken.getValue())) {
             throw new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
         }
     }
