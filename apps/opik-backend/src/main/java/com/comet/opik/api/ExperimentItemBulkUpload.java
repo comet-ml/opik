@@ -11,12 +11,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 /**
  * Request object for bulk uploading experiment items.
@@ -35,9 +38,12 @@ public record ExperimentItemBulkUpload(
                 "provided, items will be added to the existing experiment and experimentName will be ignored. If not " +
                 "provided or experiment with that ID doesn't exist, a new experiment will be created with the given " +
                 "experimentName") UUID experimentId,
-        @JsonView({View.ExperimentItemBulkWriteView.class}) @Schema(description = "Project for traces auto-created " +
-                "from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default " +
-                "project is used; relying on this fallback is deprecated, please provide project_name explicitly.") String projectName,
+        @JsonView({
+                View.ExperimentItemBulkWriteView.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Project for traces auto-created "
+                        +
+                        "from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default "
+                        +
+                        "project is used; relying on this fallback is deprecated, please provide project_name explicitly.") String projectName,
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 1000, message = "Experiment items list size must be between 1 and 1000") @Valid List<ExperimentItemBulkRecord> items)
         implements

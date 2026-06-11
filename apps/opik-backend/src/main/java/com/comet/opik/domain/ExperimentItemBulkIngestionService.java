@@ -89,12 +89,14 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                     ? projectName
                     : ProjectService.DEFAULT_PROJECT;
 
-            return validateExperimentConsistency(experiment, workspaceId)
+            return validateExperimentConsistency(experiment)
                     .then(experimentService.create(experiment))
                     .retryWhen(RetryUtils.handleConnectionError())
                     .flatMap(experimentId -> {
-                        log.info("Using experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
-                                experimentId, experiment.name(), experiment.datasetName(), workspaceId);
+                        log.info(
+                                "Using experiment with id '{}', name '{}', datasetName '{}', projectName '{}', workspaceId '{}'",
+                                experimentId, experiment.name(), experiment.datasetName(), experiment.projectName(),
+                                workspaceId);
 
                         // Collect unique project names: the bulk project (for auto-created traces and
                         // traces without a project), plus any project specified on item-level traces.
@@ -146,7 +148,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
-    private Mono<Void> validateExperimentConsistency(Experiment experiment, String workspaceId) {
+    private Mono<Void> validateExperimentConsistency(Experiment experiment) {
         if (experiment.id() == null) {
             return Mono.empty(); // New experiment, no validation needed
         }
@@ -245,8 +247,13 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
             experimentItems.add(build);
 
             if (CollectionUtils.isNotEmpty(item.spans())) {
+                // Spans belong to the item's trace (enforced by ExperimentItemBulkValidator), so they must
+                // share its resolved project — otherwise span data would diverge from the trace's project.
                 List<Span> experimentSpans = item.spans().stream()
-                        .map(span -> span.toBuilder().source(Source.EXPERIMENT).build())
+                        .map(span -> span.toBuilder()
+                                .source(Source.EXPERIMENT)
+                                .projectName(trace.projectName())
+                                .build())
                         .toList();
 
                 spans.addAll(experimentSpans);

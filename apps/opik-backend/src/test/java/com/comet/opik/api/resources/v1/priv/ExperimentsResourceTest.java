@@ -6908,6 +6908,62 @@ class ExperimentsResourceTest {
         }
 
         @Test
+        @DisplayName("when project_name is provided and an item has spans, then the spans land in the request project (same as their trace)")
+        void experimentItemsBulk__whenProjectNameProvidedAndItemHasSpans__thenSpansLandInRequestProject() {
+            // given
+            var dataset = buildDataset();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
+                    TEST_WORKSPACE, API_KEY);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(20);
+            UUID projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            // trace and span without their own project — both should inherit the request project
+            var trace = createTrace().toBuilder()
+                    .projectName(null)
+                    .projectId(null)
+                    .build();
+            var span = creatrSpan().toBuilder()
+                    .traceId(trace.id())
+                    .projectName(null)
+                    .projectId(null)
+                    .build();
+
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .projectName(projectName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetItem.id())
+                            .trace(trace)
+                            .spans(List.of(span))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+
+            // both the trace and its span land in the request project
+            Trace actualTrace = traceResourceClient.getById(trace.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.projectId()).isEqualTo(projectId);
+
+            Span actualSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actualSpan.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
         void experimentItemsBulk__whenProcessingBatchWithExceedLimit__thenReturnBadRequest() {
             // given
             var dataset = buildDataset();
