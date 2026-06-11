@@ -9,6 +9,7 @@ import {
   House,
   LayoutDashboard,
   ListChecks,
+  Radar,
   Rows3,
   Settings2,
   Sparkles,
@@ -87,6 +88,14 @@ const getMenuItems = ({
           type: MENU_ITEM_TYPE.router,
           icon: Rows3,
           label: "Logs",
+          disabled: !projectPrefix,
+        },
+        {
+          id: "signals",
+          path: projectPath("/signals"),
+          type: MENU_ITEM_TYPE.router,
+          icon: Radar,
+          label: "Signals",
           disabled: !projectPrefix,
         },
         ...(canViewDashboards

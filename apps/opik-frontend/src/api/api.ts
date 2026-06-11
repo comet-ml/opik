@@ -75,6 +75,8 @@ export const AGENT_SANDBOX_KEY = "agent-sandbox";
 export const LLM_MODELS_KEY = "llm-models";
 export const ENVIRONMENTS_KEY = "environments";
 export const ENVIRONMENT_KEY = "environment";
+export const SIGNALS_ISSUES_KEY = "signals-issues";
+export const SIGNALS_STATS_KEY = "signals-stats";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";
