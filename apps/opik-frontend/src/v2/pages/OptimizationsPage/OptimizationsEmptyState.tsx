@@ -1,5 +1,10 @@
 import React from "react";
-import { SquareDashedMousePointer, Bot, ExternalLink } from "lucide-react";
+import {
+  BotMessageSquare,
+  SquareDashedMousePointer,
+  FileSliders,
+  ExternalLink,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/ui/button";
@@ -11,11 +16,11 @@ import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg"
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 
 type OptimizationsEmptyStateProps = {
-  onOptimizeClick: () => void;
+  onOptimizeViaSdkClick: () => void;
 };
 
 const OptimizationsEmptyState: React.FC<OptimizationsEmptyStateProps> = ({
-  onOptimizeClick,
+  onOptimizeViaSdkClick,
 }) => {
   const { themeMode } = useTheme();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -26,58 +31,72 @@ const OptimizationsEmptyState: React.FC<OptimizationsEmptyStateProps> = ({
       ? emptyOptStudioDarkUrl
       : emptyOptStudioLightUrl;
 
-  const handleDemoTemplateClick = () => {
+  const navigateToStudio = (templateId?: string) => {
     navigate({
       to: "/$workspaceName/projects/$projectId/optimizations/new",
       params: { workspaceName, projectId: activeProjectId! },
-      search: { template: "opik-chatbot" },
+      search: templateId ? { template: templateId } : undefined,
     });
   };
 
   return (
     <div className="flex min-h-full flex-1 items-center justify-center gap-16 px-6">
-      <div className="flex w-full max-w-lg flex-col gap-6">
+      <div className="flex w-full max-w-[480px] flex-col gap-4">
+        <h2 className="comet-title-s text-foreground">
+          No optimization runs yet
+        </h2>
+        <p className="comet-body-s text-muted-slate">
+          Try different prompt versions and see what performs best. Optimization
+          runs help you improve accuracy, consistency, and user experience.
+        </p>
         <div className="flex flex-col gap-2">
-          <h2 className="comet-title-s text-foreground">
-            No optimization runs yet
-          </h2>
-          <p className="comet-body-s text-muted-slate">
-            Try different prompt versions and see what performs best.
-            Optimization runs help you improve accuracy, consistency, and user
-            experience.
-          </p>
-        </div>
-        <div className="flex flex-col gap-3">
           <button
             type="button"
-            onClick={onOptimizeClick}
-            className="flex items-start gap-3 rounded-md border p-4 text-left transition-colors hover:border-primary hover:bg-primary-100"
+            onClick={() => navigateToStudio("opik-chatbot")}
+            className="flex flex-col gap-1 rounded-md border p-4 text-left transition-colors hover:border-primary hover:bg-primary-100"
           >
-            <SquareDashedMousePointer className="mt-0.5 size-5 shrink-0 text-chart-green" />
-            <div className="flex flex-col gap-0.5">
+            <span className="flex items-center gap-2">
+              <BotMessageSquare className="size-4 shrink-0 text-chart-blue" />
               <span className="comet-body-s-accented text-foreground">
-                Optimize your prompt
+                Run a demo example
               </span>
-              <span className="comet-body-s text-muted-slate">
-                Start from scratch and configure your own optimization setting
-              </span>
-            </div>
+            </span>
+            <span className="comet-body-xs text-muted-slate">
+              Start with a pre-configured optimization example for a support
+              chatbot.
+            </span>
           </button>
           <button
             type="button"
-            onClick={handleDemoTemplateClick}
-            className="flex items-start gap-3 rounded-md border p-4 text-left transition-colors hover:border-primary hover:bg-primary-100"
+            onClick={() => navigateToStudio()}
+            className="flex flex-col gap-1 rounded-md border p-4 text-left transition-colors hover:border-primary hover:bg-primary-100"
           >
-            <Bot className="mt-0.5 size-5 shrink-0 text-chart-burgundy" />
-            <div className="flex flex-col gap-0.5">
+            <span className="flex items-center gap-2">
+              <SquareDashedMousePointer className="size-4 shrink-0 text-chart-purple" />
               <span className="comet-body-s-accented text-foreground">
-                Try demo template
+                Use the Optimization Studio
               </span>
-              <span className="comet-body-s text-muted-slate">
-                Train a chatbot to answer questions about Opik and decline
-                off-topic requests.
+            </span>
+            <span className="comet-body-xs text-muted-slate">
+              Create a custom optimization workflow to test and improve your
+              prompts.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={onOptimizeViaSdkClick}
+            className="flex flex-col gap-1 rounded-md border p-4 text-left transition-colors hover:border-primary hover:bg-primary-100"
+          >
+            <span className="flex items-center gap-2">
+              <FileSliders className="size-4 shrink-0 text-chart-burgundy" />
+              <span className="comet-body-s-accented text-foreground">
+                Optimize via SDK
               </span>
-            </div>
+            </span>
+            <span className="comet-body-xs text-muted-slate">
+              Generate starter code for running a custom optimization
+              programmatically.
+            </span>
           </button>
         </div>
         <div>
