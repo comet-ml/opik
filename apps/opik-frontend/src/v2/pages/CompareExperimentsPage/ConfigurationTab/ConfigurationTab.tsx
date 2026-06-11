@@ -188,15 +188,22 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
-          {promptVersions.map((pv) => (
-            <NavigationTag
-              key={pv.id}
-              id={pv.prompt_id}
-              name={`${pv.prompt_name}${pv.commit ? ` (${pv.commit})` : ""}`}
-              resource={RESOURCE_TYPE.prompt}
-              search={{ activeVersionId: pv.id }}
-            />
-          ))}
+          {promptVersions.map((pv) => {
+            // Prefer the human-readable version label; fall back to the commit
+            // hash only when the version number is unavailable (OPIK-6838).
+            const versionLabel = pv.version_number ?? pv.commit;
+            return (
+              <NavigationTag
+                key={pv.id}
+                id={pv.prompt_id}
+                name={`${pv.prompt_name}${
+                  versionLabel ? ` (${versionLabel})` : ""
+                }`}
+                resource={RESOURCE_TYPE.prompt}
+                search={{ activeVersionId: pv.id }}
+              />
+            );
+          })}
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />

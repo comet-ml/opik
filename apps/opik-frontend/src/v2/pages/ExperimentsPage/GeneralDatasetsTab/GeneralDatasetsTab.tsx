@@ -258,12 +258,20 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: "prompt",
-        label: "Prompt commit",
+        label: "Prompt",
         type: COLUMN_TYPE.list,
-        accessorFn: (row) => get(row, ["prompt_versions"], []),
+        // Show the prompt name plus its version. Unlike the Prompt Library
+        // experiments tab (where the prompt is implied by the page context),
+        // this global table needs the name too. Fall back to the commit hash
+        // only when no version number is available (OPIK-6838).
+        accessorFn: (row) =>
+          (row.prompt_versions ?? []).map((v) => ({
+            ...v,
+            version_label: `${v.prompt_name} (${v.version_number ?? v.commit})`,
+          })),
         cell: MultiResourceCell as never,
         customMeta: {
-          nameKey: "commit",
+          nameKey: "version_label",
           idKey: "prompt_id",
           resource: RESOURCE_TYPE.prompt,
           getSearch: (data: GroupedExperiment) => ({

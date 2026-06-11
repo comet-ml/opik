@@ -107,12 +107,18 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
   {
     id: "prompt",
-    label: "Prompt commit",
+    label: "Prompt",
     type: COLUMN_TYPE.list,
-    accessorFn: (row) => get(row, ["prompt_versions"], []),
+    // Show the prompt name plus its version, falling back to the commit hash
+    // only when no version number is available (OPIK-6838).
+    accessorFn: (row) =>
+      (row.prompt_versions ?? []).map((v) => ({
+        ...v,
+        version_label: `${v.prompt_name} (${v.version_number ?? v.commit})`,
+      })),
     cell: MultiResourceCell as never,
     customMeta: {
-      nameKey: "commit",
+      nameKey: "version_label",
       idKey: "prompt_id",
       resource: RESOURCE_TYPE.prompt,
       getSearch: (data: Experiment) => ({
