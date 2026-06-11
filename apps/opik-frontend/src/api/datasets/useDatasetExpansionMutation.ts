@@ -22,11 +22,11 @@ const useDatasetExpansionMutation = () => {
     AxiosError,
     UseDatasetExpansionMutationParams
   >({
-    mutationFn: async ({ datasetId, entityName: _, ...data }) => {
-      void _;
+    mutationFn: async ({ datasetId, entityName, ...reqData }) => {
+      void entityName;
       const { data: response } = await api.post(
         `${DATASETS_REST_ENDPOINT}${datasetId}/expansions`,
-        data,
+        reqData,
       );
       return response;
     },
