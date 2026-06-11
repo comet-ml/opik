@@ -167,13 +167,6 @@ const CreateDatasetSidebar: React.FunctionComponent<
 
   const hasValidUpload = uploadFile !== undefined && !uploadError;
 
-  const isDirty =
-    name.length > 0 ||
-    description.length > 0 ||
-    uploadFile !== undefined ||
-    uploadError !== undefined ||
-    assertions.length > 0;
-
   const canSubmit =
     activeMode === "upload"
       ? hasValidUpload && name.trim().length > 0
@@ -362,7 +355,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
       onClose={handleClose}
       initialWidth={0.5}
       minWidth={450}
-      blockOverlayClose={isDirty}
+      blockOverlayClose
       header={
         <ResizableSidePanelTopBar
           variant="form"

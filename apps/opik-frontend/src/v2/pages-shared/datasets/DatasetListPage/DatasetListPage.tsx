@@ -15,11 +15,10 @@ import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DatasetEmptyState from "@/v2/pages-shared/datasets/DatasetEmptyState";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset, DATASET_TYPE, DatasetListType } from "@/types/datasets";
-import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
-import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import CreateDatasetSidebar, {
   CreateDatasetMode,
 } from "@/v2/pages-shared/datasets/CreateDatasetSidebar/CreateDatasetSidebar";
+import EditDatasetSidebar from "@/v2/pages-shared/datasets/EditDatasetSidebar";
 import DatasetActionsPanel from "@/v2/pages-shared/datasets/DatasetActionsPanel/DatasetActionsPanel";
 import { createDatasetRowActionsCell } from "@/v2/pages-shared/datasets/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Plus } from "lucide-react";
@@ -78,7 +77,6 @@ const TYPE_CONFIG = {
         value: DATASET_TYPE.DATASET,
       },
     ] as Filter[],
-    useSimpleDialog: true,
     rowActionsEntityName: "dataset",
     detailRoute:
       "/$workspaceName/projects/$projectId/datasets/$datasetId" as const,
@@ -104,7 +102,6 @@ const TYPE_CONFIG = {
         value: DATASET_TYPE.TEST_SUITE,
       },
     ] as Filter[],
-    useSimpleDialog: false,
     rowActionsEntityName: "test suite",
     detailRoute:
       "/$workspaceName/projects/$projectId/test-suites/$suiteId" as const,
@@ -333,9 +330,14 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
     defaultValue: {},
   });
 
-  const EditDialog = config.useSimpleDialog
-    ? AddEditDatasetDialog
-    : AddEditTestSuiteDialog;
+  const EditDialog = useMemo(() => {
+    const BoundEditSidebar: React.FC<{
+      open: boolean;
+      setOpen: (open: boolean) => void;
+      dataset?: Dataset;
+    }> = (props) => <EditDatasetSidebar {...props} type={type} />;
+    return BoundEditSidebar;
+  }, [type]);
 
   const RowActionsCell = useMemo(
     () =>
