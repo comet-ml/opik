@@ -6,10 +6,7 @@ from opik import exceptions
 from opik.api_objects import span as span_module, trace as trace_module
 from opik.integrations import langchain
 from opik.integrations.langchain.opik_tracer import OpikTracer
-from opik.integrations.langchain.run_parse_helpers import (
-    parse_graph_interrupt_value,
-    is_langgraph_parent_command,
-)
+from opik.integrations.langchain import run_parse_helpers
 
 
 def test_opik_tracer__attach_span_to_parent_span__stream_restart_root(fake_backend):
@@ -336,7 +333,7 @@ def test_opik_tracer__init_validation():
 )
 def test_parse_graph_interrupt_value(error_traceback: str, expected: Optional[str]):
     """Test parse_graph_interrupt_value with various input formats."""
-    result = parse_graph_interrupt_value(error_traceback)
+    result = run_parse_helpers.parse_graph_interrupt_value(error_traceback)
     assert result == expected, (
         f"Expected {expected!r}, got {result!r} for input: {error_traceback[:100]}"
     )
@@ -389,7 +386,91 @@ def test_parse_graph_interrupt_value(error_traceback: str, expected: Optional[st
 )
 def test_is_langgraph_parent_command(error_traceback: str, expected: bool):
     """Test is_langgraph_parent_command with various input formats."""
-    result = is_langgraph_parent_command(error_traceback)
+    result = run_parse_helpers.is_langgraph_parent_command(error_traceback)
     assert result == expected, (
         f"Expected {expected!r}, got {result!r} for input: {error_traceback[:120]}"
     )
+
+
+def _lg_run(name, run_type="chain", node=None):
+    """Build a run_dict as it appears inside a LangGraph execution (langgraph_* metadata)."""
+    return {
+        "run_type": run_type,
+        "name": name,
+        "extra": {
+            "metadata": {
+                "langgraph_step": 1,
+                "langgraph_node": name if node is None else node,
+            }
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "run_dict, expected",
+    [
+        # Inside a graph node, intermediate wrappers carry the node name in
+        # langgraph_node but a different run name -> internal plumbing.
+        (_lg_run("RunnableSequence", node="agent"), True),
+        (_lg_run("call_model", node="agent"), True),
+        (_lg_run("Prompt", node="agent"), True),
+        (_lg_run("should_continue", node="agent"), True),
+        (_lg_run("ChannelWrite<route,x>", node="agent"), True),
+        # Conditional-edge router attached to the __start__ pseudo-node.
+        (_lg_run("fan", node="__start__"), True),
+        # Graph entry/exit markers appear as their own node but are still plumbing.
+        (_lg_run("__start__", node="__start__"), True),
+        (_lg_run("__end__", node="__end__"), True),
+        # The node boundary itself (run name == node name) is the meaningful span.
+        (_lg_run("agent", node="agent"), False),
+        (_lg_run("tools", node="tools"), False),
+        (_lg_run("weather_agent", node="weather_agent"), False),
+        # LLM and tool runs inside a graph are always meaningful.
+        (_lg_run("ChatOpenAI", run_type="llm", node="agent"), False),
+        (_lg_run("get_weather", run_type="tool", node="tools"), False),
+        # Spans without langgraph_* metadata are plain LangChain/LCEL -> out of scope.
+        ({"run_type": "chain", "name": "RunnableSequence"}, False),
+        (
+            {
+                "run_type": "chain",
+                "name": "RunnableSequence",
+                "extra": {"metadata": {"user_key": "v"}},
+            },
+            False,
+        ),
+        # Root "LangGraph" span carries no langgraph_* metadata.
+        ({"run_type": "chain", "name": "LangGraph"}, False),
+        # Missing/invalid name inside a graph.
+        (
+            {
+                "run_type": "chain",
+                "name": None,
+                "extra": {"metadata": {"langgraph_step": 1}},
+            },
+            False,
+        ),
+    ],
+)
+def test_is_internal_langgraph_run(run_dict, expected):
+    assert run_parse_helpers.is_internal_langgraph_run(run_dict) == expected
+
+
+def test_get_run_metadata__internal_langgraph_run__tagged_with_opik_category():
+    run_dict = _lg_run("RunnableSequence", node="agent")
+    run_dict["extra"]["metadata"]["user_key"] = "user_value"
+
+    metadata = run_parse_helpers.get_run_metadata(run_dict)
+
+    assert metadata["user_key"] == "user_value"
+    assert metadata["_opik"] == {"framework": "langgraph", "category": "internal"}
+
+
+def test_get_run_metadata__meaningful_run__not_tagged():
+    # A node boundary span (run name == langgraph_node) is meaningful.
+    run_dict = _lg_run("agent", node="agent")
+    run_dict["extra"]["metadata"]["user_key"] = "user_value"
+
+    metadata = run_parse_helpers.get_run_metadata(run_dict)
+
+    assert "_opik" not in metadata
+    assert "_opik" not in metadata
