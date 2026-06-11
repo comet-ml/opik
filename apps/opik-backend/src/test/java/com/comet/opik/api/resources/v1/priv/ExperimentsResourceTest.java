@@ -4,6 +4,7 @@ import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.AssertionScoreAverage;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemChanges;
@@ -6854,6 +6855,56 @@ class ExperimentsResourceTest {
             Trace actualTrace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
                     API_KEY);
             assertThat(actualTrace.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("when project_name is provided and the experiment and dataset don't exist, then both are created in that project")
+        void experimentItemsBulk__whenProjectNameProvidedAndExperimentAndDatasetDoNotExist__thenBothCreatedInProject() {
+            // given — project exists (so we know its id), but dataset and experiment do not
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(20);
+            UUID projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(20);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetName)
+                    .projectName(projectName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(podamFactory.manufacturePojo(UUID.class))
+                            .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"42\"}"))
+                            .feedbackScores(List.of(createScore()))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(actualExperimentItems).hasSize(1);
+
+            // the experiment was created in the requested project
+            Experiment experiment = experimentResourceClient.getExperiment(
+                    actualExperimentItems.getFirst().experimentId(), API_KEY, TEST_WORKSPACE);
+            assertThat(experiment.projectId()).isEqualTo(projectId);
+
+            // the dataset was created
+            Dataset dataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(datasetName).build(), API_KEY, TEST_WORKSPACE);
+            assertThat(dataset).isNotNull();
+            assertThat(dataset.name()).isEqualTo(datasetName);
+
+            // and the auto-created trace landed in the same project
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+            assertThat(trace.projectId()).isEqualTo(projectId);
         }
 
         @Test

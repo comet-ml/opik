@@ -539,6 +539,7 @@ public class ExperimentsResource {
                 .id(request.experimentId())
                 .datasetName(request.datasetName())
                 .name(request.experimentName())
+                .projectName(request.projectName())
                 .build();
 
         experimentItemBulkIngestionService.ingest(experiment, request.projectName(), items)
