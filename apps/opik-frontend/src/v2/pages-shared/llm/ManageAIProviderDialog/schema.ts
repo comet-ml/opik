@@ -1,14 +1,14 @@
 import { z } from "zod";
 import uniq from "lodash/uniq";
 
-import { PROVIDER_TYPE } from "@/types/providers";
+import {
+  OPENAI_PIPELINE_MODE_VALUES,
+  OpenAiPipelineMode,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 
-export const OPENAI_PIPELINE_MODE_VALUES = [
-  "chat_completions_api",
-  "responses_api",
-] as const;
-
-export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
+export type { OpenAiPipelineMode };
+export { OPENAI_PIPELINE_MODE_VALUES };
 
 // Default pipeline mode applied as a fallback in form defaults, resets, and save payloads.
 // Centralised here so changing the default requires editing only one place.
