@@ -24,6 +24,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsFactory databaseAnalyticsReadOnly = new DatabaseAnalyticsFactory();
+
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
 
     @Valid @NotNull @JsonProperty

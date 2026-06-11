@@ -119,6 +119,23 @@ class HealthCheckIntegrationTest {
     }
 
     @Test
+    void test__whenHitClickhouseReadOnlyHealthyCheck__thenReturnOk(ClientSupport client) {
+        var response = client.target("%s/health-check?name=clickhouse-readonly".formatted(baseURI))
+                .request()
+                .get();
+
+        assertEquals(200, response.getStatus());
+        List<HealthCheckResponse> healthChecks = response.readEntity(new GenericType<>() {
+        });
+
+        assertThat(healthChecks).hasSize(1);
+        var healthCheck = healthChecks.getFirst();
+
+        // Toggle off (default in config-test): the check reports healthy without querying the read-only user.
+        assertResponse(healthCheck, "clickhouse-readonly");
+    }
+
+    @Test
     void test__whenHitAllHealthyCheck__thenReturnOk(ClientSupport client) {
         var response = client.target("%s/health-check?name=all".formatted(baseURI))
                 .request()
@@ -128,10 +145,11 @@ class HealthCheckIntegrationTest {
         List<HealthCheckResponse> healthChecks = response.readEntity(new GenericType<>() {
         });
 
-        assertThat(healthChecks).hasSize(5);
+        assertThat(healthChecks).hasSize(6);
 
         assertThat(healthChecks).contains(
                 new HealthCheckResponse("clickhouse", true, true, "READY"),
+                new HealthCheckResponse("clickhouse-readonly", true, true, "READY"),
                 new HealthCheckResponse("mysql", true, true, "READY"),
                 new HealthCheckResponse("redis", true, true, "READY"),
                 new HealthCheckResponse("db", true, true, "READY"),

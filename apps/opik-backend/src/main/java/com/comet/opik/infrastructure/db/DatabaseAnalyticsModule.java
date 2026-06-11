@@ -18,13 +18,16 @@ import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 
 public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfiguration> {
 
+    public static final String READ_ONLY_CLICKHOUSE_CLIENT = "readOnlyClickHouseClient";
+
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
     private transient Client clickHouseClient;
+    private transient Client readOnlyClickHouseClient;
 
     @Override
     protected void configure() {
-        databaseAnalyticsFactory = configuration(DatabaseAnalyticsFactory.class);
+        databaseAnalyticsFactory = configuration().getDatabaseAnalytics();
         connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
 
@@ -33,6 +36,17 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
             @Override
             public void stop() {
                 clickHouseClient.close();
+            }
+        });
+
+        // Read-only client used for Agent Insights freeform SQL. It connects as a separate, restricted ClickHouse
+        // user (single-statement mode, no write settings). The v2 client connects lazily, so building it is cheap and
+        // never contacts ClickHouse until a query runs; the agentInsightsEnabled toggle gates all actual usage.
+        readOnlyClickHouseClient = configuration().getDatabaseAnalyticsReadOnly().buildClient();
+        environment().lifecycle().manage(new Managed() {
+            @Override
+            public void stop() {
+                readOnlyClickHouseClient.close();
             }
         });
 
@@ -53,6 +67,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Singleton
     public Client getClickHouseClient() {
         return clickHouseClient;
+    }
+
+    @Provides
+    @Singleton
+    @Named(READ_ONLY_CLICKHOUSE_CLIENT)
+    public Client getReadOnlyClickHouseClient() {
+        return readOnlyClickHouseClient;
     }
 
     @Provides

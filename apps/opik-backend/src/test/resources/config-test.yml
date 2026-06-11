@@ -74,6 +74,18 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
 
+# Description: read-only analytics database connection for Agent Insights freeform SQL. In tests the restricted
+#   comet_readonly_freeform_sql_user does not exist in the container, so the credentials point at the standard test
+#   user; the agentInsightsEnabled toggle below is off by default, and tests flip it on when exercising the RO path.
+databaseAnalyticsReadOnly:
+  protocol: HTTP
+  host: localhost
+  port: 8123
+  username: opik
+  password: opik
+  databaseName: opik
+  healthCheckTimeout: 1s
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -92,6 +104,9 @@ health:
       critical: true
       type: ready
     - name: clickhouse
+      critical: true
+      type: ready
+    - name: clickhouse-readonly
       critical: true
       type: ready
     - name: mysql
@@ -652,6 +667,10 @@ serviceToggles:
   # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
   agenticToolsEnabled: "false"
+  # Default: false
+  # Description: Whether or not the Agent Insights freeform SQL path is enabled. Tests flip this on when exercising
+  #   the read-only ClickHouse client and the clickhouse-readonly health check.
+  agentInsightsEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
