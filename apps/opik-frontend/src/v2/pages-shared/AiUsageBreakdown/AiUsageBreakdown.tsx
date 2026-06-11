@@ -208,7 +208,8 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
     inputLanes.length === 0 &&
     outputLanes.length === 0 &&
     (data.input?.total_tokens ?? 0) === 0 &&
-    (data.output?.total_tokens ?? 0) === 0;
+    (data.output?.total_tokens ?? 0) === 0 &&
+    harnessTotal === 0;
 
   if (isEmpty) {
     return (

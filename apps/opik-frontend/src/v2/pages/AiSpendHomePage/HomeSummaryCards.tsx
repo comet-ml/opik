@@ -55,13 +55,7 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
     return map;
   }, [data]);
 
-  const hasData = useMemo(
-    () =>
-      (data?.results ?? []).some(
-        (r) => (r.current ?? 0) !== 0 || (r.previous ?? 0) !== 0,
-      ),
-    [data],
-  );
+  const hasData = (data?.results?.length ?? 0) > 0;
   const showData = !isPending && hasData;
 
   const get = (name: string): SpendMetric => metrics[name] ?? EMPTY_METRIC;

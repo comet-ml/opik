@@ -52,7 +52,7 @@ import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
-import useAiSpendManager from "@/plugins/comet/useAiSpendManager";
+import { useAiSpend } from "@/contexts/AiSpendContext";
 
 const UserMenu = () => {
   const { toast } = useToast();
@@ -87,7 +87,7 @@ const UserMenu = () => {
 
   const { canInviteMembers } = useUserPermission();
   const navigate = useNavigate();
-  const { hasAccess: hasAiSpendAccess } = useAiSpendManager();
+  const { hasAccess: hasAiSpendAccess } = useAiSpend();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
 
