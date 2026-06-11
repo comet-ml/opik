@@ -16,13 +16,19 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { Extension, RangeSetBuilder } from "@codemirror/state";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
-// Chevron icons mirror lucide's ChevronDown / ChevronRight used elsewhere in
-// the trace view so the fold affordance feels native to the design system.
-const CHEVRON_DOWN =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
-const CHEVRON_RIGHT =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+// CodeMirror widgets are imperative DOM, so we render the lucide icons used
+// elsewhere in the trace view to static markup once at module load and reuse
+// the resulting SVG strings. This keeps the fold chevrons in sync with lucide
+// without paying a render cost per widget.
+const renderChevron = (Icon: typeof ChevronDown) =>
+  renderToStaticMarkup(createElement(Icon, { size: 14, strokeWidth: 2.25 }));
+
+const CHEVRON_DOWN = renderChevron(ChevronDown);
+const CHEVRON_RIGHT = renderChevron(ChevronRight);
 
 // Clickable chevron rendered inline at the end of an expanded foldable line.
 // Clicking it collapses the JSON object / array or YAML block it heads.
