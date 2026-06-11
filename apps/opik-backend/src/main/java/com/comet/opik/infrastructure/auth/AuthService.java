@@ -62,12 +62,12 @@ class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public List<WorkspaceInfo> listEligibleWorkspaces(@NonNull Cookie sessionToken) {
+    public List<WorkspaceInfo> listEligibleWorkspaces(Cookie sessionToken) {
         return ELIGIBLE_WORKSPACES;
     }
 
     @Override
-    public UserWorkspace authorizeWorkspace(@NonNull Cookie sessionToken, @NonNull String workspaceName) {
+    public UserWorkspace authorizeWorkspace(Cookie sessionToken, @NonNull String workspaceName) {
         return AUTHORIZED_WORKSPACE;
     }
 
