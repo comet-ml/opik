@@ -1,13 +1,14 @@
 package com.comet.opik.api.sorting;
 
-import java.util.List;
+import com.comet.opik.api.spend.SpendUserField;
 
-import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
+import java.util.List;
 
 public class SpendUserSortingFactory extends SortingFactory {
 
     @Override
     public List<String> getSortableFields() {
-        return List.of(TOTAL_ESTIMATED_COST, "requests", "skills", "mcps", "mcp_calls");
+        return List.of(SpendUserField.TOTAL_ESTIMATED_COST, SpendUserField.REQUESTS, SpendUserField.SKILLS,
+                SpendUserField.MCPS, SpendUserField.MCP_CALLS);
     }
 }

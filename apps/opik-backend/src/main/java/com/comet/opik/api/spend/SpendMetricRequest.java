@@ -8,6 +8,7 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -29,7 +30,7 @@ public record SpendMetricRequest(
         return intervalStart == null || intervalEnd == null || intervalStart.isBefore(intervalEnd);
     }
 
-    @AssertTrue(message = "either project_id or project_name must be provided") public boolean isProjectProvided() {
-        return projectId != null || (projectName != null && !projectName.isBlank());
+    @AssertTrue(message = "must provide either project_id or project_name") public boolean isProjectProvided() {
+        return projectId != null || StringUtils.isNotBlank(projectName);
     }
 }
