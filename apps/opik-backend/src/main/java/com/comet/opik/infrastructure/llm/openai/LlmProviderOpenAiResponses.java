@@ -61,17 +61,21 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
                 new OpenAiResponsesStreamingHandler(request, handleMessage, handleClose, handleError));
     }
 
+    /**
+     * No additional validation beyond what the Responses-API ChatModel enforces.
+     */
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
-        // No additional validation beyond what the Responses-API ChatModel enforces.
     }
 
+    /**
+     * openai-java's {@link OpenAIServiceException} (BadRequestException, RateLimitException, …) wraps
+     * the failed HTTP call. Its {@code getMessage()} is the short {@code "<status>: <text>"} form, not
+     * the JSON body, so {@link LlmProviderLangChainMapper}'s JSON-scan logic skips it and the request
+     * bubbles up as a generic 500. Extract the status + diagnostic directly from the typed exception.
+     */
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        // openai-java's OpenAIServiceException (BadRequestException, RateLimitException, …) wraps
-        // the failed HTTP call. Its getMessage() is the short "<status>: <text>" form, not the JSON
-        // body, so LlmProviderLangChainMapper's JSON-scan logic skips it and the request bubbles up
-        // as a generic 500. Extract the status + diagnostic directly from the typed exception.
         return findOpenAiServiceException(throwable)
                 .map(LlmProviderOpenAiResponses::toErrorMessage)
                 .or(() -> LlmProviderLangChainMapper.INSTANCE.getErrorObject(throwable, log));
@@ -84,11 +88,14 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
                 .findFirst();
     }
 
+    /**
+     * Prefer the diagnostic code (e.g., {@code "unsupported_parameter"}) for HTTP status; fall back to
+     * the high-level type ({@code "invalid_request_error"}); finally fall back to the SDK-provided
+     * {@code statusCode()} so we always return a meaningful 4xx/5xx instead of a generic 500.
+     * {@code Optional.map(fn)} already returns empty when {@code fn} yields null, so no explicit
+     * filter is needed.
+     */
     private static ErrorMessage toErrorMessage(OpenAIServiceException ex) {
-        // Prefer the diagnostic code (e.g., "unsupported_parameter") for HTTP status; fall back to
-        // the high-level type ("invalid_request_error"); finally fall back to the SDK-provided
-        // statusCode() so we always return a meaningful 4xx/5xx instead of a generic 500.
-        // Optional.map(fn) already returns empty when fn yields null, so no explicit filter is needed.
         Integer status = ex.code()
                 .map(OpenAiCompatStatusCodes::fromCode)
                 .or(() -> ex.type().map(OpenAiCompatStatusCodes::fromCode))

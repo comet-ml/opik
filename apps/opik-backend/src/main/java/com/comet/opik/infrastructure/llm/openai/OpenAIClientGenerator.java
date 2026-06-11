@@ -31,7 +31,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     // langchain4j's OpenAiOfficialResponsesChatModel constructor requires a non-null modelName at
     // build time. On the proxy path the real model is supplied per request via
     // ChatRequest.parameters().modelName(...), so this placeholder never reaches OpenAI.
-    private static final String PROXY_MODEL_NAME_PLACEHOLDER = "gpt-4o-mini";
+    private static final String PROXY_MODEL_NAME_PLACEHOLDER = "placeholder-model-value";
 
     public enum ApiPipelineMode {
         CHAT_COMPLETIONS_API, // Uses traditional /v1/chat/completions

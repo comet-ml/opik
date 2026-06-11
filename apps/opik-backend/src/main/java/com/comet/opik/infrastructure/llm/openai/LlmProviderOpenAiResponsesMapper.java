@@ -37,6 +37,7 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.ObjectUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -57,13 +58,19 @@ import java.util.Optional;
 @Slf4j
 class LlmProviderOpenAiResponsesMapper {
 
-    // OpenAI Chat-Completions wire-format role token for assistant messages. langchain4j's Role enum
-    // toString() yields the uppercase Java name; clients expect a lowercase per the OpenAI API spec.
+    /**
+     * OpenAI Chat-Completions wire-format role token for assistant messages. langchain4j's Role enum
+     * {@code toString()} yields the uppercase Java name; clients expect a lowercase per the OpenAI
+     * API spec.
+     */
     private static final String ASSISTANT_ROLE_WIRE_VALUE = "assistant";
 
-    // langchain4j's openai-internal JsonSchema has no public accessors — its fields are read back
-    // via a Jackson roundtrip. This dedicated mapper is intentionally minimal: it just needs to
-    // honour @JsonProperty annotations on the source class, which the default ObjectMapper does.
+    /**
+     * langchain4j's openai-internal JsonSchema has no public accessors — its fields are read back
+     * via a Jackson roundtrip. This dedicated mapper is intentionally minimal: it just needs to
+     * honour {@code @JsonProperty} annotations on the source class, which the default ObjectMapper
+     * does.
+     */
     private static final ObjectMapper RESPONSE_FORMAT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -77,13 +84,6 @@ class LlmProviderOpenAiResponsesMapper {
         Optional.ofNullable(request.topP()).ifPresent(builder::topP);
         Optional.ofNullable(resolveMaxOutputTokens(request)).ifPresent(builder::maxOutputTokens);
 
-        // frequency_penalty, presence_penalty, stop, and top_k are NOT supported by the OpenAI
-        // Responses API — langchain4j's OpenAiOfficialResponsesChatModel.validate() throws
-        // UnsupportedFeatureException for any of them. Clients (notably the playground) often
-        // send frequency_penalty: 0 / presence_penalty: 0 as framework defaults even when the
-        // user didn't tune them, so the request would fail before reaching OpenAI. We silently
-        // drop these fields rather than 500 the call; a user who explicitly tunes them and
-        // expects them to apply should use pipeline_mode=CHAT_COMPLETIONS_API.
         warnIfDroppedSamplingParam(request);
 
         if (CollectionUtils.isNotEmpty(request.tools())) {
@@ -241,13 +241,16 @@ class LlmProviderOpenAiResponsesMapper {
         return builder.build();
     }
 
+    /**
+     * Tool parameters are required to be an object schema per the OpenAI spec; non-object root
+     * schemas indicate a malformed request from the caller and are rejected with a
+     * {@link BadRequestException}.
+     */
     private JsonObjectSchema toJsonObjectSchema(@NonNull Map<String, Object> parameters) {
         var element = JsonSchemaElementJsonUtils.fromMap(parameters);
         if (element instanceof JsonObjectSchema objectSchema) {
             return objectSchema;
         }
-        // Tool parameters are required to be an object schema per the OpenAI spec; non-object root
-        // schemas indicate a malformed request from the caller.
         throw new BadRequestException(
                 "OpenAI tool parameters must be a JSON Schema object; got: " + element.getClass().getSimpleName());
     }
@@ -292,6 +295,9 @@ class LlmProviderOpenAiResponsesMapper {
      * per-request). Returns {@code true} only when the request explicitly sets {@code strict: true}
      * on a {@code json_schema} response format; everything else (no {@code response_format}, text,
      * json_object, json_schema with {@code strict} absent or false) returns {@code false}.
+     * <br/>
+     * Uses the same Jackson roundtrip as {@link #toJsonSchemaResponseFormat} — the openai-internal
+     * JsonSchema is opaque, so the strict bit is read through serialization.
      */
     static boolean extractRequestedStrictJsonSchema(@NonNull ChatCompletionRequest request) {
         var responseFormat = request.responseFormat();
@@ -300,8 +306,6 @@ class LlmProviderOpenAiResponsesMapper {
                 || responseFormat.jsonSchema() == null) {
             return false;
         }
-        // Same Jackson roundtrip as toJsonSchemaResponseFormat — the openai-internal JsonSchema is
-        // opaque, so we read the strict bit through serialization.
         Map<String, Object> raw = RESPONSE_FORMAT_MAPPER.convertValue(responseFormat.jsonSchema(), MAP_TYPE);
         return Boolean.TRUE.equals(raw.get("strict"));
     }
@@ -325,15 +329,19 @@ class LlmProviderOpenAiResponsesMapper {
         };
     }
 
+    /**
+     * Translates the openai-internal {@code json_schema} response format to langchain4j's
+     * {@link ResponseFormat}. A {@code json_schema} variant without a schema body falls back to
+     * loose JSON mode rather than throwing — defensive against malformed clients that send the type
+     * alone. The openai-internal {@link dev.langchain4j.model.openai.internal.chat.JsonSchema} is
+     * opaque (no public accessors), so it's re-emitted through Jackson to read the underlying
+     * fields — a cheap roundtrip on a tiny POJO.
+     */
     private ResponseFormat toJsonSchemaResponseFormat(
             dev.langchain4j.model.openai.internal.chat.JsonSchema jsonSchema) {
         if (jsonSchema == null) {
-            // json_schema variant without a schema body falls back to loose JSON mode rather than
-            // throwing — defensive against malformed clients that send the type alone.
             return ResponseFormat.JSON;
         }
-        // The openai-internal JsonSchema is opaque (no public accessors), so re-emit it through
-        // Jackson to read the underlying fields. Cheap roundtrip on a tiny POJO.
         Map<String, Object> raw = RESPONSE_FORMAT_MAPPER.convertValue(jsonSchema, MAP_TYPE);
         String name = (String) raw.get("name");
         Object schemaObj = raw.get("schema");
@@ -376,7 +384,17 @@ class LlmProviderOpenAiResponsesMapper {
         };
     }
 
-    private void warnIfDroppedSamplingParam(@NonNull ChatCompletionRequest request) {
+    /**
+     * {@code frequency_penalty}, {@code presence_penalty}, {@code stop}, and {@code top_k} are NOT
+     * supported by the OpenAI Responses API — langchain4j's
+     * {@code OpenAiOfficialResponsesChatModel.validate()} throws {@code UnsupportedFeatureException}
+     * for any of them. Clients (notably the playground) often send {@code frequency_penalty: 0} /
+     * {@code presence_penalty: 0} as framework defaults even when the user didn't tune them, so the
+     * request would fail before reaching OpenAI. We silently drop these fields rather than 500 the
+     * call; a user who explicitly tunes them and expects them to apply should use
+     * {@code pipeline_mode=CHAT_COMPLETIONS_API}.
+     */
+    private void warnIfDroppedSamplingParam(ChatCompletionRequest request) {
         if (request.frequencyPenalty() != null && request.frequencyPenalty() != 0.0) {
             log.debug("Dropping unsupported 'frequency_penalty'='{}' for OpenAI Responses API",
                     request.frequencyPenalty());
@@ -390,10 +408,7 @@ class LlmProviderOpenAiResponsesMapper {
         }
     }
 
-    private Integer resolveMaxOutputTokens(@NonNull ChatCompletionRequest request) {
-        if (request.maxCompletionTokens() != null) {
-            return request.maxCompletionTokens();
-        }
-        return request.maxTokens();
+    private Integer resolveMaxOutputTokens(ChatCompletionRequest request) {
+        return ObjectUtils.firstNonNull(request.maxCompletionTokens(), request.maxTokens());
     }
 }

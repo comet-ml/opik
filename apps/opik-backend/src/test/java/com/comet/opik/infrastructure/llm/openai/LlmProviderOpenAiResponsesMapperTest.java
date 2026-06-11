@@ -37,15 +37,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LlmProviderOpenAiResponsesMapperTest {
 
+    private static final String MODEL_NAME = "gpt-4o-mini";
+    private static final String DEFAULT_USER_MESSAGE = "hi";
+
+    private static ChatCompletionRequest.Builder requestBuilder() {
+        return ChatCompletionRequest.builder().model(MODEL_NAME);
+    }
+
+    private static ChatCompletionRequest.Builder requestBuilder(String userMessage) {
+        return requestBuilder().addUserMessage(userMessage);
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ToChatRequest {
 
         @Test
         void mapsModelAndBasicSamplingParameters() {
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .temperature(0.7)
                     .topP(0.9)
                     .maxCompletionTokens(512)
@@ -53,10 +62,10 @@ class LlmProviderOpenAiResponsesMapperTest {
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
-            assertThat(actual.modelName()).isEqualTo("gpt-4o-mini");
-            assertThat(actual.temperature()).isEqualTo(0.7);
-            assertThat(actual.topP()).isEqualTo(0.9);
-            assertThat(actual.maxOutputTokens()).isEqualTo(512);
+            assertThat(actual.modelName()).isEqualTo(request.model());
+            assertThat(actual.temperature()).isEqualTo(request.temperature());
+            assertThat(actual.topP()).isEqualTo(request.topP());
+            assertThat(actual.maxOutputTokens()).isEqualTo(request.maxCompletionTokens());
         }
 
         @Test
@@ -65,9 +74,7 @@ class LlmProviderOpenAiResponsesMapperTest {
             // langchain4j's OpenAiOfficialResponsesChatModel.validate() throws on any of them.
             // The mapper silently drops these (typically framework defaults like
             // frequency_penalty: 0 from playground SDKs) to keep the request from failing.
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .frequencyPenalty(0.5)
                     .presencePenalty(0.5)
                     .stop(List.of("STOP1", "STOP2"))
@@ -82,8 +89,7 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void mapsSystemUserAndAssistantMessages() {
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
+            var request = requestBuilder()
                     .addSystemMessage("you are helpful")
                     .addUserMessage("question?")
                     .addAssistantMessage("answer.")
@@ -108,8 +114,7 @@ class LlmProviderOpenAiResponsesMapperTest {
             var opikUser = com.comet.opik.domain.llm.langchain4j.OpikUserMessage.builder()
                     .content("classify this")
                     .build();
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
+            var request = requestBuilder()
                     .messages(List.of(opikUser))
                     .build();
 
@@ -122,29 +127,25 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void prefersMaxCompletionTokensOverMaxTokens() {
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .maxTokens(100)
                     .maxCompletionTokens(200)
                     .build();
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
-            assertThat(actual.maxOutputTokens()).isEqualTo(200);
+            assertThat(actual.maxOutputTokens()).isEqualTo(request.maxCompletionTokens());
         }
 
         @Test
         void fallsBackToMaxTokensWhenMaxCompletionTokensAbsent() {
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .maxTokens(150)
                     .build();
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
-            assertThat(actual.maxOutputTokens()).isEqualTo(150);
+            assertThat(actual.maxOutputTokens()).isEqualTo(request.maxTokens());
         }
 
     }
@@ -155,10 +156,7 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void mapsHappyPathWithMetadataAndUsage() {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var originalRequest = requestBuilder(DEFAULT_USER_MESSAGE).build();
             var chatResponse = ChatResponse.builder()
                     .aiMessage(AiMessage.from("hello back"))
                     .metadata(ChatResponseMetadata.builder()
@@ -171,23 +169,23 @@ class LlmProviderOpenAiResponsesMapperTest {
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatCompletionResponse(chatResponse, originalRequest);
 
-            assertThat(actual.id()).isEqualTo("resp_abc");
-            assertThat(actual.model()).isEqualTo("gpt-4o-mini-2024-07-18");
+            var metadata = chatResponse.metadata();
+            var tokenUsage = metadata.tokenUsage();
+            assertThat(actual.id()).isEqualTo(metadata.id());
+            assertThat(actual.model()).isEqualTo(metadata.modelName());
             assertThat(actual.choices()).hasSize(1);
             assertThat(actual.choices().getFirst().index()).isZero();
-            assertThat(actual.choices().getFirst().message().content()).isEqualTo("hello back");
+            assertThat(actual.choices().getFirst().message().content())
+                    .isEqualTo(chatResponse.aiMessage().text());
             assertThat(actual.choices().getFirst().finishReason()).isEqualTo("stop");
-            assertThat(actual.usage().promptTokens()).isEqualTo(7);
-            assertThat(actual.usage().completionTokens()).isEqualTo(5);
-            assertThat(actual.usage().totalTokens()).isEqualTo(12);
+            assertThat(actual.usage().promptTokens()).isEqualTo(tokenUsage.inputTokenCount());
+            assertThat(actual.usage().completionTokens()).isEqualTo(tokenUsage.outputTokenCount());
+            assertThat(actual.usage().totalTokens()).isEqualTo(tokenUsage.totalTokenCount());
         }
 
         @Test
         void fallsBackToRequestModelWhenMetadataModelMissing() {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var originalRequest = requestBuilder(DEFAULT_USER_MESSAGE).build();
             var chatResponse = ChatResponse.builder()
                     .aiMessage(AiMessage.from("ok"))
                     .metadata(ChatResponseMetadata.builder()
@@ -198,15 +196,12 @@ class LlmProviderOpenAiResponsesMapperTest {
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatCompletionResponse(chatResponse, originalRequest);
 
-            assertThat(actual.model()).isEqualTo("gpt-4o-mini");
+            assertThat(actual.model()).isEqualTo(originalRequest.model());
         }
 
         @Test
         void handlesNullUsage() {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var originalRequest = requestBuilder(DEFAULT_USER_MESSAGE).build();
             var chatResponse = ChatResponse.builder()
                     .aiMessage(AiMessage.from("ok"))
                     .metadata(ChatResponseMetadata.builder()
@@ -224,10 +219,7 @@ class LlmProviderOpenAiResponsesMapperTest {
         @ParameterizedTest
         @MethodSource("finishReasonMappings")
         void mapsFinishReasonEnumToOpenAiString(FinishReason input, String expected) {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var originalRequest = requestBuilder(DEFAULT_USER_MESSAGE).build();
             var chatResponse = ChatResponse.builder()
                     .aiMessage(AiMessage.from("ok"))
                     .metadata(ChatResponseMetadata.builder()
@@ -259,28 +251,23 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void partialChunkCarriesAssistantRoleAndContent() {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var originalRequest = requestBuilder(DEFAULT_USER_MESSAGE).build();
+            var partial = "hello";
 
-            var chunk = LlmProviderOpenAiResponsesMapper.toPartialChunk("hello", originalRequest);
+            var chunk = LlmProviderOpenAiResponsesMapper.toPartialChunk(partial, originalRequest);
 
             assertThat(chunk.choices()).hasSize(1);
             var choice = chunk.choices().getFirst();
             assertThat(choice.index()).isZero();
             assertThat(choice.delta().role()).isEqualTo("assistant");
-            assertThat(choice.delta().content()).isEqualTo("hello");
+            assertThat(choice.delta().content()).isEqualTo(partial);
             assertThat(choice.finishReason()).isNull();
-            assertThat(chunk.model()).isEqualTo("gpt-4o-mini");
+            assertThat(chunk.model()).isEqualTo(originalRequest.model());
         }
 
         @Test
         void finalChunkSetsFinishReasonWithEmptyDelta() {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var originalRequest = requestBuilder(DEFAULT_USER_MESSAGE).build();
             var chatResponse = ChatResponse.builder()
                     .aiMessage(AiMessage.from("done"))
                     .metadata(ChatResponseMetadata.builder()
@@ -293,23 +280,22 @@ class LlmProviderOpenAiResponsesMapperTest {
 
             var chunk = LlmProviderOpenAiResponsesMapper.toFinalChunk(chatResponse, originalRequest);
 
+            var metadata = chatResponse.metadata();
+            var tokenUsage = metadata.tokenUsage();
             var choice = chunk.choices().getFirst();
             assertThat(choice.finishReason()).isEqualTo("stop");
             assertThat(choice.delta().content()).isNull();
             assertThat(choice.delta().role()).isNull();
-            assertThat(chunk.usage().promptTokens()).isEqualTo(7);
-            assertThat(chunk.usage().completionTokens()).isEqualTo(5);
-            assertThat(chunk.usage().totalTokens()).isEqualTo(12);
-            assertThat(chunk.id()).isEqualTo("resp_x");
-            assertThat(chunk.model()).isEqualTo("gpt-4o-mini-2024-07-18");
+            assertThat(chunk.usage().promptTokens()).isEqualTo(tokenUsage.inputTokenCount());
+            assertThat(chunk.usage().completionTokens()).isEqualTo(tokenUsage.outputTokenCount());
+            assertThat(chunk.usage().totalTokens()).isEqualTo(tokenUsage.totalTokenCount());
+            assertThat(chunk.id()).isEqualTo(metadata.id());
+            assertThat(chunk.model()).isEqualTo(metadata.modelName());
         }
 
         @Test
         void finalChunkFallsBackToRequestModelWhenMetadataModelMissing() {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var originalRequest = requestBuilder(DEFAULT_USER_MESSAGE).build();
             var chatResponse = ChatResponse.builder()
                     .aiMessage(AiMessage.from("done"))
                     .metadata(ChatResponseMetadata.builder()
@@ -320,7 +306,7 @@ class LlmProviderOpenAiResponsesMapperTest {
 
             var chunk = LlmProviderOpenAiResponsesMapper.toFinalChunk(chatResponse, originalRequest);
 
-            assertThat(chunk.model()).isEqualTo("gpt-4o-mini");
+            assertThat(chunk.model()).isEqualTo(originalRequest.model());
         }
     }
 
@@ -342,9 +328,7 @@ class LlmProviderOpenAiResponsesMapperTest {
                                     "units", Map.of("type", "string")),
                             "required", List.of("city")))
                     .build();
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .tools(Tool.from(weatherFn))
                     .build();
 
@@ -352,8 +336,8 @@ class LlmProviderOpenAiResponsesMapperTest {
 
             assertThat(actual.toolSpecifications()).hasSize(1);
             var spec = actual.toolSpecifications().getFirst();
-            assertThat(spec.name()).isEqualTo("get_weather");
-            assertThat(spec.description()).isEqualTo("Look up current weather");
+            assertThat(spec.name()).isEqualTo(weatherFn.name());
+            assertThat(spec.description()).isEqualTo(weatherFn.description());
             assertThat(spec.parameters()).isNotNull();
             assertThat(spec.parameters().properties()).containsKeys("city", "units");
             assertThat(spec.parameters().required()).containsExactly("city");
@@ -366,9 +350,7 @@ class LlmProviderOpenAiResponsesMapperTest {
             // ToolChoice — useful for the named-function variant but wrong for the plain string
             // forms. Real wire-format JSON deserializes the string into a raw String inside the
             // Object field, which is what the mapper handles. Force-cast to Object to mirror that.
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .toolChoice((Object) openAiValue)
                     .build();
 
@@ -385,9 +367,7 @@ class LlmProviderOpenAiResponsesMapperTest {
             var namedFunctionChoice = Map.of(
                     "type", "function",
                     "function", Map.of("name", "get_weather"));
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .toolChoice(namedFunctionChoice)
                     .build();
 
@@ -398,40 +378,38 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void translatesToolResultMessageForResume() {
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("what's the weather?")
-                    .addToolMessage("call_42", "{\"temp_c\": 21}")
+            var toolCallId = "call_42";
+            var toolResult = "{\"temp_c\": 21}";
+            var request = requestBuilder("what's the weather?")
+                    .addToolMessage(toolCallId, toolResult)
                     .build();
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
             assertThat(actual.messages()).hasSize(2);
             var resume = (ToolExecutionResultMessage) actual.messages().get(1);
-            assertThat(resume.id()).isEqualTo("call_42");
-            assertThat(resume.text()).isEqualTo("{\"temp_c\": 21}");
+            assertThat(resume.id()).isEqualTo(toolCallId);
+            assertThat(resume.text()).isEqualTo(toolResult);
         }
 
         @Test
         void translatesAssistantMessageWithToolCallsForResume() {
             // Client typically replays the prior assistant turn (with tool_calls) when resuming the loop.
-            var assistantWithCall = AssistantMessage.builder()
-                    .toolCalls(List.of(ToolCall.builder()
-                            .id("call_42")
-                            .type(ToolType.FUNCTION)
-                            .function(FunctionCall.builder()
-                                    .name("get_weather")
-                                    .arguments("{\"city\":\"Lisbon\"}")
-                                    .build())
-                            .build()))
+            var toolCall = ToolCall.builder()
+                    .id("call_42")
+                    .type(ToolType.FUNCTION)
+                    .function(FunctionCall.builder()
+                            .name("get_weather")
+                            .arguments("{\"city\":\"Lisbon\"}")
+                            .build())
                     .build();
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
+            var assistantWithCall = AssistantMessage.builder().toolCalls(List.of(toolCall)).build();
+            var request = requestBuilder()
                     .messages(List.of(
-                            dev.langchain4j.model.openai.internal.chat.UserMessage.from("hi"),
+                            dev.langchain4j.model.openai.internal.chat.UserMessage.from(DEFAULT_USER_MESSAGE),
                             assistantWithCall,
                             dev.langchain4j.model.openai.internal.chat.ToolMessage.builder()
-                                    .toolCallId("call_42")
+                                    .toolCallId(toolCall.id())
                                     .content("ok")
                                     .build()))
                     .build();
@@ -441,25 +419,23 @@ class LlmProviderOpenAiResponsesMapperTest {
             var assistant = (AiMessage) actual.messages().get(1);
             assertThat(assistant.toolExecutionRequests()).hasSize(1);
             var req = assistant.toolExecutionRequests().getFirst();
-            assertThat(req.id()).isEqualTo("call_42");
-            assertThat(req.name()).isEqualTo("get_weather");
-            assertThat(req.arguments()).isEqualTo("{\"city\":\"Lisbon\"}");
+            assertThat(req.id()).isEqualTo(toolCall.id());
+            assertThat(req.name()).isEqualTo(toolCall.function().name());
+            assertThat(req.arguments()).isEqualTo(toolCall.function().arguments());
         }
 
         // ─── response side ──────────────────────────────────────────────────────────
 
         @Test
         void emitsAssistantToolCallsWhenAiMessageReturnsToolExecutionRequests() {
-            var originalRequest = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("what's the weather?")
+            var originalRequest = requestBuilder("what's the weather?").build();
+            var toolExecRequest = ToolExecutionRequest.builder()
+                    .id("call_42")
+                    .name("get_weather")
+                    .arguments("{\"city\":\"Lisbon\"}")
                     .build();
             var aiMessage = AiMessage.builder()
-                    .toolExecutionRequests(List.of(ToolExecutionRequest.builder()
-                            .id("call_42")
-                            .name("get_weather")
-                            .arguments("{\"city\":\"Lisbon\"}")
-                            .build()))
+                    .toolExecutionRequests(List.of(toolExecRequest))
                     .build();
             var chatResponse = ChatResponse.builder()
                     .aiMessage(aiMessage)
@@ -476,10 +452,10 @@ class LlmProviderOpenAiResponsesMapperTest {
             assertThat(choice.finishReason()).isEqualTo("tool_calls");
             assertThat(choice.message().toolCalls()).hasSize(1);
             var call = choice.message().toolCalls().getFirst();
-            assertThat(call.id()).isEqualTo("call_42");
+            assertThat(call.id()).isEqualTo(toolExecRequest.id());
             assertThat(call.type()).isEqualTo(ToolType.FUNCTION);
-            assertThat(call.function().name()).isEqualTo("get_weather");
-            assertThat(call.function().arguments()).isEqualTo("{\"city\":\"Lisbon\"}");
+            assertThat(call.function().name()).isEqualTo(toolExecRequest.name());
+            assertThat(call.function().arguments()).isEqualTo(toolExecRequest.arguments());
         }
     }
 
@@ -489,9 +465,7 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void mapsJsonObjectResponseFormatToLooseJsonMode() {
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
                             .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_OBJECT)
                             .build())
@@ -505,19 +479,18 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void mapsJsonSchemaResponseFormatWithNameAndRootObjectSchema() {
+            var schemaName = "classification";
             var schema = Map.of(
                     "type", "object",
                     "properties", Map.of(
                             "summary", Map.of("type", "string"),
                             "sentiment", Map.of("type", "string", "enum", List.of("positive", "negative"))),
                     "required", List.of("summary", "sentiment"));
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("classify")
+            var request = requestBuilder("classify")
                     .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
                             .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_SCHEMA)
                             .jsonSchema(dev.langchain4j.model.openai.internal.chat.JsonSchema.builder()
-                                    .name("classification")
+                                    .name(schemaName)
                                     .strict(true)
                                     .schema(schema)
                                     .build())
@@ -528,7 +501,7 @@ class LlmProviderOpenAiResponsesMapperTest {
 
             assertThat(actual.responseFormat().type()).isEqualTo(ResponseFormatType.JSON);
             var translatedJsonSchema = actual.responseFormat().jsonSchema();
-            assertThat(translatedJsonSchema.name()).isEqualTo("classification");
+            assertThat(translatedJsonSchema.name()).isEqualTo(schemaName);
             var root = (JsonObjectSchema) translatedJsonSchema.rootElement();
             assertThat(root.properties()).containsKeys("summary", "sentiment");
             assertThat(root.required()).containsExactlyInAnyOrder("summary", "sentiment");
@@ -536,10 +509,7 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void leavesResponseFormatUnsetWhenRequestOmitsIt() {
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var request = requestBuilder(DEFAULT_USER_MESSAGE).build();
 
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
@@ -550,9 +520,7 @@ class LlmProviderOpenAiResponsesMapperTest {
         void textResponseFormatLeavesChatRequestDefault() {
             // text is OpenAI's default — explicitly setting it should not force a non-default
             // ResponseFormat on the langchain4j ChatRequest.
-            var request = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
                     .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
                             .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.TEXT)
                             .build())
@@ -565,9 +533,7 @@ class LlmProviderOpenAiResponsesMapperTest {
 
         @Test
         void extractRequestedStrictJsonSchemaReturnsTrueOnlyForExplicitStrictTrue() {
-            var strictTrue = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var strictTrue = requestBuilder(DEFAULT_USER_MESSAGE)
                     .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
                             .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_SCHEMA)
                             .jsonSchema(dev.langchain4j.model.openai.internal.chat.JsonSchema.builder()
@@ -577,9 +543,7 @@ class LlmProviderOpenAiResponsesMapperTest {
                                     .build())
                             .build())
                     .build();
-            var strictFalse = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var strictFalse = requestBuilder(DEFAULT_USER_MESSAGE)
                     .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
                             .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_SCHEMA)
                             .jsonSchema(dev.langchain4j.model.openai.internal.chat.JsonSchema.builder()
@@ -589,17 +553,12 @@ class LlmProviderOpenAiResponsesMapperTest {
                                     .build())
                             .build())
                     .build();
-            var jsonObject = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
+            var jsonObject = requestBuilder(DEFAULT_USER_MESSAGE)
                     .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
                             .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_OBJECT)
                             .build())
                     .build();
-            var noResponseFormat = ChatCompletionRequest.builder()
-                    .model("gpt-4o-mini")
-                    .addUserMessage("hi")
-                    .build();
+            var noResponseFormat = requestBuilder(DEFAULT_USER_MESSAGE).build();
 
             assertThat(LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(strictTrue)).isTrue();
             assertThat(LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(strictFalse)).isFalse();
