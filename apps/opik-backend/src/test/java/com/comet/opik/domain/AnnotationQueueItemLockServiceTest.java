@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.LockResponse;
 import com.comet.opik.infrastructure.lock.LockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +15,7 @@ import org.redisson.client.codec.Codec;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -55,8 +57,7 @@ class AnnotationQueueItemLockServiceTest {
         service = new AnnotationQueueItemLockServiceImpl(redisClient, lockService);
         lenient().when(redisClient.<String, String>getMapCache(anyString(), any(Codec.class)))
                 .thenReturn(mapCache);
-        lenient().when(lockService.tryAcquireSlot(any(), anyInt(), any())).thenReturn(Mono.empty());
-        lenient().when(lockService.refreshSlot(any(), anyString(), any())).thenReturn(Mono.just(false));
+        lenient().when(mapCache.expire(any(Duration.class))).thenReturn(Mono.just(true));
     }
 
     private String field(UUID itemId, String userName) {
@@ -87,12 +88,19 @@ class AnnotationQueueItemLockServiceTest {
                     any(TimeUnit.class)))
                     .thenReturn(Mono.just(true));
 
+            var expected = LockResponse.builder()
+                    .acquired(true)
+                    .itemId(ITEM_ID)
+                    .lockedBy(USER_ALICE)
+                    .build();
+
             StepVerifier.create(service.tryLock(
                     WORKSPACE_ID, QUEUE_ID, ITEM_ID, USER_ALICE, 1, 0, 5))
                     .assertNext(result -> {
-                        assertThat(result.acquired()).isTrue();
-                        assertThat(result.itemId()).isEqualTo(ITEM_ID);
-                        assertThat(result.lockedBy()).isEqualTo(USER_ALICE);
+                        assertThat(result)
+                                .usingRecursiveComparison()
+                                .ignoringFields("expiresAt")
+                                .isEqualTo(expected);
                         assertThat(result.expiresAt()).isNotNull();
                     })
                     .verifyComplete();
@@ -137,12 +145,18 @@ class AnnotationQueueItemLockServiceTest {
             when(mapCache.get(anyString())).thenReturn(Mono.empty());
             when(lockService.tryAcquireSlot(any(), eq(1), any())).thenReturn(Mono.empty());
 
+            var expected = LockResponse.builder()
+                    .acquired(false)
+                    .itemId(ITEM_ID)
+                    .lockedBy(USER_ALICE)
+                    .expiresAt(null)
+                    .build();
+
             StepVerifier.create(service.tryLock(
                     WORKSPACE_ID, QUEUE_ID, ITEM_ID, USER_ALICE, 1, 0, 5))
-                    .assertNext(result -> {
-                        assertThat(result.acquired()).isFalse();
-                        assertThat(result.expiresAt()).isNull();
-                    })
+                    .assertNext(result -> assertThat(result)
+                            .usingRecursiveComparison()
+                            .isEqualTo(expected))
                     .verifyComplete();
         }
 

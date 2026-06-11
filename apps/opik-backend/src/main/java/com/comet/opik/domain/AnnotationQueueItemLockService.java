@@ -88,6 +88,7 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
                 .flatMap(existingPermitId -> lockService.refreshSlot(slotLock, existingPermitId, lease)
                         .flatMap(refreshed -> Boolean.TRUE.equals(refreshed)
                                 ? userMap.fastPut(field, existingPermitId, leaseMs, TimeUnit.MILLISECONDS)
+                                        .then(userMap.expire(lease))
                                         .thenReturn(true)
                                 : Mono.empty()));
 
@@ -99,7 +100,7 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
                                 .fastPutIfAbsent(field, newPermitId, leaseMs, TimeUnit.MILLISECONDS, 0,
                                         TimeUnit.MILLISECONDS)
                                 .flatMap(stored -> Boolean.TRUE.equals(stored)
-                                        ? Mono.just(true)
+                                        ? userMap.expire(lease).thenReturn(true)
                                         : lockService.releaseSlot(slotLock, newPermitId).thenReturn(true)))
                         .defaultIfEmpty(false)))
                 .map(acquired -> buildResponse(acquired, itemId, userName, expiryMs));

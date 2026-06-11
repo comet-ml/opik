@@ -214,12 +214,17 @@ class RedissonLockService implements LockService {
     public Mono<String> tryAcquireSlot(@NonNull Lock lock, int totalSlots, @NonNull Duration leaseTime) {
         var semaphore = slotSemaphore(lock);
         return semaphore.trySetPermits(totalSlots)
-                .then(Mono.defer(() -> semaphore.tryAcquire(0L, leaseTime.toMillis(), TimeUnit.MILLISECONDS)));
+                .then(Mono.defer(() -> semaphore.tryAcquire(0L, leaseTime.toMillis(), TimeUnit.MILLISECONDS)))
+                .flatMap(permitId -> semaphore.expire(leaseTime).thenReturn(permitId));
     }
 
     @Override
     public Mono<Boolean> refreshSlot(@NonNull Lock lock, @NonNull String permitId, @NonNull Duration leaseTime) {
-        return slotSemaphore(lock).updateLeaseTime(permitId, leaseTime.toMillis(), TimeUnit.MILLISECONDS);
+        var semaphore = slotSemaphore(lock);
+        return semaphore.updateLeaseTime(permitId, leaseTime.toMillis(), TimeUnit.MILLISECONDS)
+                .flatMap(result -> Boolean.TRUE.equals(result)
+                        ? semaphore.expire(leaseTime).thenReturn(true)
+                        : Mono.just(false));
     }
 
     @Override

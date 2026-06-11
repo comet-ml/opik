@@ -43,7 +43,7 @@ public interface AnnotationQueueService {
 
     Mono<Long> deleteBatch(Set<UUID> ids);
 
-    Mono<LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId);
+    Mono<LockResponse> tryLockItem(UUID queueId, UUID itemId);
 }
 
 @Singleton
@@ -98,15 +98,16 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         return IdGenerator
                 .validateVersionAsync(id, "AnnotationQueue")
                 .then(Mono.deferContextual(ctx -> {
-                    if (updateRequest.annotatorsPerItem() == null) {
-                        return annotationQueueDAO.update(id, updateRequest);
-                    }
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     return annotationQueueDAO.findQueueInfoById(id)
                             .switchIfEmpty(Mono.error(createNotFoundError(id)))
                             .flatMap(queueInfo -> {
+                                Mono<Void> updateMono = annotationQueueDAO.update(id, updateRequest);
+                                if (updateRequest.annotatorsPerItem() == null) {
+                                    return updateMono;
+                                }
                                 int delta = updateRequest.annotatorsPerItem() - queueInfo.annotatorsPerItem();
-                                return annotationQueueDAO.update(id, updateRequest)
+                                return updateMono
                                         .then(lockService.updateCapacity(workspaceId, id, delta));
                             });
                 }));
