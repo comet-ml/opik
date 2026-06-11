@@ -127,7 +127,7 @@ class AnnotationQueuesResourceTest {
         return factory.manufacturePojo(AnnotationQueue.class)
                 .toBuilder()
                 .annotatorsPerItem(1)
-                .lockTimeoutMinutes(5)
+                .lockTimeoutSeconds(300)
                 .build();
     }
 
@@ -135,7 +135,7 @@ class AnnotationQueuesResourceTest {
         return factory.manufacturePojo(AnnotationQueueUpdate.class)
                 .toBuilder()
                 .annotatorsPerItem(2)
-                .lockTimeoutMinutes(10)
+                .lockTimeoutSeconds(600)
                 .build();
     }
     private String baseURI;
@@ -1157,7 +1157,7 @@ class AnnotationQueuesResourceTest {
             var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
                     annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(5);
+            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(300);
         }
 
         @Test
@@ -1190,7 +1190,7 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
-        @DisplayName("should create annotation queue with explicit lockTimeoutMinutes and return it on get")
+        @DisplayName("should create annotation queue with explicit lockTimeoutSeconds and return it on get")
         void createAnnotationQueueWithLockTimeoutMinutes() {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
@@ -1199,7 +1199,7 @@ class AnnotationQueuesResourceTest {
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
-                    .lockTimeoutMinutes(15)
+                    .lockTimeoutSeconds(180)
                     .build();
 
             annotationQueuesResourceClient.createAnnotationQueueBatch(
@@ -1208,11 +1208,14 @@ class AnnotationQueuesResourceTest {
             var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
                     annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            assertThat(retrieved.lockTimeoutMinutes()).isEqualTo(15);
+            assertThat(retrieved)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(annotationQueue);
         }
 
         @Test
-        @DisplayName("should default lockTimeoutMinutes to 5 when omitted")
+        @DisplayName("should default lockTimeoutSeconds to 300 when omitted")
         void createAnnotationQueueWithoutLockTimeoutMinutes() {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
@@ -1221,7 +1224,7 @@ class AnnotationQueuesResourceTest {
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
-                    .lockTimeoutMinutes(null)
+                    .lockTimeoutSeconds(null)
                     .build();
 
             annotationQueuesResourceClient.createAnnotationQueueBatch(
@@ -1230,37 +1233,28 @@ class AnnotationQueuesResourceTest {
             var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
                     annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            assertThat(retrieved.lockTimeoutMinutes()).isEqualTo(5);
+            var expected = annotationQueue.toBuilder()
+                    .lockTimeoutSeconds(300)
+                    .build();
+
+            assertThat(retrieved)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(expected);
         }
 
-        private Stream<Arguments> invalidLockTimeoutValues() {
+        private Stream<Arguments> updateLockTimeoutScenarios() {
             return Stream.of(
-                    arguments(0, "zero"),
-                    arguments(-1, "negative"),
-                    arguments(61, "exceeds max"));
+                    arguments(300, AnnotationQueueUpdate.builder().lockTimeoutSeconds(1800).build(),
+                            "explicit change"),
+                    arguments(120, AnnotationQueueUpdate.builder().description("Updated description").build(),
+                            "preserve when not included"));
         }
 
         @ParameterizedTest
-        @MethodSource("invalidLockTimeoutValues")
-        @DisplayName("should reject annotation queue when lockTimeoutMinutes is invalid")
-        void createAnnotationQueueWithInvalidLockTimeoutShouldReject(int value, String label) {
-            var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
-
-            var annotationQueue = newAnnotationQueue()
-                    .toBuilder()
-                    .id(null)
-                    .projectId(projectId)
-                    .lockTimeoutMinutes(value)
-                    .build();
-
-            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
-                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
-        }
-
-        @Test
-        @DisplayName("should update lockTimeoutMinutes when explicitly changed")
-        void updateLockTimeoutMinutes() {
+        @MethodSource("updateLockTimeoutScenarios")
+        @DisplayName("should handle lockTimeoutSeconds on update:")
+        void updateLockTimeoutSeconds(int initialTimeout, AnnotationQueueUpdate updateRequest, String scenario) {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
@@ -1268,15 +1262,11 @@ class AnnotationQueuesResourceTest {
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
-                    .lockTimeoutMinutes(5)
+                    .lockTimeoutSeconds(initialTimeout)
                     .build();
 
             annotationQueuesResourceClient.createAnnotationQueueBatch(
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
-
-            var updateRequest = AnnotationQueueUpdate.builder()
-                    .lockTimeoutMinutes(30)
-                    .build();
 
             annotationQueuesResourceClient.updateAnnotationQueue(
                     annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
@@ -1284,36 +1274,12 @@ class AnnotationQueuesResourceTest {
             var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
                     annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            assertThat(updatedQueue.lockTimeoutMinutes()).isEqualTo(30);
-        }
+            var expected = applyUpdate(updateRequest, annotationQueue);
 
-        @Test
-        @DisplayName("should preserve lockTimeoutMinutes when not included in update")
-        void updateShouldPreserveLockTimeoutMinutesWhenNotIncluded() {
-            var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
-
-            var annotationQueue = newAnnotationQueue()
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .lockTimeoutMinutes(20)
-                    .build();
-
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
-
-            var updateRequest = AnnotationQueueUpdate.builder()
-                    .description("Updated description")
-                    .build();
-
-            annotationQueuesResourceClient.updateAnnotationQueue(
-                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
-
-            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
-                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
-
-            assertThat(updatedQueue.lockTimeoutMinutes()).isEqualTo(20);
+            assertThat(updatedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(expected);
         }
     }
 
@@ -2036,9 +2002,9 @@ class AnnotationQueuesResourceTest {
                 .annotatorsPerItem(updateRequest.annotatorsPerItem() != null
                         ? updateRequest.annotatorsPerItem()
                         : existingQueue.annotatorsPerItem())
-                .lockTimeoutMinutes(updateRequest.lockTimeoutMinutes() != null
-                        ? updateRequest.lockTimeoutMinutes()
-                        : existingQueue.lockTimeoutMinutes())
+                .lockTimeoutSeconds(updateRequest.lockTimeoutSeconds() != null
+                        ? updateRequest.lockTimeoutSeconds()
+                        : existingQueue.lockTimeoutSeconds())
                 .build();
     }
 

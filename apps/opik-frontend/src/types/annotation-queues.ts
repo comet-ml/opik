@@ -20,7 +20,7 @@ export interface AnnotationQueue {
   comments_enabled: boolean;
   feedback_definition_names: string[];
   annotators_per_item?: number; // optional for opik v1 compat
-  lock_timeout_minutes?: number; // optional for opik v1 compat
+  lock_timeout_seconds?: number; // optional for opik v1 compat
   scope: ANNOTATION_QUEUE_SCOPE;
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];

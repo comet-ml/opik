@@ -2,9 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
-import com.comet.opik.api.AnnotationQueueItemLock;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
+import com.comet.opik.api.LockResponse;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
@@ -43,7 +43,7 @@ public interface AnnotationQueueService {
 
     Mono<Long> deleteBatch(Set<UUID> ids);
 
-    Mono<AnnotationQueueItemLock.LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId);
+    Mono<LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId);
 }
 
 @Singleton
@@ -97,7 +97,19 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return IdGenerator
                 .validateVersionAsync(id, "AnnotationQueue")
-                .then(annotationQueueDAO.update(id, updateRequest));
+                .then(Mono.deferContextual(ctx -> {
+                    if (updateRequest.annotatorsPerItem() == null) {
+                        return annotationQueueDAO.update(id, updateRequest);
+                    }
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    return annotationQueueDAO.findQueueInfoById(id)
+                            .switchIfEmpty(Mono.error(createNotFoundError(id)))
+                            .flatMap(queueInfo -> {
+                                int delta = updateRequest.annotatorsPerItem() - queueInfo.annotatorsPerItem();
+                                return annotationQueueDAO.update(id, updateRequest)
+                                        .then(lockService.updateCapacity(workspaceId, id, delta));
+                            });
+                }));
     }
 
     @Override
@@ -164,7 +176,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     @Override
     @WithSpan
-    public Mono<AnnotationQueueItemLock.LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId) {
+    public Mono<LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -173,14 +185,14 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                     .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
                     .flatMap(queue -> annotationQueueDAO.getDistinctAnnotatorCount(
                             itemId, queue.projectId(),
-                            queue.feedbackDefinitionNames() != null
-                                    ? queue.feedbackDefinitionNames()
-                                    : List.of())
-                            .flatMap(scoredCount -> lockService.tryLock(
-                                    workspaceId, queueId, itemId, userName,
-                                    queue.annotatorsPerItem(),
-                                    scoredCount,
-                                    queue.lockTimeoutMinutes())));
+                            queue.scope().getValue(),
+                            queue.feedbackDefinitionNames())
+                            .map(scoredCount -> Map.entry(queue, scoredCount)))
+                    .flatMap(entry -> lockService.tryLock(
+                            workspaceId, queueId, itemId, userName,
+                            entry.getKey().annotatorsPerItem(),
+                            entry.getValue(),
+                            entry.getKey().lockTimeoutSeconds()));
         }).subscribeOn(Schedulers.boundedElastic());
     }
 

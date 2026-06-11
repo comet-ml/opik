@@ -29,7 +29,7 @@ import {
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import { UpdateFeedbackScoreData } from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types";
 import {
-  DEFAULT_LOCK_TIMEOUT_MINUTES,
+  DEFAULT_LOCK_TIMEOUT_SECONDS,
   getAnnotationQueueItemId,
   getFeedbackScoresByUser,
   getLastCommentByUser,
@@ -423,8 +423,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
 
     // Heartbeat at half the TTL to keep the lock alive while viewing
     const heartbeatMs =
-      ((annotationQueue.lock_timeout_minutes ?? DEFAULT_LOCK_TIMEOUT_MINUTES) *
-        60 *
+      ((annotationQueue.lock_timeout_seconds ?? DEFAULT_LOCK_TIMEOUT_SECONDS) *
         1000) /
       2;
     const heartbeatInterval = setInterval(() => {
@@ -439,7 +438,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
     currentItem,
     queueId,
     annotationQueue?.id,
-    annotationQueue?.lock_timeout_minutes,
+    annotationQueue?.lock_timeout_seconds,
     lockMutate,
     lockReset,
   ]);
