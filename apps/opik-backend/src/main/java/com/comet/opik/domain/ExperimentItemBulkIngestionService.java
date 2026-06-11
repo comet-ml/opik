@@ -33,6 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -160,6 +161,23 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         String errorMessage = "Experiment '%s' belongs to dataset '%s', but request specifies dataset '%s'"
                                 .formatted(experiment.id(), existingExperiment.datasetName(), experiment.datasetName());
                         return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
+                    }
+
+                    // Validate project consistency: a request-level project_name must match the existing
+                    // experiment's project, otherwise items would be split across projects.
+                    if (StringUtils.isNotBlank(experiment.projectName())) {
+                        return projectService.resolveProjectId(experiment.projectName())
+                                .flatMap(resolvedProjectId -> {
+                                    if (!Optional.ofNullable(existingExperiment.projectId())
+                                            .equals(resolvedProjectId)) {
+                                        String errorMessage = "Experiment '%s' belongs to project '%s', but request specifies project_name '%s'"
+                                                .formatted(experiment.id(), existingExperiment.projectName(),
+                                                        experiment.projectName());
+                                        return Mono.<Void>error(
+                                                new ClientErrorException(errorMessage, Response.Status.CONFLICT));
+                                    }
+                                    return Mono.<Void>empty();
+                                });
                     }
 
                     return Mono.<Void>empty();

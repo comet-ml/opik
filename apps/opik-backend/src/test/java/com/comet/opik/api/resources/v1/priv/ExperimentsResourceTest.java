@@ -6895,11 +6895,12 @@ class ExperimentsResourceTest {
                     actualExperimentItems.getFirst().experimentId(), API_KEY, TEST_WORKSPACE);
             assertThat(experiment.projectId()).isEqualTo(projectId);
 
-            // the dataset was created
+            // the dataset was created in the requested project
             Dataset dataset = datasetResourceClient.getDatasetByIdentifier(
                     DatasetIdentifier.builder().datasetName(datasetName).build(), API_KEY, TEST_WORKSPACE);
             assertThat(dataset).isNotNull();
             assertThat(dataset.name()).isEqualTo(datasetName);
+            assertThat(dataset.projectId()).isEqualTo(projectId);
 
             // and the auto-created trace landed in the same project
             Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
@@ -6961,6 +6962,60 @@ class ExperimentsResourceTest {
 
             Span actualSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY);
             assertThat(actualSpan.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("when experimentId points to an existing experiment and a different project_name is provided, then return conflict")
+        void experimentItemsBulk__whenExistingExperimentAndMismatchedProjectName__thenReturnConflict() {
+            // given
+            var dataset = buildDataset();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
+                    TEST_WORKSPACE, API_KEY);
+
+            var projectA = "project-" + RandomStringUtils.secure().nextAlphanumeric(20);
+            var projectB = "project-" + RandomStringUtils.secure().nextAlphanumeric(20);
+            projectResourceClient.createProject(projectB, API_KEY, TEST_WORKSPACE);
+
+            var experimentId = podamFactory.manufacturePojo(UUID.class);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            // create the experiment in project A via a first bulk upload
+            experimentResourceClient.bulkUploadExperimentItem(
+                    ExperimentItemBulkUpload.builder()
+                            .experimentId(experimentId)
+                            .experimentName(experimentName)
+                            .datasetName(dataset.name())
+                            .projectName(projectA)
+                            .items(List.of(ExperimentItemBulkRecord.builder()
+                                    .datasetItemId(datasetItem.id())
+                                    .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"42\"}"))
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            // when — upload again to the same experiment but with a different project
+            var mismatched = ExperimentItemBulkUpload.builder()
+                    .experimentId(experimentId)
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .projectName(projectB)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetItem.id())
+                            .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"43\"}"))
+                            .build()))
+                    .build();
+
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(mismatched, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
         }
 
         @Test
