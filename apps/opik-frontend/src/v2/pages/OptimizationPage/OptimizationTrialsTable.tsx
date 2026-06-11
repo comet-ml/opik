@@ -21,7 +21,7 @@ const StickyTableWrapperWithBorder: React.FC<DataTableWrapperProps> = ({
 }) => {
   return (
     <div
-      className="comet-sticky-table comet-compare-optimizations-table h-full overflow-auto rounded-md"
+      className="comet-sticky-table comet-compare-optimizations-table overflow-x-auto rounded-md"
       {...{
         [TABLE_WRAPPER_ATTRIBUTE]: "",
       }}
@@ -69,7 +69,7 @@ const OptimizationTrialsTable: React.FC<OptimizationTrialsTableProps> = ({
   );
 
   return (
-    <Card className="h-full flex-1 overflow-hidden">
+    <Card className="overflow-hidden">
       <DataTable
         columns={columns}
         data={rows}

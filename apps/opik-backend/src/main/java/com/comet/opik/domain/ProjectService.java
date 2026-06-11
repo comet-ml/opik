@@ -803,10 +803,12 @@ class ProjectServiceImpl implements ProjectService {
             return get(projectId).id();
         }
 
-        // If the project name is provided, find the project by name
+        // If the project name is provided, find the project by name, then verify visibility so that
+        // public (unauthenticated) requests cannot reach non-public projects by name.
         return findByNames(workspaceId, List.of(projectName))
                 .stream()
                 .findFirst()
+                .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
                 .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName))
                 .id();
     }

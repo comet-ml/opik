@@ -34,6 +34,10 @@ import static org.mockito.Mockito.when;
 @DisplayName("OAuth Register Resource Test")
 class OAuthRegisterResourceTest {
 
+    private static final String REDIRECT_URI = "http://example.com/cb";
+    private static final Set<String> REDIRECT_URIS = Set.of(REDIRECT_URI);
+    private static final long REMAINING_TTL_MILLIS = 60_000L;
+
     @Mock
     private OAuthClientService clientService;
     @Mock
@@ -58,33 +62,35 @@ class OAuthRegisterResourceTest {
         lenient().when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
                 .thenReturn(Mono.just(false));
         lenient().when(rateLimitService.getRemainingTTL(anyString(), any()))
-                .thenReturn(Mono.just(60_000L));
+                .thenReturn(Mono.just(REMAINING_TTL_MILLIS));
     }
 
     @Test
     @DisplayName("register: returns 201 with Location header pointing at admin endpoint per RFC 7591 §3.2.1")
     void register_returns201WithLocationHeader() {
         String clientId = "client-123";
+        String clientName = "Test Client";
         McpOAuthClient minted = McpOAuthClient.builder()
                 .id(clientId)
-                .name("Test Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+                .name(clientName)
+                .redirectUris(REDIRECT_URIS)
                 .build();
         when(clientService.register(any(ClientRegistrationRequest.class))).thenReturn(minted);
 
         Response response = resource.register(ClientRegistrationRequest.builder()
-                .clientName("Test Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+                .clientName(clientName)
+                .redirectUris(REDIRECT_URIS)
                 .build(), httpRequest);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
-        assertThat(response.getLocation().getPath()).isEqualTo("/admin/mcp-oauth-clients/" + clientId);
+        assertThat(response.getLocation().getPath())
+                .isEqualTo(OAuthConstants.CLIENT_CONFIG_PATH_PREFIX + clientId);
 
         ClientRegistrationResponse body = (ClientRegistrationResponse) response.getEntity();
         ClientRegistrationResponse expected = ClientRegistrationResponse.builder()
                 .clientId(clientId)
-                .clientName("Test Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+                .clientName(clientName)
+                .redirectUris(REDIRECT_URIS)
                 .tokenEndpointAuthMethod(OAuthConstants.AUTH_METHOD_NONE)
                 .grantTypes(OAuthConstants.DEFAULT_GRANT_TYPES)
                 .responseTypes(OAuthConstants.DEFAULT_RESPONSE_TYPES)
@@ -95,16 +101,17 @@ class OAuthRegisterResourceTest {
     @Test
     @DisplayName("register: response body always omits clientIdIssuedAt (not surfaced by the client model)")
     void register_clientIdIssuedAtAlwaysOmitted() {
+        String clientName = "No-Timestamp Client";
         McpOAuthClient minted = McpOAuthClient.builder()
                 .id("client-456")
-                .name("No-Timestamp Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+                .name(clientName)
+                .redirectUris(REDIRECT_URIS)
                 .build();
         when(clientService.register(any(ClientRegistrationRequest.class))).thenReturn(minted);
 
         Response response = resource.register(ClientRegistrationRequest.builder()
-                .clientName("No-Timestamp Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+                .clientName(clientName)
+                .redirectUris(REDIRECT_URIS)
                 .build(), httpRequest);
 
         ClientRegistrationResponse body = (ClientRegistrationResponse) response.getEntity();
@@ -119,29 +126,32 @@ class OAuthRegisterResourceTest {
 
         Response response = resource.register(ClientRegistrationRequest.builder()
                 .clientName("Spammy Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+                .redirectUris(REDIRECT_URIS)
                 .build(), httpRequest);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
-        assertThat(response.getHeaderString("Retry-After")).isEqualTo("60");
+        assertThat(response.getHeaderString("Retry-After"))
+                .isEqualTo(String.valueOf(Duration.ofMillis(REMAINING_TTL_MILLIS).toSeconds()));
         OAuthError error = (OAuthError) response.getEntity();
-        assertThat(error.error()).isEqualTo("too_many_requests");
-        assertThat(error.errorDescription()).isEqualTo("registration rate limit exceeded");
+        assertThat(error.error()).isEqualTo(OAuthConstants.ERROR_TOO_MANY_REQUESTS);
+        assertThat(error.errorDescription()).isEqualTo(OAuthConstants.ERROR_DESC_REGISTRATION_RATE_LIMIT);
         verify(clientService, never()).register(any());
     }
 
     @Test
     @DisplayName("register: rate limit bucket keys on last (nginx-appended) X-Forwarded-For hop, not the spoofable first")
     void register_usesLastForwardedForHopAsRateLimitKey() {
-        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn("1.2.3.4, 203.0.113.7");
+        String lastHopIp = "203.0.113.7";
+        when(httpRequest.getHeader(OAuthConstants.X_FORWARDED_FOR_HEADER)).thenReturn("1.2.3.4, " + lastHopIp);
         when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
                 .thenReturn(Mono.just(true));
 
         resource.register(ClientRegistrationRequest.builder()
                 .clientName("Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+                .redirectUris(REDIRECT_URIS)
                 .build(), httpRequest);
 
-        verify(rateLimitService).isLimitExceeded(anyLong(), eq("mcp_oauth_register:203.0.113.7"), any());
+        verify(rateLimitService).isLimitExceeded(anyLong(),
+                eq(OAuthConstants.RATE_LIMIT_BUCKET.formatted(lastHopIp)), any());
     }
 }
