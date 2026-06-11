@@ -25,6 +25,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
@@ -39,6 +40,7 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.X_FORWARDED_FOR_HEAD
 
 @Path("/oauth/register")
 @Timed
+@Slf4j
 @Tag(name = "MCP OAuth", description = "MCP OAuth 2.1 Authorization Server resources")
 public class OAuthRegisterResource {
 
@@ -71,6 +73,8 @@ public class OAuthRegisterResource {
     public Response register(@NonNull @Valid ClientRegistrationRequest request,
             @Context HttpServletRequest httpRequest) {
 
+        log.info("MCP OAuth client registration request [client_name={}]", request.clientName());
+
         // Throttle directly via RateLimitService rather than @RateLimited: this protection is
         // intentionally independent of the global rateLimit.enabled flag, since DCR is unauthenticated
         // and the per-IP cap is its only abuse control.
@@ -81,6 +85,7 @@ public class OAuthRegisterResource {
         if (exceeded) {
             long retryAfterSeconds = Math.max(
                     Duration.ofMillis(rateLimitService.getRemainingTTL(bucket, limitConfig).block()).toSeconds(), 1);
+            log.warn("MCP OAuth client registration rate limit exceeded [retry_after_seconds={}]", retryAfterSeconds);
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
                     .type(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.RETRY_AFTER, retryAfterSeconds)
@@ -93,6 +98,7 @@ public class OAuthRegisterResource {
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
+        log.info("MCP OAuth client registered [client_id={}]", client.id());
         return Response.created(URI.create(CLIENT_CONFIG_PATH_PREFIX + client.id()))
                 .entity(body)
                 .build();
@@ -104,7 +110,7 @@ public class OAuthRegisterResource {
      * is not client-spoofable; the left-most hops are attacker-controlled and must not key the bucket.
      * Falls back to the direct remote address when the header is absent.
      */
-    private static String clientIp(HttpServletRequest request) {
+    private String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader(X_FORWARDED_FOR_HEADER);
         if (StringUtils.isNotBlank(forwarded)) {
             String[] hops = forwarded.split(",");

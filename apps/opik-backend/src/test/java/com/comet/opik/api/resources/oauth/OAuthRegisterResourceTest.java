@@ -25,7 +25,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,17 +56,14 @@ class OAuthRegisterResourceTest {
         when(opikConfig.getMcpOAuth()).thenReturn(mcpOAuthConfig);
 
         resource = new OAuthRegisterResource(clientService, rateLimitService, opikConfig);
-
-        lenient().when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.1");
-        lenient().when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
-                .thenReturn(Mono.just(false));
-        lenient().when(rateLimitService.getRemainingTTL(anyString(), any()))
-                .thenReturn(Mono.just(REMAINING_TTL_MILLIS));
     }
 
     @Test
     @DisplayName("register: returns 201 with Location header pointing at admin endpoint per RFC 7591 §3.2.1")
     void register_returns201WithLocationHeader() {
+        when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.1");
+        when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any())).thenReturn(Mono.just(false));
+
         String clientId = "client-123";
         String clientName = "Test Client";
         McpOAuthClient minted = McpOAuthClient.builder()
@@ -101,6 +97,9 @@ class OAuthRegisterResourceTest {
     @Test
     @DisplayName("register: response body always omits clientIdIssuedAt (not surfaced by the client model)")
     void register_clientIdIssuedAtAlwaysOmitted() {
+        when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.1");
+        when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any())).thenReturn(Mono.just(false));
+
         String clientName = "No-Timestamp Client";
         McpOAuthClient minted = McpOAuthClient.builder()
                 .id("client-456")
@@ -121,8 +120,11 @@ class OAuthRegisterResourceTest {
     @Test
     @DisplayName("register: per-IP rate limit exceeded returns 429 without registering")
     void register_rateLimitExceeded_returns429() {
+        when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.1");
         when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
                 .thenReturn(Mono.just(true));
+        when(rateLimitService.getRemainingTTL(anyString(), any()))
+                .thenReturn(Mono.just(REMAINING_TTL_MILLIS));
 
         Response response = resource.register(ClientRegistrationRequest.builder()
                 .clientName("Spammy Client")
@@ -145,6 +147,8 @@ class OAuthRegisterResourceTest {
         when(httpRequest.getHeader(OAuthConstants.X_FORWARDED_FOR_HEADER)).thenReturn("1.2.3.4, " + lastHopIp);
         when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
                 .thenReturn(Mono.just(true));
+        when(rateLimitService.getRemainingTTL(anyString(), any()))
+                .thenReturn(Mono.just(REMAINING_TTL_MILLIS));
 
         resource.register(ClientRegistrationRequest.builder()
                 .clientName("Client")
