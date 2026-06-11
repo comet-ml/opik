@@ -5,6 +5,18 @@ import { useAiSpend } from "@/contexts/AiSpendContext";
 export interface AiSpendBreakdownItemApi {
   label: string;
   total_tokens: number;
+  count?: number;
+  // When present, the bar renders as stacked segments: always-on definition
+  // cost (muted) + on-demand usage cost (solid). Sum = total_tokens.
+  definition_tokens?: number;
+  usage_tokens?: number;
+}
+
+export interface AiSpendBreakdownSectionApi {
+  title: string;
+  items: AiSpendBreakdownItemApi[];
+  // Noun for this section's item counts (e.g. "calls").
+  item_unit?: string;
 }
 
 export interface AiSpendBreakdownResponse {
@@ -13,7 +25,18 @@ export interface AiSpendBreakdownResponse {
   subtitle?: string;
   total_tokens: number;
   item_count: number;
+  // Noun for item counts (e.g. "prompts") - UI falls back to "items".
+  item_unit?: string;
   items: AiSpendBreakdownItemApi[];
+  // Title of the main items card - defaults to "Cost breakdown" in the UI
+  // (e.g. "Top MCP servers").
+  items_title?: string;
+  // Noun for the main items' per-row counts (e.g. "calls") when it differs
+  // from item_unit (the header noun, e.g. "servers").
+  items_unit?: string;
+  // Additional independent slices of the lane, rendered as separate cards
+  // below the main breakdown.
+  sections?: AiSpendBreakdownSectionApi[];
 }
 
 type UseAiSpendLaneBreakdownParams = {

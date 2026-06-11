@@ -1,20 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, ChevronsRight, PieChart, TrendingDown } from "lucide-react";
-import useAiSpendLaneBreakdown from "@/api/ai-spend/useAiSpendLaneBreakdown";
+import { ChevronsRight, TrendingDown } from "lucide-react";
+import useAiSpendLaneBreakdown, {
+  AiSpendBreakdownItemApi,
+} from "@/api/ai-spend/useAiSpendLaneBreakdown";
 import useAiSpendRecommendations from "@/api/ai-spend/useAiSpendRecommendations";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ProgressBar from "@/shared/ProgressBar/ProgressBar";
-import TokenCount from "@/shared/TokenCount/TokenCount";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Skeleton } from "@/ui/skeleton";
 import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
-import { cn } from "@/lib/utils";
+import { cn, formatNumberInK } from "@/lib/utils";
 import { formatCost } from "@/lib/money";
 import { getSpendInterval, SPEND_WINDOWS, SpendWindow } from "@/lib/aiSpend";
 import { getLaneMeta } from "@/v2/pages-shared/AiUsageBreakdown/laneRegistry";
 import { laneWeight, lanePct } from "@/v2/pages-shared/AiUsageBreakdown/utils";
+import useSavingsPricer from "@/api/ai-spend/useSavingsPricer";
 import RecommendationCard from "@/v2/pages-shared/AiUsageRecommendations/RecommendationCard";
 
 interface AiUsageLaneDetailsPanelProps {
@@ -68,8 +70,14 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
   const recommendations = (recommendationsQuery.data?.items ?? []).filter(
     (item) => item.related_lane_key === laneKey,
   );
+  const priceSavings = useSavingsPricer({
+    projectName,
+    intervalStart,
+    intervalEnd,
+    userUuid,
+  });
   const recommendationsSavings = recommendations.reduce(
-    (acc, item) => acc + (item.est_saving ?? 0),
+    (acc, item) => acc + (priceSavings(item.est_saving_tokens) ?? 0),
     0,
   );
 
@@ -77,11 +85,83 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
   const LaneIcon = meta.icon;
   const title = breakdown?.title ?? laneLabel ?? meta.labelFallback;
 
-  const totalWeight = Math.max(...(breakdown?.items ?? []).map(laneWeight), 0);
-  const weightSum = (breakdown?.items ?? []).reduce(
-    (acc, item) => acc + laneWeight(item),
-    0,
-  );
+  const renderItems = (items: AiSpendBreakdownItemApi[], unit?: string) => {
+    const totalWeight = Math.max(...items.map(laneWeight), 0);
+    const weightSum = items.reduce((acc, item) => acc + laneWeight(item), 0);
+    const hasCounts = items.some((item) => item.count != null);
+    return (
+      <div className="grid grid-cols-[minmax(0,160px)_minmax(80px,1fr)_auto] items-center gap-x-4 gap-y-3">
+        {items.map((item) => {
+          const weight = laneWeight(item);
+          const pct = lanePct(weight, weightSum);
+          const barPct = lanePct(weight, totalWeight);
+          return (
+            <React.Fragment key={item.label}>
+              <TooltipWrapper content={item.label}>
+                <span className="comet-body-xs min-w-0 truncate text-foreground">
+                  {item.label}
+                </span>
+              </TooltipWrapper>
+              {item.definition_tokens != null && item.usage_tokens != null ? (
+                <TooltipWrapper
+                  content={`Definition ${item.definition_tokens.toLocaleString()} tok · Usage ${item.usage_tokens.toLocaleString()} tok`}
+                >
+                  <div className="relative h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-border">
+                    <div
+                      className="absolute inset-y-0 flex"
+                      style={{ width: `${barPct}%` }}
+                    >
+                      <div
+                        style={{
+                          width: `${lanePct(item.definition_tokens, weight)}%`,
+                          backgroundColor: meta.color,
+                          opacity: 0.35,
+                        }}
+                      />
+                      <div
+                        className="rounded-r-full"
+                        style={{
+                          width: `${lanePct(item.usage_tokens, weight)}%`,
+                          backgroundColor: meta.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </TooltipWrapper>
+              ) : (
+                <ProgressBar
+                  value={barPct}
+                  color={meta.color}
+                  className="w-full"
+                />
+              )}
+              <div className="flex items-center justify-end gap-3">
+                <TooltipWrapper
+                  content={`${item.total_tokens.toLocaleString()} tokens`}
+                >
+                  <span className="comet-body-xs-accented w-12 shrink-0 text-right text-foreground">
+                    {formatNumberInK(item.total_tokens)}
+                  </span>
+                </TooltipWrapper>
+                <span className="comet-body-xs w-11 shrink-0 text-right text-light-slate">
+                  {pct.toFixed(1)}%
+                </span>
+                {hasCounts && (
+                  <span className="comet-body-xs w-20 shrink-0 text-right text-light-slate">
+                    {item.count != null
+                      ? `${item.count} ${
+                          unit ?? breakdown?.item_unit ?? "items"
+                        }`
+                      : ""}
+                  </span>
+                )}
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
 
   const header = (
     <div className="flex w-full items-center justify-between gap-2">
@@ -155,39 +235,7 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
         </div>
       );
     }
-    return (
-      <div className="grid grid-cols-[minmax(0,240px)_minmax(64px,1fr)_auto] items-center gap-x-4 gap-y-3">
-        {breakdown.items.map((item) => {
-          const weight = laneWeight(item);
-          const pct = lanePct(weight, weightSum);
-          const barPct = lanePct(weight, totalWeight);
-          return (
-            <React.Fragment key={item.label}>
-              <TooltipWrapper content={item.label}>
-                <span className="comet-body-xs min-w-0 truncate text-foreground">
-                  {item.label}
-                </span>
-              </TooltipWrapper>
-              <ProgressBar
-                value={barPct}
-                color={meta.color}
-                className="w-full max-w-[240px]"
-              />
-              <div className="flex items-center justify-end gap-3">
-                <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
-                  <PieChart className="size-3" />
-                  {pct.toFixed(1)}%
-                </span>
-                <TokenCount
-                  tokens={item.total_tokens}
-                  className="comet-body-xs text-muted-slate"
-                />
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </div>
-    );
+    return renderItems(breakdown.items, breakdown.items_unit);
   };
 
   return (
@@ -201,32 +249,46 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
       minWidth={480}
     >
       <div className="flex size-full flex-col gap-4 overflow-y-auto p-4">
-        <div className="flex flex-col gap-2">
-          {breakdown?.subtitle && (
-            <p className="comet-body-s text-muted-slate">
-              {breakdown.subtitle}
-            </p>
-          )}
-          <div className="flex items-center gap-2">
-            <TokenCount
-              tokens={breakdown?.total_tokens ?? 0}
-              showLabel
-              className="comet-body-s text-muted-slate"
-              iconClassName="size-3.5"
-            />
-            <span className="comet-body-s flex items-center gap-1 text-muted-slate">
-              <Box className="size-3.5" />
-              {breakdown?.item_count ?? 0} items
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-1.5">
+            <TooltipWrapper
+              content={`${(
+                breakdown?.total_tokens ?? 0
+              ).toLocaleString()} tokens`}
+            >
+              <span className="comet-title-m text-foreground">
+                {formatNumberInK(breakdown?.total_tokens ?? 0)}
+              </span>
+            </TooltipWrapper>
+            <span className="comet-body-s text-muted-slate">tokens</span>
+            <span className="comet-body-s text-light-slate">·</span>
+            <span className="comet-body-s text-muted-slate">
+              {breakdown?.item_count ?? 0} {breakdown?.item_unit ?? "items"}
             </span>
           </div>
+          {meta.description && (
+            <p className="comet-body-xs text-muted-slate">{meta.description}</p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5 rounded-md border bg-background px-3 py-2">
           <span className="comet-body-xs-accented text-muted-slate">
-            Cost breakdown
+            {breakdown?.items_title ?? "Cost breakdown"}
           </span>
           {renderBreakdown()}
         </div>
+
+        {(breakdown?.sections ?? []).map((section) => (
+          <div
+            key={section.title}
+            className="flex flex-col gap-1.5 rounded-md border bg-background px-3 py-2"
+          >
+            <span className="comet-body-xs-accented text-muted-slate">
+              {section.title}
+            </span>
+            {renderItems(section.items, section.item_unit)}
+          </div>
+        ))}
 
         {showRecommendations && recommendations.length > 0 && (
           <div className="flex flex-col gap-3 rounded-md border bg-background px-3 py-2">
@@ -248,6 +310,7 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
                 <RecommendationCard
                   key={rec.id}
                   recommendation={rec}
+                  estSavingUsd={priceSavings(rec.est_saving_tokens)}
                   variant="compact"
                 />
               ))}

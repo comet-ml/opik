@@ -7,8 +7,8 @@ import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
 import jakarta.inject.Singleton;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,29 +22,37 @@ class AiSpendMapper {
         return HIGH_SPEND_FACTOR;
     }
 
-    List<WorkspaceMetricsSummaryResponse.Result> summaryResults(CostRow cost, CountsRow counts) {
+    List<WorkspaceMetricsSummaryResponse.Result> summaryResults(TiersRow tiers, CountsRow counts) {
         return List.of(
-                result("total_spend", toDouble(cost.current()), toDouble(cost.previous())),
+                // Raw tier tokens — the FE prices them and derives
+                // total_spend / avg_cost_per_user client-side.
+                result("spend_input_tokens", toDouble(tiers.inputCurrent()), toDouble(tiers.inputPrevious())),
+                result("spend_cache_read_tokens", toDouble(tiers.cacheReadCurrent()),
+                        toDouble(tiers.cacheReadPrevious())),
+                result("spend_cache_creation_tokens", toDouble(tiers.cacheCreationCurrent()),
+                        toDouble(tiers.cacheCreationPrevious())),
+                result("spend_output_tokens", toDouble(tiers.outputCurrent()), toDouble(tiers.outputPrevious())),
                 result("total_messages", toDouble(counts.messagesCurrent()), toDouble(counts.messagesPrevious())),
-                result("avg_cost_per_user", average(cost.current(), counts.activeUsersCurrent()),
-                        average(cost.previous(), counts.activeUsersPrevious())),
                 result("active_users", toDouble(counts.activeUsersCurrent()), null),
                 result("total_users", toDouble(counts.totalUsers()), null));
     }
 
-    SpendCompositionResponse composition(Map<SpendLane, Long> inputTokens, Map<String, Long> outputTokens,
-            BigDecimal totalCost) {
+    SpendCompositionResponse composition(InputLanesRow inputRow, Map<String, Long> outputTokens) {
         List<SpendCompositionResponse.Lane> inputLanes = new ArrayList<>();
         long inputTotal = 0L;
         for (SpendLane lane : SpendLane.values()) {
-            long laneTokens = inputTokens.getOrDefault(lane, 0L);
+            LaneTiers tiers = inputRow.lanes().getOrDefault(lane, LaneTiers.empty());
             inputLanes.add(SpendCompositionResponse.Lane.builder()
                     .key(lane.getKey())
                     .label(lane.getLabel())
-                    .totalTokens(laneTokens)
+                    .totalTokens(tiers.total())
+                    .inputTokens(tiers.input())
+                    .cacheReadTokens(tiers.cacheRead())
+                    .cacheCreationTokens(tiers.cacheCreation())
+                    .outputTokens(tiers.output())
                     .hasBreakdown(lane.hasBreakdown())
                     .build());
-            inputTotal += laneTokens;
+            inputTotal += tiers.total();
         }
 
         List<SpendCompositionResponse.Lane> outputLanes = new ArrayList<>();
@@ -55,6 +63,7 @@ class AiSpendMapper {
                     .key(lane.getKey())
                     .label(lane.getLabel())
                     .totalTokens(laneTokens)
+                    .outputTokens(laneTokens)
                     .hasBreakdown(lane.hasBreakdown())
                     .build());
             outputTotal += laneTokens;
@@ -63,10 +72,10 @@ class AiSpendMapper {
         return SpendCompositionResponse.builder()
                 .input(SpendCompositionResponse.Side.builder().totalTokens(inputTotal).lanes(inputLanes).build())
                 .output(SpendCompositionResponse.Side.builder().totalTokens(outputTotal).lanes(outputLanes).build())
+                .models(inputRow.models())
                 .harness(List.of(SpendCompositionResponse.HarnessEntry.builder()
                         .key("claude_code")
                         .label("Claude Code")
-                        .totalEstimatedCost(totalCost)
                         .build()))
                 .build();
     }
@@ -76,6 +85,9 @@ class AiSpendMapper {
                 .map(row -> SpendBreakdownResponse.Item.builder()
                         .label(row.label())
                         .totalTokens(row.totalTokens())
+                        .definitionTokens(row.definitionTokens())
+                        .usageTokens(row.usageTokens())
+                        .count(row.events())
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));
 
@@ -100,33 +112,24 @@ class AiSpendMapper {
                 .build();
     }
 
-    OutputCost outputCost(List<OutputLaneCost> rows) {
-        Map<String, Long> tokens = rows.stream()
+    Map<String, Long> outputTokens(List<OutputLaneRow> rows) {
+        return rows.stream()
                 .filter(row -> row.lane() != null && !row.lane().isEmpty())
-                .collect(Collectors.toMap(OutputLaneCost::lane, OutputLaneCost::tokens));
-        BigDecimal cost = rows.stream().map(OutputLaneCost::cost).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new OutputCost(tokens, cost);
+                .collect(Collectors.toMap(OutputLaneRow::lane, OutputLaneRow::tokens));
     }
 
     private WorkspaceMetricsSummaryResponse.Result result(String name, Double current, Double previous) {
         return WorkspaceMetricsSummaryResponse.Result.builder().name(name).current(current).previous(previous).build();
     }
 
-    private Double average(BigDecimal total, Long count) {
-        return total == null || count == null || count == 0L ? null : total.doubleValue() / count;
-    }
-
-    private Double toDouble(BigDecimal value) {
-        return value == null ? null : value.doubleValue();
-    }
-
     private Double toDouble(Long value) {
         return value == null ? null : value.doubleValue();
     }
 
-    record CostRow(BigDecimal current, BigDecimal previous) {
-        static CostRow empty() {
-            return new CostRow(null, null);
+    record TiersRow(long inputCurrent, long cacheReadCurrent, long cacheCreationCurrent, long outputCurrent,
+            long inputPrevious, long cacheReadPrevious, long cacheCreationPrevious, long outputPrevious) {
+        static TiersRow empty() {
+            return new TiersRow(0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
         }
     }
 
@@ -137,12 +140,22 @@ class AiSpendMapper {
         }
     }
 
-    record BreakdownRow(String label, long totalTokens, long grandTotal, long groupCount) {
+    record LaneTiers(long total, long input, long cacheRead, long cacheCreation, long output) {
+        static LaneTiers empty() {
+            return new LaneTiers(0L, 0L, 0L, 0L, 0L);
+        }
     }
 
-    record OutputLaneCost(String lane, long tokens, BigDecimal cost) {
+    record InputLanesRow(Map<SpendLane, LaneTiers> lanes, List<String> models) {
+        static InputLanesRow empty() {
+            return new InputLanesRow(new EnumMap<>(SpendLane.class), List.of());
+        }
     }
 
-    record OutputCost(Map<String, Long> tokens, BigDecimal cost) {
+    record BreakdownRow(String label, long totalTokens, long definitionTokens, long usageTokens, long events,
+            long grandTotal, long groupCount) {
+    }
+
+    record OutputLaneRow(String lane, long tokens) {
     }
 }

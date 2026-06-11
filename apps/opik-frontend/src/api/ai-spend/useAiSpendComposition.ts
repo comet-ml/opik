@@ -6,6 +6,11 @@ export interface AiSpendLaneApi {
   key: string;
   label: string;
   total_tokens: number;
+  // Raw cache-tier sums from cc.billing; priced FE-side (claudePricing).
+  input_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  output_tokens?: number;
   has_breakdown: boolean;
 }
 
@@ -17,13 +22,14 @@ export interface AiSpendSideApi {
 export interface AiSpendHarnessApi {
   key: string;
   label: string;
-  total_estimated_cost: number | null;
 }
 
 export interface AiSpendCompositionResponse {
   input: AiSpendSideApi;
   harness: AiSpendHarnessApi[];
   output: AiSpendSideApi;
+  // Distinct cc.billing.model values in the window, for FE pricing.
+  models?: string[];
 }
 
 type UseAiSpendCompositionParams = {

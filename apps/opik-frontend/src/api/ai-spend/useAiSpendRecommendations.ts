@@ -7,13 +7,13 @@ export interface SpendRecommendation {
   title: string;
   body: string;
   impact: string;
-  est_saving: number | null;
+  est_saving_tokens: number | null;
   docs_url?: string;
   related_lane_key?: string;
 }
 
 export interface SpendRecommendationsResponse {
-  total_savings: number | null;
+  total_savings_tokens: number | null;
   items: SpendRecommendation[];
 }
 

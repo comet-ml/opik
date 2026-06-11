@@ -25,6 +25,13 @@ public record SpendBreakdownResponse(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Item(
             String label,
-            Long totalTokens) {
+            Long totalTokens,
+            // Stacked-bar segments: always-on definition cost vs
+            // conversation-driven usage cost. Sum == totalTokens.
+            Long definitionTokens,
+            Long usageTokens,
+            // New events this turn summed across traces = true counts
+            // (loads, calls, prompts, files).
+            Long count) {
     }
 }

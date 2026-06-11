@@ -48,7 +48,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -63,7 +62,6 @@ import java.util.stream.IntStream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.podam.PodamFactoryUtils.newPodamFactory;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -71,7 +69,13 @@ import static org.assertj.core.api.Assertions.within;
 class AiSpendResourceTest {
 
     private static final String USER = UUID.randomUUID().toString();
-    private static final BigDecimal SPAN_COST = BigDecimal.valueOf(2.0);
+
+    // Per-trace cc.billing fixture numbers (see buildCcMetadata):
+    // input-side lanes sum to 2800, output lane to 280; tier totals are
+    // input=50, cache_read=2710, cache_creation=40, output=280.
+    private static final long TRACE_INPUT_SIDE = 2800L;
+    private static final long TRACE_OUTPUT_SIDE = 280L;
+    private static final long TRACE_TOTAL_TOKENS = 50L + 2710L + 40L + 280L;
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -125,7 +129,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("summary: aggregates spend, messages and users for the current vs previous window")
+    @DisplayName("summary: aggregates billed tier tokens, messages and users for the current vs previous window")
     void summary_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -147,9 +151,6 @@ class AiSpendResourceTest {
         createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA, userB));
         createCcTraces(projectName, apiKey, workspaceName, previousTime, List.of(userC));
 
-        createCostSpans(projectName, apiKey, workspaceName, currentTime, 4);
-        createCostSpans(projectName, apiKey, workspaceName, previousTime, 2);
-
         var summary = aiSpendResourceClient.getSummary(SpendMetricRequest.builder()
                 .projectName(projectName)
                 .intervalStart(intervalStart)
@@ -159,17 +160,21 @@ class AiSpendResourceTest {
         Map<String, WorkspaceMetricsSummaryResponse.Result> byName = summary.results().stream()
                 .collect(Collectors.toMap(WorkspaceMetricsSummaryResponse.Result::name, Function.identity()));
 
-        assertThat(byName.get("total_spend").current()).isCloseTo(8.0, within(0.0001));
-        assertThat(byName.get("total_spend").previous()).isCloseTo(4.0, within(0.0001));
+        assertThat(byName.get("spend_input_tokens").current()).isEqualTo(150.0);
+        assertThat(byName.get("spend_input_tokens").previous()).isEqualTo(50.0);
+        assertThat(byName.get("spend_cache_read_tokens").current()).isEqualTo(8130.0);
+        assertThat(byName.get("spend_cache_read_tokens").previous()).isEqualTo(2710.0);
+        assertThat(byName.get("spend_cache_creation_tokens").current()).isEqualTo(120.0);
+        assertThat(byName.get("spend_output_tokens").current()).isEqualTo(840.0);
+        assertThat(byName.get("spend_output_tokens").previous()).isEqualTo(280.0);
         assertThat(byName.get("total_messages").current()).isEqualTo(3.0);
         assertThat(byName.get("total_messages").previous()).isEqualTo(1.0);
         assertThat(byName.get("active_users").current()).isEqualTo(2.0);
         assertThat(byName.get("total_users").current()).isEqualTo(3.0);
-        assertThat(byName.get("avg_cost_per_user").current()).isCloseTo(4.0, within(0.0001));
     }
 
     @Test
-    @DisplayName("composition: sums cc.* token lanes from traces and total cost from spans")
+    @DisplayName("composition: sums cc.billing lane tier tokens from traces and output lanes from output items")
     void composition_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -185,8 +190,6 @@ class AiSpendResourceTest {
 
         var user = UUID.randomUUID().toString();
         createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
-        createCostSpans(projectName, apiKey, workspaceName, currentTime, 4);
-        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
 
         var composition = aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -194,34 +197,43 @@ class AiSpendResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), apiKey, workspaceName);
 
-        Map<String, Long> inputTokens = composition.input().lanes().stream()
-                .collect(Collectors.toMap(SpendCompositionResponse.Lane::key,
-                        SpendCompositionResponse.Lane::totalTokens));
+        Map<String, SpendCompositionResponse.Lane> inputLanes = composition.input().lanes().stream()
+                .collect(Collectors.toMap(SpendCompositionResponse.Lane::key, Function.identity()));
         Map<String, Long> outputTokens = composition.output().lanes().stream()
                 .collect(Collectors.toMap(SpendCompositionResponse.Lane::key,
                         SpendCompositionResponse.Lane::totalTokens));
 
-        assertThat(inputTokens.get("prior_assistant")).isEqualTo(3000L);
-        assertThat(inputTokens.get("tool_results")).isEqualTo(600L);
-        assertThat(inputTokens.get("user_prompts")).isEqualTo(150L);
-        assertThat(inputTokens.get("skills_available")).isEqualTo(300L);
-        assertThat(inputTokens.get("skills_loaded")).isEqualTo(2400L);
-        assertThat(inputTokens.get("tools")).isEqualTo(1140L);
-        assertThat(inputTokens.get("memory")).isEqualTo(180L);
-        assertThat(inputTokens.get("file_attachments")).isEqualTo(120L);
+        assertThat(inputLanes.get("user_prompts").totalTokens()).isEqualTo(150L);
+        assertThat(inputLanes.get("file_attachments").totalTokens()).isEqualTo(120L);
+        assertThat(inputLanes.get("built_in_tools").totalTokens()).isEqualTo(600L);
+        assertThat(inputLanes.get("prior_assistant").totalTokens()).isEqualTo(3000L);
+        assertThat(inputLanes.get("skills").totalTokens()).isEqualTo(2700L);
+        assertThat(inputLanes.get("custom_agents").totalTokens()).isEqualTo(90L);
+        assertThat(inputLanes.get("mcp_servers").totalTokens()).isEqualTo(1140L);
+        assertThat(inputLanes.get("memory").totalTokens()).isEqualTo(180L);
+        assertThat(inputLanes.get("static_overhead").totalTokens()).isEqualTo(300L);
+        assertThat(inputLanes.get("unattributed").totalTokens()).isEqualTo(120L);
 
-        assertThat(outputTokens.get("thinking")).isEqualTo(150L);
-        assertThat(outputTokens.get("assistant_text")).isEqualTo(70L);
-        assertThat(outputTokens.get("built_in_tool_calls")).isEqualTo(30L);
-        assertThat(outputTokens.get("mcp_tool_calls")).isEqualTo(20L);
-        assertThat(outputTokens.get("skill_invocations")).isEqualTo(10L);
+        // Tier columns ride along so the FE can price each lane.
+        assertThat(inputLanes.get("user_prompts").inputTokens()).isEqualTo(150L);
+        assertThat(inputLanes.get("user_prompts").cacheReadTokens()).isEqualTo(0L);
+        assertThat(inputLanes.get("prior_assistant").cacheReadTokens()).isEqualTo(3000L);
+        assertThat(inputLanes.get("unattributed").cacheCreationTokens()).isEqualTo(120L);
+        assertThat(inputLanes.get("unattributed").hasBreakdown()).isFalse();
 
-        assertThat(composition.input().totalTokens()).isEqualTo(7890L);
-        assertThat(composition.output().totalTokens()).isEqualTo(280L);
+        assertThat(outputTokens.get("thinking")).isEqualTo(450L);
+        assertThat(outputTokens.get("assistant_text")).isEqualTo(210L);
+        assertThat(outputTokens.get("built_in_tool_calls")).isEqualTo(90L);
+        assertThat(outputTokens.get("mcp_tool_calls")).isEqualTo(60L);
+        assertThat(outputTokens.get("skill_invocations")).isEqualTo(30L);
+
+        assertThat(composition.input().totalTokens()).isEqualTo(3 * TRACE_INPUT_SIDE);
+        assertThat(composition.output().totalTokens()).isEqualTo(3 * TRACE_OUTPUT_SIDE);
+
+        assertThat(composition.models()).containsExactly("claude-opus-4-8");
 
         assertThat(composition.harness()).hasSize(1);
         assertThat(composition.harness().getFirst().key()).isEqualTo("claude_code");
-        assertThat(composition.harness().getFirst().totalEstimatedCost().doubleValue()).isCloseTo(8.0, within(0.0001));
     }
 
     @Test
@@ -254,6 +266,7 @@ class AiSpendResourceTest {
                 .collect(Collectors.toMap(SpendCompositionResponse.Lane::key,
                         SpendCompositionResponse.Lane::totalTokens));
         assertThat(inputTokens.get("prior_assistant")).isEqualTo(2000L);
+        assertThat(composition.input().totalTokens()).isEqualTo(2 * TRACE_INPUT_SIDE);
     }
 
     @Test
@@ -299,17 +312,20 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("breakdown: 400 for an unknown lane key")
+    @DisplayName("breakdown: 400 for an unknown lane key or a lane without breakdown")
     void breakdown_rejectsUnknownLane() {
         var workspaceName = UUID.randomUUID().toString();
         var apiKey = UUID.randomUUID().toString();
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(), USER);
 
-        aiSpendResourceClient.getBreakdown("not_a_lane", SpendMetricRequest.builder()
+        var request = SpendMetricRequest.builder()
                 .projectName(RandomStringUtils.randomAlphabetic(10))
                 .intervalStart(Instant.now().minus(Duration.ofMinutes(10)))
                 .intervalEnd(Instant.now())
-                .build(), apiKey, workspaceName, HttpStatus.SC_BAD_REQUEST);
+                .build();
+
+        aiSpendResourceClient.getBreakdown("not_a_lane", request, apiKey, workspaceName, HttpStatus.SC_BAD_REQUEST);
+        aiSpendResourceClient.getBreakdown("unattributed", request, apiKey, workspaceName, HttpStatus.SC_BAD_REQUEST);
     }
 
     @Test
@@ -360,15 +376,17 @@ class AiSpendResourceTest {
         Map<String, WorkspaceMetricsSummaryResponse.Result> byName = summary.results().stream()
                 .collect(Collectors.toMap(WorkspaceMetricsSummaryResponse.Result::name, Function.identity()));
 
-        assertThat(byName.get("total_spend").current()).isEqualTo(0.0);
+        assertThat(byName.get("spend_input_tokens").current()).isEqualTo(0.0);
+        assertThat(byName.get("spend_cache_read_tokens").current()).isEqualTo(0.0);
+        assertThat(byName.get("spend_cache_creation_tokens").current()).isEqualTo(0.0);
+        assertThat(byName.get("spend_output_tokens").current()).isEqualTo(0.0);
         assertThat(byName.get("total_messages").current()).isEqualTo(0.0);
         assertThat(byName.get("active_users").current()).isEqualTo(0.0);
         assertThat(byName.get("total_users").current()).isEqualTo(0.0);
-        assertThat(byName.get("avg_cost_per_user").current()).isNull();
     }
 
     @Test
-    @DisplayName("breakdown: aggregates a lane's cc.* detail array per item")
+    @DisplayName("breakdown: aggregates a lane's items per entity, split into definition vs usage")
     void breakdown_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -385,28 +403,31 @@ class AiSpendResourceTest {
         var user = UUID.randomUUID().toString();
         createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
-        var breakdown = aiSpendResourceClient.getBreakdown("skills_loaded", SpendMetricRequest.builder()
+        var breakdown = aiSpendResourceClient.getBreakdown("skills", SpendMetricRequest.builder()
                 .projectName(projectName)
                 .intervalStart(intervalStart)
                 .intervalEnd(intervalEnd)
                 .build(), apiKey, workspaceName);
 
-        assertThat(breakdown.laneKey()).isEqualTo("skills_loaded");
-        assertThat(breakdown.title()).isEqualTo("Skills loaded");
-        assertThat(breakdown.subtitle()).isEqualTo("Tokens per loaded skill body");
+        assertThat(breakdown.laneKey()).isEqualTo("skills");
+        assertThat(breakdown.title()).isEqualTo("Skills");
         assertThat(breakdown.itemCount()).isEqualTo(2);
-        assertThat(breakdown.totalTokens()).isEqualTo(2400L);
+        assertThat(breakdown.totalTokens()).isEqualTo(2700L);
 
-        Map<String, Long> byLabel = breakdown.items().stream()
-                .collect(Collectors.toMap(SpendBreakdownResponse.Item::label,
-                        SpendBreakdownResponse.Item::totalTokens));
-        assertThat(byLabel.get("opik-frontend")).isEqualTo(1500L);
-        assertThat(byLabel.get("find-skills")).isEqualTo(900L);
+        Map<String, SpendBreakdownResponse.Item> byLabel = breakdown.items().stream()
+                .collect(Collectors.toMap(SpendBreakdownResponse.Item::label, Function.identity()));
+        assertThat(byLabel.get("opik-frontend").totalTokens()).isEqualTo(1800L);
+        assertThat(byLabel.get("opik-frontend").definitionTokens()).isEqualTo(300L);
+        assertThat(byLabel.get("opik-frontend").usageTokens()).isEqualTo(1500L);
+        assertThat(byLabel.get("opik-frontend").count()).isEqualTo(3L);
+        assertThat(byLabel.get("find-skills").totalTokens()).isEqualTo(900L);
+        assertThat(byLabel.get("find-skills").definitionTokens()).isEqualTo(0L);
+        assertThat(byLabel.get("find-skills").usageTokens()).isEqualTo(900L);
     }
 
     @Test
-    @DisplayName("breakdown: tools lane adds a Built-in row so items sum to the lane total")
-    void breakdown_toolsMatchesLaneTotal() {
+    @DisplayName("breakdown: mcp_servers folds definition and tool usage rows of a server into one entity")
+    void breakdown_mcpServers() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
         var apiKey = UUID.randomUUID().toString();
@@ -422,24 +443,22 @@ class AiSpendResourceTest {
         var user = UUID.randomUUID().toString();
         createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
-        var breakdown = aiSpendResourceClient.getBreakdown("tools", SpendMetricRequest.builder()
-                .projectName(projectName)
-                .intervalStart(intervalStart)
-                .intervalEnd(intervalEnd)
-                .build(), apiKey, workspaceName);
+        var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "mcp_servers");
 
-        assertThat(breakdown.laneKey()).isEqualTo("tools");
+        assertThat(breakdown.laneKey()).isEqualTo("mcp_servers");
         assertThat(breakdown.totalTokens()).isEqualTo(1140L);
+        assertThat(breakdown.itemCount()).isEqualTo(1);
 
-        Map<String, Long> byLabel = breakdown.items().stream()
-                .collect(Collectors.toMap(SpendBreakdownResponse.Item::label,
-                        SpendBreakdownResponse.Item::totalTokens));
-        assertThat(byLabel.get("chrome-devtools")).isEqualTo(900L);
-        assertThat(byLabel.get("Built-in tools")).isEqualTo(240L);
+        var server = breakdown.items().getFirst();
+        assertThat(server.label()).isEqualTo("chrome-devtools");
+        assertThat(server.totalTokens()).isEqualTo(1140L);
+        assertThat(server.definitionTokens()).isEqualTo(900L);
+        assertThat(server.usageTokens()).isEqualTo(240L);
+        assertThat(server.count()).isEqualTo(3L);
     }
 
     @Test
-    @DisplayName("breakdown: output tool-call lanes group by tool/server/skill and sum to lane total")
+    @DisplayName("breakdown: output tool-call lanes group output items by tool/server/skill")
     void breakdown_outputToolCalls() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -453,27 +472,29 @@ class AiSpendResourceTest {
         Instant intervalEnd = Instant.now();
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
-        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
+        var user = UUID.randomUUID().toString();
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
         var builtIn = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
                 "built_in_tool_calls");
-        assertThat(builtIn.totalTokens()).isEqualTo(30L);
+        assertThat(builtIn.totalTokens()).isEqualTo(90L);
         assertThat(builtIn.itemCount()).isEqualTo(1);
         assertThat(builtIn.items().getFirst().label()).isEqualTo("Bash");
-        assertThat(builtIn.items().getFirst().totalTokens()).isEqualTo(30L);
+        assertThat(builtIn.items().getFirst().totalTokens()).isEqualTo(90L);
+        assertThat(builtIn.items().getFirst().count()).isEqualTo(3L);
 
         var mcp = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "mcp_tool_calls");
-        assertThat(mcp.totalTokens()).isEqualTo(20L);
+        assertThat(mcp.totalTokens()).isEqualTo(60L);
         assertThat(mcp.items().getFirst().label()).isEqualTo("chrome");
 
         var skill = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "skill_invocations");
-        assertThat(skill.totalTokens()).isEqualTo(10L);
+        assertThat(skill.totalTokens()).isEqualTo(30L);
         assertThat(skill.items().getFirst().label()).isEqualTo("diagram-generation");
     }
 
     @Test
-    @DisplayName("breakdown: thinking and assistant text break down by model")
-    void breakdown_outputByModel() {
+    @DisplayName("breakdown: thinking and assistant text lanes return single rows")
+    void breakdown_outputTextLanes() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
         var apiKey = UUID.randomUUID().toString();
@@ -486,17 +507,18 @@ class AiSpendResourceTest {
         Instant intervalEnd = Instant.now();
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
-        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
+        var user = UUID.randomUUID().toString();
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
         var thinking = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "thinking");
-        assertThat(thinking.totalTokens()).isEqualTo(150L);
+        assertThat(thinking.totalTokens()).isEqualTo(450L);
         assertThat(thinking.itemCount()).isEqualTo(1);
-        assertThat(thinking.items().getFirst().label()).isEqualTo("claude-opus-4-8");
-        assertThat(thinking.items().getFirst().totalTokens()).isEqualTo(150L);
+        assertThat(thinking.items().getFirst().label()).isEqualTo("thinking");
+        assertThat(thinking.items().getFirst().totalTokens()).isEqualTo(450L);
 
         var text = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "assistant_text");
-        assertThat(text.totalTokens()).isEqualTo(70L);
-        assertThat(text.items().getFirst().label()).isEqualTo("claude-opus-4-8");
+        assertThat(text.totalTokens()).isEqualTo(210L);
+        assertThat(text.items().getFirst().label()).isEqualTo("assistant_text");
     }
 
     @Test
@@ -514,10 +536,10 @@ class AiSpendResourceTest {
         Instant intervalEnd = Instant.now();
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
-        createBuiltInToolSpans(projectName, apiKey, workspaceName, currentTime, 201);
+        createBuiltInToolItemsTrace(projectName, apiKey, workspaceName, currentTime, 201);
 
         var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
-                "built_in_tool_calls");
+                "built_in_tools");
 
         assertThat(breakdown.totalTokens()).isEqualTo(201L);
         assertThat(breakdown.itemCount()).isEqualTo(201);
@@ -545,10 +567,10 @@ class AiSpendResourceTest {
         Instant intervalEnd = Instant.now();
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
-        createBuiltInToolSpans(projectName, apiKey, workspaceName, currentTime, 200);
+        createBuiltInToolItemsTrace(projectName, apiKey, workspaceName, currentTime, 200);
 
         var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
-                "built_in_tool_calls");
+                "built_in_tools");
 
         assertThat(breakdown.totalTokens()).isEqualTo(200L);
         assertThat(breakdown.itemCount()).isEqualTo(200);
@@ -559,7 +581,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("users: ranks users by spend, joins per-user cost, flags high spenders")
+    @DisplayName("users: ranks users by billed tokens, joins span activity, flags high spenders")
     void users_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -577,8 +599,8 @@ class AiSpendResourceTest {
         var userB = UUID.randomUUID().toString();
 
         var userATraces = createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
-        userATraces.forEach(traceId -> createLinkedSpan(projectName, apiKey, workspaceName, traceId, currentTime));
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB));
+        userATraces.forEach(traceId -> createMcpSpan(projectName, apiKey, workspaceName, traceId, currentTime));
+        createIdentityTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB));
 
         SpendUserPage page = aiSpendResourceClient.getUsers(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -592,14 +614,22 @@ class AiSpendResourceTest {
         SpendUserRow top = page.content().getFirst();
         assertThat(top.userUuid()).isEqualTo(userA);
         assertThat(top.requests()).isEqualTo(2);
-        assertThat(top.totalEstimatedCost().doubleValue()).isCloseTo(4.0, within(0.0001));
+        assertThat(top.totalTokens()).isEqualTo(2 * TRACE_TOTAL_TOKENS);
+        assertThat(top.inputTokens()).isEqualTo(100L);
+        assertThat(top.cacheReadTokens()).isEqualTo(5420L);
+        assertThat(top.cacheCreationTokens()).isEqualTo(80L);
+        assertThat(top.outputTokens()).isEqualTo(560L);
         assertThat(top.flags()).contains("high_spend");
         assertThat(top.repositories()).containsExactly("repo-a");
         assertThat(top.skills()).isEqualTo(4L);
+        assertThat(top.mcps()).isEqualTo(1L);
+        assertThat(top.mcpCalls()).isEqualTo(2L);
+        assertThat(top.model()).isEqualTo("claude-opus-4-8");
 
         SpendUserRow second = page.content().get(1);
         assertThat(second.userUuid()).isEqualTo(userB);
-        assertThat(second.totalEstimatedCost().doubleValue()).isCloseTo(0.0, within(0.0001));
+        assertThat(second.totalTokens()).isEqualTo(0L);
+        assertThat(second.flags()).doesNotContain("high_spend");
     }
 
     @Test
@@ -654,9 +684,8 @@ class AiSpendResourceTest {
         var userA = UUID.randomUUID().toString();
         var userB = UUID.randomUUID().toString();
 
-        var userATraces = createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
-        userATraces.forEach(traceId -> createLinkedSpan(projectName, apiKey, workspaceName, traceId, currentTime));
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB, userB, userB));
+        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
+        createIdentityTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB, userB, userB));
 
         var request = SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -664,10 +693,10 @@ class AiSpendResourceTest {
                 .intervalEnd(intervalEnd)
                 .build();
 
-        SpendUserPage bySpend = aiSpendResourceClient.getUsers(request, 1, 25, apiKey, workspaceName);
-        assertThat(bySpend.sortableBy())
-                .containsExactly("total_estimated_cost", "requests", "skills", "mcps", "mcp_calls");
-        assertThat(bySpend.content()).extracting(SpendUserRow::userUuid).containsExactly(userA, userB);
+        SpendUserPage byTokens = aiSpendResourceClient.getUsers(request, 1, 25, apiKey, workspaceName);
+        assertThat(byTokens.sortableBy())
+                .containsExactly("total_tokens", "requests", "skills", "mcps", "mcp_calls");
+        assertThat(byTokens.content()).extracting(SpendUserRow::userUuid).containsExactly(userA, userB);
 
         var byRequestsDesc = List.of(SortingField.builder().field("requests").direction(Direction.DESC).build());
         SpendUserPage byRequests = aiSpendResourceClient.getUsers(request, 1, 25, byRequestsDesc, apiKey,
@@ -685,7 +714,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("recommendations: returns up to 3 judgment-based items for the current usage")
+    @DisplayName("recommendations: returns judgment-based items with token-denominated savings")
     void recommendations_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -701,8 +730,6 @@ class AiSpendResourceTest {
 
         var user = UUID.randomUUID().toString();
         createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
-        createCostSpans(projectName, apiKey, workspaceName, currentTime, 4);
-        createLlmCallSpans(projectName, apiKey, workspaceName, currentTime);
 
         var recommendations = aiSpendResourceClient.getRecommendations(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -713,10 +740,12 @@ class AiSpendResourceTest {
         List<String> ids = recommendations.items().stream()
                 .map(SpendRecommendationsResponse.Item::id)
                 .toList();
+        // thinking is 450/840 > 0.5 of output; prior_assistant is 3000/8400 < 0.4 of input.
         assertThat(ids).contains("thinking_effort", "fewer_tools");
         assertThat(ids).doesNotContain("compact_threshold");
         assertThat(recommendations.items()).hasSizeLessThanOrEqualTo(3);
-        assertThat(recommendations.totalSavings().doubleValue()).isGreaterThan(0.0);
+        // round(450 * 0.3) + round(1140 * 0.5) = 135 + 570
+        assertThat(recommendations.totalSavingsTokens()).isEqualTo(705L);
 
         Map<String, Impact> impacts = recommendations.items().stream()
                 .collect(Collectors.toMap(SpendRecommendationsResponse.Item::id,
@@ -727,6 +756,16 @@ class AiSpendResourceTest {
 
     private List<UUID> createCcTraces(String projectName, String apiKey, String workspaceName, Instant time,
             List<String> userUuids) {
+        return createTraces(projectName, apiKey, workspaceName, time, userUuids, this::buildCcMetadata);
+    }
+
+    private List<UUID> createIdentityTraces(String projectName, String apiKey, String workspaceName, Instant time,
+            List<String> userUuids) {
+        return createTraces(projectName, apiKey, workspaceName, time, userUuids, this::buildIdentityMetadata);
+    }
+
+    private List<UUID> createTraces(String projectName, String apiKey, String workspaceName, Instant time,
+            List<String> userUuids, Function<String, JsonNode> metadata) {
         List<UUID> ids = new ArrayList<>();
         for (String userUuid : userUuids) {
             UUID id = idGenerator.getTimeOrderedEpoch(time.toEpochMilli());
@@ -734,7 +773,7 @@ class AiSpendResourceTest {
                     .id(id)
                     .projectName(projectName)
                     .startTime(time)
-                    .metadata(buildCcMetadata(userUuid))
+                    .metadata(metadata.apply(userUuid))
                     .feedbackScores(null)
                     .build();
             traceResourceClient.createTrace(trace, apiKey, workspaceName);
@@ -743,32 +782,18 @@ class AiSpendResourceTest {
         return ids;
     }
 
-    private void createLinkedSpan(String projectName, String apiKey, String workspaceName, UUID traceId, Instant time) {
+    private void createMcpSpan(String projectName, String apiKey, String workspaceName, UUID traceId, Instant time) {
         Span span = factory.manufacturePojo(Span.class).toBuilder()
                 .startTime(time)
                 .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
                 .traceId(traceId)
+                .name("mcp__chrome__click")
+                .model("claude-opus-4-8")
                 .projectId(null)
                 .projectName(projectName)
-                .totalEstimatedCost(SPAN_COST)
                 .feedbackScores(null)
                 .build();
         spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
-    }
-
-    private void createCostSpans(String projectName, String apiKey, String workspaceName, Instant time, int count) {
-        var spans = IntStream.range(0, count)
-                .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                        .startTime(time)
-                        .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
-                        .traceId(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
-                        .projectId(null)
-                        .projectName(projectName)
-                        .totalEstimatedCost(SPAN_COST)
-                        .feedbackScores(null)
-                        .build())
-                .toList();
-        spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
     }
 
     private SpendBreakdownResponse getBreakdown(String projectName, String apiKey, String workspaceName,
@@ -780,71 +805,83 @@ class AiSpendResourceTest {
                 .build(), apiKey, workspaceName);
     }
 
-    private void createBuiltInToolSpans(String projectName, String apiKey, String workspaceName, Instant time,
+    private void createBuiltInToolItemsTrace(String projectName, String apiKey, String workspaceName, Instant time,
             int count) {
-        JsonNode metadata = JsonUtils.getJsonNodeFromString(
-                "{ \"cc\": { \"llm_call\": { \"block_kind\": \"tool_use\", \"attributed_output_tokens\": 1 } } }");
-        List<Span> spans = IntStream.range(0, count)
-                .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                        .startTime(time)
-                        .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
-                        .traceId(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
-                        .name("tool_" + i)
-                        .projectId(null)
-                        .projectName(projectName)
-                        .totalEstimatedCost(BigDecimal.ZERO)
-                        .metadata(metadata)
-                        .feedbackScores(null)
-                        .build())
-                .toList();
-        spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-    }
-
-    private void createLlmCallSpans(String projectName, String apiKey, String workspaceName, Instant time) {
-        createLlmCallSpan(projectName, apiKey, workspaceName, time, "thinking", "Thinking", 150, null);
-        createLlmCallSpan(projectName, apiKey, workspaceName, time, "text", "Text", 70, null);
-        createLlmCallSpan(projectName, apiKey, workspaceName, time, "tool_use", "Bash", 30, null);
-        createLlmCallSpan(projectName, apiKey, workspaceName, time, "tool_use", "mcp__chrome__click", 20, null);
-        createLlmCallSpan(projectName, apiKey, workspaceName, time, "tool_use", "Skill", 10, "diagram-generation");
-    }
-
-    private void createLlmCallSpan(String projectName, String apiKey, String workspaceName, Instant time,
-            String blockKind, String name, long attributedTokens, String skill) {
+        String items = IntStream.range(0, count)
+                .mapToObj(i -> """
+                        { "name": "tool_%d", "kind": "usage", "count": 1, "total": 1, "cache_read": 1 }""".formatted(i))
+                .collect(Collectors.joining(","));
         String json = """
-                { "cc": { "llm_call": { "block_kind": "%s", "attributed_output_tokens": %d } } }
-                """.formatted(blockKind, attributedTokens);
-        var builder = factory.manufacturePojo(Span.class).toBuilder()
-                .startTime(time)
+                { "cc": { "billing": { "lanes": { "built_in_tools": { "total": %1$d, "cache_read": %1$d, "items": [ %2$s ] } } } } }
+                """
+                .formatted(count, items);
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
-                .traceId(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
-                .name(name)
-                .model("claude-opus-4-8")
-                .projectId(null)
                 .projectName(projectName)
-                .totalEstimatedCost(BigDecimal.ZERO)
+                .startTime(time)
                 .metadata(JsonUtils.getJsonNodeFromString(json))
-                .feedbackScores(null);
-        if (skill != null) {
-            builder.input(JsonUtils.getJsonNodeFromString("{ \"skill\": \"%s\" }".formatted(skill)));
-        }
-        spanResourceClient.batchCreateSpans(List.of(builder.build()), apiKey, workspaceName);
+                .feedbackScores(null)
+                .build();
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
+    private JsonNode buildIdentityMetadata(String userUuid) {
+        String json = """
+                {
+                  "cc": {
+                    "identity": { "user_uuid": "%1$s", "user_email": "%1$s@comet.com", "user_display_name": "%1$s" },
+                    "git": { "repository": "repo-a" }
+                  }
+                }
+                """.formatted(userUuid);
+        return JsonUtils.getJsonNodeFromString(json);
+    }
+
+    // Every number under cc.billing is a per-LLM-call billing event: lane tier
+    // columns sum to the lane total, lane totals (incl. unattributed) sum to
+    // totals, and items sum to their lane.
     private JsonNode buildCcMetadata(String userUuid) {
         String json = """
                 {
                   "cc": {
                     "identity": { "user_uuid": "%1$s", "user_email": "%1$s@comet.com", "user_display_name": "%1$s" },
                     "git": { "repository": "repo-a" },
-                    "prior_assistant": { "summary": { "total_tokens": 1000 } },
-                    "tool_results": { "summary": { "total_tokens": 200, "count": 8 }, "by_tool": [ { "name": "Bash", "tokens": 200 } ] },
-                    "user_prompts": { "summary": { "total_tokens": 50 } },
-                    "skills": { "summary": { "loaded_tokens": 800, "menu_tokens": 100, "loaded_count": 2 }, "loaded": [ { "name": "opik-frontend", "body_tokens": 500 }, { "name": "find-skills", "body_tokens": 300 } ] },
-                    "tools": { "summary": { "schema_tokens": 380, "by_source": { "mcp": { "schema_tokens": 300, "available_count": 1 }, "builtin": { "schema_tokens": 80 } }, "by_server": [ { "server": "chrome-devtools", "schema_tokens": 300 } ] } },
-                    "file_attachments": { "summary": { "total_tokens": 40 }, "files": [ { "path": "a.png", "body_tokens": 40 } ] },
-                    "memory": { "summary": { "total_tokens": 60 }, "files": [ { "path": "AGENTS.md", "body_tokens": 60 } ] },
-                    "thinking": { "summary": { "total_tokens": 150 }, "by_model": [ { "model": "claude-opus-4-7", "tokens": 150 } ] },
-                    "assistant_text": { "summary": { "total_tokens": 70 } }
+                    "billing": {
+                      "llm_calls": 2,
+                      "model": "claude-opus-4-8",
+                      "totals": { "total": 3080, "input": 50, "cache_read": 2710, "cache_creation": 40, "output": 280 },
+                      "lanes": {
+                        "user_prompts": { "total": 50, "input": 50, "cache_read": 0, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "short", "kind": "usage", "count": 1, "total": 50, "input": 50 } ] },
+                        "file_attachments": { "total": 40, "input": 0, "cache_read": 40, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": ".png", "kind": "usage", "count": 1, "total": 40, "cache_read": 40 } ] },
+                        "built_in_tools": { "total": 200, "input": 0, "cache_read": 200, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "Bash", "kind": "usage", "count": 2, "total": 200, "cache_read": 200 } ] },
+                        "prior_assistant": { "total": 1000, "input": 0, "cache_read": 1000, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "assistant_text", "kind": "usage", "count": 0, "total": 600, "cache_read": 600 },
+                                     { "name": "thinking", "kind": "usage", "count": 0, "total": 400, "cache_read": 400 } ] },
+                        "skills": { "total": 900, "input": 0, "cache_read": 900, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "opik-frontend", "kind": "definition", "count": 0, "total": 100, "cache_read": 100 },
+                                     { "name": "opik-frontend", "kind": "usage", "count": 1, "total": 500, "cache_read": 500 },
+                                     { "name": "find-skills", "kind": "usage", "count": 1, "total": 300, "cache_read": 300 } ] },
+                        "custom_agents": { "total": 30, "input": 0, "cache_read": 30, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "code-reviewer", "kind": "definition", "count": 0, "total": 30, "cache_read": 30 } ] },
+                        "mcp_servers": { "total": 380, "input": 0, "cache_read": 380, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "chrome-devtools", "kind": "definition", "count": 0, "total": 300, "cache_read": 300 },
+                                     { "name": "chrome-devtools", "kind": "usage", "count": 1, "total": 80, "cache_read": 80 } ] },
+                        "memory": { "total": 60, "input": 0, "cache_read": 60, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "AGENTS.md", "kind": "definition", "count": 1, "total": 60, "cache_read": 60 } ] },
+                        "static_overhead": { "total": 100, "input": 0, "cache_read": 100, "cache_creation": 0, "output": 0,
+                          "items": [ { "name": "core_prompt", "kind": "definition", "count": 0, "total": 100, "cache_read": 100 } ] },
+                        "unattributed": { "total": 40, "input": 0, "cache_read": 0, "cache_creation": 40, "output": 0 },
+                        "output": { "total": 280, "input": 0, "cache_read": 0, "cache_creation": 0, "output": 280,
+                          "items": [ { "name": "thinking", "kind": "usage", "count": 0, "total": 150, "output": 150 },
+                                     { "name": "assistant_text", "kind": "usage", "count": 0, "total": 70, "output": 70 },
+                                     { "name": "built_in_tools/Bash", "kind": "usage", "count": 1, "total": 30, "output": 30 },
+                                     { "name": "mcp_servers/chrome", "kind": "usage", "count": 1, "total": 20, "output": 20 },
+                                     { "name": "skills/diagram-generation", "kind": "usage", "count": 1, "total": 10, "output": 10 } ] }
+                      }
+                    }
                   }
                 }
                 """

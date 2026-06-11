@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
@@ -14,7 +13,8 @@ import java.util.List;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record SpendRecommendationsResponse(
-        BigDecimal totalSavings,
+        // Token-denominated; the FE prices with its Claude rate table.
+        Long totalSavingsTokens,
         List<Item> items) {
 
     @Builder(toBuilder = true)
@@ -25,7 +25,7 @@ public record SpendRecommendationsResponse(
             String title,
             String body,
             Impact impact,
-            BigDecimal estSaving,
+            Long estSavingTokens,
             String docsUrl,
             String relatedLaneKey) {
     }

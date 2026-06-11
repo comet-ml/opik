@@ -9,7 +9,11 @@ export interface SpendUserRow {
   user_email: string;
   user_display_name: string;
   model: string;
-  total_estimated_cost: number | null;
+  input_tokens?: number | null;
+  cache_read_tokens?: number | null;
+  cache_creation_tokens?: number | null;
+  output_tokens?: number | null;
+  total_tokens?: number | null;
   requests: number;
   skills: number;
   mcps: number;
