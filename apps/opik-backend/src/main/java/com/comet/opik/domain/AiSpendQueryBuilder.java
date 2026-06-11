@@ -205,7 +205,8 @@ class AiSpendQueryBuilder {
                 AND %3$s
                 AND %2$s
                 <if(user_uuid)> %4$s <endif>
-            GROUP BY label""";
+            GROUP BY label
+            HAVING label != ''""";
 
     private static final String USERS = """
             WITH
