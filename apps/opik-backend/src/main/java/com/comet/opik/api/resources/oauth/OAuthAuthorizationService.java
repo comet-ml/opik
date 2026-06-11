@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.oauth;
 import com.comet.opik.domain.mcpoauth.CreateOAuthCodeCommand;
 import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
-import com.comet.opik.domain.mcpoauth.McpOAuthTokens;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -96,7 +96,7 @@ public class OAuthAuthorizationService {
                 .clientName(client.name())
                 .clientLogoUri(client.logoUri())
                 .workspaces(workspaces)
-                .csrfToken(McpOAuthTokens.randomToken())
+                .csrfToken(McpOAuthTokenUtils.randomToken())
                 .build();
     }
 

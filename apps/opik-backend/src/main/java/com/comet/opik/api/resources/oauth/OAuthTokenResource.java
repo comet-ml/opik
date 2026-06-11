@@ -17,6 +17,7 @@ import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -79,16 +80,23 @@ public class OAuthTokenResource {
             @FormParam(PARAM_CODE_VERIFIER) String codeVerifier,
             @FormParam(PARAM_REFRESH_TOKEN) String refreshToken) {
 
+        log.info("MCP OAuth token request [grant_type={}, client_id={}]", grantType, clientId);
+
         if (GRANT_AUTHORIZATION_CODE.equals(grantType)) {
             if (StringUtils.isBlank(code) || StringUtils.isBlank(redirectUri) || StringUtils.isBlank(clientId)
                     || StringUtils.isBlank(codeVerifier)) {
+                log.warn("MCP OAuth authorization_code request rejected: missing required parameters [client_id={}]",
+                        clientId);
                 return error(ERROR_INVALID_REQUEST);
             }
             if (clientService.resolve(clientId).isEmpty()) {
+                log.warn("MCP OAuth authorization_code request rejected: unknown client [client_id={}]", clientId);
                 return error(ERROR_INVALID_CLIENT);
             }
             try {
-                return okToken(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId));
+                Response response = okToken(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId));
+                log.info("MCP OAuth authorization_code exchanged [client_id={}]", clientId);
+                return response;
             } catch (BadRequestException e) {
                 log.warn("MCP OAuth authorization_code exchange failed [client_id={}]", clientId, e);
                 return error(ERROR_INVALID_GRANT);
@@ -97,20 +105,31 @@ public class OAuthTokenResource {
 
         if (GRANT_REFRESH_TOKEN.equals(grantType)) {
             if (StringUtils.isBlank(refreshToken) || StringUtils.isBlank(clientId)) {
+                log.warn("MCP OAuth refresh_token request rejected: missing required parameters [client_id={}]",
+                        clientId);
                 return error(ERROR_INVALID_REQUEST);
             }
             if (clientService.resolve(clientId).isEmpty()) {
+                log.warn("MCP OAuth refresh_token request rejected: unknown client [client_id={}]", clientId);
                 return error(ERROR_INVALID_CLIENT);
             }
             try {
-                return okToken(mcpOAuthService.refresh(refreshToken, clientId));
+                Response response = okToken(mcpOAuthService.refresh(refreshToken, clientId));
+                log.info("MCP OAuth refresh_token rotated [client_id={}]", clientId);
+                return response;
             } catch (BadRequestException e) {
                 log.warn("MCP OAuth refresh failed [client_id={}]", clientId, e);
                 return error(ERROR_INVALID_GRANT);
             }
         }
 
-        return StringUtils.isBlank(grantType) ? error(ERROR_INVALID_REQUEST) : error(ERROR_UNSUPPORTED_GRANT_TYPE);
+        if (StringUtils.isBlank(grantType)) {
+            log.warn("MCP OAuth token request rejected: missing grant_type [client_id={}]", clientId);
+            return error(ERROR_INVALID_REQUEST);
+        }
+        log.warn("MCP OAuth token request rejected: unsupported grant_type [grant_type={}, client_id={}]",
+                grantType, clientId);
+        return error(ERROR_UNSUPPORTED_GRANT_TYPE);
     }
 
     @POST
@@ -121,6 +140,8 @@ public class OAuthTokenResource {
     public Response revoke(
             @FormParam(PARAM_TOKEN) String token,
             @FormParam(PARAM_CLIENT_ID) String clientId) {
+
+        log.info("MCP OAuth revoke request [token={}, client_id={}]", McpOAuthTokenUtils.maskToken(token), clientId);
 
         // RFC 7009 §2.2: the AS returns 200 whether the token was revoked, never existed, or was invalid.
         if (!StringUtils.isBlank(token)) {
@@ -135,19 +156,24 @@ public class OAuthTokenResource {
     }
 
     private static Response okToken(TokenResponse body) {
-        return Response.ok(body)
-                .header("Cache-Control", "no-store")
-                .header("Pragma", "no-cache")
-                .build();
+        return noStore(Response.ok(body)).build();
     }
 
     private static Response error(String code) {
-        return Response.status(Response.Status.BAD_REQUEST)
+        return noStore(Response.status(Response.Status.BAD_REQUEST))
                 .type(MediaType.APPLICATION_JSON)
-                .header("Cache-Control", "no-store")
-                .header("Pragma", "no-cache")
                 .entity(OAuthError.builder().error(code).build())
                 .build();
+    }
+
+    /**
+     * Applies the RFC 6749 §5.1 no-caching headers required on token-endpoint responses, so credentials
+     * are never stored by intermediaries.
+     */
+    private static Response.ResponseBuilder noStore(Response.ResponseBuilder builder) {
+        return builder
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header("Pragma", "no-cache");
     }
 
 }
