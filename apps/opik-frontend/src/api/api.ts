@@ -44,6 +44,7 @@ export const AGENT_CONFIGS_REST_ENDPOINT = "/v1/private/agent-configs/";
 export const LOCAL_RUNNERS_REST_ENDPOINT = "/v1/private/local-runners/";
 export const LLM_MODELS_REST_ENDPOINT = "/v1/private/llm/models";
 export const ENVIRONMENTS_REST_ENDPOINT = "/v1/private/environments/";
+export const AI_SPEND_REST_ENDPOINT = "/v1/private/ai-spend/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";

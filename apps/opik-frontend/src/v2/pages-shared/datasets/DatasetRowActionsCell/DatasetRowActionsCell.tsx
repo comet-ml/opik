@@ -101,7 +101,7 @@ export const createDatasetRowActionsCell = ({
         stopClickPropagation
       >
         <EditDialog
-          key={`add-${resetKeyRef.current}`}
+          key={`edit-${dataset.id}`}
           open={open === 2}
           setOpen={(val: boolean) => setOpen(val)}
           dataset={dataset}
