@@ -85,6 +85,7 @@ import ItemSourceCell, {
   ITEM_SOURCE_LABEL,
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Skeleton } from "@/ui/skeleton";
 
 const PASS_RATE_LABEL = "Pass rate";
@@ -260,14 +261,13 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         id: "prompt",
         label: "Prompt",
         type: COLUMN_TYPE.list,
-        // Show the prompt name plus its version. Unlike the Prompt Library
-        // experiments tab (where the prompt is implied by the page context),
-        // this global table needs the name too. Fall back to the commit hash
-        // only when no version number is available (OPIK-6838).
+        // Show the prompt name plus its version (OPIK-6838). Unlike the Prompt
+        // Library experiments tab, where the prompt is implied by the page
+        // context, this global table needs the name too.
         accessorFn: (row) =>
           (row.prompt_versions ?? []).map((v) => ({
             ...v,
-            version_label: `${v.prompt_name} (${v.version_number ?? v.commit})`,
+            version_label: formatPromptVersionLabel(v),
           })),
         cell: MultiResourceCell as never,
         customMeta: {

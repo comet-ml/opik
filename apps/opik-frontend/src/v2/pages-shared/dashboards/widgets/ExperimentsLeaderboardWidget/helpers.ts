@@ -2,6 +2,7 @@ import uniq from "lodash/uniq";
 import get from "lodash/get";
 
 import { Experiment } from "@/types/datasets";
+import { formatPromptVersionLabel } from "@/lib/experiments";
 import {
   COLUMN_TYPE,
   ColumnData,
@@ -109,12 +110,11 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     id: "prompt",
     label: "Prompt",
     type: COLUMN_TYPE.list,
-    // Show the prompt name plus its version, falling back to the commit hash
-    // only when no version number is available (OPIK-6838).
+    // Show the prompt name plus its version (OPIK-6838).
     accessorFn: (row) =>
       (row.prompt_versions ?? []).map((v) => ({
         ...v,
-        version_label: `${v.prompt_name} (${v.version_number ?? v.commit})`,
+        version_label: formatPromptVersionLabel(v),
       })),
     cell: MultiResourceCell as never,
     customMeta: {
