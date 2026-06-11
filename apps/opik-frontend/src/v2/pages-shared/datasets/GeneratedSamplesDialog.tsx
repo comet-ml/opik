@@ -96,11 +96,12 @@ type GeneratedSamplesDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onAddItems?: (items: DatasetItem[]) => void;
+  entityName?: string;
 };
 
 const GeneratedSamplesDialog: React.FunctionComponent<
   GeneratedSamplesDialogProps
-> = ({ samples, open, setOpen, onAddItems }) => {
+> = ({ samples, open, setOpen, onAddItems, entityName = "dataset" }) => {
   const [selectedSamples, setSelectedSamples] = useState<Set<string>>(
     new Set(samples.map((sample) => sample.id)),
   );
@@ -422,8 +423,8 @@ const GeneratedSamplesDialog: React.FunctionComponent<
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button onClick={handleAddToDataset} disabled={noneSelected}>
-            Add {selectedSamples.size} Sample
-            {selectedSamples.size !== 1 ? "s" : ""} to Dataset
+            Add {selectedSamples.size} sample
+            {selectedSamples.size !== 1 ? "s" : ""} to {entityName}
           </Button>
         </DialogFooter>
       </DialogContent>
