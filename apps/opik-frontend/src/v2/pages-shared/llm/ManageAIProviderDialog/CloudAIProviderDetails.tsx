@@ -8,7 +8,6 @@ import EyeInput from "@/shared/EyeInput/EyeInput";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import {
   AIProviderFormType,
-  DEFAULT_OPENAI_PIPELINE_MODE,
   OpenAiPipelineMode,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import { DropdownOption } from "@/types/shared";
@@ -86,7 +85,9 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
               <FormControl>
                 <SelectBox
                   id="openaiPipelineMode"
-                  value={field.value ?? DEFAULT_OPENAI_PIPELINE_MODE}
+                  // Field is always seeded for the OpenAI branch by ManageAIProviderDialog
+                  // (defaultValues, resetSelectionState, handleProviderSelect), so non-null here.
+                  value={field.value!}
                   onChange={(value: OpenAiPipelineMode) =>
                     field.onChange(value)
                   }

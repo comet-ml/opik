@@ -297,12 +297,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const suppressDefaultAuthValue =
       isCustomLike && suppressDefaultAuth === true ? "true" : undefined;
 
-    // Always send the explicit openai_pipeline_mode on OpenAI keys so switching back to
+    // Always send the explicit openai_pipeline_mode on OpenAI keys, so switching back to
     // chat_completions_api persists (otherwise an omitted key could leave a previously stored
-    // responses_api value untouched).
-    const openaiPipelineMode = form.getValues("openaiPipelineMode");
+    // responses_api value untouched). The field is always seeded for the OpenAI branch by
+    // defaultValues/resetSelectionState/handleProviderSelect, so the assertion is safe.
     const openaiPipelineModeValue = isOpenAi
-      ? openaiPipelineMode ?? DEFAULT_OPENAI_PIPELINE_MODE
+      ? form.getValues("openaiPipelineMode")!
       : undefined;
 
     const configuration =
