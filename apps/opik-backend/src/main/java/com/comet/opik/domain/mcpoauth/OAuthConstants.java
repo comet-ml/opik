@@ -22,14 +22,11 @@ public class OAuthConstants {
     public static final String RESPONSE_TYPE_CODE = "code";
 
     // RFC 6749 §4.1.1, §4.1.2 + RFC 7636 + RFC 8707 — authorization request/response query parameters
-    public static final String PARAM_CLIENT_ID = "client_id";
-    public static final String PARAM_REDIRECT_URI = "redirect_uri";
     public static final String PARAM_RESPONSE_TYPE = "response_type";
     public static final String PARAM_CODE_CHALLENGE = "code_challenge";
     public static final String PARAM_CODE_CHALLENGE_METHOD = "code_challenge_method";
     public static final String PARAM_RESOURCE = "resource";
     public static final String PARAM_STATE = "state";
-    public static final String PARAM_CODE = "code";
     public static final String PARAM_ERROR = "error";
 
     // RFC 7636 — PKCE
