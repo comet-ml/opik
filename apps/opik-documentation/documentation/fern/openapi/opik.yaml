@@ -110,6 +110,99 @@ tags:
 - name: Redirect
   description: Redirects for SDK generated links
 paths:
+  /oauth/authorize:
+    get:
+      tags:
+      - MCP OAuth
+      summary: OAuth Authorization Endpoint
+      description: "OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the\
+        \ client and PKCE parameters, then redirects to the login or consent page"
+      operationId: authorize
+      parameters:
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: redirect_uri
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: response_type
+        in: query
+        schema:
+          type: string
+      - name: code_challenge
+        in: query
+        schema:
+          type: string
+      - name: code_challenge_method
+        in: query
+        schema:
+          type: string
+      - name: resource
+        in: query
+        schema:
+          type: string
+      - name: state
+        in: query
+        schema:
+          type: string
+      responses:
+        "302":
+          description: "Redirect to login, consent, or client redirect_uri with an\
+            \ error"
+    post:
+      tags:
+      - MCP OAuth
+      summary: Submit Authorization Consent
+      description: "Submit the user's consent, issue an authorization code, and return\
+        \ the client redirect target"
+      operationId: consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentRequest"
+        required: true
+      responses:
+        "200":
+          description: Consent response with the client redirect target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentResponse"
+  /oauth/authorize/context:
+    get:
+      tags:
+      - MCP OAuth
+      summary: Get Authorization Consent Context
+      description: "Get the client details, eligible workspaces, and a CSRF token\
+        \ used to render the consent screen"
+      operationId: getAuthorizeContext
+      parameters:
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: redirect_uri
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      responses:
+        "200":
+          description: Authorization consent context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizeContext"
   /.well-known/oauth-authorization-server:
     get:
       tags:
@@ -124,6 +217,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorizationServerMetadata"
+  /oauth/revoke:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Token Revocation Endpoint
+      description: "OAuth 2.0 token revocation endpoint (RFC 7009). Always returns\
+        \ 200, whether the token was revoked, never existed, or was invalid"
+      operationId: revoke
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                client_id:
+                  type: string
+      responses:
+        "200":
+          description: Revocation acknowledged
+  /oauth/token:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Token Endpoint
+      description: "OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization\
+        \ code with PKCE or a refresh token for an access/refresh token pair"
+      operationId: token
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
+                client_id:
+                  type: string
+                code_verifier:
+                  type: string
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: OAuth error (RFC 6749 §5.2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthError"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -1270,6 +1423,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/{queueId}/locks:
+    get:
+      tags:
+      - Annotation Queues
+      summary: Get all active locks for an annotation queue
+      description: Returns lock status for all actively locked items in the queue
+      operationId: getAnnotationQueueLocks
+      parameters:
+      - name: queueId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Queue locks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocksResponse"
+  /v1/private/annotation-queues/{queueId}/items/{itemId}/lock:
+    put:
+      tags:
+      - Annotation Queues
+      summary: Create or extend annotation queue item lock
+      description: "Claim an annotation queue item for the current user, or extend\
+        \ an existing lock"
+      operationId: lockAnnotationQueueItem
+      parameters:
+      - name: queueId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Lock result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LockResponse"
   /v1/private/annotation-queues/{id}/items/delete:
     post:
       tags:
@@ -3405,7 +3607,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
         "409":
-          description: Experiment dataset mismatch
+          description: Conflict
           content:
             application/json:
               schema:
@@ -8676,6 +8878,64 @@ paths:
             application/json: {}
 components:
   schemas:
+    ConsentResponse:
+      type: object
+      properties:
+        redirect_to:
+          type: string
+    ConsentRequest:
+      required:
+      - client_id
+      - code_challenge
+      - code_challenge_method
+      - redirect_uri
+      - resource
+      type: object
+      properties:
+        client_id:
+          minLength: 1
+          type: string
+        redirect_uri:
+          minLength: 1
+          type: string
+        code_challenge:
+          minLength: 1
+          type: string
+        code_challenge_method:
+          minLength: 1
+          pattern: S256
+          type: string
+        resource:
+          minLength: 1
+          type: string
+        state:
+          type: string
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+        csrf:
+          type: string
+    AuthorizeContext:
+      type: object
+      properties:
+        client_name:
+          type: string
+        client_logo_uri:
+          type: string
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceInfo"
+        csrf_token:
+          type: string
+    WorkspaceInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
     AuthorizationServerMetadata:
       type: object
       properties:
@@ -8705,6 +8965,29 @@ components:
           type: array
           items:
             type: string
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+          format: int64
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+    OAuthError:
+      type: object
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
     BiInformation:
       type: object
       properties:
@@ -9090,8 +9373,6 @@ components:
           type: string
         label:
           type: string
-        total_estimated_cost:
-          type: number
     Lane:
       type: object
       properties:
@@ -9100,6 +9381,18 @@ components:
         label:
           type: string
         total_tokens:
+          type: integer
+          format: int64
+        input_tokens:
+          type: integer
+          format: int64
+        cache_read_tokens:
+          type: integer
+          format: int64
+        cache_creation_tokens:
+          type: integer
+          format: int64
+        output_tokens:
           type: integer
           format: int64
         has_breakdown:
@@ -9125,6 +9418,10 @@ components:
             $ref: "#/components/schemas/HarnessEntry"
         output:
           $ref: "#/components/schemas/Side"
+        models:
+          type: array
+          items:
+            type: string
     SpendMetricRequest:
       required:
       - interval_end
@@ -9164,8 +9461,9 @@ components:
           - high
           - medium
           - low
-        est_saving:
-          type: number
+        estimated_savings_tokens:
+          type: integer
+          format: int64
         docs_url:
           type: string
         related_lane_key:
@@ -9182,9 +9480,25 @@ components:
         total_tokens:
           type: integer
           format: int64
+        input_tokens:
+          type: integer
+          format: int64
+        cache_read_tokens:
+          type: integer
+          format: int64
+        cache_creation_tokens:
+          type: integer
+          format: int64
+        output_tokens:
+          type: integer
+          format: int64
+        model:
+          type: string
         item_count:
           type: integer
           format: int32
+        item_unit:
+          type: string
         items:
           type: array
           items:
@@ -9192,8 +9506,9 @@ components:
     SpendRecommendationsResponse:
       type: object
       properties:
-        total_savings:
-          type: number
+        total_savings_tokens:
+          type: integer
+          format: int64
         items:
           type: array
           items:
@@ -9247,8 +9562,21 @@ components:
           type: string
         model:
           type: string
-        total_estimated_cost:
-          type: number
+        input_tokens:
+          type: integer
+          format: int64
+        cache_read_tokens:
+          type: integer
+          format: int64
+        cache_creation_tokens:
+          type: integer
+          format: int64
+        output_tokens:
+          type: integer
+          format: int64
+        total_tokens:
+          type: integer
+          format: int64
         requests:
           type: integer
           format: int64
@@ -9823,6 +10151,11 @@ components:
           minimum: 1
           type: integer
           format: int32
+        lock_timeout_seconds:
+          maximum: 3600
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9905,6 +10238,11 @@ components:
             type: string
         annotators_per_item:
           maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+        lock_timeout_seconds:
+          maximum: 3600
           minimum: 1
           type: integer
           format: int32
@@ -10005,6 +10343,11 @@ components:
           minimum: 1
           type: integer
           format: int32
+        lock_timeout_seconds:
+          maximum: 3600
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -10045,6 +10388,36 @@ components:
         value:
           type: number
       readOnly: true
+    ItemLockInfo:
+      type: object
+      properties:
+        active_locks:
+          type: integer
+          format: int32
+        locked_by:
+          type: array
+          items:
+            type: string
+    LocksResponse:
+      type: object
+      properties:
+        locks:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ItemLockInfo"
+    LockResponse:
+      type: object
+      properties:
+        acquired:
+          type: boolean
+        item_id:
+          type: string
+          format: uuid
+        locked_by:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
     AnnotationQueueUpdate:
       type: object
       properties:
@@ -10064,6 +10437,11 @@ components:
             type: string
         annotators_per_item:
           maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+        lock_timeout_seconds:
+          maximum: 3600
           minimum: 1
           type: integer
           format: int32
@@ -15144,6 +15522,13 @@ components:
             \ or experiment with that ID doesn't exist, a new experiment will be created\
             \ with the given experimentName"
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "Project for traces auto-created from items that provide evaluate_task_result\
+            \ (i.e. without an explicit trace). If null, the default project is used;\
+            \ relying on this fallback is deprecated, please provide project_name\
+            \ explicitly."
         items:
           maxItems: 1000
           minItems: 1
@@ -15488,6 +15873,13 @@ components:
             \ or experiment with that ID doesn't exist, a new experiment will be created\
             \ with the given experimentName"
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "Project for traces auto-created from items that provide evaluate_task_result\
+            \ (i.e. without an explicit trace). If null, the default project is used;\
+            \ relying on this fallback is deprecated, please provide project_name\
+            \ explicitly."
         items:
           maxItems: 1000
           minItems: 1
@@ -19455,6 +19847,7 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agentInsightsEnabled
       - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
@@ -19528,6 +19921,8 @@ components:
         ollieEnabled:
           type: boolean
         agenticToolsEnabled:
+          type: boolean
+        agentInsightsEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true

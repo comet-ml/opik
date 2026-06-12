@@ -117,6 +117,7 @@ function createHostListeners(): HostListeners {
     "context:changed": new Set(),
     "visibility:changed": new Set(),
     "runner:state-changed": new Set(),
+    "conversation:start": new Set(),
   };
 }
 
@@ -192,6 +193,9 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
           );
         }
     }
+  },
+  startConversation: (message: string) => {
+    emitHostEvent(refs.listeners, "conversation:start", { message });
   },
 });
 

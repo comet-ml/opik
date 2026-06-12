@@ -133,7 +133,7 @@ public class OAuthAuthorizationService {
                 .build();
     }
 
-    private static URI errorRedirect(String redirectUri, String error, String state) {
+    private URI errorRedirect(String redirectUri, String error, String state) {
         UriBuilder builder = UriBuilder.fromUri(redirectUri).queryParam(PARAM_ERROR, error);
         if (StringUtils.isNotBlank(state)) {
             builder.queryParam(PARAM_STATE, state);
@@ -141,7 +141,7 @@ public class OAuthAuthorizationService {
         return builder.build();
     }
 
-    private static URI loginRedirect(McpOAuthConfig config, String rawQuery) {
+    private URI loginRedirect(McpOAuthConfig config, String rawQuery) {
         String authorizeUrl = config.getBaseUrl() + AUTHORIZE_PATH
                 + (StringUtils.isBlank(rawQuery) ? "" : "?" + rawQuery);
         return UriBuilder.fromUri(config.getBaseUrl())
@@ -150,7 +150,7 @@ public class OAuthAuthorizationService {
                 .build();
     }
 
-    private static URI consentRedirect(McpOAuthConfig config, AuthorizeRequest request) {
+    private URI consentRedirect(McpOAuthConfig config, AuthorizeRequest request) {
         UriBuilder consentUri = UriBuilder.fromUri(config.getBaseUrl())
                 .path("/oauth/consent")
                 .queryParam(PARAM_CLIENT_ID, request.clientId())

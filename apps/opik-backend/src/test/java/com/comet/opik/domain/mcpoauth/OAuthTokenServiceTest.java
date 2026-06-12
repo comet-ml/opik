@@ -1,11 +1,14 @@
 package com.comet.opik.domain.mcpoauth;
 
 import jakarta.ws.rs.BadRequestException;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -13,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.ACCESS_PREFIX;
 import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.REFRESH_PREFIX;
@@ -24,6 +28,7 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,11 +38,20 @@ import static org.mockito.Mockito.when;
 @DisplayName("OAuth Token Service Test")
 class OAuthTokenServiceTest {
 
-    private static final String CLIENT_ID = "client-123";
-    private static final String REDIRECT_URI = "http://localhost:1234/cb";
-    private static final String CODE = "auth-code-xyz";
-    private static final String CODE_VERIFIER = "verifier";
-    private static final String REFRESH_TOKEN = REFRESH_PREFIX + "abc";
+    private final String clientId = "client-" + RandomStringUtils.secure().nextAlphanumeric(8);
+    private final String redirectUri = "http://localhost:1234/" + RandomStringUtils.secure().nextAlphanumeric(8);
+    private final String code = RandomStringUtils.secure().nextAlphanumeric(20);
+    private final String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(20);
+    private final String refreshToken = REFRESH_PREFIX + RandomStringUtils.secure().nextAlphanumeric(10);
+
+    private final TokenResponse minted = TokenResponse.builder()
+            .accessToken(ACCESS_PREFIX + RandomStringUtils.secure().nextAlphanumeric(20))
+            .refreshToken(REFRESH_PREFIX + RandomStringUtils.secure().nextAlphanumeric(20))
+            .tokenType("Bearer")
+            .expiresIn(RandomUtils.secure().randomLong(0, 86400))
+            .workspaceId(RandomStringUtils.secure().nextAlphanumeric(10))
+            .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
+            .build();
 
     @Mock
     private OAuthClientService clientService;
@@ -48,17 +62,10 @@ class OAuthTokenServiceTest {
     private OAuthTokenService service;
 
     private McpOAuthClient validClient() {
-        return McpOAuthClient.builder().id(CLIENT_ID).name("c").redirectUris(Set.of(REDIRECT_URI)).build();
-    }
-
-    private TokenResponse minted() {
-        return TokenResponse.builder()
-                .accessToken(ACCESS_PREFIX + "xxx")
-                .refreshToken(REFRESH_PREFIX + "yyy")
-                .tokenType("Bearer")
-                .expiresIn(3600L)
-                .workspaceId("ws-1")
-                .workspaceName("default")
+        return McpOAuthClient.builder()
+                .id(clientId)
+                .name(RandomStringUtils.secure().nextAlphanumeric(5))
+                .redirectUris(Set.of(redirectUri))
                 .build();
     }
 
@@ -71,22 +78,29 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("authorization_code: valid request returns the exchanged tokens")
     void issueToken_authCodeGrant_returnsTokens() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.of(validClient()));
-        when(mcpOAuthService.exchangeCode(CODE, CODE_VERIFIER, REDIRECT_URI, CLIENT_ID)).thenReturn(minted());
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
+        when(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId)).thenReturn(minted);
 
-        TokenResponse response = service.issueToken(GRANT_AUTHORIZATION_CODE, CODE, REDIRECT_URI, CLIENT_ID,
-                CODE_VERIFIER, null);
+        TokenResponse response = service.issueToken(GRANT_AUTHORIZATION_CODE, code, redirectUri, clientId,
+                codeVerifier, null);
 
-        assertThat(response).isEqualTo(minted());
+        assertThat(response).isEqualTo(minted);
+    }
+
+    private static Stream<Arguments> issueToken_authCodeGrant_missingFields_invalidRequest() {
+        String code = RandomStringUtils.secure().nextAlphanumeric(20);
+        String redirectUri = "http://localhost:1234/" + RandomStringUtils.secure().nextAlphanumeric(8);
+        String clientId = "client-" + RandomStringUtils.secure().nextAlphanumeric(8);
+        String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(20);
+        return Stream.of(
+                arguments(null, redirectUri, clientId, codeVerifier),
+                arguments(code, null, clientId, codeVerifier),
+                arguments(code, redirectUri, null, codeVerifier),
+                arguments(code, redirectUri, clientId, null));
     }
 
     @ParameterizedTest
-    @CsvSource(nullValues = "NULL", value = {
-            "NULL,          http://localhost:1234/cb, client-123, verifier",
-            "auth-code-xyz, NULL,                     client-123, verifier",
-            "auth-code-xyz, http://localhost:1234/cb, NULL,       verifier",
-            "auth-code-xyz, http://localhost:1234/cb, client-123, NULL",
-    })
+    @MethodSource
     @DisplayName("authorization_code: each missing required field → invalid_request")
     void issueToken_authCodeGrant_missingFields_invalidRequest(String code, String redirectUri, String clientId,
             String codeVerifier) {
@@ -99,10 +113,10 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("authorization_code: unknown client_id → invalid_client")
     void issueToken_authCodeGrant_unknownClient_invalidClient() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.empty());
+        when(clientService.resolve(clientId)).thenReturn(Optional.empty());
 
-        assertOAuthError(() -> service.issueToken(GRANT_AUTHORIZATION_CODE, CODE, REDIRECT_URI, CLIENT_ID,
-                CODE_VERIFIER, null), ERROR_INVALID_CLIENT);
+        assertOAuthError(() -> service.issueToken(GRANT_AUTHORIZATION_CODE, code, redirectUri, clientId,
+                codeVerifier, null), ERROR_INVALID_CLIENT);
 
         verify(mcpOAuthService, never()).exchangeCode(any(), any(), any(), any());
     }
@@ -110,30 +124,35 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("authorization_code: exchange failure is translated to invalid_grant")
     void issueToken_authCodeGrant_exchangeFails_invalidGrant() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.of(validClient()));
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
         when(mcpOAuthService.exchangeCode(any(), any(), any(), any()))
                 .thenThrow(new BadRequestException(ERROR_INVALID_GRANT));
 
-        assertOAuthError(() -> service.issueToken(GRANT_AUTHORIZATION_CODE, CODE, REDIRECT_URI, CLIENT_ID,
-                CODE_VERIFIER, null), ERROR_INVALID_GRANT);
+        assertOAuthError(() -> service.issueToken(GRANT_AUTHORIZATION_CODE, code, redirectUri, clientId,
+                codeVerifier, null), ERROR_INVALID_GRANT);
     }
 
     @Test
     @DisplayName("refresh_token: valid request returns the rotated tokens")
     void issueToken_refreshGrant_returnsTokens() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.of(validClient()));
-        when(mcpOAuthService.refresh(REFRESH_TOKEN, CLIENT_ID)).thenReturn(minted());
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
+        when(mcpOAuthService.refresh(refreshToken, clientId)).thenReturn(minted);
 
-        TokenResponse response = service.issueToken(GRANT_REFRESH_TOKEN, null, null, CLIENT_ID, null, REFRESH_TOKEN);
+        TokenResponse response = service.issueToken(GRANT_REFRESH_TOKEN, null, null, clientId, null, refreshToken);
 
-        assertThat(response).isEqualTo(minted());
+        assertThat(response).isEqualTo(minted);
+    }
+
+    private static Stream<Arguments> issueToken_refreshGrant_missingFields_invalidRequest() {
+        String refreshToken = REFRESH_PREFIX + RandomStringUtils.secure().nextAlphanumeric(10);
+        String clientId = "client-" + RandomStringUtils.secure().nextAlphanumeric(8);
+        return Stream.of(
+                arguments(null, clientId),
+                arguments(refreshToken, null));
     }
 
     @ParameterizedTest
-    @CsvSource(nullValues = "NULL", value = {
-            "NULL,   client-123",
-            "rt-abc, NULL",
-    })
+    @MethodSource
     @DisplayName("refresh_token: each missing required field → invalid_request")
     void issueToken_refreshGrant_missingFields_invalidRequest(String refreshToken, String clientId) {
         assertOAuthError(() -> service.issueToken(GRANT_REFRESH_TOKEN, null, null, clientId, null, refreshToken),
@@ -146,9 +165,9 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("refresh_token: unknown client_id → invalid_client")
     void issueToken_refreshGrant_unknownClient_invalidClient() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.empty());
+        when(clientService.resolve(clientId)).thenReturn(Optional.empty());
 
-        assertOAuthError(() -> service.issueToken(GRANT_REFRESH_TOKEN, null, null, CLIENT_ID, null, REFRESH_TOKEN),
+        assertOAuthError(() -> service.issueToken(GRANT_REFRESH_TOKEN, null, null, clientId, null, refreshToken),
                 ERROR_INVALID_CLIENT);
 
         verify(mcpOAuthService, never()).refresh(any(), any());
@@ -157,30 +176,30 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("refresh_token: refresh failure is translated to invalid_grant")
     void issueToken_refreshGrant_refreshFails_invalidGrant() {
-        when(clientService.resolve(CLIENT_ID)).thenReturn(Optional.of(validClient()));
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
         when(mcpOAuthService.refresh(any(), any())).thenThrow(new BadRequestException(ERROR_INVALID_GRANT));
 
-        assertOAuthError(() -> service.issueToken(GRANT_REFRESH_TOKEN, null, null, CLIENT_ID, null, REFRESH_TOKEN),
+        assertOAuthError(() -> service.issueToken(GRANT_REFRESH_TOKEN, null, null, clientId, null, refreshToken),
                 ERROR_INVALID_GRANT);
     }
 
     @Test
     @DisplayName("unsupported grant_type → unsupported_grant_type")
     void issueToken_unsupportedGrant_unsupportedGrantType() {
-        assertOAuthError(() -> service.issueToken("client_credentials", null, null, CLIENT_ID, null, null),
+        assertOAuthError(() -> service.issueToken("client_credentials", null, null, clientId, null, null),
                 ERROR_UNSUPPORTED_GRANT_TYPE);
     }
 
     @Test
     @DisplayName("missing grant_type → invalid_request")
     void issueToken_blankGrant_invalidRequest() {
-        assertOAuthError(() -> service.issueToken(null, null, null, CLIENT_ID, null, null), ERROR_INVALID_REQUEST);
+        assertOAuthError(() -> service.issueToken(null, null, null, clientId, null, null), ERROR_INVALID_REQUEST);
     }
 
     @Test
     @DisplayName("revoke: delegates to the underlying service")
     void revoke_delegates() {
-        String accessToken = ACCESS_PREFIX + "xxx";
+        String accessToken = ACCESS_PREFIX + RandomStringUtils.secure().nextAlphanumeric(20);
 
         service.revoke(accessToken);
 
@@ -192,7 +211,7 @@ class OAuthTokenServiceTest {
     void revoke_serviceThrows_isSwallowed() {
         Mockito.doThrow(new RuntimeException("db down")).when(mcpOAuthService).revoke(any());
 
-        service.revoke(ACCESS_PREFIX + "zzz");
+        service.revoke(ACCESS_PREFIX + RandomStringUtils.secure().nextAlphanumeric(20));
 
         verify(mcpOAuthService).revoke(any());
     }

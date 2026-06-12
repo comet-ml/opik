@@ -13,7 +13,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/ui/form";
-import useAppStore from "@/store/AppStore";
+import { useOpikWorkspaceName } from "@/store/AppStore";
 import useUser from "@/plugins/comet/useUser";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMutation";
@@ -59,7 +59,7 @@ export const inviteUsersSchema = z.object({
 type InviteUsersFormData = z.infer<typeof inviteUsersSchema>;
 
 const InviteUsersForm = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const workspaceName = useOpikWorkspaceName();
   const { data: user } = useUser();
   const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,

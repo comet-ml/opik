@@ -12,6 +12,7 @@ export const ExperimentItemBulkUpload: core.serialization.ObjectSchema<
     experimentName: core.serialization.property("experiment_name", core.serialization.string()),
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
     experimentId: core.serialization.property("experiment_id", core.serialization.string().optional()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     items: core.serialization.list(ExperimentItemBulkRecord),
 });
 
@@ -20,6 +21,7 @@ export declare namespace ExperimentItemBulkUpload {
         experiment_name: string;
         dataset_name: string;
         experiment_id?: string | null;
+        project_name?: string | null;
         items: ExperimentItemBulkRecord.Raw[];
     }
 }

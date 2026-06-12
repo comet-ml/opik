@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
@@ -16,7 +15,10 @@ import java.util.List;
 public record SpendCompositionResponse(
         Side input,
         List<HarnessEntry> harness,
-        Side output) {
+        Side output,
+        // Distinct cc.billing.model values in the window — the FE uses
+        // these to price the tier columns.
+        List<String> models) {
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -33,6 +35,12 @@ public record SpendCompositionResponse(
             String key,
             String label,
             Long totalTokens,
+            // Raw cache-tier sums from cc.billing — the FE prices these
+            // (hardcoded Claude rates); the BE ships data, not dollars.
+            Long inputTokens,
+            Long cacheReadTokens,
+            Long cacheCreationTokens,
+            Long outputTokens,
             boolean hasBreakdown) {
     }
 
@@ -41,7 +49,6 @@ public record SpendCompositionResponse(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record HarnessEntry(
             String key,
-            String label,
-            BigDecimal totalEstimatedCost) {
+            String label) {
     }
 }

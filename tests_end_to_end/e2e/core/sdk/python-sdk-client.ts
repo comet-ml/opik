@@ -68,6 +68,20 @@ export interface PythonSdkClient {
       score_value: number;
     }>;
   }>;
+  createTextPrompt(args: {
+    name: string;
+    prompt: string;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  createChatPrompt(args: {
+    name: string;
+    messages: Array<{ role: string; content: string }>;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
   createTestSuite(args: {
     name: string;
     project_name: string;
@@ -144,12 +158,25 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       // is picked up after the bridge has already spawned.
       const apiKey = process.env.OPIK_API_KEY;
       if (apiKey) headers['X-Opik-Api-Key'] = apiKey;
-      const res = await fetch(`${bridgeUrl}${path}`, {
-        method,
-        headers: Object.keys(headers).length > 0 ? headers : undefined,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: ctrl.signal,
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${bridgeUrl}${path}`, {
+          method,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: ctrl.signal,
+        });
+      } catch (err) {
+        if (ctrl.signal.aborted) {
+          throw new PythonSdkBridgeError({
+            status: 0,
+            endpoint,
+            detail: 'client-timeout',
+            message: `opik-sdk-driver ${endpoint} aborted after ${REQUEST_TIMEOUT_MS}ms (client-side timeout — the bridge or backend did not respond in time)`,
+          });
+        }
+        throw err;
+      }
       if (res.ok) {
         return (await res.json()) as TResponse;
       }
@@ -197,6 +224,12 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async createTextPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/text', args);
+    },
+    async createChatPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/chat', args);
     },
     async evaluateExperiment(args) {
       return request<{

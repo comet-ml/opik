@@ -45,6 +45,8 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.PRAGMA_NO_CACHE;
 @Path("/oauth")
 @Timed
 @Slf4j
+@Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+@Produces(MediaType.APPLICATION_JSON)
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "MCP OAuth", description = "MCP OAuth 2.1 Authorization Server resources")
 public class OAuthTokenResource {
@@ -53,8 +55,6 @@ public class OAuthTokenResource {
 
     @POST
     @Path("/token")
-    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    @Produces(MediaType.APPLICATION_JSON)
     @Operation(operationId = "token", summary = "OAuth Token Endpoint", description = "OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization code with PKCE or a refresh token for an access/refresh token pair", responses = {
             @ApiResponse(responseCode = "200", description = "Token response", content = @Content(schema = @Schema(implementation = TokenResponse.class))),
             @ApiResponse(responseCode = "400", description = "OAuth error (RFC 6749 §5.2)", content = @Content(schema = @Schema(implementation = OAuthError.class)))})
@@ -77,7 +77,6 @@ public class OAuthTokenResource {
 
     @POST
     @Path("/revoke")
-    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Operation(operationId = "revoke", summary = "OAuth Token Revocation Endpoint", description = "OAuth 2.0 token revocation endpoint (RFC 7009). Always returns 200, whether the token was revoked, never existed, or was invalid", responses = {
             @ApiResponse(responseCode = "200", description = "Revocation acknowledged")})
     public Response revoke(

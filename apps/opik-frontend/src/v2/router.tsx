@@ -62,11 +62,13 @@ import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
+import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 import AiSpend from "@/v2/pages/AiSpend/AiSpend";
 import AiSpendHomePage from "@/v2/pages/AiSpendHomePage/AiSpendHomePage";
 import AiSpendLeaderboardPage from "@/v2/pages/AiSpendLeaderboardPage/AiSpendLeaderboardPage";
+import AiSpendSessionsPage from "@/v2/pages/LogsPage/AiSpendSessionsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -223,12 +225,11 @@ const projectScopedRoute = createRoute({
   },
 });
 
-// TODO: OPIK-6260 - Restore ProjectHomePage as /home component once home page redesign is complete
-// ----------- project home (project-scoped) — temporarily shows Ollie
+// ----------- project home (project-scoped)
 const projectHomeRoute = createRoute({
   path: "/home",
   getParentRoute: () => projectScopedRoute,
-  component: OlliePage,
+  component: ProjectHomePage,
 });
 
 // ----------- ollie (project-scoped)
@@ -646,6 +647,15 @@ const aiSpendLeaderboardRoute = createRoute({
   },
 });
 
+const aiSpendSessionsRoute = createRoute({
+  path: "/sessions",
+  getParentRoute: () => aiSpendRoute,
+  component: AiSpendSessionsPage,
+  staticData: {
+    title: "Sessions",
+  },
+});
+
 // ----------- Automation logs
 const automationLogsRoute = createRoute({
   path: "/$workspaceName/automation-logs",
@@ -679,6 +689,7 @@ const routeTree = rootRoute.addChildren([
       aiSpendIndexRoute,
       aiSpendHomeRoute,
       aiSpendLeaderboardRoute,
+      aiSpendSessionsRoute,
     ]),
     workspaceRoute.addChildren([
       workspaceIndexRoute,

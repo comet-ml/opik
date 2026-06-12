@@ -64,6 +64,7 @@ from .audio_url_public import AudioUrlPublic
 from .audio_url_write import AudioUrlWrite
 from .auth_details_holder import AuthDetailsHolder
 from .authorization_server_metadata import AuthorizationServerMetadata
+from .authorize_context import AuthorizeContext
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
@@ -220,6 +221,7 @@ from .comment_public import CommentPublic
 from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
+from .consent_response import ConsentResponse
 from .count_value_stat_public import CountValueStatPublic
 from .create_session_response import CreateSessionResponse
 from .dashboard_page_public import DashboardPagePublic
@@ -405,6 +407,7 @@ from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
 from .item import Item
 from .item_impact import ItemImpact
+from .item_lock_info import ItemLockInfo
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
@@ -451,6 +454,8 @@ from .local_runner_log_entry import LocalRunnerLogEntry
 from .local_runner_page import LocalRunnerPage
 from .local_runner_status import LocalRunnerStatus
 from .local_runner_type import LocalRunnerType
+from .lock_response import LockResponse
+from .locks_response import LocksResponse
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
@@ -469,6 +474,7 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
+from .o_auth_error import OAuthError
 from .ollama_connection_test_response import OllamaConnectionTestResponse
 from .ollama_instance_base_url_request import OllamaInstanceBaseUrlRequest
 from .ollama_model import OllamaModel
@@ -616,6 +622,7 @@ from .studio_optimizer_write import StudioOptimizerWrite
 from .studio_prompt import StudioPrompt
 from .studio_prompt_public import StudioPromptPublic
 from .studio_prompt_write import StudioPromptWrite
+from .token_response import TokenResponse
 from .token_usage_names import TokenUsageNames
 from .tool import Tool
 from .tool_call import ToolCall
@@ -683,6 +690,7 @@ from .webhook_test_result_status import WebhookTestResultStatus
 from .webhook_write import WebhookWrite
 from .welcome_wizard_tracking import WelcomeWizardTracking
 from .workspace_configuration import WorkspaceConfiguration
+from .workspace_info import WorkspaceInfo
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
@@ -757,6 +765,7 @@ __all__ = [
     "AudioUrlWrite",
     "AuthDetailsHolder",
     "AuthorizationServerMetadata",
+    "AuthorizeContext",
     "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorAction",
     "AutomationRuleEvaluatorLlmAsJudge",
@@ -877,6 +886,7 @@ __all__ = [
     "CompleteMultipartUploadRequest",
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
+    "ConsentResponse",
     "CountValueStatPublic",
     "CreateSessionResponse",
     "DashboardPagePublic",
@@ -1055,6 +1065,7 @@ __all__ = [
     "ImageUrlWrite",
     "Item",
     "ItemImpact",
+    "ItemLockInfo",
     "JsonListString",
     "JsonListStringCompare",
     "JsonListStringExperimentItemBulkWriteView",
@@ -1101,6 +1112,8 @@ __all__ = [
     "LocalRunnerPage",
     "LocalRunnerStatus",
     "LocalRunnerType",
+    "LockResponse",
+    "LocksResponse",
     "LogItem",
     "LogItemLevel",
     "LogPage",
@@ -1119,6 +1132,7 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
+    "OAuthError",
     "OllamaConnectionTestResponse",
     "OllamaInstanceBaseUrlRequest",
     "OllamaModel",
@@ -1264,6 +1278,7 @@ __all__ = [
     "StudioPrompt",
     "StudioPromptPublic",
     "StudioPromptWrite",
+    "TokenResponse",
     "TokenUsageNames",
     "Tool",
     "ToolCall",
@@ -1331,6 +1346,7 @@ __all__ = [
     "WebhookWrite",
     "WelcomeWizardTracking",
     "WorkspaceConfiguration",
+    "WorkspaceInfo",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
     "WorkspaceMetricsSummaryRequest",

@@ -83,8 +83,9 @@ const PreviewBody: React.FC<{
   const top = [...items]
     .sort((a, b) => laneWeight(b) - laneWeight(a))
     .slice(0, TOP_N);
-  const itemCount = data?.item_count ?? items.length;
-  const hasMore = itemCount > top.length;
+  // item_count is the total event count, not the entity count - the overflow
+  // figure is the number of listed entities.
+  const hasMore = items.length > top.length;
   const barColor = getLaneMeta(laneKey).color;
 
   return (
@@ -133,7 +134,7 @@ const PreviewBody: React.FC<{
             className="comet-body-xs h-6 w-full justify-center px-2"
             onClick={() => onViewAll?.(laneKey)}
           >
-            View all ({itemCount})
+            View all ({items.length})
           </Button>
         </>
       )}

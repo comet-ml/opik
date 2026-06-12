@@ -8,7 +8,7 @@ import * as environments from "../../../../environments.js";
 import { handleNonStatusCodeError } from "../../../../errors/handleNonStatusCodeError.js";
 import * as errors from "../../../../errors/index.js";
 import * as serializers from "../../../../serialization/index.js";
-import type * as OpikApi from "../../../index.js";
+import * as OpikApi from "../../../index.js";
 
 export declare namespace McpOAuthClient {
     export type Options = BaseClientOptions;
@@ -24,6 +24,234 @@ export class McpOAuthClient {
 
     constructor(options: McpOAuthClient.Options = {}) {
         this._options = normalizeClientOptions(options);
+    }
+
+    /**
+     * OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the client and PKCE parameters, then redirects to the login or consent page
+     *
+     * @param {OpikApi.AuthorizeRequest} request
+     * @param {McpOAuthClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.mcpOAuth.authorize({
+     *         clientId: "client_id",
+     *         redirectUri: "redirect_uri"
+     *     })
+     */
+    public authorize(
+        request: OpikApi.AuthorizeRequest,
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__authorize(request, requestOptions));
+    }
+
+    private async __authorize(
+        request: OpikApi.AuthorizeRequest,
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const { clientId, redirectUri, responseType, codeChallenge, codeChallengeMethod, resource, state } = request;
+        const _queryParams: Record<string, unknown> = {
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            response_type: responseType,
+            code_challenge: codeChallenge,
+            code_challenge_method: codeChallengeMethod,
+            resource,
+            state,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "oauth/authorize",
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "GET", "/oauth/authorize");
+    }
+
+    /**
+     * Submit the user's consent, issue an authorization code, and return the client redirect target
+     *
+     * @param {OpikApi.ConsentRequest} request
+     * @param {McpOAuthClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.mcpOAuth.consent({
+     *         clientId: "client_id",
+     *         redirectUri: "redirect_uri",
+     *         codeChallenge: "code_challenge",
+     *         codeChallengeMethod: "code_challenge_method",
+     *         resource: "resource"
+     *     })
+     */
+    public consent(
+        request: OpikApi.ConsentRequest,
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ConsentResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__consent(request, requestOptions));
+    }
+
+    private async __consent(
+        request: OpikApi.ConsentRequest,
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ConsentResponse>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "oauth/authorize",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.ConsentRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ConsentResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/oauth/authorize");
+    }
+
+    /**
+     * Get the client details, eligible workspaces, and a CSRF token used to render the consent screen
+     *
+     * @param {OpikApi.GetAuthorizeContextRequest} request
+     * @param {McpOAuthClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.mcpOAuth.getAuthorizeContext({
+     *         clientId: "client_id",
+     *         redirectUri: "redirect_uri"
+     *     })
+     */
+    public getAuthorizeContext(
+        request: OpikApi.GetAuthorizeContextRequest,
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.AuthorizeContext> {
+        return core.HttpResponsePromise.fromPromise(this.__getAuthorizeContext(request, requestOptions));
+    }
+
+    private async __getAuthorizeContext(
+        request: OpikApi.GetAuthorizeContextRequest,
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.AuthorizeContext>> {
+        const { clientId, redirectUri } = request;
+        const _queryParams: Record<string, unknown> = {
+            client_id: clientId,
+            redirect_uri: redirectUri,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "oauth/authorize/context",
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.AuthorizeContext.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "GET", "/oauth/authorize/context");
     }
 
     /**
@@ -94,5 +322,151 @@ export class McpOAuthClient {
             "GET",
             "/.well-known/oauth-authorization-server",
         );
+    }
+
+    /**
+     * OAuth 2.0 token revocation endpoint (RFC 7009). Always returns 200, whether the token was revoked, never existed, or was invalid
+     *
+     * @param {OpikApi.RevokeRequest} request
+     * @param {McpOAuthClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.mcpOAuth.revoke()
+     */
+    public revoke(
+        request: OpikApi.RevokeRequest = {},
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__revoke(request, requestOptions));
+    }
+
+    private async __revoke(
+        request: OpikApi.RevokeRequest = {},
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "oauth/revoke",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/x-www-form-urlencoded",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "form",
+            body: serializers.RevokeRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/oauth/revoke");
+    }
+
+    /**
+     * OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization code with PKCE or a refresh token for an access/refresh token pair
+     *
+     * @param {OpikApi.TokenRequest} request
+     * @param {McpOAuthClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     *
+     * @example
+     *     await client.mcpOAuth.token()
+     */
+    public token(
+        request: OpikApi.TokenRequest = {},
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.TokenResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__token(request, requestOptions));
+    }
+
+    private async __token(
+        request: OpikApi.TokenRequest = {},
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.TokenResponse>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "oauth/token",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/x-www-form-urlencoded",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "form",
+            body: serializers.TokenRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.TokenResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/oauth/token");
     }
 }

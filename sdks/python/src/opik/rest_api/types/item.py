@@ -12,7 +12,7 @@ class Item(UniversalBaseModel):
     title: typing.Optional[str] = None
     body: typing.Optional[str] = None
     impact: typing.Optional[ItemImpact] = None
-    est_saving: typing.Optional[float] = None
+    estimated_savings_tokens: typing.Optional[int] = None
     docs_url: typing.Optional[str] = None
     related_lane_key: typing.Optional[str] = None
 

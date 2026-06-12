@@ -3,5 +3,4 @@
 export interface HarnessEntry {
     key?: string;
     label?: string;
-    totalEstimatedCost?: number;
 }
