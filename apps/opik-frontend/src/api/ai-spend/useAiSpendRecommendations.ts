@@ -1,6 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { useAiSpend } from "@/contexts/AiSpendContext";
 
 export interface SpendRecommendation {
   id: string;
@@ -22,7 +21,6 @@ type UseAiSpendRecommendationsParams = {
   intervalStart: string;
   intervalEnd: string;
   userUuid?: string;
-  workspaceName?: string;
 };
 
 const getAiSpendRecommendations = async (
@@ -32,7 +30,6 @@ const getAiSpendRecommendations = async (
     intervalStart,
     intervalEnd,
     userUuid,
-    workspaceName,
   }: UseAiSpendRecommendationsParams,
 ) => {
   const { data } = await api.post<SpendRecommendationsResponse>(
@@ -43,27 +40,19 @@ const getAiSpendRecommendations = async (
       interval_end: intervalEnd,
       ...(userUuid && { user_id: userUuid }),
     },
-    {
-      signal,
-      ...(workspaceName && {
-        headers: { "Comet-Workspace": workspaceName },
-      }),
-    },
+    { signal },
   );
 
   return data;
 };
 
 export default function useAiSpendRecommendations(
-  params: Omit<UseAiSpendRecommendationsParams, "workspaceName">,
+  params: UseAiSpendRecommendationsParams,
   options?: QueryConfig<SpendRecommendationsResponse>,
 ) {
-  const { spendWorkspaceName } = useAiSpend();
-  const queryParams = { ...params, workspaceName: spendWorkspaceName };
-
   return useQuery({
-    queryKey: ["ai-spend-recommendations", queryParams],
-    queryFn: (context) => getAiSpendRecommendations(context, queryParams),
+    queryKey: ["ai-spend-recommendations", params],
+    queryFn: (context) => getAiSpendRecommendations(context, params),
     ...options,
   });
 }
