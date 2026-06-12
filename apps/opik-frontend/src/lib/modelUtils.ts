@@ -17,6 +17,19 @@ import {
 } from "@/lib/provider";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
+export const getRoutableProviderModelValue = (
+  composedProviderType: COMPOSED_PROVIDER_TYPE,
+  modelValue: string,
+): PROVIDER_MODEL_TYPE => {
+  const providerType = parseComposedProviderType(composedProviderType);
+
+  if (providerType === PROVIDER_TYPE.VERTEX_AI && !modelValue.includes("/")) {
+    return `vertex_ai/${modelValue}` as PROVIDER_MODEL_TYPE;
+  }
+
+  return modelValue as PROVIDER_MODEL_TYPE;
+};
+
 /**
  * Checks if a model is a reasoning model that requires temperature = 1.0.
  *
