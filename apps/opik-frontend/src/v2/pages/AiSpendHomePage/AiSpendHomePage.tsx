@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { AxiosError } from "axios";
 import HomeSummaryCards from "./HomeSummaryCards";
 import AiSpendEmptyState from "./AiSpendEmptyState";
 import SpendPeriodSelect from "@/v2/pages-shared/SpendPeriodSelect/SpendPeriodSelect";
@@ -22,13 +23,21 @@ const AiSpendHomePage: React.FC = () => {
     [windowDays],
   );
 
-  const { data: project, isPending: isProbePending } = useProjectByName(
+  const {
+    data: project,
+    isPending: isProbePending,
+    isError,
+    error,
+  } = useProjectByName(
     { projectName },
     { refetchOnMount: false, retry: false },
   );
 
-  const hasAnyData = Boolean(project?.last_updated_trace_at);
-  const showEmptyState = !isProbePending && !hasAnyData;
+  const isProjectMissing =
+    isError && error instanceof AxiosError && error.response?.status === 404;
+  const isRealError = isError && !isProjectMissing;
+  const showEmptyState =
+    !isProbePending && !isRealError && !project?.last_updated_trace_at;
 
   return (
     <div className="py-6">
