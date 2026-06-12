@@ -1,5 +1,5 @@
+import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
-import { expect } from '@playwright/test';
 
 /**
  * Page object for the Playground logs sidebar (TraceLogsSidebar).
@@ -19,7 +19,9 @@ export class PlaygroundLogsSidebarPage {
 
   /** Wait for the sidebar sheet to be visible. */
   async waitForOpen(): Promise<void> {
-    await this.dialog.waitFor({ state: 'visible' });
+    return test.step('wait for logs sidebar to open', async () => {
+      await this.dialog.waitFor({ state: 'visible' });
+    });
   }
 
   /** All trace rows in the sidebar table. */
@@ -33,19 +35,23 @@ export class PlaygroundLogsSidebarPage {
 
   /** Poll until at least one trace row appears (traces are async after a run). */
   async waitForTraceRow(timeoutMs = 30_000): Promise<void> {
-    await expect
-      .poll(
-        async () => (await this.traceRows().count()) > 0,
-        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
-      )
-      .toBe(true);
+    return test.step('wait for trace row to appear', async () => {
+      await expect
+        .poll(
+          async () => (await this.traceRows().count()) > 0,
+          { timeout: timeoutMs, intervals: [500, 1000, 2000] },
+        )
+        .toBe(true);
+    });
   }
 
   /** Click the first trace row and wait for the trace detail panel to open. */
   async openFirstTrace(): Promise<void> {
-    await this.firstTraceRow().click();
-    await this.page.waitForURL((url) => !!url.searchParams.get('tls_trace'));
-    await this.traceDetailPanel().waitFor({ state: 'visible' });
+    return test.step('open first trace', async () => {
+      await this.firstTraceRow().click();
+      await this.page.waitForURL((url) => !!url.searchParams.get('tls_trace'));
+      await this.traceDetailPanel().waitFor({ state: 'visible' });
+    });
   }
 
   /** The trace detail panel rendered inside the sidebar. */
@@ -55,6 +61,8 @@ export class PlaygroundLogsSidebarPage {
 
   /** Click the "Prompts" tab in the trace detail panel. */
   async clickPromptsTab(): Promise<void> {
-    await this.traceDetailPanel().getByRole('tab', { name: 'Prompts' }).click();
+    return test.step('click Prompts tab', async () => {
+      await this.traceDetailPanel().getByRole('tab', { name: 'Prompts' }).click();
+    });
   }
 }

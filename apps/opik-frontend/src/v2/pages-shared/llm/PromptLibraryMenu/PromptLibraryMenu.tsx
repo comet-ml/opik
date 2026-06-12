@@ -95,6 +95,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
       <PopoverContent
         align="end"
         className="w-[320px] p-0"
+        data-testid="prompt-library-menu"
         onCloseAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => {
           const target = e.target as HTMLElement | null;

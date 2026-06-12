@@ -97,13 +97,9 @@ test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@prompts',
         await expect(variant.detailLocator(detail)).toContainText(messageContent);
       });
 
-      await test.step('Load prompt into Playground', async () => {
-        await detail.loadInPlayground();
-      });
+      await detail.loadInPlayground();
 
-      await test.step('Verify Playground loaded with the prompt', async () => {
-        await playground.waitForReady();
-      });
+      await playground.waitForReady();
 
       await test.step('Select model and run prompt', async () => {
         await playground.selectModel(0, modelDisplayName);
@@ -129,9 +125,7 @@ test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@prompts',
         await expect(sidebar.firstTraceRow()).toBeVisible();
       });
 
-      await test.step('Open trace details', async () => {
-        await sidebar.openFirstTrace();
-      });
+      await sidebar.openFirstTrace();
 
       await test.step('Verify trace detail panel shows the prompt message', async () => {
         await expect(sidebar.traceDetailPanel().getByText(messageContent).first()).toBeVisible();

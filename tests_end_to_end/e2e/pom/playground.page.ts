@@ -1,5 +1,5 @@
+import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
-import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
@@ -39,18 +39,22 @@ export class PlaygroundPage {
   ) {}
 
   async goto(): Promise<void> {
-    const env = loadEnvConfig();
-    await this.page.goto(
-      `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/playground`,
-    );
+    return test.step('navigate to Playground', async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/playground`,
+      );
+    });
   }
 
   async waitForReady(): Promise<void> {
-    await this.page
-      .getByRole('heading', { name: 'Playground', level: 1 })
-      .waitFor({ state: 'visible' });
-    // Variant card "A" should be mounted with its model picker.
-    await this.modelPicker(0).waitFor({ state: 'visible' });
+    return test.step('wait for Playground to be ready', async () => {
+      await this.page
+        .getByRole('heading', { name: 'Playground', level: 1 })
+        .waitFor({ state: 'visible' });
+      // Variant card "A" should be mounted with its model picker.
+      await this.modelPicker(0).waitFor({ state: 'visible' });
+    });
   }
 
   /**
@@ -60,33 +64,37 @@ export class PlaygroundPage {
    * - Otherwise, the first message row (already User by default) is filled directly.
    */
   async configureVariant(index: number, cfg: PlaygroundVariantConfig): Promise<void> {
-    if (cfg.modelDisplayName) {
-      await this.setModelForVariant(index, cfg.modelDisplayName);
-    }
+    return test.step(`configure variant ${index}`, async () => {
+      if (cfg.modelDisplayName) {
+        await this.setModelForVariant(index, cfg.modelDisplayName);
+      }
 
-    const messages = this.variantMessages(index);
+      const messages = this.variantMessages(index);
 
-    if (cfg.systemPrompt !== undefined) {
-      // Flip first message role to System and fill it.
-      const firstMessage = messages.first();
-      await firstMessage.getByRole('button', { name: 'User' }).click();
-      await this.page.getByRole('menuitemcheckbox', { name: 'System' }).click();
-      await this.fillMessageBody(firstMessage, cfg.systemPrompt);
+      if (cfg.systemPrompt !== undefined) {
+        // Flip first message role to System and fill it.
+        const firstMessage = messages.first();
+        await firstMessage.getByRole('button', { name: 'User' }).click();
+        await this.page.getByRole('menuitemcheckbox', { name: 'System' }).click();
+        await this.fillMessageBody(firstMessage, cfg.systemPrompt);
 
-      // Add a new message; defaults to User.
-      await this.variantCard(index).getByRole('button', { name: 'Message' }).click();
-      const userMessage = messages.nth(1);
-      await this.fillMessageBody(userMessage, cfg.userPrompt);
-    } else {
-      const firstMessage = messages.first();
-      await this.fillMessageBody(firstMessage, cfg.userPrompt);
-    }
+        // Add a new message; defaults to User.
+        await this.variantCard(index).getByRole('button', { name: 'Message' }).click();
+        const userMessage = messages.nth(1);
+        await this.fillMessageBody(userMessage, cfg.userPrompt);
+      } else {
+        const firstMessage = messages.first();
+        await this.fillMessageBody(firstMessage, cfg.userPrompt);
+      }
+    });
   }
 
   /** Open the "Run experiment" dialog (when no suite/dataset is loaded). */
   async clickRunExperiment(): Promise<void> {
-    await this.runExperimentTriggerButton().click();
-    await this.runExperimentDialog().waitFor({ state: 'visible' });
+    return test.step('click Run experiment', async () => {
+      await this.runExperimentTriggerButton().click();
+      await this.runExperimentDialog().waitFor({ state: 'visible' });
+    });
   }
 
   /**
@@ -98,28 +106,32 @@ export class PlaygroundPage {
     mode: RunExperimentSourceMode;
     entityName: string;
   }): Promise<void> {
-    const dialog = this.runExperimentDialog();
-    const testid =
-      args.mode === 'test_suite'
-        ? 'run-experiment-dialog-source-suite'
-        : 'run-experiment-dialog-source-dataset';
-    await dialog.getByTestId(testid).click();
+    return test.step(`submit Run experiment dialog with ${args.mode} "${args.entityName}"`, async () => {
+      const dialog = this.runExperimentDialog();
+      const testid =
+        args.mode === 'test_suite'
+          ? 'run-experiment-dialog-source-suite'
+          : 'run-experiment-dialog-source-dataset';
+      await dialog.getByTestId(testid).click();
 
-    // Open the source selector combobox and pick the entity by name.
-    await dialog.getByRole('combobox').click();
-    const listbox = this.page.getByRole('listbox');
-    await listbox.waitFor({ state: 'visible' });
-    await listbox.getByPlaceholder(/^Search (dataset|test suite)/).fill(args.entityName);
-    await listbox.getByText(args.entityName, { exact: true }).first().click();
+      // Open the source selector combobox and pick the entity by name.
+      await dialog.getByRole('combobox').click();
+      const listbox = this.page.getByRole('listbox');
+      await listbox.waitFor({ state: 'visible' });
+      await listbox.getByPlaceholder(/^Search (dataset|test suite)/).fill(args.entityName);
+      await listbox.getByText(args.entityName, { exact: true }).first().click();
 
-    const submitLabel = args.mode === 'test_suite' ? 'Use test suite' : 'Use dataset';
-    await dialog.getByRole('button', { name: submitLabel, exact: true }).click();
-    await dialog.waitFor({ state: 'hidden' });
+      const submitLabel = args.mode === 'test_suite' ? 'Use test suite' : 'Use dataset';
+      await dialog.getByRole('button', { name: submitLabel, exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
   }
 
   /** Click Re-run when a suite/dataset is already loaded. */
   async clickReRun(): Promise<void> {
-    await this.runButton().click();
+    return test.step('click Re-run', async () => {
+      await this.runButton().click();
+    });
   }
 
   /**
@@ -135,18 +147,20 @@ export class PlaygroundPage {
    * loading (`No runs yet` is unmounted while rows are still being painted).
    */
   async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
-    const table = this.resultsTable();
-    await expect
-      .poll(
-        async () => {
-          const noRunsYet = await table.getByText('No runs yet').count();
-          if (noRunsYet !== 0) return false;
-          const rowCount = await this.countOutputRows();
-          return rowCount >= opts.expectedRows;
-        },
-        { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
-      )
-      .toBe(true);
+    return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
+      const table = this.resultsTable();
+      await expect
+        .poll(
+          async () => {
+            const noRunsYet = await table.getByText('No runs yet').count();
+            if (noRunsYet !== 0) return false;
+            const rowCount = await this.countOutputRows();
+            return rowCount >= opts.expectedRows;
+          },
+          { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
+        )
+        .toBe(true);
+    });
   }
 
   /**
@@ -191,43 +205,47 @@ export class PlaygroundPage {
    * mode writes results to the right side of each variant card.
    */
   async runSimplePromptAndAwaitResponse(args: RunSimplePromptArgs): Promise<RunSimplePromptResult> {
-    await this.setModelForVariant(0, args.modelDisplayName);
-    const messages = this.variantMessages(0);
-    await this.fillMessageBody(messages.first(), args.prompt);
+    return test.step('run simple prompt and await response', async () => {
+      await this.setModelForVariant(0, args.modelDisplayName);
+      const messages = this.variantMessages(0);
+      await this.fillMessageBody(messages.first(), args.prompt);
 
-    // Use the top-right Run button (playground-run-button testid) for inline runs.
-    await this.runButton().click();
+      // Use the top-right Run button (playground-run-button testid) for inline runs.
+      await this.runButton().click();
 
-    const timeoutMs = args.timeoutMs ?? 60_000;
-    // After clicking Run, the variant card shows the model's response inline.
-    // Wait for any non-empty text that wasn't there before, scoped to the
-    // variant card's bottom half (output area).
-    const errorIndicator = this.variantCard(0).getByText(/error|failed/i);
-    await expect
-      .poll(
-        async () => {
-          // Detect completion via the "No runs yet" empty state disappearing OR
-          // the page rendering an error.
-          const noRunsYet = await this.page.getByText('No runs yet').count();
-          const errored = (await errorIndicator.count()) > 0;
-          return noRunsYet === 0 || errored;
-        },
-        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
-      )
-      .toBeTruthy();
+      const timeoutMs = args.timeoutMs ?? 60_000;
+      // After clicking Run, the variant card shows the model's response inline.
+      // Wait for any non-empty text that wasn't there before, scoped to the
+      // variant card's bottom half (output area).
+      const errorIndicator = this.variantCard(0).getByText(/error|failed/i);
+      await expect
+        .poll(
+          async () => {
+            // Detect completion via the "No runs yet" empty state disappearing OR
+            // the page rendering an error.
+            const noRunsYet = await this.page.getByText('No runs yet').count();
+            const errored = (await errorIndicator.count()) > 0;
+            return noRunsYet === 0 || errored;
+          },
+          { timeout: timeoutMs, intervals: [500, 1000, 2000] },
+        )
+        .toBeTruthy();
 
-    // Grab the rendered response text. The Playground emits output to a region
-    // that follows the variant card. We use the variant card root and trim its
-    // textContent — this includes the model picker label etc., but a non-empty
-    // result string is enough for sanity assertion.
-    const cardText = ((await this.variantCard(0).textContent()) ?? '').trim();
-    const isError = (await errorIndicator.count()) > 0;
-    return { outputText: cardText, isError };
+      // Grab the rendered response text. The Playground emits output to a region
+      // that follows the variant card. We use the variant card root and trim its
+      // textContent — this includes the model picker label etc., but a non-empty
+      // result string is enough for sanity assertion.
+      const cardText = ((await this.variantCard(0).textContent()) ?? '').trim();
+      const isError = (await errorIndicator.count()) > 0;
+      return { outputText: cardText, isError };
+    });
   }
 
   /** Set the model for a variant — public wrapper for setModelForVariant. */
   async selectModel(index: number, modelDisplayName: string): Promise<void> {
-    await this.setModelForVariant(index, modelDisplayName);
+    return test.step(`select model "${modelDisplayName}" for variant ${index}`, async () => {
+      await this.setModelForVariant(index, modelDisplayName);
+    });
   }
 
   /**
@@ -235,41 +253,122 @@ export class PlaygroundPage {
    * The prompt content must already be loaded — this does NOT fill a message body.
    */
   async runFreeMode(timeoutMs = 120_000): Promise<void> {
-    await this.runButton().click();
-    const errorText = this.page.getByText(/error|failed/i);
-    await expect
-      .poll(
-        async () => {
-          const noRunsYet = await this.page.getByText('No runs yet').count();
-          const errored = (await errorText.count()) > 0;
-          return noRunsYet === 0 || errored;
-        },
-        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
-      )
-      .toBeTruthy();
+    return test.step('run prompt (free mode)', async () => {
+      await this.runButton().click();
+      const errorText = this.page.getByText(/error|failed/i);
+      await expect
+        .poll(
+          async () => {
+            const noRunsYet = await this.page.getByText('No runs yet').count();
+            const errored = (await errorText.count()) > 0;
+            return noRunsYet === 0 || errored;
+          },
+          { timeout: timeoutMs, intervals: [500, 1000, 2000] },
+        )
+        .toBeTruthy();
+    });
+  }
+
+  /**
+   * Open the prompt library menu in the first variant card, hover the named prompt
+   * to reveal the version submenu, and click the specified version label (e.g. "v1").
+   */
+  async loadPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
+    return test.step(`load prompt "${promptName}" version "${versionLabel}" from library`, async () => {
+      // The button is in a div that only expands on group-hover; hover the card first.
+      await this.variantCard(0).hover();
+      await this.variantCard(0).getByTestId('load-prompt-button').click();
+
+      const menu = this.page.getByTestId('prompt-library-menu');
+      await menu.waitFor({ state: 'visible' });
+
+      await menu.getByPlaceholder('Search').fill(promptName);
+
+      const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
+      await promptRow.waitFor({ state: 'visible' });
+      await promptRow.hover();
+
+      const versionSubmenu = this.page.locator('[data-prompt-versions-submenu]');
+      await versionSubmenu.waitFor({ state: 'visible' });
+
+      await versionSubmenu
+        .getByRole('button')
+        .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
+        .first()
+        .click();
+    });
+  }
+
+  /**
+   * Open the text-prompt library menu in the first message row of variant 0,
+   * hover the named prompt to reveal the version submenu, and click the specified
+   * version label (e.g. "v1"). The button lives inside the message-row actions
+   * area which is hidden until the row is hovered.
+   */
+  async loadTextPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
+    return test.step(`load text prompt "${promptName}" version "${versionLabel}" from message-row library`, async () => {
+      const messageRow = this.variantMessages(0).first();
+      await messageRow.hover();
+      await messageRow.getByTestId('load-text-prompt-button').click();
+
+      const menu = this.page.getByTestId('prompt-library-menu');
+      await menu.waitFor({ state: 'visible' });
+
+      await menu.getByPlaceholder('Search').fill(promptName);
+
+      const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
+      await promptRow.waitFor({ state: 'visible' });
+      await promptRow.hover();
+
+      const versionSubmenu = this.page.locator('[data-prompt-versions-submenu]');
+      await versionSubmenu.waitFor({ state: 'visible' });
+
+      await versionSubmenu
+        .getByRole('button')
+        .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
+        .first()
+        .click();
+    });
+  }
+
+  /** Assert the LoadedPromptDisplay in variant 0 shows the given prompt name and version label. */
+  async waitForLoadedPromptVersion(promptName: string, versionLabel: string): Promise<void> {
+    return test.step(`wait for prompt "${promptName}" at version "${versionLabel}" to be loaded`, async () => {
+      const card = this.variantCard(0);
+      // For text prompts the loaded-prompt chip is inside the message-row actions
+      // area which is only visible on hover (invisible group-hover:visible).
+      // Hovering the first message row reveals it without affecting chat-prompt cards.
+      await this.variantMessages(0).first().hover();
+      await expect(card.getByText(promptName)).toBeVisible();
+      await expect(card.getByText(versionLabel, { exact: true })).toBeVisible();
+    });
   }
 
   /** Click the "Go to logs" icon button to open the Playground logs sidebar. */
   async openLogsPanel(): Promise<void> {
-    await this.page.getByTestId('playground-logs-sidebar-button').click();
+    return test.step('open Playground logs panel', async () => {
+      await this.page.getByTestId('playground-logs-sidebar-button').click();
+    });
   }
 
   /** Set a single model-config option (e.g., temperature, max_tokens) on a variant. */
   async setVariantOption(index: number, optionName: string, value: number | string): Promise<void> {
-    // The options pane is collapsed by default; expand it first. Implementation
-    // is exploratory — Phase 4 will refine if discovery reveals a different shape.
-    const card = this.variantCard(index);
-    // Try to open the options pane via the gear/settings affordance.
-    const settingsButton = card.getByRole('button', { name: /settings|options/i });
-    if ((await settingsButton.count()) > 0) {
-      await settingsButton.first().click();
-    }
-    // Fill the named input. Provider-sanity tests use a small whitelist of
-    // option names that map to spinbutton inputs.
-    const input = card.getByRole('spinbutton', { name: new RegExp(`^${optionName}$`, 'i') });
-    if ((await input.count()) > 0) {
-      await input.first().fill(String(value));
-    }
+    return test.step(`set variant ${index} option "${optionName}" to ${value}`, async () => {
+      // The options pane is collapsed by default; expand it first. Implementation
+      // is exploratory — Phase 4 will refine if discovery reveals a different shape.
+      const card = this.variantCard(index);
+      // Try to open the options pane via the gear/settings affordance.
+      const settingsButton = card.getByRole('button', { name: /settings|options/i });
+      if ((await settingsButton.count()) > 0) {
+        await settingsButton.first().click();
+      }
+      // Fill the named input. Provider-sanity tests use a small whitelist of
+      // option names that map to spinbutton inputs.
+      const input = card.getByRole('spinbutton', { name: new RegExp(`^${optionName}$`, 'i') });
+      if ((await input.count()) > 0) {
+        await input.first().fill(String(value));
+      }
+    });
   }
 
   // ── private helpers ─────────────────────────────────────────────────────

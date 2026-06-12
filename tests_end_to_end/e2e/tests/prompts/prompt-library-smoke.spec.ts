@@ -15,9 +15,7 @@ async function runVersioningSteps(detail: PromptDetailPage, opts: VersioningOpts
     await expect(detail.activeVersionLabel()).toHaveText('v1');
   });
 
-  await test.step('Edit the prompt and save as new version', async () => {
-    await opts.edit(detail, opts.updatedContent);
-  });
+  await opts.edit(detail, opts.updatedContent);
 
   await test.step('v2 is active and shows the updated content', async () => {
     await expect(detail.activeVersionLabel()).toHaveText('v2');

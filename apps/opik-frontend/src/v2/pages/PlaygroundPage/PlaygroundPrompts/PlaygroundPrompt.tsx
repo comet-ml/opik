@@ -406,7 +406,7 @@ const PlaygroundPrompt = ({
               trigger={
                 <div>
                   <TooltipWrapper content="Load prompt">
-                    <Button variant="minimal" size="icon-sm">
+                    <Button variant="minimal" size="icon-sm" data-testid="load-prompt-button">
                       <FileTerminal />
                     </Button>
                   </TooltipWrapper>
