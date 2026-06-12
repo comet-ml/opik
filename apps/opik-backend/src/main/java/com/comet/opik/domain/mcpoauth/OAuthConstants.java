@@ -68,15 +68,7 @@ public class OAuthConstants {
     public static final String ERROR_INVALID_TARGET = "invalid_target";
     public static final String ERROR_UNSUPPORTED_GRANT_TYPE = "unsupported_grant_type";
     public static final String ERROR_UNSUPPORTED_RESPONSE_TYPE = "unsupported_response_type";
-    public static final String ERROR_TOO_MANY_REQUESTS = "too_many_requests";
-    public static final String ERROR_DESC_REGISTRATION_RATE_LIMIT = "registration rate limit exceeded";
-
-    public static final String RATE_LIMIT_BUCKET_PREFIX = "mcp_oauth_register";
-    public static final String RATE_LIMIT_BUCKET = RATE_LIMIT_BUCKET_PREFIX + ":%s";
 
     // RFC 7591 §3.2.1 client-configuration endpoint path; the registration response Location points here.
     public static final String CLIENT_CONFIG_PATH_PREFIX = "/admin/mcp-oauth-clients/";
-
-    // Proxy hop header; nginx appends the observed peer address, so the right-most hop is trustworthy.
-    public static final String X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
 }

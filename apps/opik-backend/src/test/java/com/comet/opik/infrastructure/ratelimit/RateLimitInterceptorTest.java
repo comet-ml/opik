@@ -2,7 +2,9 @@ package com.comet.opik.infrastructure.ratelimit;
 
 import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.net.HttpHeaders;
 import jakarta.inject.Provider;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HEAD;
@@ -26,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.lang.reflect.Method;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.RandomTestUtils.randomIp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
@@ -49,13 +52,20 @@ class RateLimitInterceptorTest {
     private RequestContext requestContext;
 
     @Mock
+    private Provider<HttpServletRequest> httpServletRequestProvider;
+
+    @Mock
+    private HttpServletRequest httpServletRequest;
+
+    @Mock
     private MethodInvocation methodInvocation;
 
     private RateLimitInterceptor interceptor;
 
     @BeforeEach
     void setUp() {
-        interceptor = new RateLimitInterceptor(requestContextProvider, rateLimitServiceProvider, rateLimitConfig);
+        interceptor = new RateLimitInterceptor(requestContextProvider, rateLimitServiceProvider, rateLimitConfig,
+                httpServletRequestProvider);
     }
 
     @Nested
@@ -207,6 +217,69 @@ class RateLimitInterceptorTest {
                     Arguments.of(TestResource.class, "headMethod", "HEAD"),
                     Arguments.of(TestResource.class, "optionsMethod", "OPTIONS"));
         }
+    }
+
+    @Nested
+    @DisplayName("Client IP Rate Limit Keying Tests")
+    class ClientIpKeyingTests {
+
+        @Test
+        void clientIp_whenForwardedForHasMultipleHops_usesLastNginxAppendedHop() throws Exception {
+            String firstIp = randomIp();
+            String secondId = randomIp();
+            String thirdIp = randomIp();
+            when(httpServletRequestProvider.get()).thenReturn(httpServletRequest);
+            when(httpServletRequest.getHeader(HttpHeaders.X_FORWARDED_FOR))
+                    .thenReturn("%s, %s, %s".formatted(firstIp, secondId, thirdIp));
+
+            assertThat(getClientIp()).isEqualTo(thirdIp);
+        }
+
+        @Test
+        void clientIp_whenForwardedForAbsent_fallsBackToRemoteAddr() throws Exception {
+            String remoteAddr = randomIp();
+            when(httpServletRequestProvider.get()).thenReturn(httpServletRequest);
+            when(httpServletRequest.getHeader(HttpHeaders.X_FORWARDED_FOR)).thenReturn(null);
+            when(httpServletRequest.getRemoteAddr()).thenReturn(remoteAddr);
+
+            assertThat(getClientIp()).isEqualTo(remoteAddr);
+        }
+
+        @Test
+        void replaceLimitVariables_resolvesClientIpPlaceholderFromRequest() throws Exception {
+            String clientIp = randomIp();
+            when(httpServletRequestProvider.get()).thenReturn(httpServletRequest);
+            when(httpServletRequest.getHeader(HttpHeaders.X_FORWARDED_FOR)).thenReturn(clientIp);
+
+            assertThat(replaceLimitVariables("mcpOAuthRegister:{clientIp}"))
+                    .isEqualTo("mcpOAuthRegister" + clientIp);
+        }
+
+        @Test
+        void getBucketName_stripsClientIpPlaceholder() throws Exception {
+            assertThat(getBucketName("mcpOAuthRegister:{clientIp}")).isEqualTo("mcpOAuthRegister");
+        }
+    }
+
+    // Helper method to access private getClientIp method
+    private String getClientIp() throws Exception {
+        Method method = RateLimitInterceptor.class.getDeclaredMethod("getClientIp");
+        method.setAccessible(true);
+        return (String) method.invoke(interceptor);
+    }
+
+    // Helper method to access private replaceLimitVariables method
+    private String replaceLimitVariables(String limit) throws Exception {
+        Method method = RateLimitInterceptor.class.getDeclaredMethod("replaceLimitVariables", String.class);
+        method.setAccessible(true);
+        return (String) method.invoke(interceptor, limit);
+    }
+
+    // Helper method to access private getBucketName method
+    private String getBucketName(String limit) throws Exception {
+        Method method = RateLimitInterceptor.class.getDeclaredMethod("getBucketName", String.class);
+        method.setAccessible(true);
+        return (String) method.invoke(interceptor, limit);
     }
 
     // Helper method to access private extractHttpRoute method
