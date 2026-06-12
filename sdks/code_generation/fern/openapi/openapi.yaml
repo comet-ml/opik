@@ -945,7 +945,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WorkspaceMetricsSummaryResponse"
+                $ref: "#/components/schemas/SpendSummaryResponse"
         "400":
           description: Bad Request
           content:
@@ -9524,6 +9524,17 @@ components:
         total_tokens:
           type: integer
           format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        has_breakdown:
+          type: boolean
+    ModelTiers:
+      type: object
+      properties:
+        model:
+          type: string
         input_tokens:
           type: integer
           format: int64
@@ -9536,8 +9547,6 @@ components:
         output_tokens:
           type: integer
           format: int64
-        has_breakdown:
-          type: boolean
     Side:
       type: object
       properties:
@@ -9559,10 +9568,6 @@ components:
             $ref: "#/components/schemas/HarnessEntry"
         output:
           $ref: "#/components/schemas/Side"
-        models:
-          type: array
-          items:
-            type: string
     SpendMetricRequest:
       required:
       - interval_end
@@ -9621,20 +9626,10 @@ components:
         total_tokens:
           type: integer
           format: int64
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-        model:
-          type: string
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
         item_count:
           type: integer
           format: int32
@@ -9665,13 +9660,21 @@ components:
         previous:
           type: number
           format: double
-    WorkspaceMetricsSummaryResponse:
+    SpendSummaryResponse:
       type: object
       properties:
         results:
           type: array
           items:
             $ref: "#/components/schemas/Result"
+        spend_current:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        spend_previous:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
     SpendUserPage:
       type: object
       properties:
@@ -9701,20 +9704,10 @@ components:
           type: string
         user_display_name:
           type: string
-        model:
-          type: string
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
         total_tokens:
           type: integer
           format: int64
@@ -21688,3 +21681,10 @@ components:
         Workspace version response.
         The opik_version field indicates which navigation mode the frontend should render:
         'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
+    WorkspaceMetricsSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
