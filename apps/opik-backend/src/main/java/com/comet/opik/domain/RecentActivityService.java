@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.InstantToUUIDMapper;
@@ -7,6 +8,12 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.RecentActivity.ActivityType;
 import com.comet.opik.api.RecentActivity.RecentActivityItem;
 import com.comet.opik.api.RecentActivity.RecentActivityPage;
+import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.metrics.MetricType;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.alerts.AlertEventLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -20,7 +27,10 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,7 +43,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 
 /**
  * Aggregates recent activity across multiple entity types (experiments, optimizations,
- * datasets, test suites, agent configs, alert events) for a project.
+ * datasets, test suites, prompt versions, alert events) for a project.
  * <p>
  * Each source is queried for its N most recent items (page 1 only, sorted by id DESC).
  * Results are merged, sorted by createdAt descending, and paginated in memory.
@@ -54,6 +64,7 @@ public class RecentActivityService {
     private final @NonNull ExperimentService experimentService;
     private final @NonNull OptimizationService optimizationService;
     private final @NonNull AlertEventLogsDAO alertEventLogsDAO;
+    private final @NonNull ProjectMetricsService projectMetricsService;
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -65,9 +76,11 @@ public class RecentActivityService {
         var optimizationsMono = fetchOptimizations(projectId, size);
         var alertsMono = fetchAlertEvents(projectId, size);
         var datasetsMono = fetchDatasetSources(workspaceId, projectId, size);
-        var agentConfigsMono = fetchAgentConfigs(workspaceId, projectId, size);
+        var promptVersionsMono = fetchPromptVersions(workspaceId, projectId, size);
+        var traceDailyMono = fetchTraceDailyCounts(projectId, size);
 
-        return Mono.zip(experimentsMono, optimizationsMono, alertsMono, datasetsMono, agentConfigsMono)
+        return Mono
+                .zip(experimentsMono, optimizationsMono, alertsMono, datasetsMono, promptVersionsMono, traceDailyMono)
                 .map(tuple -> {
                     var all = new ArrayList<RecentActivityItem>();
                     all.addAll(tuple.getT1());
@@ -75,6 +88,7 @@ public class RecentActivityService {
                     all.addAll(tuple.getT3());
                     all.addAll(tuple.getT4());
                     all.addAll(tuple.getT5());
+                    all.addAll(tuple.getT6());
 
                     all.sort(Comparator.comparing(RecentActivityItem::createdAt).reversed());
 
@@ -169,18 +183,76 @@ public class RecentActivityService {
                 });
     }
 
-    private Mono<List<RecentActivityItem>> fetchAgentConfigs(String workspaceId, UUID projectId, int size) {
+    private Mono<List<RecentActivityItem>> fetchPromptVersions(String workspaceId, UUID projectId, int size) {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(AgentConfigDAO.class);
-            return dao.getBlueprintHistory(workspaceId, projectId, size, 0).stream()
-                    .map(bp -> RecentActivityItem.builder()
-                            .type(ActivityType.AGENT_CONFIG_VERSION).id(bp.id()).name(bp.name())
-                            .createdAt(bp.createdAt()).createdBy(bp.createdBy()).build())
+            var dao = handle.attach(PromptDAO.class);
+            return dao.findRecentPromptVersionsByProjectId(workspaceId, projectId, size).stream()
+                    .map(pv -> {
+                        String name = pv.versionNumber() != null
+                                ? "%s %s".formatted(pv.promptName(), pv.versionNumber())
+                                : pv.promptName();
+                        return RecentActivityItem.builder()
+                                .type(ActivityType.PROMPT_VERSION).id(pv.promptId()).name(name)
+                                .createdAt(pv.createdAt()).createdBy(pv.createdBy()).build();
+                    })
                     .toList();
         })).subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(e -> {
-                    log.warn("Failed to fetch recent agent configs for project '{}'", projectId, e);
+                    log.warn("Failed to fetch recent prompt versions for project '{}'", projectId, e);
                     return Mono.just(List.of());
                 });
+    }
+
+    private Mono<List<RecentActivityItem>> fetchTraceDailyCounts(UUID projectId, int size) {
+        Instant now = Instant.now();
+        Instant start = now.minus(LOOKBACK_DAYS, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
+        var request = ProjectMetricRequest.builder()
+                .metricType(MetricType.TRACE_COUNT)
+                .interval(TimeInterval.DAILY)
+                .intervalStart(start)
+                .traceFilters(List.of(defaultVisibilityFilter()))
+                .build();
+
+        return projectMetricsService.getProjectMetrics(projectId, request)
+                .map(response -> response.results().stream()
+                        .flatMap(r -> r.data().stream())
+                        .filter(this::hasPositiveValue)
+                        .sorted(Comparator.<DataPoint<Number>, Instant>comparing(DataPoint::time).reversed())
+                        .limit(size)
+                        .map(dp -> toTraceDailyItem(dp, today, now))
+                        .toList())
+                .onErrorResume(e -> {
+                    log.warn("Failed to fetch daily trace counts for project '{}'", projectId, e);
+                    return Mono.just(List.of());
+                });
+    }
+
+    private TraceFilter defaultVisibilityFilter() {
+        return TraceFilter.builder()
+                .field(TraceField.VISIBILITY_MODE)
+                .operator(Operator.EQUAL)
+                .value("default")
+                .build();
+    }
+
+    private boolean hasPositiveValue(DataPoint<Number> dp) {
+        return dp.value() != null && dp.value().longValue() > 0;
+    }
+
+    private RecentActivityItem toTraceDailyItem(DataPoint<Number> dp, LocalDate today, Instant now) {
+        LocalDate date = dp.time().atZone(ZoneOffset.UTC).toLocalDate();
+        // Noon keeps the date stable across all timezones when the FE converts to local time
+        Instant createdAt = date.equals(today)
+                ? now
+                : date.atTime(12, 0).toInstant(ZoneOffset.UTC);
+
+        return RecentActivityItem.builder()
+                .type(ActivityType.TRACE_DAILY)
+                .id(UUID.nameUUIDFromBytes(dp.time().toString().getBytes(StandardCharsets.UTF_8)))
+                .name(String.valueOf(dp.value().longValue()))
+                .createdAt(createdAt)
+                .build();
     }
 }
