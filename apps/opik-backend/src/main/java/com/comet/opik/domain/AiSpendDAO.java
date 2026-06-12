@@ -9,7 +9,6 @@ import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.api.spend.SpendUserRow;
-import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -64,13 +63,12 @@ class AiSpendDAOImpl implements AiSpendDAO {
 
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull IdGenerator idGenerator;
-    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull AiSpendQueryBuilder queryBuilder;
     private final @NonNull AiSpendMapper mapper;
 
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getSummary(@NonNull SpendMetricRequest request) {
-        Mono<AiSpendMapper.TiersRow> tiers = querySingle(queryBuilder.summaryTiersSql(), "ai_spend_summary_tiers",
+        Mono<AiSpendMapper.TiersRow> tiers = querySingle(queryBuilder.summaryTiers(), "ai_spend_summary_tiers",
                 request.resolvedProjectId(), NO_TEMPLATE,
                 statement -> bindSummaryRange(statement, request),
                 (row, metadata) -> new AiSpendMapper.TiersRow(
@@ -84,7 +82,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         getLong(row.get("output_previous", Long.class))),
                 AiSpendMapper.TiersRow.empty());
 
-        Mono<AiSpendMapper.CountsRow> counts = querySingle(queryBuilder.summaryCountsSql(), "ai_spend_summary_counts",
+        Mono<AiSpendMapper.CountsRow> counts = querySingle(queryBuilder.summaryCounts(), "ai_spend_summary_counts",
                 request.resolvedProjectId(), NO_TEMPLATE,
                 statement -> bindSummaryRange(statement, request),
                 (row, metadata) -> new AiSpendMapper.CountsRow(
@@ -102,7 +100,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
     public Mono<SpendCompositionResponse> getComposition(@NonNull SpendMetricRequest request) {
         Optional<String> userUuid = resolveUserUuid(request);
 
-        Mono<AiSpendMapper.InputLanesRow> inputTokens = querySingle(queryBuilder.compositionTokensSql(),
+        Mono<AiSpendMapper.InputLanesRow> inputTokens = querySingle(queryBuilder.compositionTokens(),
                 "ai_spend_composition_tokens", request.resolvedProjectId(), userFlag(userUuid),
                 statement -> bindComposition(statement, request, userUuid),
                 (row, metadata) -> {
@@ -122,7 +120,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                 },
                 AiSpendMapper.InputLanesRow.empty());
 
-        Mono<Map<String, Long>> outputTokens = queryList(queryBuilder.compositionOutputSql(),
+        Mono<Map<String, Long>> outputTokens = queryList(queryBuilder.compositionOutput(),
                 "ai_spend_composition_output", request.resolvedProjectId(), userFlag(userUuid),
                 statement -> bindComposition(statement, request, userUuid),
                 (row, metadata) -> new AiSpendMapper.OutputLaneRow(
@@ -137,21 +135,21 @@ class AiSpendDAOImpl implements AiSpendDAO {
     @Override
     public Mono<SpendBreakdownResponse> getBreakdown(@NonNull SpendMetricRequest request, @NonNull SpendLane lane) {
         Optional<String> userUuid = resolveUserUuid(request);
-        return runBreakdown(queryBuilder.breakdownSql(lane), "ai_spend_breakdown", lane.getKey(),
-                lane.getLabel(), null, request, userUuid);
+        return runBreakdown(queryBuilder.breakdown(lane), "ai_spend_breakdown", lane.getKey(),
+                lane.getLabel(), lane.getDescription(), request, userUuid);
     }
 
     @Override
     public Mono<SpendBreakdownResponse> getOutputBreakdown(@NonNull SpendMetricRequest request,
             @NonNull OutputLane lane) {
         Optional<String> userUuid = resolveUserUuid(request);
-        return runBreakdown(queryBuilder.outputBreakdownSql(lane), "ai_spend_output_breakdown", lane.getKey(),
+        return runBreakdown(queryBuilder.outputBreakdown(lane), "ai_spend_output_breakdown", lane.getKey(),
                 lane.getLabel(), null, request, userUuid);
     }
 
-    private Mono<SpendBreakdownResponse> runBreakdown(String sql, String queryName, String laneKey, String title,
-            String subtitle, SpendMetricRequest request, Optional<String> userUuid) {
-        return queryList(sql, queryName, laneKey, userFlag(userUuid),
+    private Mono<SpendBreakdownResponse> runBreakdown(AiSpendQueryBuilder.TemplatedQuery query, String queryName,
+            String laneKey, String title, String subtitle, SpendMetricRequest request, Optional<String> userUuid) {
+        return queryList(query, queryName, laneKey, userFlag(userUuid),
                 statement -> {
                     bindComposition(statement, request, userUuid);
                     statement.bind("limit", queryBuilder.breakdownItemLimit());
@@ -163,20 +161,23 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         getLong(row.get("usage_tokens", Long.class)),
                         getLong(row.get("events", Long.class)),
                         getLong(row.get("grand_total", Long.class)),
-                        getLong(row.get("group_count", Long.class))))
+                        getLong(row.get("group_count", Long.class)),
+                        getLong(row.get("total_events", Long.class)),
+                        getLong(row.get("total_input", Long.class)),
+                        getLong(row.get("total_cache_read", Long.class)),
+                        getLong(row.get("total_cache_creation", Long.class)),
+                        getLong(row.get("total_output", Long.class)),
+                        row.get("model", String.class)))
                 .map(rows -> mapper.breakdown(laneKey, title, subtitle, rows));
     }
 
     @Override
     public Mono<SpendUserPage> getUsers(@NonNull SpendMetricRequest request,
             @NonNull List<SortingField> sortingFields, String name, int page, int size) {
-        String orderBy = Optional.ofNullable(sortingQueryBuilder.toOrderBySql(sortingFields))
-                .map(clause -> clause + ", total_tokens DESC")
-                .orElse("total_tokens DESC");
         boolean hasName = StringUtils.isNotBlank(name);
         long offset = (long) (page - 1) * size;
 
-        return queryList(queryBuilder.usersSql(orderBy), "ai_spend_users", request.resolvedProjectId(),
+        return queryList(queryBuilder.users(sortingFields), "ai_spend_users", request.resolvedProjectId(),
                 st -> {
                     if (hasName) {
                         st.add("user_name", true);
@@ -221,10 +222,10 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         .build());
     }
 
-    private <T> Mono<List<T>> queryList(String sql, String queryName, Object details, Consumer<ST> templating,
-            Consumer<Statement> bind, BiFunction<Row, RowMetadata, T> mapper) {
+    private <T> Mono<List<T>> queryList(AiSpendQueryBuilder.TemplatedQuery query, String queryName, Object details,
+            Consumer<ST> templating, Consumer<Statement> bind, BiFunction<Row, RowMetadata, T> mapper) {
         return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var statement = createStatement(connection, sql, queryName, workspaceId, userName, details, templating);
+            var statement = createStatement(connection, query, queryName, workspaceId, userName, details, templating);
             bind.accept(statement);
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map(mapper))
@@ -232,10 +233,11 @@ class AiSpendDAOImpl implements AiSpendDAO {
         }));
     }
 
-    private <T> Mono<T> querySingle(String sql, String queryName, Object details, Consumer<ST> templating,
-            Consumer<Statement> bind, BiFunction<Row, RowMetadata, T> mapper, T defaultValue) {
+    private <T> Mono<T> querySingle(AiSpendQueryBuilder.TemplatedQuery query, String queryName, Object details,
+            Consumer<ST> templating, Consumer<Statement> bind, BiFunction<Row, RowMetadata, T> mapper,
+            T defaultValue) {
         return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var statement = createStatement(connection, sql, queryName, workspaceId, userName, details, templating);
+            var statement = createStatement(connection, query, queryName, workspaceId, userName, details, templating);
             bind.accept(statement);
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map(mapper))
@@ -243,9 +245,10 @@ class AiSpendDAOImpl implements AiSpendDAO {
         }));
     }
 
-    private Statement createStatement(Connection connection, String sql, String queryName, String workspaceId,
-            String userName, Object details, Consumer<ST> templating) {
-        var st = getSTWithLogComment(withLogComment(sql), queryName, workspaceId, userName, details);
+    private Statement createStatement(Connection connection, AiSpendQueryBuilder.TemplatedQuery query,
+            String queryName, String workspaceId, String userName, Object details, Consumer<ST> templating) {
+        var st = getSTWithLogComment(withLogComment(query.sql()), queryName, workspaceId, userName, details);
+        query.fragments().accept(st);
         templating.accept(st);
         return connection.createStatement(st.render()).bind("workspace_id", workspaceId);
     }

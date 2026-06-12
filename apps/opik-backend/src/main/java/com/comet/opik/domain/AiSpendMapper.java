@@ -91,8 +91,9 @@ class AiSpendMapper {
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));
 
-        long grandTotal = rows.isEmpty() ? 0L : rows.getFirst().grandTotal();
-        long groupCount = rows.isEmpty() ? 0L : rows.getFirst().groupCount();
+        BreakdownRow first = rows.isEmpty() ? null : rows.getFirst();
+        long grandTotal = first == null ? 0L : first.grandTotal();
+        long groupCount = first == null ? 0L : first.groupCount();
         long hidden = groupCount - items.size();
         if (hidden > 0) {
             long shown = items.stream().mapToLong(SpendBreakdownResponse.Item::totalTokens).sum();
@@ -107,7 +108,12 @@ class AiSpendMapper {
                 .title(title)
                 .subtitle(subtitle)
                 .totalTokens(grandTotal)
-                .itemCount((int) groupCount)
+                .inputTokens(first == null ? 0L : first.inputTokens())
+                .cacheReadTokens(first == null ? 0L : first.cacheReadTokens())
+                .cacheCreationTokens(first == null ? 0L : first.cacheCreationTokens())
+                .outputTokens(first == null ? 0L : first.outputTokens())
+                .model(first == null ? null : first.model())
+                .itemCount((int) (first == null ? 0L : first.totalEvents()))
                 .items(items)
                 .build();
     }
@@ -153,7 +159,8 @@ class AiSpendMapper {
     }
 
     record BreakdownRow(String label, long totalTokens, long definitionTokens, long usageTokens, long events,
-            long grandTotal, long groupCount) {
+            long grandTotal, long groupCount, long totalEvents, long inputTokens, long cacheReadTokens,
+            long cacheCreationTokens, long outputTokens, String model) {
     }
 
     record OutputLaneRow(String lane, long tokens) {

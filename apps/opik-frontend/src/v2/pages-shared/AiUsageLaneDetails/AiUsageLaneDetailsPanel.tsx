@@ -13,11 +13,14 @@ import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import { cn, formatNumberInK } from "@/lib/utils";
 import { formatCost } from "@/lib/money";
+import { tierCost } from "@/api/ai-spend/claudePricing";
 import { getSpendInterval, SPEND_WINDOWS, SpendWindow } from "@/lib/aiSpend";
 import { getLaneMeta } from "@/v2/pages-shared/AiUsageBreakdown/laneRegistry";
 import { laneWeight, lanePct } from "@/v2/pages-shared/AiUsageBreakdown/utils";
 import useSavingsPricer from "@/api/ai-spend/useSavingsPricer";
 import RecommendationCard from "@/v2/pages-shared/AiUsageRecommendations/RecommendationCard";
+
+const PROMPT_SIZE_ORDER = ["small", "medium", "large", "xlarge"];
 
 interface AiUsageLaneDetailsPanelProps {
   laneKey: string | null;
@@ -77,13 +80,26 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
     userUuid,
   });
   const recommendationsSavings = recommendations.reduce(
-    (acc, item) => acc + (priceSavings(item.est_saving_tokens) ?? 0),
+    (acc, item) => acc + (priceSavings(item.estimated_savings_tokens) ?? 0),
     0,
   );
 
   const meta = getLaneMeta(laneKey ?? "", laneLabel);
   const LaneIcon = meta.icon;
   const title = breakdown?.title ?? laneLabel ?? meta.labelFallback;
+
+  const totalTokens = breakdown?.total_tokens ?? 0;
+  const cost = breakdown
+    ? tierCost(
+        {
+          input_tokens: breakdown.input_tokens,
+          cache_read_tokens: breakdown.cache_read_tokens,
+          cache_creation_tokens: breakdown.cache_creation_tokens,
+          output_tokens: breakdown.output_tokens,
+        },
+        breakdown.model,
+      )
+    : null;
 
   const renderItems = (items: AiSpendBreakdownItemApi[], unit?: string) => {
     const totalWeight = Math.max(...items.map(laneWeight), 0);
@@ -150,7 +166,7 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
                   <span className="comet-body-xs w-20 shrink-0 text-right text-light-slate">
                     {item.count != null
                       ? `${item.count} ${
-                          unit ?? breakdown?.item_unit ?? "items"
+                          unit ?? breakdown?.item_unit ?? "calls"
                         }`
                       : ""}
                   </span>
@@ -235,7 +251,19 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
         </div>
       );
     }
-    return renderItems(breakdown.items, breakdown.items_unit);
+    // User-prompt buckets read as a size axis, so order them small→xlarge
+    // rather than by volume. Unknown labels (e.g. an "Other" row) sink last.
+    const items =
+      laneKey === "user_prompts"
+        ? [...breakdown.items].sort((a, b) => {
+            const rank = (label: string) => {
+              const i = PROMPT_SIZE_ORDER.indexOf(label);
+              return i === -1 ? PROMPT_SIZE_ORDER.length : i;
+            };
+            return rank(a.label) - rank(b.label);
+          })
+        : breakdown.items;
+    return renderItems(items, breakdown.items_unit);
   };
 
   return (
@@ -251,19 +279,34 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
       <div className="flex size-full flex-col gap-4 overflow-y-auto p-4">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline gap-1.5">
-            <TooltipWrapper
-              content={`${(
-                breakdown?.total_tokens ?? 0
-              ).toLocaleString()} tokens`}
-            >
-              <span className="comet-title-m text-foreground">
-                {formatNumberInK(breakdown?.total_tokens ?? 0)}
-              </span>
-            </TooltipWrapper>
-            <span className="comet-body-s text-muted-slate">tokens</span>
+            {cost != null ? (
+              <>
+                <span className="comet-title-m text-foreground">
+                  {formatCost(cost)}
+                </span>
+                <TooltipWrapper
+                  content={`${totalTokens.toLocaleString()} tokens`}
+                >
+                  <span className="comet-body-s text-muted-slate">
+                    {formatNumberInK(totalTokens)} tokens
+                  </span>
+                </TooltipWrapper>
+              </>
+            ) : (
+              <>
+                <TooltipWrapper
+                  content={`${totalTokens.toLocaleString()} tokens`}
+                >
+                  <span className="comet-title-m text-foreground">
+                    {formatNumberInK(totalTokens)}
+                  </span>
+                </TooltipWrapper>
+                <span className="comet-body-s text-muted-slate">tokens</span>
+              </>
+            )}
             <span className="comet-body-s text-light-slate">·</span>
             <span className="comet-body-s text-muted-slate">
-              {breakdown?.item_count ?? 0} {breakdown?.item_unit ?? "items"}
+              {breakdown?.item_count ?? 0} {breakdown?.item_unit ?? "calls"}
             </span>
           </div>
           {meta.description && (
@@ -310,7 +353,7 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
                 <RecommendationCard
                   key={rec.id}
                   recommendation={rec}
-                  estSavingUsd={priceSavings(rec.est_saving_tokens)}
+                  estSavingUsd={priceSavings(rec.estimated_savings_tokens)}
                   variant="compact"
                 />
               ))}

@@ -139,7 +139,7 @@ class AiSpendServiceImpl implements AiSpendService {
                             .title(rule.title())
                             .body(rule.body())
                             .impact(rule.impact())
-                            .estSavingTokens(Math.round(laneTokens * rule.factor()))
+                            .estimatedSavingsTokens(Math.round(laneTokens * rule.factor()))
                             .docsUrl(DOCS_URL)
                             .relatedLaneKey(rule.laneKey())
                             .build();
@@ -148,7 +148,7 @@ class AiSpendServiceImpl implements AiSpendService {
                 .toList();
 
         long totalSavingsTokens = items.stream()
-                .mapToLong(SpendRecommendationsResponse.Item::estSavingTokens)
+                .mapToLong(SpendRecommendationsResponse.Item::estimatedSavingsTokens)
                 .sum();
 
         return SpendRecommendationsResponse.builder().totalSavingsTokens(totalSavingsTokens).items(items).build();

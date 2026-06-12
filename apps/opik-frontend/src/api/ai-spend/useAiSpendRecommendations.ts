@@ -7,7 +7,7 @@ export interface SpendRecommendation {
   title: string;
   body: string;
   impact: string;
-  est_saving_tokens: number | null;
+  estimated_savings_tokens: number | null;
   docs_url?: string;
   related_lane_key?: string;
 }

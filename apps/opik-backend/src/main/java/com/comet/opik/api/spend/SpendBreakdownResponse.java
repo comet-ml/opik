@@ -17,6 +17,15 @@ public record SpendBreakdownResponse(
         String title,
         String subtitle,
         Long totalTokens,
+        // Tier-token sums for the lane's window total — the FE prices these.
+        Long inputTokens,
+        Long cacheReadTokens,
+        Long cacheCreationTokens,
+        Long outputTokens,
+        // Representative billing model so the FE can resolve a rate.
+        String model,
+        // Total occurrences across the lane (the "calls" figure), not the
+        // distinct-entity count.
         int itemCount,
         List<Item> items) {
 

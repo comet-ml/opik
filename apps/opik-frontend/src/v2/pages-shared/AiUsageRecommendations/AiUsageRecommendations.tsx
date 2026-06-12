@@ -78,7 +78,7 @@ const AiUsageRecommendations: React.FC<AiUsageRecommendationsProps> = ({
           <RecommendationCard
             key={rec.id}
             recommendation={rec}
-            estSavingUsd={priceSavings(rec.est_saving_tokens)}
+            estSavingUsd={priceSavings(rec.estimated_savings_tokens)}
             variant="full"
             onHover={onHoverRecommendation}
           />

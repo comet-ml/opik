@@ -44,16 +44,6 @@ public enum SpendLane {
     private final String label;
     private final String description;
 
-    /** Fixed JSON path expression for the lane's billed total. */
-    public String getTokenExpression() {
-        return getTierExpression("total");
-    }
-
-    /** Fixed JSON path expression for one of the lane's tier columns. */
-    public String getTierExpression(String column) {
-        return "JSONExtractInt(metadata, 'cc', 'billing', 'lanes', '%s', '%s')".formatted(key, column);
-    }
-
     /** The unattributed lane has no entity items by design. */
     public boolean hasBreakdown() {
         return this != UNATTRIBUTED;

@@ -21,6 +21,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.spend.Impact;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
+import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
 import com.comet.opik.api.spend.SpendRecommendationsResponse;
 import com.comet.opik.api.spend.SpendUserPage;
@@ -411,8 +412,17 @@ class AiSpendResourceTest {
 
         assertThat(breakdown.laneKey()).isEqualTo("skills");
         assertThat(breakdown.title()).isEqualTo("Skills");
-        assertThat(breakdown.itemCount()).isEqualTo(2);
+        assertThat(breakdown.subtitle()).isEqualTo(SpendLane.SKILLS.getDescription());
+        // itemCount is the total occurrence count: opik-frontend (1 usage) +
+        // find-skills (1 usage), across 3 traces = 6 calls.
+        assertThat(breakdown.itemCount()).isEqualTo(6);
         assertThat(breakdown.totalTokens()).isEqualTo(2700L);
+
+        // Tier sums + model ride along so the FE can price the lane total.
+        assertThat(breakdown.cacheReadTokens()).isEqualTo(2700L);
+        assertThat(breakdown.inputTokens()).isEqualTo(0L);
+        assertThat(breakdown.outputTokens()).isEqualTo(0L);
+        assertThat(breakdown.model()).isEqualTo("claude-opus-4-8");
 
         Map<String, SpendBreakdownResponse.Item> byLabel = breakdown.items().stream()
                 .collect(Collectors.toMap(SpendBreakdownResponse.Item::label, Function.identity()));
@@ -447,7 +457,8 @@ class AiSpendResourceTest {
 
         assertThat(breakdown.laneKey()).isEqualTo("mcp_servers");
         assertThat(breakdown.totalTokens()).isEqualTo(1140L);
-        assertThat(breakdown.itemCount()).isEqualTo(1);
+        // chrome-devtools: 1 usage call per trace, across 3 traces = 3 calls.
+        assertThat(breakdown.itemCount()).isEqualTo(3);
 
         var server = breakdown.items().getFirst();
         assertThat(server.label()).isEqualTo("chrome-devtools");
@@ -478,7 +489,10 @@ class AiSpendResourceTest {
         var builtIn = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
                 "built_in_tool_calls");
         assertThat(builtIn.totalTokens()).isEqualTo(90L);
-        assertThat(builtIn.itemCount()).isEqualTo(1);
+        // Output lanes have no description, so no subtitle.
+        assertThat(builtIn.subtitle()).isNull();
+        // Bash tool call: 1 per trace, across 3 traces = 3 calls.
+        assertThat(builtIn.itemCount()).isEqualTo(3);
         assertThat(builtIn.items().getFirst().label()).isEqualTo("Bash");
         assertThat(builtIn.items().getFirst().totalTokens()).isEqualTo(90L);
         assertThat(builtIn.items().getFirst().count()).isEqualTo(3L);
@@ -512,7 +526,8 @@ class AiSpendResourceTest {
 
         var thinking = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "thinking");
         assertThat(thinking.totalTokens()).isEqualTo(450L);
-        assertThat(thinking.itemCount()).isEqualTo(1);
+        // thinking items carry no call count (count=0), so 0 calls.
+        assertThat(thinking.itemCount()).isEqualTo(0);
         assertThat(thinking.items().getFirst().label()).isEqualTo("thinking");
         assertThat(thinking.items().getFirst().totalTokens()).isEqualTo(450L);
 

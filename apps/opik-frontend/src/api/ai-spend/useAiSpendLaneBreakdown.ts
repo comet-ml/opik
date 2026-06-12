@@ -24,6 +24,13 @@ export interface AiSpendBreakdownResponse {
   title: string;
   subtitle?: string;
   total_tokens: number;
+  // Tier sums for the lane's window total; priced FE-side (claudePricing).
+  input_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  output_tokens?: number;
+  // Representative cc.billing model, for FE pricing.
+  model?: string;
   item_count: number;
   // Noun for item counts (e.g. "prompts") - UI falls back to "items".
   item_unit?: string;
