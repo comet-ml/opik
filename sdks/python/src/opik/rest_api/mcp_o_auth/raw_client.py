@@ -8,9 +8,11 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
+from ..errors.bad_request_error import BadRequestError
 from ..types.authorization_server_metadata import AuthorizationServerMetadata
 from ..types.authorize_context import AuthorizeContext
 from ..types.consent_response import ConsentResponse
+from ..types.token_response import TokenResponse
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -240,6 +242,129 @@ class RawMcpOAuthClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def revoke(
+        self,
+        *,
+        token: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        OAuth 2.0 token revocation endpoint (RFC 7009). Always returns 200, whether the token was revoked, never existed, or was invalid
+
+        Parameters
+        ----------
+        token : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "oauth/revoke",
+            method="POST",
+            json={
+                "token": token,
+                "client_id": client_id,
+            },
+            headers={
+                "content-type": "application/x-www-form-urlencoded",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def token(
+        self,
+        *,
+        grant_type: typing.Optional[str] = OMIT,
+        code: typing.Optional[str] = OMIT,
+        redirect_uri: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        code_verifier: typing.Optional[str] = OMIT,
+        refresh_token: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[TokenResponse]:
+        """
+        OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization code with PKCE or a refresh token for an access/refresh token pair
+
+        Parameters
+        ----------
+        grant_type : typing.Optional[str]
+
+        code : typing.Optional[str]
+
+        redirect_uri : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        code_verifier : typing.Optional[str]
+
+        refresh_token : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[TokenResponse]
+            Token response
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "oauth/token",
+            method="POST",
+            json={
+                "grant_type": grant_type,
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": client_id,
+                "code_verifier": code_verifier,
+                "refresh_token": refresh_token,
+            },
+            headers={
+                "content-type": "application/x-www-form-urlencoded",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    TokenResponse,
+                    parse_obj_as(
+                        type_=TokenResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawMcpOAuthClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -460,6 +585,129 @@ class AsyncRawMcpOAuthClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def revoke(
+        self,
+        *,
+        token: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        OAuth 2.0 token revocation endpoint (RFC 7009). Always returns 200, whether the token was revoked, never existed, or was invalid
+
+        Parameters
+        ----------
+        token : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "oauth/revoke",
+            method="POST",
+            json={
+                "token": token,
+                "client_id": client_id,
+            },
+            headers={
+                "content-type": "application/x-www-form-urlencoded",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def token(
+        self,
+        *,
+        grant_type: typing.Optional[str] = OMIT,
+        code: typing.Optional[str] = OMIT,
+        redirect_uri: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        code_verifier: typing.Optional[str] = OMIT,
+        refresh_token: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[TokenResponse]:
+        """
+        OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization code with PKCE or a refresh token for an access/refresh token pair
+
+        Parameters
+        ----------
+        grant_type : typing.Optional[str]
+
+        code : typing.Optional[str]
+
+        redirect_uri : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        code_verifier : typing.Optional[str]
+
+        refresh_token : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[TokenResponse]
+            Token response
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "oauth/token",
+            method="POST",
+            json={
+                "grant_type": grant_type,
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": client_id,
+                "code_verifier": code_verifier,
+                "refresh_token": refresh_token,
+            },
+            headers={
+                "content-type": "application/x-www-form-urlencoded",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    TokenResponse,
+                    parse_obj_as(
+                        type_=TokenResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
