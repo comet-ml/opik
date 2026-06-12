@@ -133,7 +133,7 @@ public class OAuthAuthorizationService {
                 .build();
     }
 
-    private static URI errorRedirect(String redirectUri, String error, String state) {
+    private URI errorRedirect(String redirectUri, String error, String state) {
         UriBuilder builder = UriBuilder.fromUri(redirectUri).queryParam(PARAM_ERROR, error);
         if (StringUtils.isNotBlank(state)) {
             builder.queryParam(PARAM_STATE, state);

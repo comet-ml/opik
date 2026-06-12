@@ -4,6 +4,7 @@ import com.comet.opik.domain.mcpoauth.OAuthException;
 import com.comet.opik.domain.mcpoauth.OAuthTokenService;
 import com.comet.opik.domain.mcpoauth.TokenResponse;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.ws.rs.client.Entity;
@@ -102,10 +103,10 @@ class OAuthTokenResourceTest {
             assertNoStore(response);
 
             response.bufferEntity();
-            assertThat(response.readEntity(String.class))
-                    .contains("\"access_token\"", "\"refresh_token\"", "\"token_type\"", "\"expires_in\"",
-                            "\"workspace_id\"", "\"workspace_name\"");
             assertThat(response.readEntity(TokenResponse.class)).isEqualTo(minted());
+            assertThat(response.readEntity(JsonNode.class).fieldNames()).toIterable()
+                    .contains("access_token", "refresh_token", "token_type", "expires_in", "workspace_id",
+                            "workspace_name");
         }
     }
 
