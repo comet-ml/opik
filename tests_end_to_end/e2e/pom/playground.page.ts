@@ -225,6 +225,35 @@ export class PlaygroundPage {
     return { outputText: cardText, isError };
   }
 
+  /** Set the model for a variant — public wrapper for setModelForVariant. */
+  async selectModel(index: number, modelDisplayName: string): Promise<void> {
+    await this.setModelForVariant(index, modelDisplayName);
+  }
+
+  /**
+   * Click Run (free mode) and wait for the "No runs yet" placeholder to disappear.
+   * The prompt content must already be loaded — this does NOT fill a message body.
+   */
+  async runFreeMode(timeoutMs = 120_000): Promise<void> {
+    await this.runButton().click();
+    const errorText = this.page.getByText(/error|failed/i);
+    await expect
+      .poll(
+        async () => {
+          const noRunsYet = await this.page.getByText('No runs yet').count();
+          const errored = (await errorText.count()) > 0;
+          return noRunsYet === 0 || errored;
+        },
+        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
+      )
+      .toBeTruthy();
+  }
+
+  /** Click the "Go to logs" icon button to open the Playground logs sidebar. */
+  async openLogsPanel(): Promise<void> {
+    await this.page.getByTestId('playground-logs-sidebar-button').click();
+  }
+
   /** Set a single model-config option (e.g., temperature, max_tokens) on a variant. */
   async setVariantOption(index: number, optionName: string, value: number | string): Promise<void> {
     // The options pane is collapsed by default; expand it first. Implementation
