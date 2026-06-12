@@ -4,17 +4,14 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .model_tiers import ModelTiers
 
 
 class SpendUserRow(UniversalBaseModel):
     user_uuid: typing.Optional[str] = None
     user_email: typing.Optional[str] = None
     user_display_name: typing.Optional[str] = None
-    model: typing.Optional[str] = None
-    input_tokens: typing.Optional[int] = None
-    cache_read_tokens: typing.Optional[int] = None
-    cache_creation_tokens: typing.Optional[int] = None
-    output_tokens: typing.Optional[int] = None
+    by_model: typing.Optional[typing.List[ModelTiers]] = None
     total_tokens: typing.Optional[int] = None
     requests: typing.Optional[int] = None
     skills: typing.Optional[int] = None
