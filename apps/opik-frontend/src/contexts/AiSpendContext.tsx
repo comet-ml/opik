@@ -4,14 +4,17 @@ export type AiSpendContextValue = {
   isPending: boolean;
   hasAccess: boolean;
   spendWorkspaceName?: string;
+  isSpendWorkspaceActive?: boolean;
   organizationName?: string;
   projectName: string;
+  goToCostIntelligence: () => void;
 };
 
 const DEFAULT_VALUE: AiSpendContextValue = {
   isPending: false,
   hasAccess: false,
   projectName: "",
+  goToCostIntelligence: () => {},
 };
 
 const AiSpendContext = createContext<AiSpendContextValue>(DEFAULT_VALUE);

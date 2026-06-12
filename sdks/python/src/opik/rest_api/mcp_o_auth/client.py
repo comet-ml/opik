@@ -5,7 +5,13 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.authorization_server_metadata import AuthorizationServerMetadata
+from ..types.authorize_context import AuthorizeContext
+from ..types.consent_response import ConsentResponse
+from ..types.token_response import TokenResponse
 from .raw_client import AsyncRawMcpOAuthClient, RawMcpOAuthClient
+
+# this is used as the default value for optional parameters
+OMIT = typing.cast(typing.Any, ...)
 
 
 class McpOAuthClient:
@@ -22,6 +28,158 @@ class McpOAuthClient:
         RawMcpOAuthClient
         """
         return self._raw_client
+
+    def authorize(
+        self,
+        *,
+        client_id: str,
+        redirect_uri: str,
+        response_type: typing.Optional[str] = None,
+        code_challenge: typing.Optional[str] = None,
+        code_challenge_method: typing.Optional[str] = None,
+        resource: typing.Optional[str] = None,
+        state: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the client and PKCE parameters, then redirects to the login or consent page
+
+        Parameters
+        ----------
+        client_id : str
+
+        redirect_uri : str
+
+        response_type : typing.Optional[str]
+
+        code_challenge : typing.Optional[str]
+
+        code_challenge_method : typing.Optional[str]
+
+        resource : typing.Optional[str]
+
+        state : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.mcp_o_auth.authorize(client_id='client_id', redirect_uri='redirect_uri', )
+        """
+        _response = self._raw_client.authorize(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            response_type=response_type,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
+            resource=resource,
+            state=state,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def consent(
+        self,
+        *,
+        client_id: str,
+        redirect_uri: str,
+        code_challenge: str,
+        code_challenge_method: str,
+        resource: str,
+        state: typing.Optional[str] = OMIT,
+        workspace_id: typing.Optional[str] = OMIT,
+        workspace_name: typing.Optional[str] = OMIT,
+        csrf: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ConsentResponse:
+        """
+        Submit the user's consent, issue an authorization code, and return the client redirect target
+
+        Parameters
+        ----------
+        client_id : str
+
+        redirect_uri : str
+
+        code_challenge : str
+
+        code_challenge_method : str
+
+        resource : str
+
+        state : typing.Optional[str]
+
+        workspace_id : typing.Optional[str]
+
+        workspace_name : typing.Optional[str]
+
+        csrf : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ConsentResponse
+            Consent response with the client redirect target
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.mcp_o_auth.consent(client_id='client_id', redirect_uri='redirect_uri', code_challenge='code_challenge', code_challenge_method='code_challenge_method', resource='resource', )
+        """
+        _response = self._raw_client.consent(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
+            resource=resource,
+            state=state,
+            workspace_id=workspace_id,
+            workspace_name=workspace_name,
+            csrf=csrf,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def get_authorize_context(
+        self, *, client_id: str, redirect_uri: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AuthorizeContext:
+        """
+        Get the client details, eligible workspaces, and a CSRF token used to render the consent screen
+
+        Parameters
+        ----------
+        client_id : str
+
+        redirect_uri : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AuthorizeContext
+            Authorization consent context
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.mcp_o_auth.get_authorize_context(client_id='client_id', redirect_uri='redirect_uri', )
+        """
+        _response = self._raw_client.get_authorize_context(
+            client_id=client_id, redirect_uri=redirect_uri, request_options=request_options
+        )
+        return _response.data
 
     def get_o_auth_authorization_server_metadata(
         self, *, request_options: typing.Optional[RequestOptions] = None
@@ -48,6 +206,91 @@ class McpOAuthClient:
         _response = self._raw_client.get_o_auth_authorization_server_metadata(request_options=request_options)
         return _response.data
 
+    def revoke(
+        self,
+        *,
+        token: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        OAuth 2.0 token revocation endpoint (RFC 7009). Always returns 200, whether the token was revoked, never existed, or was invalid
+
+        Parameters
+        ----------
+        token : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.mcp_o_auth.revoke()
+        """
+        _response = self._raw_client.revoke(token=token, client_id=client_id, request_options=request_options)
+        return _response.data
+
+    def token(
+        self,
+        *,
+        grant_type: typing.Optional[str] = OMIT,
+        code: typing.Optional[str] = OMIT,
+        redirect_uri: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        code_verifier: typing.Optional[str] = OMIT,
+        refresh_token: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TokenResponse:
+        """
+        OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization code with PKCE or a refresh token for an access/refresh token pair
+
+        Parameters
+        ----------
+        grant_type : typing.Optional[str]
+
+        code : typing.Optional[str]
+
+        redirect_uri : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        code_verifier : typing.Optional[str]
+
+        refresh_token : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        TokenResponse
+            Token response
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.mcp_o_auth.token()
+        """
+        _response = self._raw_client.token(
+            grant_type=grant_type,
+            code=code,
+            redirect_uri=redirect_uri,
+            client_id=client_id,
+            code_verifier=code_verifier,
+            refresh_token=refresh_token,
+            request_options=request_options,
+        )
+        return _response.data
+
 
 class AsyncMcpOAuthClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -63,6 +306,167 @@ class AsyncMcpOAuthClient:
         AsyncRawMcpOAuthClient
         """
         return self._raw_client
+
+    async def authorize(
+        self,
+        *,
+        client_id: str,
+        redirect_uri: str,
+        response_type: typing.Optional[str] = None,
+        code_challenge: typing.Optional[str] = None,
+        code_challenge_method: typing.Optional[str] = None,
+        resource: typing.Optional[str] = None,
+        state: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the client and PKCE parameters, then redirects to the login or consent page
+
+        Parameters
+        ----------
+        client_id : str
+
+        redirect_uri : str
+
+        response_type : typing.Optional[str]
+
+        code_challenge : typing.Optional[str]
+
+        code_challenge_method : typing.Optional[str]
+
+        resource : typing.Optional[str]
+
+        state : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.mcp_o_auth.authorize(client_id='client_id', redirect_uri='redirect_uri', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.authorize(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            response_type=response_type,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
+            resource=resource,
+            state=state,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def consent(
+        self,
+        *,
+        client_id: str,
+        redirect_uri: str,
+        code_challenge: str,
+        code_challenge_method: str,
+        resource: str,
+        state: typing.Optional[str] = OMIT,
+        workspace_id: typing.Optional[str] = OMIT,
+        workspace_name: typing.Optional[str] = OMIT,
+        csrf: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ConsentResponse:
+        """
+        Submit the user's consent, issue an authorization code, and return the client redirect target
+
+        Parameters
+        ----------
+        client_id : str
+
+        redirect_uri : str
+
+        code_challenge : str
+
+        code_challenge_method : str
+
+        resource : str
+
+        state : typing.Optional[str]
+
+        workspace_id : typing.Optional[str]
+
+        workspace_name : typing.Optional[str]
+
+        csrf : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ConsentResponse
+            Consent response with the client redirect target
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.mcp_o_auth.consent(client_id='client_id', redirect_uri='redirect_uri', code_challenge='code_challenge', code_challenge_method='code_challenge_method', resource='resource', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.consent(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
+            resource=resource,
+            state=state,
+            workspace_id=workspace_id,
+            workspace_name=workspace_name,
+            csrf=csrf,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def get_authorize_context(
+        self, *, client_id: str, redirect_uri: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AuthorizeContext:
+        """
+        Get the client details, eligible workspaces, and a CSRF token used to render the consent screen
+
+        Parameters
+        ----------
+        client_id : str
+
+        redirect_uri : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AuthorizeContext
+            Authorization consent context
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.mcp_o_auth.get_authorize_context(client_id='client_id', redirect_uri='redirect_uri', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_authorize_context(
+            client_id=client_id, redirect_uri=redirect_uri, request_options=request_options
+        )
+        return _response.data
 
     async def get_o_auth_authorization_server_metadata(
         self, *, request_options: typing.Optional[RequestOptions] = None
@@ -90,4 +494,95 @@ class AsyncMcpOAuthClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_o_auth_authorization_server_metadata(request_options=request_options)
+        return _response.data
+
+    async def revoke(
+        self,
+        *,
+        token: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        OAuth 2.0 token revocation endpoint (RFC 7009). Always returns 200, whether the token was revoked, never existed, or was invalid
+
+        Parameters
+        ----------
+        token : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.mcp_o_auth.revoke()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.revoke(token=token, client_id=client_id, request_options=request_options)
+        return _response.data
+
+    async def token(
+        self,
+        *,
+        grant_type: typing.Optional[str] = OMIT,
+        code: typing.Optional[str] = OMIT,
+        redirect_uri: typing.Optional[str] = OMIT,
+        client_id: typing.Optional[str] = OMIT,
+        code_verifier: typing.Optional[str] = OMIT,
+        refresh_token: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TokenResponse:
+        """
+        OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization code with PKCE or a refresh token for an access/refresh token pair
+
+        Parameters
+        ----------
+        grant_type : typing.Optional[str]
+
+        code : typing.Optional[str]
+
+        redirect_uri : typing.Optional[str]
+
+        client_id : typing.Optional[str]
+
+        code_verifier : typing.Optional[str]
+
+        refresh_token : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        TokenResponse
+            Token response
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.mcp_o_auth.token()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.token(
+            grant_type=grant_type,
+            code=code,
+            redirect_uri=redirect_uri,
+            client_id=client_id,
+            code_verifier=code_verifier,
+            refresh_token=refresh_token,
+            request_options=request_options,
+        )
         return _response.data

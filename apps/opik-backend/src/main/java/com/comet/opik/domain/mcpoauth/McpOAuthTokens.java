@@ -2,6 +2,7 @@ package com.comet.opik.domain.mcpoauth;
 
 import lombok.experimental.UtilityClass;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 
 import java.security.NoSuchAlgorithmException;
@@ -21,15 +22,21 @@ public class McpOAuthTokens {
     private static final SecureRandom SECURE_RANDOM = getSecureRandom();
 
     public static String generateAccessToken() {
-        return ACCESS_PREFIX + randomSuffix();
+        return ACCESS_PREFIX + randomToken();
     }
 
     public static String generateRefreshToken() {
-        return REFRESH_PREFIX + randomSuffix();
+        return REFRESH_PREFIX + randomToken();
     }
 
     public static String generateCode() {
-        return randomSuffix();
+        return randomToken();
+    }
+
+    public static String randomToken() {
+        byte[] bytes = new byte[RANDOM_BYTES];
+        SECURE_RANDOM.nextBytes(bytes);
+        return ENCODER.encodeToString(bytes);
     }
 
     public static boolean isAccessToken(String token) {
@@ -55,10 +62,19 @@ public class McpOAuthTokens {
         return DigestUtils.sha256Hex(token);
     }
 
-    private static String randomSuffix() {
-        byte[] bytes = new byte[RANDOM_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
-        return ENCODER.encodeToString(bytes);
+    /**
+     * Masks a token for safe logging. Never emits token fragments: a SHA-256 prefix is non-reversible
+     * yet stable enough to correlate the same token across log lines.
+     *
+     * @param token the raw token; may be {@code null} or empty
+     * @return an empty string for null/empty input, otherwise {@code "sha256:"} followed by the first
+     *         12 hex characters of the token's SHA-256 hash
+     */
+    public static String maskToken(String token) {
+        if (StringUtils.isEmpty(token)) {
+            return "";
+        }
+        return "sha256:" + hash(token).substring(0, 12);
     }
 
     private static SecureRandom getSecureRandom() {

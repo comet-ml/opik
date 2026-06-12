@@ -3,6 +3,7 @@ import useAiSpendRecommendations from "@/api/ai-spend/useAiSpendRecommendations"
 import { Skeleton } from "@/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/money";
+import useSavingsPricer from "@/api/ai-spend/useSavingsPricer";
 import RecommendationCard from "./RecommendationCard";
 
 interface AiUsageRecommendationsProps {
@@ -22,6 +23,12 @@ const AiUsageRecommendations: React.FC<AiUsageRecommendationsProps> = ({
   onHoverRecommendation,
   className,
 }) => {
+  const priceSavings = useSavingsPricer({
+    projectName,
+    intervalStart,
+    intervalEnd,
+    userUuid,
+  });
   const { data, isPending } = useAiSpendRecommendations({
     projectName,
     intervalStart,
@@ -61,7 +68,7 @@ const AiUsageRecommendations: React.FC<AiUsageRecommendationsProps> = ({
             Potential savings
           </span>
           <span className="comet-body-s-accented text-foreground">
-            {formatCost(data?.total_savings)}
+            {formatCost(priceSavings(data?.total_savings_tokens))}
           </span>
         </div>
       </div>
@@ -71,6 +78,7 @@ const AiUsageRecommendations: React.FC<AiUsageRecommendationsProps> = ({
           <RecommendationCard
             key={rec.id}
             recommendation={rec}
+            estSavingUsd={priceSavings(rec.estimated_savings_tokens)}
             variant="full"
             onHover={onHoverRecommendation}
           />

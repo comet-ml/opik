@@ -7,8 +7,10 @@ import com.comet.opik.api.resources.utils.CommentAssertionUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,6 +20,13 @@ public class ExperimentTestAssertions {
             "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt", "comments.createdAt", "comments.lastUpdatedAt",
             "feedbackScores.valueByAuthor", "projectName"
     };
+
+    // Experiment items returned by the bulk endpoint get server-generated ids/traceId/experimentId, so those
+    // are ignored on top of the base ignored fields. projectId is intentionally NOT ignored — it is asserted.
+    public static final String[] BULK_EXPERIMENT_ITEMS_IGNORED_FIELDS = Stream.concat(
+            Arrays.stream(EXPERIMENT_ITEMS_IGNORED_FIELDS),
+            Stream.of("traceId", "id", "experimentId"))
+            .toArray(String[]::new);
 
     public static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "assertionScores", "traceCount", "createdAt",

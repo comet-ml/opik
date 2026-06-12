@@ -31,6 +31,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     ollamaProviderEnabled: core.serialization.boolean(),
     ollieEnabled: core.serialization.boolean(),
     agenticToolsEnabled: core.serialization.boolean(),
+    agentInsightsEnabled: core.serialization.boolean(),
     v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     v1WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     forceWorkspaceVersion: core.serialization.string(),
@@ -64,6 +65,7 @@ export declare namespace ServiceTogglesConfig {
         ollamaProviderEnabled: boolean;
         ollieEnabled: boolean;
         agenticToolsEnabled: boolean;
+        agentInsightsEnabled: boolean;
         v2WorkspaceAllowlistIds: string[];
         v1WorkspaceAllowlistIds: string[];
         forceWorkspaceVersion: string;

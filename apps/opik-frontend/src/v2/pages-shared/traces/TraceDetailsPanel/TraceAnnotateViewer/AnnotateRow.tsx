@@ -190,6 +190,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           placeholder="Score"
           type="number"
           value={value}
+          data-testid="annotate-score-input"
         />
       );
     }
@@ -341,6 +342,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       <div
         className="flex items-center overflow-hidden border-t border-border p-1"
         data-test-value={name}
+        data-testid={`annotate-score-row-${name}`}
       >
         {feedbackDefinition ? (
           <div className="min-w-0 flex-1 overflow-auto">
@@ -355,6 +357,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           <Button
             variant="minimal"
             size="icon-xs"
+            aria-label="Clear score"
             onClick={deleteFeedbackScore}
           >
             <X />

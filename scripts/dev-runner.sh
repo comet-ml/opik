@@ -16,6 +16,12 @@ ORIGINAL_COMMAND="$0 $@"
 # version_1) before invoking the script.
 export TOGGLE_FORCE_WORKSPACE_VERSION="${TOGGLE_FORCE_WORKSPACE_VERSION:-version_2}"
 
+# Agent Insights read-only freeform SQL is off by default for local dev (the feature is driven by the Ollie agent,
+# which isn't available locally). Set TOGGLE_AGENT_INSIGHTS_ENABLED=true before invoking to opt in: start_backend
+# then provisions the restricted read-only ClickHouse user/profile/policies and the JVM connects with the feature on.
+# Exported here so this single variable controls both the provisioning gate and the JAR-mode backend (config.yml).
+export TOGGLE_AGENT_INSIGHTS_ENABLED="${TOGGLE_AGENT_INSIGHTS_ENABLED:-false}"
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
@@ -643,6 +649,17 @@ start_backend() {
     export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
     export REDIS_URL="${REDIS_URL:-redis://:opik@localhost:${REDIS_PORT}/0}"
     export ANALYTICS_DB_PORT="${CLICKHOUSE_HTTP_PORT}"
+
+    # Agent Insights (read-only freeform SQL) — opt-in for local dev. When enabled, provision the restricted
+    # read-only ClickHouse user (via the shared script also used by the docker-compose backend container) and export
+    # its credentials so the locally-launched backend connects as that user. Default off: behavior unchanged. The
+    # script runs against the docker-compose ClickHouse on localhost:${ANALYTICS_DB_PORT} exported just above.
+    if [ "${TOGGLE_AGENT_INSIGHTS_ENABLED}" = "true" ]; then
+        export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
+        export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
+        bash "$BACKEND_DIR/provision_agent_insights_readonly_user.sh"
+        log_debug "  TOGGLE_AGENT_INSIGHTS_ENABLED=true (read-only CH user: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER})"
+    fi
 
     log_debug "Backend configured with:"
     log_debug "  SERVER_APPLICATION_PORT=$SERVER_APPLICATION_PORT"

@@ -34,10 +34,13 @@ const useAiSpendManager = () => {
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   return {
-    isPending: isEnabled && (isOrganizationsPending || isWorkspacesPending),
+    isPending:
+      isEnabled &&
+      (isOrganizationsPending || isWorkspacesPending || !workspaceVersion),
     organization,
     spendWorkspace,
     spendWorkspaceName: spendWorkspace?.workspaceName,
+    isSpendWorkspaceActive: isAiSpendWorkspace(currentWorkspace),
     isEnterprise,
     isOrganizationAdmin,
     hasAccess:
