@@ -1,4 +1,4 @@
-from typing import Dict, Any, Annotated, Optional, Literal
+from typing import Dict, Any, Annotated, List, Optional, Literal
 
 import langchain_openai
 import pytest
@@ -1389,3 +1389,79 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
 
     assert_equal(EXPECTED_FIRST_TRACE, fake_backend.trace_trees[0])
     assert_equal(EXPECTED_SECOND_TRACE, fake_backend.trace_trees[1])
+
+
+def test_langgraph__internal_span_classifier__only_meaningful_spans_stay_visible(
+    fake_backend,
+):
+    """Real (no-LLM) LangGraph run pinning down the *visible* (non-internal) spans.
+
+    Asserted from the inverse direction on purpose: rather than enumerating the spans we
+    expect to hide, we assert the exact set of spans that stay visible. If a future
+    LangChain/LangGraph version emits a new plumbing span the classifier fails to tag, it
+    surfaces here as an unexpected visible span and breaks the test — signalling the
+    classifier needs adjusting, instead of silently leaking framework noise into the UI.
+    """
+
+    class State(TypedDict):
+        value: str
+        route: Optional[str]
+
+    @opik.track(type="tool")
+    def lookup(value: str) -> str:
+        return f"looked-up:{value}"
+
+    def classify(state: State) -> Dict[str, Any]:
+        return {"route": "a" if "x" in state["value"] else "b"}
+
+    def pick_branch(state: State) -> str:
+        return "branch_a" if state["route"] == "a" else "branch_b"
+
+    def branch_a(state: State) -> Dict[str, Any]:
+        return {"value": lookup(state["value"])}
+
+    def branch_b(state: State) -> Dict[str, Any]:
+        return {"value": "b-done"}
+
+    builder = StateGraph(State)
+    builder.add_node("classify", classify)
+    builder.add_node("branch_a", branch_a)
+    builder.add_node("branch_b", branch_b)
+    builder.add_edge(START, "classify")
+    builder.add_conditional_edges(
+        "classify", pick_branch, {"branch_a": "branch_a", "branch_b": "branch_b"}
+    )
+    builder.add_edge("branch_a", END)
+    builder.add_edge("branch_b", END)
+    graph = builder.compile()
+
+    tracer = OpikTracer()
+    graph.invoke({"value": "x-ray", "route": None}, config={"callbacks": [tracer]})
+    tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    def is_internal(span):
+        opik_meta = (span.metadata or {}).get("_opik")
+        return isinstance(opik_meta, dict) and opik_meta.get("category") == "internal"
+
+    def collect(spans, visible, hidden):
+        for span_ in spans:
+            (hidden if is_internal(span_) else visible).append(span_.name)
+            collect(span_.spans or [], visible, hidden)
+
+    visible_spans: List[str] = []
+    hidden_spans: List[str] = []
+    collect(trace_tree.spans, visible_spans, hidden_spans)
+
+    # The only meaningful spans for this run: the two executed node boundaries and the
+    # tool call. Everything else LangGraph emits (here: the pick_branch router) must be
+    # classified internal and therefore absent from this set.
+    assert sorted(visible_spans) == ["branch_a", "classify", "lookup"], (
+        f"unexpected visible spans; hidden={sorted(hidden_spans)}"
+    )
+
+    # Sanity: the feature is actually doing something (at least one span was hidden),
+    # so the assertion above can't pass vacuously by tagging being disabled.
+    assert hidden_spans
