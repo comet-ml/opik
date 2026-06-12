@@ -23,7 +23,12 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
 
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig apiKey) {
-        return new LlmProviderOpenAi(clientGenerator.newOpenAiClient(apiKey));
+        return switch (clientGenerator.extractApiPipelineMode(apiKey)) {
+            case CHAT_COMPLETIONS_API -> new LlmProviderOpenAi(clientGenerator.newOpenAiClient(apiKey));
+            // LlmProviderOpenAiResponses builds its ChatModels per request — the per-request
+            // response_format.json_schema.strict flag has to be set at langchain4j build time.
+            case RESPONSES_API -> new LlmProviderOpenAiResponses(clientGenerator, apiKey);
+        };
     }
 
     @Override

@@ -686,6 +686,16 @@ export type PROVIDER_MODELS_TYPE = {
   }[];
 };
 
+/** OpenAI (OPIK-6833): canonical set of pipeline-mode values. Lives in this lower-layer types/
+ * module, so the persisted-config type, the form schema's Zod enum, and the runtime normaliser all
+ * derive from the same source — adding a third mode requires editing only this tuple. */
+export const OPENAI_PIPELINE_MODE_VALUES = [
+  "chat_completions_api",
+  "responses_api",
+] as const;
+
+export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -697,6 +707,9 @@ export interface ProviderKeyConfiguration {
   auth_header_name?: string;
   /** Custom LLM (OPIK-4551): "true" to drop the default Authorization: Bearer header */
   suppress_default_auth?: string;
+  /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
+   * and falls back to chat_completions_api on unknown values. */
+  openai_pipeline_mode?: OpenAiPipelineMode;
 }
 
 export interface BaseProviderKey {

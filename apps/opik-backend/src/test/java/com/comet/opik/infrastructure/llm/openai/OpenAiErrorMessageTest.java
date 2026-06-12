@@ -16,9 +16,32 @@ class OpenAiErrorMessageTest {
                 Arguments.of("invalid_api_key", 401, "some error message"),
                 Arguments.of("internal_error", 500, "some error message"),
                 Arguments.of("invalid_request_error", 400, "some error message"),
+                Arguments.of("unsupported_parameter", 400, "some error message"),
                 Arguments.of("rate_limit_exceeded", 429, "some error message"),
                 Arguments.of("insufficient_quota", 402, "some error message"),
                 Arguments.of("model_not_found", 404, "some error message"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("typeFallbackMappings")
+    void toErrorMessageFallsBackToErrorTypeWhenCodeUnrecognized(String unknownCode, String knownType,
+            int expectedStatus) {
+        // OpenAI sometimes emits a specific {code} we haven't enumerated alongside a recognised
+        // high-level {type}. The mapper should fall back to the type so the response carries the
+        // right HTTP status family instead of degrading to 500.
+        var message = "Unsupported parameter: 'top_p' is not supported with this model.";
+        var error = new OpenAiErrorMessage(new OpenAiErrorMessage.OpenAiError(message, unknownCode, knownType));
+
+        var actual = error.toErrorMessage();
+
+        assertThat(actual).usingRecursiveComparison()
+                .isEqualTo(new ErrorMessage(expectedStatus, message));
+    }
+
+    static Stream<Arguments> typeFallbackMappings() {
+        return Stream.of(
+                Arguments.of("brand_new_code_we_dont_know_about", "invalid_request_error", 400),
+                Arguments.of("yet_another_unknown", "rate_limit_exceeded", 429));
     }
 
     @ParameterizedTest

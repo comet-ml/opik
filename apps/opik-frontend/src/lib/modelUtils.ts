@@ -199,6 +199,14 @@ export const updateProviderConfig = <
       changed = true;
     }
 
+    // Reasoning models reject top_p outright (OpenAI returns 400 "Unsupported parameter:
+    // 'top_p' is not supported with this model."). Drop any stale value so the next request
+    // omits the field entirely. The Top P slider is hidden for these models in the UI.
+    if (isReasoningModel(params.model) && next.topP !== undefined) {
+      next.topP = undefined;
+      changed = true;
+    }
+
     // reasoningEffort: drop it for models without an effort option list,
     // coerce stale values to "high" otherwise. Mirrors the Anthropic
     // thinkingEffort handling below.
@@ -290,6 +298,18 @@ export const sanitizeConfigForRequest = (
         delete sanitized.reasoningEffort;
       }
     }
+  }
+
+  // Strip top_p for OpenAI reasoning models — OpenAI rejects it with 400 "Unsupported
+  // parameter: 'top_p' is not supported with this model." Belt-and-braces with the slider
+  // gating and updateProviderConfig: stale persisted prompts that bypass the reconciler
+  // still produce a valid wire payload.
+  if (
+    provider === PROVIDER_TYPE.OPEN_AI &&
+    isReasoningModel(model) &&
+    sanitized.topP != null
+  ) {
+    delete sanitized.topP;
   }
 
   return sanitized;
