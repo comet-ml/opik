@@ -103,6 +103,21 @@ class OAuthAuthorizeResourceTest {
         when(clientService.resolveForRedirect(CLIENT_ID, REDIRECT_URI)).thenReturn(validClient());
     }
 
+    private Response getAuthorize(String responseType, String codeChallenge, String resource) {
+        return EXT.target(AUTHORIZE_PATH)
+                .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                .queryParam(PARAM_CLIENT_ID, CLIENT_ID)
+                .queryParam(PARAM_REDIRECT_URI, REDIRECT_URI)
+                .queryParam(PARAM_RESPONSE_TYPE, responseType)
+                .queryParam(PARAM_CODE_CHALLENGE, codeChallenge)
+                .queryParam(PARAM_CODE_CHALLENGE_METHOD, CODE_CHALLENGE_METHOD_S256)
+                .queryParam(PARAM_RESOURCE, resource)
+                .queryParam(PARAM_STATE, STATE)
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, "sess")
+                .get();
+    }
+
     private ConsentRequest buildConsent() {
         return ConsentRequest.builder()
                 .clientId(CLIENT_ID)
@@ -124,18 +139,7 @@ class OAuthAuthorizeResourceTest {
         when(authService.listEligibleWorkspaces(any()))
                 .thenReturn(List.of(WorkspaceInfo.builder().id("ws-1").name("default").build()));
 
-        try (Response response = EXT.target(AUTHORIZE_PATH)
-                .property(ClientProperties.FOLLOW_REDIRECTS, false)
-                .queryParam(PARAM_CLIENT_ID, CLIENT_ID)
-                .queryParam(PARAM_REDIRECT_URI, REDIRECT_URI)
-                .queryParam(PARAM_RESPONSE_TYPE, RESPONSE_TYPE_CODE)
-                .queryParam(PARAM_CODE_CHALLENGE, CODE_CHALLENGE)
-                .queryParam(PARAM_CODE_CHALLENGE_METHOD, CODE_CHALLENGE_METHOD_S256)
-                .queryParam(PARAM_RESOURCE, RESOURCE_URI)
-                .queryParam(PARAM_STATE, STATE)
-                .request()
-                .cookie(RequestContext.SESSION_COOKIE, "sess")
-                .get()) {
+        try (Response response = getAuthorize(RESPONSE_TYPE_CODE, CODE_CHALLENGE, RESOURCE_URI)) {
 
             assertThat(response.getStatus()).isEqualTo(Response.Status.FOUND.getStatusCode());
             assertThat(response.getLocation().toString())
@@ -162,17 +166,7 @@ class OAuthAuthorizeResourceTest {
             String expectedError) {
         mockClientResolution();
 
-        try (Response response = EXT.target(AUTHORIZE_PATH)
-                .property(ClientProperties.FOLLOW_REDIRECTS, false)
-                .queryParam(PARAM_CLIENT_ID, CLIENT_ID)
-                .queryParam(PARAM_REDIRECT_URI, REDIRECT_URI)
-                .queryParam(PARAM_RESPONSE_TYPE, responseType)
-                .queryParam(PARAM_CODE_CHALLENGE, codeChallenge)
-                .queryParam(PARAM_CODE_CHALLENGE_METHOD, CODE_CHALLENGE_METHOD_S256)
-                .queryParam(PARAM_RESOURCE, resource)
-                .queryParam(PARAM_STATE, STATE)
-                .request()
-                .get()) {
+        try (Response response = getAuthorize(responseType, codeChallenge, resource)) {
 
             assertThat(response.getStatus()).isEqualTo(Response.Status.FOUND.getStatusCode());
             assertThat(response.getLocation().toString())
@@ -187,17 +181,7 @@ class OAuthAuthorizeResourceTest {
         mockClientResolution();
         when(authService.listEligibleWorkspaces(any())).thenThrow(new ClientErrorException(401));
 
-        try (Response response = EXT.target(AUTHORIZE_PATH)
-                .property(ClientProperties.FOLLOW_REDIRECTS, false)
-                .queryParam(PARAM_CLIENT_ID, CLIENT_ID)
-                .queryParam(PARAM_REDIRECT_URI, REDIRECT_URI)
-                .queryParam(PARAM_RESPONSE_TYPE, RESPONSE_TYPE_CODE)
-                .queryParam(PARAM_CODE_CHALLENGE, CODE_CHALLENGE)
-                .queryParam(PARAM_CODE_CHALLENGE_METHOD, CODE_CHALLENGE_METHOD_S256)
-                .queryParam(PARAM_RESOURCE, RESOURCE_URI)
-                .queryParam(PARAM_STATE, STATE)
-                .request()
-                .get()) {
+        try (Response response = getAuthorize(RESPONSE_TYPE_CODE, CODE_CHALLENGE, RESOURCE_URI)) {
 
             String location = response.getLocation().toString();
             assertThat(location).startsWith(BASE_OPIK_URL + "/login?returnTo=");
