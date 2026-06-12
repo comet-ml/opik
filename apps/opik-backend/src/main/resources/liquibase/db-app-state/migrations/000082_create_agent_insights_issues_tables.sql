@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset petrot:000081_create_agent_insights_issues_tables
+--changeset petrot:000082_create_agent_insights_issues_tables
 --comment: Agent Insights report results. One row per detected issue plus one row per issue x report_day with the daily metrics. Issues are upserted on the natural key (workspace_id, project_id, id) so daily re-runs stay idempotent; status is owned by the user and never touched by the reporting agent.
 
 CREATE TABLE agent_insights_issues
