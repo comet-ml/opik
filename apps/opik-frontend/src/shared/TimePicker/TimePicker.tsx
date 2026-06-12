@@ -1,3 +1,4 @@
+// v1 only — use @/shared/TimeInput/TimeInput for new code
 import React, { useEffect, useRef, useState } from "react";
 import { Label } from "@/ui/label";
 import { TimePickerInput } from "@/ui/time-picker-input";
