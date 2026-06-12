@@ -7,6 +7,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { AggregatedCandidate } from "@/types/optimizations";
+import { Experiment } from "@/types/datasets";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { convertColumnDataToColumn } from "@/lib/table";
 import TrialStatusCell from "@/v2/pages/OptimizationPage/TrialStatusCell";
@@ -17,10 +18,13 @@ import {
   TrialCandidateCostCell,
   TrialCandidateLatencyCell,
 } from "@/v2/pages/OptimizationPage/TrialMetricCells";
+import { TrialPromptCell } from "@/v2/pages/OptimizationPage/TrialPromptCell";
 import { getObjectiveLabel } from "@/lib/optimizations";
 
 type UseOptimizationColumnsParams = {
   candidates: AggregatedCandidate[];
+  experiments: Experiment[];
+  baselineExperiment?: Experiment;
   columnsOrder: string[];
   selectedColumns: string[];
   sortableBy: string[];
@@ -38,6 +42,8 @@ type UseOptimizationColumnsParams = {
 
 export const useOptimizationColumns = ({
   candidates,
+  experiments,
+  baselineExperiment,
   columnsOrder,
   selectedColumns,
   sortableBy,
@@ -48,6 +54,11 @@ export const useOptimizationColumns = ({
   inProgressInfo,
   objectiveName,
 }: UseOptimizationColumnsParams) => {
+  const experimentMap = useMemo(
+    () => new Map(experiments.map((e) => [e.id, e])),
+    [experiments],
+  );
+
   const columnsDef: ColumnData<AggregatedCandidate>[] = useMemo(() => {
     return [
       {
@@ -105,6 +116,18 @@ export const useOptimizationColumns = ({
         },
       },
       {
+        id: "prompt",
+        label: "Prompt",
+        type: COLUMN_TYPE.string,
+        size: 280,
+        accessorFn: (row) => row.experimentIds?.[0],
+        cell: TrialPromptCell as never,
+        customMeta: {
+          experimentMap,
+          baselineExperiment,
+        },
+      },
+      {
         id: "trace_count",
         label: "Trial items",
         type: COLUMN_TYPE.number,
@@ -138,6 +161,8 @@ export const useOptimizationColumns = ({
     ];
   }, [
     candidates,
+    experimentMap,
+    baselineExperiment,
     bestCandidateId,
     baselineCandidate,
     isTestSuite,

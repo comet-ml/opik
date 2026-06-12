@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   sanitizeConfigForRequest,
   supportsOpenAIReasoningEffort,
@@ -16,6 +17,35 @@ import {
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
+
+describe("getRoutableProviderModelValue", () => {
+  it("qualifies bare Vertex AI Gemini ids", () => {
+    expect(
+      getRoutableProviderModelValue(
+        PROVIDER_TYPE.VERTEX_AI,
+        PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      ),
+    ).toBe(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO);
+  });
+
+  it("keeps already-qualified Vertex AI values unchanged", () => {
+    expect(
+      getRoutableProviderModelValue(
+        PROVIDER_TYPE.VERTEX_AI,
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      ),
+    ).toBe(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO);
+  });
+
+  it("keeps non-Vertex provider values unchanged", () => {
+    expect(
+      getRoutableProviderModelValue(
+        PROVIDER_TYPE.GEMINI,
+        PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      ),
+    ).toBe(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO);
+  });
+});
 
 describe("supportsSamplingParams", () => {
   it("returns true for an empty model selector", () => {
@@ -205,7 +235,10 @@ describe("updateProviderConfig — OpenAI", () => {
     expect(result?.temperature).toBe(1);
   });
 
-  it("does not change temperature when already 1", () => {
+  it("does not change temperature when already 1, but still strips topP on a reasoning model", () => {
+    // topP=1 is the slider default and "harmless" in spirit, but OpenAI rejects any topP value
+    // on reasoning models (the constraint is the parameter's presence, not its value). The
+    // reconciler strips it; that's a real change so reference equality no longer holds.
     const config: LLMOpenAIConfigsType = {
       temperature: 1,
       maxCompletionTokens: 4000,
@@ -217,8 +250,8 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_O3,
       provider: OPEN_AI,
     });
-    // Reference equality: nothing changed, same object back.
-    expect(result).toBe(config);
+    expect(result?.temperature).toBe(1);
+    expect(result?.topP).toBeUndefined();
   });
 
   it("coerces invalid reasoningEffort to high when switching into a model that doesn't support it", () => {
@@ -314,6 +347,40 @@ describe("updateProviderConfig — OpenAI", () => {
       provider: OPEN_AI,
     });
     expect(result).toBe(config);
+  });
+
+  it("drops topP when switching into a reasoning OpenAI model", () => {
+    // OpenAI rejects top_p with 400 on reasoning models. The reconciler must clear stale
+    // values when the user switches from gpt-4o (where top_p is valid) to gpt-5.5.
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0.7,
+      maxCompletionTokens: 4000,
+      topP: 0.9,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+    expect(result?.topP).toBeUndefined();
+    // Temperature should also be coerced to 1.0 in the same call.
+    expect(result?.temperature).toBe(1.0);
+  });
+
+  it("keeps topP when switching to a non-reasoning OpenAI model", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0.5,
+      maxCompletionTokens: 4000,
+      topP: 0.9,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      provider: OPEN_AI,
+    });
+    expect(result?.topP).toBe(0.9);
   });
 });
 
@@ -433,5 +500,22 @@ describe("sanitizeConfigForRequest", () => {
       },
     );
     expect(result.reasoningEffort).toBe("high");
+  });
+
+  it("strips topP for OpenAI reasoning models", () => {
+    // gpt-5.5 is a reasoning model; OpenAI returns 400 if top_p is in the request.
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_5, {
+      temperature: 1,
+      topP: 0.9,
+    });
+    expect(result.topP).toBeUndefined();
+    expect(result.temperature).toBe(1);
+  });
+
+  it("keeps topP for non-reasoning OpenAI models", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_4O, {
+      topP: 0.9,
+    });
+    expect(result.topP).toBe(0.9);
   });
 });

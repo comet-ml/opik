@@ -15,6 +15,7 @@ export interface PromptLibraryMetadata {
   name: string;
   id: string;
   template_structure?: PROMPT_TEMPLATE_STRUCTURE;
+  modified?: boolean;
   version: {
     template: unknown;
     commit?: string;

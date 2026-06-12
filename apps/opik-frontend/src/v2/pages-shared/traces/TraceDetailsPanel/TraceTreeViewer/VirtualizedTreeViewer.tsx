@@ -437,6 +437,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
               key={node.id}
               ref={rowVirtualizer.measureElement}
               data-index={virtualRow.index}
+              data-testid={`trace-tree-node-${name}`}
               className={cn(
                 "absolute left-0 flex w-full flex-col py-1 pl-2 pr-4 cursor-pointer border-l-8 border-transparent",
                 "hover:bg-[var(--row-bg)]",
@@ -496,6 +497,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                       variant="ghost"
                       size="icon-3xs"
                       className="ml-1"
+                      aria-label="Expand or collapse span"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleExpand(node.id);

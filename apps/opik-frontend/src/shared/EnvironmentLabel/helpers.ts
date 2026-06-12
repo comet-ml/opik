@@ -1,5 +1,9 @@
 import { Code, FlaskRound, LucideIcon, Rocket } from "lucide-react";
 import { DEFAULT_HEX_COLOR, HEX_COLOR_REGEX } from "@/constants/colorVariants";
+import {
+  DEFAULT_ENVIRONMENT_NAMES,
+  DefaultEnvironmentName,
+} from "@/utils/environments";
 
 export const resolveEnvironmentColor = (color: string | undefined) =>
   color && HEX_COLOR_REGEX.test(color) ? color : DEFAULT_HEX_COLOR;
@@ -12,24 +16,34 @@ export const getContrastingTextColor = (hex: string): string => {
   return luminance > 140 ? "#0f172a" : "#ffffff";
 };
 
-// Seeded server-side by migration 000066_seed_default_environments. Name +
-// color are kept in lock-step with the backend so the UI can recognize them
-// and protect their color from edits.
+// Seeded server-side by migration 000066_seed_default_environments. The set of
+// names is the source of truth in `utils/environments.ts`
+// (DEFAULT_ENVIRONMENT_NAMES); TypeScript enforces this map carries one entry
+// per default env so adding a new default forces editing both color/icon and
+// sort priority together.
 type DefaultEnvironmentMeta = { color: string; icon: LucideIcon };
 
-const DEFAULT_ENVIRONMENTS: Record<string, DefaultEnvironmentMeta> = {
-  development: { color: "#EF6868", icon: Code },
-  staging: { color: "#F4B400", icon: FlaskRound },
+const DEFAULT_ENVIRONMENTS: Record<
+  DefaultEnvironmentName,
+  DefaultEnvironmentMeta
+> = {
   production: { color: "#19A979", icon: Rocket },
+  staging: { color: "#F4B400", icon: FlaskRound },
+  development: { color: "#EF6868", icon: Code },
 };
 
-const normalize = (name: string | undefined | null) =>
+const normalize = (name: string | undefined | null): string =>
   name?.trim().toLowerCase() ?? "";
+
+const isDefaultName = (name: string): name is DefaultEnvironmentName =>
+  (DEFAULT_ENVIRONMENT_NAMES as readonly string[]).includes(name);
 
 export const getDefaultEnvironmentMeta = (
   name: string | undefined | null,
-): DefaultEnvironmentMeta | null =>
-  DEFAULT_ENVIRONMENTS[normalize(name)] ?? null;
+): DefaultEnvironmentMeta | null => {
+  const normalized = normalize(name);
+  return isDefaultName(normalized) ? DEFAULT_ENVIRONMENTS[normalized] : null;
+};
 
 export const isDefaultEnvironmentName = (name: string | undefined | null) =>
-  normalize(name) in DEFAULT_ENVIRONMENTS;
+  isDefaultName(normalize(name));

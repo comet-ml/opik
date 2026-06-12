@@ -88,7 +88,7 @@ your experiments.
 
   # Get or create a dataset
   client = Opik()
-  dataset = client.get_or_create_dataset(name="geography-questions", project_name="my-project")
+  dataset = client.get_or_create_dataset(name="geography-questions", project_name="your-project-name")
 
   # Add dataset items
   dataset.insert(dataset_items)
@@ -264,14 +264,24 @@ print(f"Prepared {len(evaluation_items)} evaluation items")
 
 Use the bulk endpoint to efficiently log multiple evaluation results at once.
 
+<Note>
+  Pass `project_name` on the bulk request so the experiment, its dataset (when it
+  doesn't exist yet), and any traces auto-created from `evaluate_task_result` are
+  placed in that project. If you omit it, those traces fall back to the
+  `Default Project` — this fallback is deprecated and the response includes an
+  `X-Opik-Deprecation` header. The value should match the `project_name` you used
+  when creating the experiment.
+</Note>
+
 <CodeBlocks>
 ```typescript title="TypeScript" language="typescript" maxLines=1000
 import { Opik } from "opik";
 
+const projectName = "your-project-name";
 const client = new Opik({
   apiKey: "your-api-key",
   apiUrl: "https://www.comet.com/opik/api",
-  projectName: "your-project-name",
+  projectName,
   workspaceName: "your-workspace-name",
 });
 
@@ -285,7 +295,7 @@ const items = [
   }
 ];
 
-await client.api.experiments.experimentItemsBulk({ experimentName, datasetName, items });
+await client.api.experiments.experimentItemsBulk({ experimentName, datasetName, projectName, items });
 ```
 
 ```python title="Python" language="python" maxLines=1000
@@ -294,6 +304,7 @@ experiment_name = "Bulk experiment upload"
 client.rest_client.experiments.experiment_items_bulk(
     experiment_name=experiment_name,
     dataset_name="geography-questions",
+    project_name="your-project-name",
     items=[
         {
             "dataset_item_id": item["dataset_item_id"],
@@ -316,6 +327,7 @@ curl -X PUT 'https://www.comet.com/opik/api/v1/private/experiments/items/bulk' \
     -d '{
       "experiment_name": "geography-bot-v1",
       "dataset_name": "geography-questions",
+      "project_name": "your-project-name",
       "items": [
         {
           "dataset_item_id": "dataset-item-id-1",
@@ -379,6 +391,7 @@ to the same experiment:
       experimentId: experimentId,
       experimentName: experimentName,
       datasetName: "geography-questions",
+      projectName: "your-project-name",
       items: half.map(item => ({
         datasetItemId: item.datasetItemId,
         evaluateTaskResult: item.evaluateTaskResult,
@@ -407,6 +420,7 @@ to the same experiment:
           experiment_id=experiment_id,
           experiment_name=experiment_name,
           dataset_name="geography-questions",
+          project_name="your-project-name",
           items=[
               {
                   "dataset_item_id": item["dataset_item_id"],
@@ -435,16 +449,19 @@ Here's a complete example that puts all the steps together:
   ```typescript title="TypeScript" language="typescript"
   import { Opik } from "opik";
 
+const projectName = "your-project-name";
+const datasetName = "geography-questions";
+
 // Configure Opik
 const client = new Opik({
   apiKey: "your-api-key",
   apiUrl: "https://www.comet.com/opik/api",
-  projectName: "your-project-name",
+  projectName,
   workspaceName: "your-workspace-name",
 });
 
 // Step 1: Create dataset
-const dataset = await client.getOrCreateDataset("geography-questions");
+const dataset = await client.getOrCreateDataset(datasetName);
 
 const localDatasetItems = [
   {
@@ -487,7 +504,8 @@ const evaluationItems = [
 const experimentName = `geography-bot-${Math.random().toString(36).substr(2, 4)}`;
 await client.api.experiments.experimentItemsBulk({
   experimentName,
-  datasetName: "geography-questions",
+  datasetName,
+  projectName,
   items: evaluationItems.map(item => ({
     datasetItemId: item.dataset_item_id,
     evaluateTaskResult: item.evaluate_task_result,
@@ -509,9 +527,12 @@ import uuid
 # Configure Opik
 opik.configure()
 
+dataset_name = "geography-questions"
+project_name = "your-project-name"
+
 # Step 1: Create dataset
 client = Opik()
-dataset = client.get_or_create_dataset(name="geography-questions", project_name="my-project")
+dataset = client.get_or_create_dataset(name=dataset_name, project_name=project_name)
 
 dataset_items = [
     {
@@ -556,7 +577,8 @@ rest_client = client.rest_client
 experiment_name = f"geography-bot-{str(uuid.uuid4())[0:4]}"
 rest_client.experiments.experiment_items_bulk(
     experiment_name=experiment_name,
-    dataset_name="geography-questions",
+    dataset_name=dataset_name,
+    project_name=project_name,
     items=[
         {
             "dataset_item_id": item["dataset_item_id"],
@@ -616,6 +638,7 @@ curl -X PUT "https://www.comet.com/opik/api/v1/private/experiments/items/bulk" \
   -d '{
     "experiment_name": "geography-bot-v1",
     "dataset_name": "geography-questions",
+    "project_name": "your-project-name",
     "items": [
       {
         "dataset_item_id": "dataset-item-id-1",

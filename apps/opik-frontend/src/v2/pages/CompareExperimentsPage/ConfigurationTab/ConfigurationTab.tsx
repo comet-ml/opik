@@ -22,7 +22,10 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
+import NavigationTag from "@/shared/NavigationTag";
+import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
+import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
@@ -63,6 +66,10 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   });
 
   const isCompare = experimentsIds.length > 1;
+
+  // Prompt-version links only make sense for a single experiment; in compare
+  // mode we don't show them. An empty array simply renders nothing.
+  const promptVersions = isCompare ? [] : experiments[0]?.prompt_versions ?? [];
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -174,7 +181,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         direction="bidirectional"
         limitWidth
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
@@ -182,6 +189,15 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
+          {promptVersions.map((pv) => (
+            <NavigationTag
+              key={pv.id}
+              id={pv.prompt_id}
+              name={formatPromptVersionLabel(pv)}
+              resource={RESOURCE_TYPE.prompt}
+              search={{ activeVersionId: pv.id }}
+            />
+          ))}
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />

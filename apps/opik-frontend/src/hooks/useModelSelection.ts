@@ -60,7 +60,10 @@ const useModelSelection = ({
 
   const { model, provider, configs } = useMemo(() => {
     if (lastPickedModel) {
-      const lastPickedProvider = calculateModelProvider(lastPickedModel);
+      const lastPickedProvider = calculateModelProvider(
+        lastPickedModel,
+        defaultProvider,
+      );
       if (lastPickedProvider && providerKeys.includes(lastPickedProvider)) {
         return {
           model: lastPickedModel,
@@ -85,7 +88,10 @@ const useModelSelection = ({
       lastPickedModel,
       providerKeys,
     ) as PROVIDER_MODEL_TYPE | "";
-    const calculatedProvider = calculateModelProvider(calculatedModel);
+    const calculatedProvider = calculateModelProvider(
+      calculatedModel,
+      defaultProvider,
+    );
     return {
       model: calculatedModel,
       provider: calculatedProvider,
@@ -127,6 +133,7 @@ const useModelSelection = ({
     (deletedProvider: COMPOSED_PROVIDER_TYPE) => {
       const currentProvider = calculateModelProvider(
         model as PROVIDER_MODEL_TYPE | "",
+        deletedProvider,
       );
       if (currentProvider === deletedProvider) {
         setLastPickedModel("");

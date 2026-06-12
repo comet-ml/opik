@@ -18,7 +18,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <dropwizard.version>5.0.0</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
-        <lombok.version>1.18.38</lombok.version>
+        <lombok.version>1.18.46</lombok.version>
         <mysql.version>9.7.0</mysql.version>
         <dropwizard-guicey.version>8.0.0</dropwizard-guicey.version>
         <stringtemplate.version>3.53.0</stringtemplate.version>
@@ -315,9 +315,15 @@
             <artifactId>json-path</artifactId>
             <version>${json-path.version}</version>
         </dependency>
+        <!-- Standard OpenAI (Chat Completions API) -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai</artifactId>
+        </dependency>
+        <!-- Official OpenAI SDK Wrapper (Responses API) -->
+        <dependency>
+          <groupId>dev.langchain4j</groupId>
+          <artifactId>langchain4j-open-ai-official</artifactId>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
@@ -588,8 +594,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <source>25</source>
+                    <target>25</target>
                     <compilerArgument>-parameters</compilerArgument>
                     <parameters>true</parameters>
                     <testCompilerArgument>-parameters</testCompilerArgument>

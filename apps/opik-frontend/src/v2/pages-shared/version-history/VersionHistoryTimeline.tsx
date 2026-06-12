@@ -51,7 +51,7 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
   }
 
   return (
-    <ul className="px-4 pb-4 pt-1">
+    <ul className="px-4 pb-4 pt-1" data-testid="version-history-timeline">
       {items.map((item, index) => {
         const isSelected = item.id === selectedId;
         const isLast = index === items.length - 1;
@@ -86,6 +86,7 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
             </div>
 
             <div
+              data-testid={`version-history-item-${item.label}`}
               className={cn(
                 "min-w-0 flex-1 cursor-pointer rounded px-3 py-2 transition-colors",
                 isSelected
@@ -101,7 +102,7 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
                 <VersionTagList tags={item.tags} size="sm" maxWidth={200} />
                 <EnvironmentBadgeList
                   names={item.environments}
-                  size="sm"
+                  size="pill"
                   badgeClassName="max-w-[120px]"
                   withOverflow
                   maxWidth={160}
