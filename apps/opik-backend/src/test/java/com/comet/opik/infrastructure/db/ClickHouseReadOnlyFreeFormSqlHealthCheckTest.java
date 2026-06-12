@@ -14,7 +14,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-class ClickHouseReadOnlyHealthyCheckTest {
+class ClickHouseReadOnlyFreeFormSqlHealthCheckTest {
 
     private static ServiceTogglesConfig toggles(boolean agentInsightsEnabled) {
         var config = new ServiceTogglesConfig();
@@ -26,7 +26,7 @@ class ClickHouseReadOnlyHealthyCheckTest {
     void check__whenToggleOff__thenHealthyWithoutTouchingClient() {
         var client = mock(Client.class);
 
-        var healthCheck = new ClickHouseReadOnlyHealthyCheck(client, toggles(false), Duration.seconds(1));
+        var healthCheck = new ClickHouseReadOnlyFreeFormSqlHealthCheck(client, toggles(false), Duration.seconds(1));
 
         HealthCheck.Result result = healthCheck.execute();
 
@@ -39,7 +39,7 @@ class ClickHouseReadOnlyHealthyCheckTest {
         var client = mock(Client.class);
         when(client.query("SELECT 1")).thenReturn(CompletableFuture.completedFuture(mock(QueryResponse.class)));
 
-        var healthCheck = new ClickHouseReadOnlyHealthyCheck(client, toggles(true), Duration.seconds(1));
+        var healthCheck = new ClickHouseReadOnlyFreeFormSqlHealthCheck(client, toggles(true), Duration.seconds(1));
 
         assertThat(healthCheck.execute().isHealthy()).isTrue();
     }
@@ -50,7 +50,7 @@ class ClickHouseReadOnlyHealthyCheckTest {
         when(client.query("SELECT 1"))
                 .thenReturn(CompletableFuture.failedFuture(new RuntimeException("clickhouse unavailable")));
 
-        var healthCheck = new ClickHouseReadOnlyHealthyCheck(client, toggles(true), Duration.seconds(1));
+        var healthCheck = new ClickHouseReadOnlyFreeFormSqlHealthCheck(client, toggles(true), Duration.seconds(1));
 
         assertThat(healthCheck.execute().isHealthy()).isFalse();
     }

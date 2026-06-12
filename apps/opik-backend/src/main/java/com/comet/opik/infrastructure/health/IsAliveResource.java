@@ -11,6 +11,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
 
 import java.util.List;
 import java.util.Set;
@@ -27,8 +28,8 @@ public class IsAliveResource {
     private final Set<String> criticalHealthChecks;
 
     @Inject
-    public IsAliveResource(HealthCheckRegistry registry, AppMetadataService metadataService,
-            OpikConfiguration configuration) {
+    public IsAliveResource(@NonNull HealthCheckRegistry registry, @NonNull AppMetadataService metadataService,
+            @NonNull OpikConfiguration configuration) {
         this.registry = registry;
         this.metadataService = metadataService;
         this.criticalHealthChecks = configuration.getHealthFactory()
@@ -60,8 +61,9 @@ public class IsAliveResource {
     @Path("/ping")
     public Response isAlive() {
 
-        // Only critical checks gate liveness. Non-critical checks (e.g. the optional clickhouse-readonly Agent
-        // Insights check) are still reported via /health-check but must not make the server look down to SDKs/FE.
+        // Only critical checks gate liveness. Non-critical checks (e.g. the optional
+        // clickhouse-readonly-freeform-sql Agent Insights check) are still reported via /health-check but must not
+        // make the server look down to SDKs/FE.
         boolean anyCriticalUnhealthy = registry.runHealthChecks().entrySet().stream()
                 .filter(entry -> criticalHealthChecks.isEmpty() || criticalHealthChecks.contains(entry.getKey()))
                 .anyMatch(entry -> !entry.getValue().isHealthy());

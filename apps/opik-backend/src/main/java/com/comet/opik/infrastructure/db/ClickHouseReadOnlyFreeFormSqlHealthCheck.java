@@ -13,17 +13,17 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.concurrent.TimeUnit;
 
 @Singleton
-public class ClickHouseReadOnlyHealthyCheck extends NamedHealthCheck {
+public class ClickHouseReadOnlyFreeFormSqlHealthCheck extends NamedHealthCheck {
 
     private final Client readOnlyClient;
     private final boolean enabled;
     private final long healthCheckTimeoutMs;
 
     @Inject
-    public ClickHouseReadOnlyHealthyCheck(
-            @NonNull @Named(DatabaseAnalyticsModule.READ_ONLY_CLICKHOUSE_CLIENT) Client readOnlyClient,
+    public ClickHouseReadOnlyFreeFormSqlHealthCheck(
+            @NonNull @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) Client readOnlyClient,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
-            @Named("clickhouse_health_check_timeout") Duration healthCheckTimeout) {
+            @NonNull @Named("clickhouse_health_check_timeout") Duration healthCheckTimeout) {
         this.readOnlyClient = readOnlyClient;
         this.enabled = serviceToggles.isAgentInsightsEnabled();
         this.healthCheckTimeoutMs = healthCheckTimeout.toMilliseconds();
@@ -31,7 +31,7 @@ public class ClickHouseReadOnlyHealthyCheck extends NamedHealthCheck {
 
     @Override
     public String getName() {
-        return "clickhouse-readonly";
+        return "clickhouse-readonly-freeform-sql";
     }
 
     @Override

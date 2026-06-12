@@ -118,12 +118,6 @@ public class TestDropwizardAppExtensionUtils {
             configs.add("databaseAnalytics.port: " + appContextConfig.databaseAnalyticsFactory().getPort());
             configs.add("databaseAnalytics.username: " + appContextConfig.databaseAnalyticsFactory().getUsername());
             configs.add("databaseAnalytics.password: " + appContextConfig.databaseAnalyticsFactory().getPassword());
-            // The read-only client is always built; point it at the same container so toggle-on tests can connect.
-            configs.add("databaseAnalyticsReadOnly.port: " + appContextConfig.databaseAnalyticsFactory().getPort());
-            configs.add(
-                    "databaseAnalyticsReadOnly.username: " + appContextConfig.databaseAnalyticsFactory().getUsername());
-            configs.add(
-                    "databaseAnalyticsReadOnly.password: " + appContextConfig.databaseAnalyticsFactory().getPassword());
         }
 
         if (appContextConfig.runtimeInfo() != null) {

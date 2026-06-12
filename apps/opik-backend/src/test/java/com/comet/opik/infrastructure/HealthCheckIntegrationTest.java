@@ -96,10 +96,14 @@ class HealthCheckIntegrationTest {
     }
 
     private static void assertResponse(HealthCheckResponse healthCheck, String expected) {
+        assertResponse(healthCheck, expected, true);
+    }
+
+    private static void assertResponse(HealthCheckResponse healthCheck, String expected, boolean critical) {
         assertThat(healthCheck.name()).isEqualTo(expected);
         assertThat(healthCheck.type()).isEqualTo("READY");
         assertThat(healthCheck.healthy()).isTrue();
-        assertThat(healthCheck.critical()).isTrue();
+        assertThat(healthCheck.critical()).isEqualTo(critical);
     }
 
     @Test
@@ -119,8 +123,8 @@ class HealthCheckIntegrationTest {
     }
 
     @Test
-    void test__whenHitClickhouseReadOnlyHealthyCheck__thenReturnOk(ClientSupport client) {
-        var response = client.target("%s/health-check?name=clickhouse-readonly".formatted(baseURI))
+    void test__whenHitClickhouseReadOnlyFreeFormSqlHealthCheck__thenReturnOk(ClientSupport client) {
+        var response = client.target("%s/health-check?name=clickhouse-readonly-freeform-sql".formatted(baseURI))
                 .request()
                 .get();
 
@@ -133,10 +137,7 @@ class HealthCheckIntegrationTest {
 
         // Toggle off (default in config-test): the check reports healthy without querying the read-only user.
         // Non-critical on purpose so a freeform-SQL issue never gates overall readiness.
-        assertThat(healthCheck.name()).isEqualTo("clickhouse-readonly");
-        assertThat(healthCheck.type()).isEqualTo("READY");
-        assertThat(healthCheck.healthy()).isTrue();
-        assertThat(healthCheck.critical()).isFalse();
+        assertResponse(healthCheck, "clickhouse-readonly-freeform-sql", false);
     }
 
     @Test
@@ -153,7 +154,7 @@ class HealthCheckIntegrationTest {
 
         assertThat(healthChecks).contains(
                 new HealthCheckResponse("clickhouse", true, true, "READY"),
-                new HealthCheckResponse("clickhouse-readonly", true, false, "READY"),
+                new HealthCheckResponse("clickhouse-readonly-freeform-sql", true, false, "READY"),
                 new HealthCheckResponse("mysql", true, true, "READY"),
                 new HealthCheckResponse("redis", true, true, "READY"),
                 new HealthCheckResponse("db", true, true, "READY"),

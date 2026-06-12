@@ -622,50 +622,6 @@ display_ollie_process_status() {
 }
 
 # Function to start backend
-# Provision the Agent Insights read-only ClickHouse user, settings profile, grants and row policies against the
-# local (docker-compose) ClickHouse. Opt-in: only invoked when TOGGLE_AGENT_INSIGHTS_ENABLED=true. Mirrors the prod
-# DDL owned by OPIK-6846 (db=opik). The SQL_ custom_settings_prefixes registration lives in the mounted CH config
-# (deployment/docker-compose/clickhouse_config/additional_config.xml), without which the profile DDL is rejected.
-# These statements are security-critical and intentionally mirror the prod provisioning in OPIK-6846 — keep the two
-# copies in sync. Requires CLICKHOUSE_HTTP_PORT to be set (today guaranteed by start_backend, which exports it before
-# calling this); the guard below makes that dependency explicit if the function is ever reused elsewhere.
-provision_agent_insights_readonly_user() {
-    require_command curl
-    if [ -z "${CLICKHOUSE_HTTP_PORT:-}" ]; then
-        log_error "provision_agent_insights_readonly_user requires CLICKHOUSE_HTTP_PORT to be set"
-        exit 1
-    fi
-    local ro_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
-    local ro_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
-    local ch_url="http://localhost:${CLICKHOUSE_HTTP_PORT}/?user=opik&password=opik"
-
-    log_info "Provisioning Agent Insights read-only ClickHouse user '${ro_user}'..."
-
-    local statements=(
-        "CREATE USER IF NOT EXISTS ${ro_user} IDENTIFIED BY '${ro_pass}'"
-        "CREATE SETTINGS PROFILE IF NOT EXISTS comet_llm_readonly_freeform_sql_profile SETTINGS readonly = 1, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY TO ${ro_user}"
-        "GRANT SELECT ON opik.spans TO ${ro_user}"
-        "GRANT SELECT ON opik.traces TO ${ro_user}"
-        "GRANT SELECT ON opik.authored_feedback_scores TO ${ro_user}"
-        "CREATE ROW POLICY IF NOT EXISTS spans_workspace_project_isolation ON opik.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
-        "CREATE ROW POLICY IF NOT EXISTS traces_workspace_project_isolation ON opik.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
-        "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_workspace_project_isolation ON opik.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
-    )
-
-    local stmt response http_code body
-    for stmt in "${statements[@]}"; do
-        response=$(curl -sS -w $'\n%{http_code}' "$ch_url" --data-binary "$stmt" 2>&1)
-        http_code="${response##*$'\n'}"
-        body="${response%$'\n'*}"
-        if [ "$http_code" != "200" ]; then
-            log_error "Failed to provision read-only CH user (statement starting '${stmt%% *}...'): $body"
-            exit 1
-        fi
-    done
-
-    log_success "Agent Insights read-only ClickHouse user provisioned"
-}
-
 start_backend() {
     require_command java
     log_info "Starting backend on port ${BACKEND_PORT}..."
@@ -695,12 +651,13 @@ start_backend() {
     export ANALYTICS_DB_PORT="${CLICKHOUSE_HTTP_PORT}"
 
     # Agent Insights (read-only freeform SQL) — opt-in for local dev. When enabled, provision the restricted
-    # read-only ClickHouse user and export its credentials so the backend connects as that user (otherwise the
-    # clickhouse-readonly health check, which is critical/ready, would fail). Default off: behavior unchanged.
+    # read-only ClickHouse user (via the shared script also used by the docker-compose backend container) and export
+    # its credentials so the locally-launched backend connects as that user. Default off: behavior unchanged. The
+    # script runs against the docker-compose ClickHouse on localhost:${ANALYTICS_DB_PORT} exported just above.
     if [ "${TOGGLE_AGENT_INSIGHTS_ENABLED}" = "true" ]; then
         export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
         export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
-        provision_agent_insights_readonly_user
+        bash "$BACKEND_DIR/provision_agent_insights_readonly_user.sh"
         log_debug "  TOGGLE_AGENT_INSIGHTS_ENABLED=true (read-only CH user: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER})"
     fi
 
