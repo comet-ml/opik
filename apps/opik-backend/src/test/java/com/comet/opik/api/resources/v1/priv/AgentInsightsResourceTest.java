@@ -218,6 +218,9 @@ class AgentInsightsResourceTest {
             assertThat(issueA.lastSeen()).isEqualTo(DAY_1);
             assertThat(issueA.daysReported()).isEqualTo(1);
             assertThat(issueA.createdBy()).isEqualTo(USER);
+            assertThat(issueA.lastUpdatedBy()).isEqualTo(USER);
+            assertThat(issueA.createdAt()).isNotNull();
+            assertThat(issueA.lastUpdatedAt()).isNotNull();
         }
 
         @Test
