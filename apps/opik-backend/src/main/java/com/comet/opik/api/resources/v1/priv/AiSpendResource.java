@@ -2,12 +2,12 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.sorting.SpendUserSortingFactory;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
 import com.comet.opik.api.spend.SpendRecommendationsResponse;
+import com.comet.opik.api.spend.SpendSummaryResponse;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.domain.AiSpendService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -56,7 +56,7 @@ public class AiSpendResource {
     @POST
     @Path("/summary")
     @Operation(operationId = "getSpendSummary", summary = "Get spend summary", description = "Get coding-agent spend KPI summary", responses = {
-            @ApiResponse(responseCode = "200", description = "Spend summary", content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Spend summary", content = @Content(schema = @Schema(implementation = SpendSummaryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)

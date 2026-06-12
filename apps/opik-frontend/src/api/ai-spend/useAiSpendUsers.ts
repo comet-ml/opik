@@ -2,16 +2,15 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import { ColumnSort } from "@tanstack/react-table";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { processSorting } from "@/lib/sorting";
+import { ModelTiers } from "./claudePricing";
 
 export interface SpendUserRow {
   user_uuid: string;
   user_email: string;
   user_display_name: string;
-  model: string;
-  input_tokens?: number | null;
-  cache_read_tokens?: number | null;
-  cache_creation_tokens?: number | null;
-  output_tokens?: number | null;
+  // Per-model cache-tier sums from cc.billing; priced FE-side. The chip shows
+  // the dominant model (+N when the user spans several).
+  by_model: ModelTiers[];
   total_tokens?: number | null;
   requests: number;
   skills: number;

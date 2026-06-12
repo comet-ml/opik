@@ -1,5 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import { ModelTiers } from "./claudePricing";
 
 export interface SpendSummaryResult {
   name: string;
@@ -8,7 +9,12 @@ export interface SpendSummaryResult {
 }
 
 export interface SpendSummaryResponse {
+  // Count metrics (total_messages, active_users, total_users).
   results: SpendSummaryResult[];
+  // Per-model spend tiers for the current and previous windows; priced
+  // FE-side so total spend and its trend reflect each model's rate.
+  spend_current: ModelTiers[];
+  spend_previous: ModelTiers[];
 }
 
 type UseAiSpendSummaryParams = {
