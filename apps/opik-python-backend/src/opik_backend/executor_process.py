@@ -16,6 +16,7 @@ from opentelemetry import metrics
 
 from opik_backend.executor import (
     CodeExecutorBase,
+    EXEC_TIMEOUT_ERROR,
     SATURATED_ERROR,
     SHUTDOWN_ERROR,
 )
@@ -255,12 +256,10 @@ class ProcessExecutor(CodeExecutorBase):
 
         Single-pass: one queue read and one liveness check. Raises
         :class:`TimeoutError` on saturation, executor shutdown, or when the
-        retrieved worker is dead. Holding the request thread on the
-        SIGTERM/SIGKILL handshake of a stale worker was the latent thread-
-        pinning hazard OPIK-6308 set out to remove, so dead-worker cleanup
-        is dispatched asynchronously and the caller is asked to retry via
-        the same 503 path as saturation. ``run_scoring`` translates this
-        into HTTP 503.
+        retrieved worker is dead. Dead-worker cleanup is dispatched
+        asynchronously so the request thread isn't held on the
+        SIGTERM/SIGKILL handshake; the caller retries via the same 503
+        path as saturation. ``run_scoring`` translates this into HTTP 503.
         """
         if self.stop_event.is_set():
             raise TimeoutError(SHUTDOWN_ERROR)
@@ -268,9 +267,9 @@ class ProcessExecutor(CodeExecutorBase):
         try:
             worker = self.process_pool.get(timeout=self.pool_acquire_timeout)
         except Empty as e:
-            # Detailed diagnostic stays in the log; the exception carries
-            # the wire-facing constant so internal config (timeout,
-            # max_parallel) can't leak to a downstream `str(exc)`.
+            # Detailed diagnostic stays in the log; the exception uses
+            # the wire-facing constant so internal config doesn't leak
+            # to downstream `str(exc)` consumers.
             logger.warning(
                 f"Process pool exhausted: no worker available within "
                 f"{self.pool_acquire_timeout:.3f}s (max_parallel={self.max_parallel})"
@@ -329,9 +328,12 @@ class ProcessExecutor(CodeExecutorBase):
                 result = connection.recv()
             else:
                 logger.error(f"Timeout waiting for result from worker {worker_id}")
-                # Terminate the worker as it's unresponsive
-                terminate_worker(worker)
-                return {"code": 500, "error": "Execution timed out"}
+                # Dispatch termination off the request thread so the
+                # SIGTERM/SIGKILL handshake doesn't block the caller.
+                self._async_terminate(worker)
+                # 504 (not 500) so Java BE's retry policy treats per-execution
+                # timeouts uniformly with the Docker executor.
+                return {"code": 504, "error": EXEC_TIMEOUT_ERROR}
 
             latency = _calculate_latency_ms(start_exec_time)
             process_execution_histogram.record(latency)
@@ -341,5 +343,7 @@ class ProcessExecutor(CodeExecutorBase):
             return result
         except Exception as e:
             logger.error(f"Error in run_scoring with worker {worker.get('id', 'unknown')}: {e}")
-            terminate_worker(worker)
+            # Dispatch termination off the request thread so the
+            # SIGTERM/SIGKILL handshake doesn't block the caller.
+            self._async_terminate(worker)
             return {"code": 500, "error": f"Failed to execute code: {e}"}

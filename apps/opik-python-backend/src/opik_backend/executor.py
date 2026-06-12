@@ -25,9 +25,10 @@ DEFAULT_CPU_LIMIT = None
 SATURATED_ERROR = "Code executor is saturated, please retry"
 SHUTDOWN_ERROR = "Service is shutting down"
 
+# Body returned with HTTP 504 when a single execution exceeds exec_timeout.
+EXEC_TIMEOUT_ERROR = "Server processing exceeded timeout limit."
+
 # Tunable acquire wait for the in-memory pool before responding HTTP 503.
-# Centralized so the env-var name and its fallback live next to the rest
-# of the executor's runtime configuration.
 POOL_ACQUIRE_TIMEOUT_ENV_VAR = "PYTHON_CODE_EXECUTOR_POOL_ACQUIRE_TIMEOUT_IN_SECS"
 POOL_ACQUIRE_TIMEOUT_DEFAULT = 0.0
 
@@ -70,7 +71,7 @@ class CodeExecutorBase(ABC):
         if not math.isfinite(value) or value < 0:
             # Reject nan/inf alongside negatives: an infinite timeout would
             # re-introduce the unbounded blocking acquire this knob exists
-            # to bound (see OPIK-6308).
+            # to bound.
             logger.warning(
                 f"{POOL_ACQUIRE_TIMEOUT_ENV_VAR} must be a finite non-negative "
                 f"number, got '{raw}'; falling back to {POOL_ACQUIRE_TIMEOUT_DEFAULT}"

@@ -13,6 +13,7 @@ monitor scheduler is stubbed, and ``_pre_warm_container_pool`` is patched
 out so no real containers are created.
 """
 import logging
+from queue import Empty
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,8 +47,8 @@ def empty_pool_executor():
 def test_tracer_is_initialized_before_pre_warm():
     """Pre-warm reads ``self.tracer`` to open a span on ``create_container``;
     if the tracer is initialized after pre-warm the pool silently starts
-    empty (CI regression caught in 12155a833). Lock the ordering directly
-    so the regression surfaces locally instead of only in real-Docker CI."""
+    empty. Lock the ordering directly so the regression surfaces without
+    needing a real Docker daemon."""
     tracer_visible_in_pre_warm = []
 
     def capture(self):
@@ -77,6 +78,16 @@ def test_get_container_raises_timeout_error(empty_pool_executor, set_stop_event,
         empty_pool_executor.get_container()
 
     assert str(excinfo.value) == expected_message
+
+
+def test_get_container_preserves_empty_cause_on_saturation(empty_pool_executor):
+    """``raise TimeoutError(...) from e`` keeps the underlying
+    :class:`queue.Empty` as ``__cause__`` so tracebacks still link the
+    saturation TimeoutError to its originating queue event for debugging."""
+    with pytest.raises(TimeoutError) as excinfo:
+        empty_pool_executor.get_container()
+
+    assert isinstance(excinfo.value.__cause__, Empty)
 
 
 def test_get_container_logs_warning_on_saturation(empty_pool_executor, caplog):

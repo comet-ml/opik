@@ -10,6 +10,7 @@ Covers the public contract:
 - the Flask route translates saturation to HTTP 503
 """
 import logging
+from queue import Empty
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +18,7 @@ import pytest
 from opik_backend import create_app
 from opik_backend.executor import (
     CodeExecutorBase,
+    EXEC_TIMEOUT_ERROR,
     POOL_ACQUIRE_TIMEOUT_ENV_VAR,
     SATURATED_ERROR,
     SHUTDOWN_ERROR,
@@ -54,6 +56,16 @@ def test_get_worker_raises_timeout_error(empty_pool_executor, set_stop_event, ex
         empty_pool_executor.get_worker()
 
     assert str(excinfo.value) == expected_message
+
+
+def test_get_worker_preserves_empty_cause_on_saturation(empty_pool_executor):
+    """``raise TimeoutError(...) from e`` keeps the underlying
+    :class:`queue.Empty` as ``__cause__`` so tracebacks still link the
+    saturation TimeoutError to its originating queue event for debugging."""
+    with pytest.raises(TimeoutError) as excinfo:
+        empty_pool_executor.get_worker()
+
+    assert isinstance(excinfo.value.__cause__, Empty)
 
 
 def test_get_worker_logs_warning_on_saturation(empty_pool_executor, caplog):
@@ -113,7 +125,7 @@ def test_run_scoring_returns_503_when_pool_yields_dead_worker(empty_pool_executo
     """End-to-end: a dead worker collapses to the same 503 + SATURATED_ERROR
     body as real pool saturation. Body intentionally re-used — the wire
     contract is the HTTP status, the dead-worker case is distinguishable
-    via logs (and outcome counter, once M1 lands on the process side)."""
+    via logs."""
     dead_process = MagicMock()
     dead_process.is_alive.return_value = False
     dead_worker = {"id": "dead", "process": dead_process, "connection": MagicMock()}
@@ -123,6 +135,42 @@ def test_run_scoring_returns_503_when_pool_yields_dead_worker(empty_pool_executo
             response = empty_pool_executor.run_scoring(code="<unused>", data=DATA)
 
     assert response == {"code": 503, "error": SATURATED_ERROR}
+
+
+def test_run_scoring_async_terminates_on_exec_timeout(empty_pool_executor):
+    """The exec-timeout branch must terminate the unresponsive worker off
+    the request thread, and return 504 with the shared exec-timeout body
+    so Java BE's retry policy treats this uniformly with the Docker
+    executor (504 is retryable; 500 is not)."""
+    process = MagicMock()
+    process.is_alive.return_value = True
+    connection = MagicMock()
+    connection.poll.return_value = False  # exec_timeout elapses with no result
+    worker = {"id": "w-timeout", "process": process, "connection": connection}
+
+    with patch.object(empty_pool_executor, "get_worker", return_value=worker):
+        with patch.object(empty_pool_executor, "_async_terminate") as async_term:
+            response = empty_pool_executor.run_scoring(code="<unused>", data=DATA)
+
+    async_term.assert_called_once_with(worker)
+    assert response == {"code": 504, "error": EXEC_TIMEOUT_ERROR}
+
+
+def test_run_scoring_async_terminates_on_exception(empty_pool_executor):
+    """The generic exception branch must also terminate the failed worker
+    off the request thread, symmetric to the exec-timeout branch."""
+    process = MagicMock()
+    process.is_alive.return_value = True
+    # connection=None makes the inner ``if not connection: raise`` fire,
+    # which is the simplest way to land us in the generic except branch.
+    worker = {"id": "w-error", "process": process, "connection": None}
+
+    with patch.object(empty_pool_executor, "get_worker", return_value=worker):
+        with patch.object(empty_pool_executor, "_async_terminate") as async_term:
+            response = empty_pool_executor.run_scoring(code="<unused>", data=DATA)
+
+    async_term.assert_called_once_with(worker)
+    assert response["code"] == 500
 
 
 def test_async_terminate_dispatches_via_releaser_executor_when_available(empty_pool_executor):

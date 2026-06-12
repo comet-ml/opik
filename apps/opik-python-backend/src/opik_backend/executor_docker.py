@@ -21,6 +21,7 @@ from opik_backend.executor import (
     DEFAULT_CPU_SHARES,
     DEFAULT_MEM_LIMIT,
     DEFAULT_CPU_LIMIT,
+    EXEC_TIMEOUT_ERROR,
     SATURATED_ERROR,
     SHUTDOWN_ERROR,
 )
@@ -122,11 +123,9 @@ class DockerExecutor(CodeExecutorBase):
 
         self.stop_event = Event()
 
-        # Initialize the tracer before pre-warm and the pool monitor — both
-        # paths call create_container, which opens a span on self.tracer.
-        # Setting it later left pre-warm raising AttributeError silently
-        # (futures swallowed the exception), so the pool started empty and
-        # only refilled on the next scheduler tick.
+        # Initialize the tracer before pre-warm and the pool monitor —
+        # create_container opens a span on self.tracer, so it must exist
+        # before any code path that creates containers runs.
         self.tracer = trace.get_tracer(__name__)
 
         # Log container configuration for debugging
@@ -394,10 +393,9 @@ class DockerExecutor(CodeExecutorBase):
             try:
                 container = self.container_pool.get(timeout=self.pool_acquire_timeout)
             except Empty as e:
-                # Detailed diagnostic stays in the log; the exception
-                # carries the wire-facing constant so internal config
-                # (pool_acquire_timeout) can't leak to a downstream
-                # `str(exc)`.
+                # Detailed diagnostic stays in the log; the exception uses
+                # the wire-facing constant so internal config doesn't leak
+                # to downstream `str(exc)` consumers.
                 logger.warning(
                     f"Container pool exhausted: no container available within "
                     f"{self.pool_acquire_timeout:.3f}s"
@@ -493,7 +491,7 @@ class DockerExecutor(CodeExecutorBase):
                 span.set_status(Status(StatusCode.ERROR, "Execution timed out"))
                 span.set_attribute("error.type", "timeout")
                 span.set_attribute("error.timeout_seconds", self.exec_timeout)
-                return {"code": 504, "error": "Server processing exceeded timeout limit."}
+                return {"code": 504, "error": EXEC_TIMEOUT_ERROR}
             except Exception as e:
                 self._record_execution_outcome("error", payload_type)
                 span.record_exception(e)
