@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { PanelLeft } from "lucide-react";
-import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useOpikWorkspaceName } from "@/store/AppStore";
 import { Button } from "@/ui/button";
 import Logo from "@/shared/Logo/Logo";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -25,7 +25,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   onToggle,
 }) => {
   useActiveProjectInitializer();
-  const workspaceName = useActiveWorkspaceName();
 
   const isProjectRoute = useRouterState({
     select: (state) =>
@@ -36,6 +35,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     select: (state) => isAiSpendRoute(state.location.pathname),
   });
 
+  const opikWorkspaceName = useOpikWorkspaceName();
+
   const logo = <Logo expanded={expanded} />;
 
   return (
@@ -44,7 +45,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         <Link
           to={HOME_PATH}
           className="absolute left-[15px] top-1/2 block -translate-y-1/2"
-          params={{ workspaceName }}
+          params={{ workspaceName: opikWorkspaceName }}
         >
           {logo}
           {canToggle && !expanded && (

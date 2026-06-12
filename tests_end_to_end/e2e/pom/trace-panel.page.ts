@@ -41,6 +41,123 @@ export class TracePanelPage {
     return this.root.getByText(new RegExp(`^Spans\\s*\\(${n}\\)$`)).first();
   }
 
+  /** A node in the span tree, keyed by the span/trace name. */
+  spanTreeNode(name: string): Locator {
+    return this.root.getByTestId(`trace-tree-node-${name}`);
+  }
+
+  /** The expand/collapse toggle within a given tree node. */
+  spanTreeToggle(name: string): Locator {
+    return this.spanTreeNode(name).getByRole('button', { name: 'Expand or collapse span' });
+  }
+
+  /** Collapse a span tree node by clicking its toggle. */
+  async collapseSpan(name: string): Promise<void> {
+    return test.step(`Collapse span "${name}"`, async () => {
+      await this.spanTreeToggle(name).click();
+    });
+  }
+
+  /** Expand a span tree node by clicking its toggle. */
+  async expandSpan(name: string): Promise<void> {
+    return test.step(`Expand span "${name}"`, async () => {
+      await this.spanTreeToggle(name).click();
+    });
+  }
+
+  /** Select a span in the tree, opening its detail in the inspect area. */
+  async selectSpan(name: string): Promise<void> {
+    return test.step(`Select span "${name}"`, async () => {
+      await this.spanTreeNode(name).click();
+      await this.page.waitForURL((url) => (url.searchParams.get('span') ?? '') !== '');
+    });
+  }
+
+  /** The provider/model chip shown in the inspect header for an LLM span. */
+  get spanModelChip(): Locator {
+    return this.root.getByTestId('data-viewer-provider-model');
+  }
+
+  /** Text within the panel — use to assert token usage / cost values render. */
+  panelText(value: string | RegExp): Locator {
+    return this.root.getByText(value);
+  }
+
+  // --- Tags ---
+
+  get addTagButton(): Locator {
+    return this.root.getByTestId('add-tag-button');
+  }
+
+  /** A rendered tag chip matching the given tag text. */
+  tagChip(tag: string): Locator {
+    return this.root.getByText(tag, { exact: true });
+  }
+
+  /** Add a tag via the add-tag popover input. */
+  async addTag(tag: string): Promise<void> {
+    return test.step(`Add tag "${tag}"`, async () => {
+      await this.addTagButton.click();
+      const input = this.page.getByPlaceholder('New tag');
+      await input.waitFor({ state: 'visible' });
+      await input.fill(tag);
+      await input.press('Enter');
+      await this.page.keyboard.press('Escape');
+    });
+  }
+
+  // --- Annotate panel: manual feedback scores ---
+
+  /** Open the Annotate panel section. Idempotent. */
+  async openAnnotate(): Promise<void> {
+    return test.step('Open Annotate panel', async () => {
+      await this.root.getByRole('button', { name: /Annotate/ }).click();
+      await this.page.waitForURL((url) => url.searchParams.get('lastSection') === 'annotate');
+    });
+  }
+
+  /** The annotate score row for a named feedback definition. */
+  annotateScoreRow(definitionName: string): Locator {
+    return this.root.getByTestId(`annotate-score-row-${definitionName}`);
+  }
+
+  /** Set (or change) the numeric value in a named annotate score row. */
+  async setAnnotateScore(definitionName: string, value: number): Promise<void> {
+    return test.step(`Set ${definitionName} score to ${value}`, async () => {
+      const input = this.annotateScoreRow(definitionName).getByTestId('annotate-score-input');
+      await input.fill(String(value));
+      // The score input debounces; blur to flush the write.
+      await input.blur();
+    });
+  }
+
+  /**
+   * Clear the score in a named annotate score row. The clear button sits in a
+   * grid cell that is a sibling of the score-input cell (the one carrying the
+   * row testid), not a descendant — so it's scoped to the panel root. With a
+   * single seeded definition this is unambiguous; the void param documents
+   * which score the call clears.
+   */
+  async clearAnnotateScore(definitionName: string): Promise<void> {
+    return test.step(`Clear ${definitionName} score`, async () => {
+      await this.root.getByRole('button', { name: 'Clear score' }).click();
+    });
+  }
+
+  /** A rendered feedback score tag matching the given score name. */
+  feedbackScoreTag(scoreName: string): Locator {
+    return this.root
+      .getByTestId('feedback-score-tag')
+      .filter({ has: this.page.getByTestId('feedback-score-tag-label').filter({ hasText: scoreName }) });
+  }
+
+  /** Read the value rendered on a feedback score tag by score name. */
+  async readFeedbackScoreTagValue(scoreName: string): Promise<string> {
+    const tag = this.feedbackScoreTag(scoreName);
+    await tag.waitFor({ state: 'visible' });
+    return (await tag.getByTestId('feedback-score-tag-value').textContent())?.trim() ?? '';
+  }
+
   /** Rendered input text inside the panel's Details tab. */
   inputValue(value: string): Locator {
     return this.root.getByText(value, { exact: true }).first();

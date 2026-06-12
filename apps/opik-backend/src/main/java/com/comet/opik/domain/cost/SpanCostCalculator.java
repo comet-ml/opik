@@ -86,9 +86,14 @@ class SpanCostCalculator {
         int outputTokens = usage.getOrDefault("completion_tokens",
                 usage.getOrDefault("original_usage.candidates_token_count", 0));
 
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
-                .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
-                .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+        // Whole-prompt tier check: Google's prompt_token_count already includes the cached portion,
+        // so totalPromptTokens == inputTokens + cachedReadInputTokens (i.e. the raw prompt_token_count).
+        int totalPromptTokens = inputTokens + cachedReadInputTokens;
+
+        return modelPrice.effectiveInputPrice(totalPromptTokens).multiply(BigDecimal.valueOf(inputTokens))
+                .add(modelPrice.effectiveOutputPrice(totalPromptTokens).multiply(BigDecimal.valueOf(outputTokens)))
+                .add(modelPrice.effectiveCacheReadInputTokenPrice(totalPromptTokens)
+                        .multiply(BigDecimal.valueOf(cachedReadInputTokens)));
     }
 
     /**
@@ -109,18 +114,23 @@ class SpanCostCalculator {
             String inputTokensKey, String outputTokensKey, String cacheReadInputTokensKey,
             String cacheCreationInputTokensKey) {
 
-        return modelPrice.inputPrice()
-                .multiply(
-                        BigDecimal.valueOf(usage.getOrDefault(inputTokensKey, usage.getOrDefault("prompt_tokens", 0))))
-                .add(modelPrice.outputPrice()
-                        .multiply(BigDecimal.valueOf(
-                                usage.getOrDefault(outputTokensKey, usage.getOrDefault("completion_tokens", 0)))))
-                .add(modelPrice.cacheCreationInputTokenPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheCreationInputTokensKey,
-                                usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_KEY, 0)))))
-                .add(modelPrice.cacheReadInputTokenPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheReadInputTokensKey,
-                                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0)))));
+        int inputTokens = usage.getOrDefault(inputTokensKey, usage.getOrDefault("prompt_tokens", 0));
+        int outputTokens = usage.getOrDefault(outputTokensKey, usage.getOrDefault("completion_tokens", 0));
+        int cacheCreationInputTokens = usage.getOrDefault(cacheCreationInputTokensKey,
+                usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_KEY, 0));
+        int cacheReadInputTokens = usage.getOrDefault(cacheReadInputTokensKey,
+                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0));
+
+        // Whole-prompt tier check: in the Anthropic/Bedrock shape the inputTokensKey value EXCLUDES
+        // cached tokens, so the full prompt size for tier classification is input + both cache buckets.
+        int totalPromptTokens = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+
+        return modelPrice.effectiveInputPrice(totalPromptTokens).multiply(BigDecimal.valueOf(inputTokens))
+                .add(modelPrice.effectiveOutputPrice(totalPromptTokens).multiply(BigDecimal.valueOf(outputTokens)))
+                .add(modelPrice.effectiveCacheCreationInputTokenPrice(totalPromptTokens)
+                        .multiply(BigDecimal.valueOf(cacheCreationInputTokens)))
+                .add(modelPrice.effectiveCacheReadInputTokenPrice(totalPromptTokens)
+                        .multiply(BigDecimal.valueOf(cacheReadInputTokens)));
     }
 
     public static BigDecimal defaultCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {

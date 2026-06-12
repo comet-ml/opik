@@ -1,7 +1,38 @@
 import { z } from "zod";
 import uniq from "lodash/uniq";
 
-import { PROVIDER_TYPE } from "@/types/providers";
+import {
+  OPENAI_PIPELINE_MODE_VALUES,
+  OpenAiPipelineMode,
+  PROVIDER_TYPE,
+} from "@/types/providers";
+
+export type { OpenAiPipelineMode };
+export { OPENAI_PIPELINE_MODE_VALUES };
+
+// Default pipeline mode applied as a fallback in form defaults, resets, and save payloads.
+// Centralised here so changing the default requires editing only one place.
+export const DEFAULT_OPENAI_PIPELINE_MODE: OpenAiPipelineMode =
+  "chat_completions_api";
+
+/**
+ * Normalises a backend-stored {@code openai_pipeline_mode} string into a typed
+ * {@link OpenAiPipelineMode}. The backend's {@code OpenAIClientGenerator.extractApiPipelineMode}
+ * accepts any casing (it uppercases before enum lookup), so the persisted value could be either
+ * lowercase or uppercase depending on how it was written (UI vs direct REST). The form schema is
+ * strict-cased lowercase, so we lowercase here and reject anything that isn't one of the known
+ * values — falling back to {@link DEFAULT_OPENAI_PIPELINE_MODE}. Keeps the Select always pointing
+ * at a valid option and prevents Zod from blocking submit on legacy/odd-cased values.
+ */
+export const normalizeOpenAiPipelineMode = (
+  value: string | undefined | null,
+): OpenAiPipelineMode => {
+  if (!value) return DEFAULT_OPENAI_PIPELINE_MODE;
+  const lowered = value.toLowerCase();
+  return (OPENAI_PIPELINE_MODE_VALUES as readonly string[]).includes(lowered)
+    ? (lowered as OpenAiPipelineMode)
+    : DEFAULT_OPENAI_PIPELINE_MODE;
+};
 
 export const CloudAIProviderDetailsFormSchema = z.object({
   provider: z.enum(
@@ -22,6 +53,9 @@ export const CloudAIProviderDetailsFormSchema = z.object({
       required_error: "API key is required",
     })
     .min(1, { message: "API key is required" }),
+  // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
+  // because non-OpenAI cloud providers ignore it. The dialog defaults to chat_completions_api.
+  openaiPipelineMode: z.enum(OPENAI_PIPELINE_MODE_VALUES).optional(),
 });
 
 export const VertexAIProviderDetailsFormSchema = z.object({

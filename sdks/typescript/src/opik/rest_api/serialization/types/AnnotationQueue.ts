@@ -24,6 +24,7 @@ export const AnnotationQueue: core.serialization.ObjectSchema<
         core.serialization.list(core.serialization.string()).optional(),
     ),
     annotatorsPerItem: core.serialization.property("annotators_per_item", core.serialization.number().optional()),
+    lockTimeoutSeconds: core.serialization.property("lock_timeout_seconds", core.serialization.number().optional()),
     reviewers: core.serialization.list(AnnotationQueueReviewer).optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
@@ -48,6 +49,7 @@ export declare namespace AnnotationQueue {
         comments_enabled?: boolean | null;
         feedback_definition_names?: string[] | null;
         annotators_per_item?: number | null;
+        lock_timeout_seconds?: number | null;
         reviewers?: AnnotationQueueReviewer.Raw[] | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         items_count?: number | null;

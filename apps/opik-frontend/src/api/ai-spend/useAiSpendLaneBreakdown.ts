@@ -1,6 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { useAiSpend } from "@/contexts/AiSpendContext";
 
 export interface AiSpendBreakdownItemApi {
   label: string;
@@ -59,7 +58,6 @@ type UseAiSpendLaneBreakdownParams = {
   intervalStart: string;
   intervalEnd: string;
   userUuid?: string;
-  workspaceName?: string;
 };
 
 const getAiSpendLaneBreakdown = async (
@@ -70,7 +68,6 @@ const getAiSpendLaneBreakdown = async (
     intervalStart,
     intervalEnd,
     userUuid,
-    workspaceName,
   }: UseAiSpendLaneBreakdownParams,
 ) => {
   const { data } = await api.post<AiSpendBreakdownResponse>(
@@ -81,27 +78,19 @@ const getAiSpendLaneBreakdown = async (
       interval_end: intervalEnd,
       ...(userUuid && { user_id: userUuid }),
     },
-    {
-      signal,
-      ...(workspaceName && {
-        headers: { "Comet-Workspace": workspaceName },
-      }),
-    },
+    { signal },
   );
 
   return data;
 };
 
 export default function useAiSpendLaneBreakdown(
-  params: Omit<UseAiSpendLaneBreakdownParams, "workspaceName">,
+  params: UseAiSpendLaneBreakdownParams,
   options?: QueryConfig<AiSpendBreakdownResponse>,
 ) {
-  const { spendWorkspaceName } = useAiSpend();
-  const queryParams = { ...params, workspaceName: spendWorkspaceName };
-
   return useQuery({
-    queryKey: ["ai-spend-lane-breakdown", queryParams],
-    queryFn: (context) => getAiSpendLaneBreakdown(context, queryParams),
+    queryKey: ["ai-spend-lane-breakdown", params],
+    queryFn: (context) => getAiSpendLaneBreakdown(context, params),
     enabled: Boolean(params.laneKey),
     ...options,
   });

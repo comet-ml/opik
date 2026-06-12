@@ -1,6 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { useAiSpend } from "@/contexts/AiSpendContext";
 
 export interface AiSpendLaneApi {
   key: string;
@@ -37,7 +36,6 @@ type UseAiSpendCompositionParams = {
   intervalStart: string;
   intervalEnd: string;
   userUuid?: string;
-  workspaceName?: string;
 };
 
 const buildBody = ({
@@ -59,27 +57,19 @@ const getAiSpendComposition = async (
   const { data } = await api.post<AiSpendCompositionResponse>(
     `${AI_SPEND_REST_ENDPOINT}composition`,
     buildBody(params),
-    {
-      signal,
-      ...(params.workspaceName && {
-        headers: { "Comet-Workspace": params.workspaceName },
-      }),
-    },
+    { signal },
   );
 
   return data;
 };
 
 export default function useAiSpendComposition(
-  params: Omit<UseAiSpendCompositionParams, "workspaceName">,
+  params: UseAiSpendCompositionParams,
   options?: QueryConfig<AiSpendCompositionResponse>,
 ) {
-  const { spendWorkspaceName } = useAiSpend();
-  const queryParams = { ...params, workspaceName: spendWorkspaceName };
-
   return useQuery({
-    queryKey: ["ai-spend-composition", queryParams],
-    queryFn: (context) => getAiSpendComposition(context, queryParams),
+    queryKey: ["ai-spend-composition", params],
+    queryFn: (context) => getAiSpendComposition(context, params),
     ...options,
   });
 }
