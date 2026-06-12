@@ -64,6 +64,38 @@ class CostServiceTest {
     }
 
     @Test
+    void calculateCostUsesAbove200kTierPricingForGemini_issue6982() {
+        // gemini-2.5-pro: base input 1.25e-6 / output 1e-5; above_200k input 2.5e-6 / output 1.5e-5.
+        // For a prompt of exactly 200_000 the base rate must still apply (threshold is strictly >).
+        Map<String, Integer> baseTier = Map.of(
+                "prompt_tokens", 200_000,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_token_count", 200_000,
+                "original_usage.candidates_token_count", 1_000);
+
+        BigDecimal baseCost = CostService.calculateCost("gemini-2.5-pro", "google_vertexai", baseTier, null);
+
+        // 200_000 * 1.25e-6 + 1_000 * 1e-5 = 0.25 + 0.01 = 0.26
+        assertThat(baseCost).isEqualByComparingTo("0.26");
+    }
+
+    @Test
+    void calculateCostUsesAbove200kTierPricingForGemini_issue6982_aboveThreshold() {
+        // Whole-prompt semantics: once prompt > 200_000 every token is billed at the above_200k rate.
+        // gemini-2.5-pro above_200k: input 2.5e-6, output 1.5e-5.
+        Map<String, Integer> aboveTier = Map.of(
+                "prompt_tokens", 300_000,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_token_count", 300_000,
+                "original_usage.candidates_token_count", 1_000);
+
+        BigDecimal aboveCost = CostService.calculateCost("gemini-2.5-pro", "google_vertexai", aboveTier, null);
+
+        // 300_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.75 + 0.015 = 0.765
+        assertThat(aboveCost).isEqualByComparingTo("0.765");
+    }
+
+    @Test
     void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
         Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 1000,
