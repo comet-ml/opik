@@ -1157,7 +1157,7 @@ class AnnotationQueuesResourceTest {
             var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
                     annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(300);
+            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(5);
         }
 
         @Test
