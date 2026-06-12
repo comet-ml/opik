@@ -55,6 +55,10 @@ import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 
+// Hidden per product for now. Direct URL access to the spend workspace
+// (/$__ai_spend_<orgId>__/ai-spend/home) keeps working regardless.
+const SHOW_COST_INTELLIGENCE: boolean = false;
+
 const UserMenu = () => {
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
@@ -290,10 +294,11 @@ const UserMenu = () => {
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
-          {(hasAiSpendAccess || !isLLMOnlyOrganization) && (
+          {((SHOW_COST_INTELLIGENCE && hasAiSpendAccess) ||
+            !isLLMOnlyOrganization) && (
             <>
               <DropdownMenuSeparator />
-              {hasAiSpendAccess && (
+              {SHOW_COST_INTELLIGENCE && hasAiSpendAccess && (
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={goToCostIntelligence}
