@@ -39,9 +39,12 @@ public class ClickHouseReadOnlyHealthyCheck extends NamedHealthCheck {
         if (!enabled) {
             return Result.healthy("Agent Insights queries disabled");
         }
-        try (var response = readOnlyClient.query("SELECT 1").get(healthCheckTimeoutMs, TimeUnit.MILLISECONDS)) {
+        var queryFuture = readOnlyClient.query("SELECT 1");
+        try (var response = queryFuture.get(healthCheckTimeoutMs, TimeUnit.MILLISECONDS)) {
             return Result.healthy();
         } catch (Exception ex) {
+            // On timeout (or any failure) cancel the future so the query doesn't keep running server-side.
+            queryFuture.cancel(true);
             return Result.unhealthy(ex);
         }
     }

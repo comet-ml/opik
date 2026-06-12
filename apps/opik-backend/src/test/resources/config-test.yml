@@ -84,7 +84,6 @@ databaseAnalyticsReadOnly:
   username: opik
   password: opik
   databaseName: opik
-  healthCheckTimeout: 1s
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -107,7 +106,7 @@ health:
       critical: true
       type: ready
     - name: clickhouse-readonly
-      critical: true
+      critical: false
       type: ready
     - name: mysql
       critical: true

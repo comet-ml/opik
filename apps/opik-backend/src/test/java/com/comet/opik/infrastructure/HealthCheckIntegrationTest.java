@@ -132,7 +132,11 @@ class HealthCheckIntegrationTest {
         var healthCheck = healthChecks.getFirst();
 
         // Toggle off (default in config-test): the check reports healthy without querying the read-only user.
-        assertResponse(healthCheck, "clickhouse-readonly");
+        // Non-critical on purpose so a freeform-SQL issue never gates overall readiness.
+        assertThat(healthCheck.name()).isEqualTo("clickhouse-readonly");
+        assertThat(healthCheck.type()).isEqualTo("READY");
+        assertThat(healthCheck.healthy()).isTrue();
+        assertThat(healthCheck.critical()).isFalse();
     }
 
     @Test
@@ -149,7 +153,7 @@ class HealthCheckIntegrationTest {
 
         assertThat(healthChecks).contains(
                 new HealthCheckResponse("clickhouse", true, true, "READY"),
-                new HealthCheckResponse("clickhouse-readonly", true, true, "READY"),
+                new HealthCheckResponse("clickhouse-readonly", true, false, "READY"),
                 new HealthCheckResponse("mysql", true, true, "READY"),
                 new HealthCheckResponse("redis", true, true, "READY"),
                 new HealthCheckResponse("db", true, true, "READY"),

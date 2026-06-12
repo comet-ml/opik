@@ -626,8 +626,15 @@ display_ollie_process_status() {
 # local (docker-compose) ClickHouse. Opt-in: only invoked when TOGGLE_AGENT_INSIGHTS_ENABLED=true. Mirrors the prod
 # DDL owned by OPIK-6846 (db=opik). The SQL_ custom_settings_prefixes registration lives in the mounted CH config
 # (deployment/docker-compose/clickhouse_config/additional_config.xml), without which the profile DDL is rejected.
+# These statements are security-critical and intentionally mirror the prod provisioning in OPIK-6846 — keep the two
+# copies in sync. Requires CLICKHOUSE_HTTP_PORT to be set (today guaranteed by start_backend, which exports it before
+# calling this); the guard below makes that dependency explicit if the function is ever reused elsewhere.
 provision_agent_insights_readonly_user() {
     require_command curl
+    if [ -z "${CLICKHOUSE_HTTP_PORT:-}" ]; then
+        log_error "provision_agent_insights_readonly_user requires CLICKHOUSE_HTTP_PORT to be set"
+        exit 1
+    fi
     local ro_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
     local ro_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
     local ch_url="http://localhost:${CLICKHOUSE_HTTP_PORT}/?user=opik&password=opik"

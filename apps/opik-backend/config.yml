@@ -114,9 +114,8 @@ databaseAnalyticsReadOnly:
   #  Default: opik
   #  Description: The database name
   databaseName: ${ANALYTICS_DB_DATABASE_NAME:-opik}
-  #  Default: 1s
-  #  Description: Timeout for the ClickHouse read-only health check query (e.g. 1s, 500ms, 2 minutes)
-  healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
+  # Note: no healthCheckTimeout here on purpose — the clickhouse-readonly check reuses the shared
+  # clickhouse_health_check_timeout binding (same ClickHouse instance), so a separate value would be dead config.
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -138,8 +137,11 @@ health:
     - name: clickhouse
       critical: true
       type: ready
+    # Non-critical on purpose: this is an optional, toggle-gated feature (Agent Insights freeform SQL). A
+    # provisioning issue or transient CH rejection on the read-only user must degrade only that feature, not pull
+    # the whole backend out of readiness/traffic.
     - name: clickhouse-readonly
-      critical: true
+      critical: false
       type: ready
     - name: mysql
       critical: true
