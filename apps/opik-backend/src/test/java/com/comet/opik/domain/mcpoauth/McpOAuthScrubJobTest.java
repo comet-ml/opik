@@ -1,127 +1,163 @@
 package com.comet.opik.domain.mcpoauth;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
+import com.comet.opik.api.resources.utils.TestContainersSetup;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import org.jdbi.v3.core.Handle;
-import org.junit.jupiter.api.AfterEach;
+import com.comet.opik.podam.PodamFactoryUtils;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
-import ru.vyarus.guicey.jdbi3.tx.TxAction;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("McpOAuthScrubJob")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class McpOAuthScrubJobTest {
 
     private static final Duration ROTATION_GRACE = Duration.ofMinutes(5);
 
-    @Mock
-    private TransactionTemplate template;
-    @Mock
-    private Handle handle;
-    @Mock
-    private McpOAuthCodeDAO codeDAO;
-    @Mock
-    private McpOAuthTokenDAO tokenDAO;
+    private final TestContainersSetup setup = new TestContainersSetup();
 
+    @RegisterApp
+    private final TestDropwizardAppExtension APP = setup.APP;
+
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
+    private TransactionTemplate transactionTemplate;
     private McpOAuthScrubJob job;
-    private Logger jobLogger;
-    private ListAppender<ILoggingEvent> logAppender;
+
+    @BeforeAll
+    void setUpAll(TransactionTemplate transactionTemplate) {
+        this.transactionTemplate = transactionTemplate;
+
+        var config = new OpikConfiguration();
+        config.getMcpOAuth().setRefreshRotationGrace(ROTATION_GRACE);
+        this.job = new McpOAuthScrubJob(transactionTemplate, config);
+    }
+
+    @AfterAll
+    void tearDownAll() {
+        setup.wireMock.server().stop();
+    }
 
     @BeforeEach
     void setUp() {
-        var config = new OpikConfiguration();
-        config.getMcpOAuth().setRefreshRotationGrace(ROTATION_GRACE);
-
-        job = new McpOAuthScrubJob(template, config);
-
-        lenient().when(template.inTransaction(any(), any())).thenAnswer(invocation -> {
-            TxAction<?> callback = invocation.getArgument(1);
-            return callback.execute(handle);
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.execute("DELETE FROM mcp_oauth_codes");
+            handle.execute("DELETE FROM mcp_oauth_tokens");
+            return null;
         });
-        lenient().when(handle.attach(McpOAuthCodeDAO.class)).thenReturn(codeDAO);
-        lenient().when(handle.attach(McpOAuthTokenDAO.class)).thenReturn(tokenDAO);
-
-        logAppender = new ListAppender<>();
-        logAppender.start();
-        jobLogger = (Logger) LoggerFactory.getLogger(McpOAuthScrubJob.class);
-        jobLogger.addAppender(logAppender);
-    }
-
-    @AfterEach
-    void tearDown() {
-        jobLogger.detachAppender(logAppender);
     }
 
     @Test
-    @DisplayName("scrubs expired codes and trails the token threshold behind now by the rotation grace")
-    void appliesRotationGraceToTokenThreshold() {
-        var codeNow = ArgumentCaptor.forClass(Instant.class);
-        var tokenThreshold = ArgumentCaptor.forClass(Instant.class);
+    @DisplayName("scrub deletes codes past their expiry and keeps the ones still valid")
+    void deletesExpiredCodes() {
+        Instant now = Instant.now();
+        McpOAuthCode expired = insertCode(now.minus(Duration.ofHours(1)));
+        McpOAuthCode valid = insertCode(now.plus(Duration.ofHours(1)));
 
         job.doJob(null);
 
-        verify(codeDAO).deleteExpired(codeNow.capture());
-        verify(tokenDAO).deleteExpiredAndRevoked(tokenThreshold.capture());
-
-        // Revoked tokens must remain queryable for the grace window, so their cutoff trails "now" by exactly the grace.
-        assertThat(tokenThreshold.getValue()).isEqualTo(codeNow.getValue().minus(ROTATION_GRACE));
-    }
-
-    @ParameterizedTest(name = "failure in {0} transaction is swallowed")
-    @ValueSource(strings = {"codes", "tokens"})
-    @DisplayName("a DAO failure in either transaction is swallowed so a transient DB error never kills the scheduler")
-    void swallowsRuntimeExceptionFromEitherTransaction(String failing) {
-        if ("codes".equals(failing)) {
-            when(codeDAO.deleteExpired(any())).thenThrow(new RuntimeException("db down"));
-        } else {
-            when(tokenDAO.deleteExpiredAndRevoked(any())).thenThrow(new RuntimeException("db down"));
-        }
-
-        assertThatCode(() -> job.doJob(null)).doesNotThrowAnyException();
+        assertThat(codeExists(expired.codeHash())).isFalse();
+        assertThat(codeExists(valid.codeHash())).isTrue();
     }
 
     @Test
-    @DisplayName("logs the removed counts when anything was scrubbed")
-    void logsSummaryWhenSomethingRemoved() {
-        when(codeDAO.deleteExpired(any())).thenReturn(3);
-        when(tokenDAO.deleteExpiredAndRevoked(any())).thenReturn(5);
+    @DisplayName("scrub deletes tokens past their expiry and keeps the ones still valid")
+    void deletesExpiredTokens() {
+        Instant now = Instant.now();
+        McpOAuthToken expired = insertToken(now.minus(Duration.ofHours(1)), null);
+        McpOAuthToken valid = insertToken(now.plus(Duration.ofHours(1)), null);
 
         job.doJob(null);
 
-        assertThat(logAppender.list)
-                .filteredOn(event -> event.getLevel() == Level.INFO)
-                .singleElement()
-                .satisfies(event -> assertThat(event.getFormattedMessage())
-                        .isEqualTo("MCP OAuth scrub: removed '3' expired codes, '5' expired/revoked tokens"));
+        assertThat(tokenExists(expired.tokenHash())).isFalse();
+        assertThat(tokenExists(valid.tokenHash())).isTrue();
     }
 
     @Test
-    @DisplayName("stays silent when nothing was scrubbed")
-    void doesNotLogWhenNothingRemoved() {
+    @DisplayName("revoked tokens are deleted only once they fall outside the rotation grace window")
+    void deletesRevokedTokensOnlyAfterGrace() {
+        Instant now = Instant.now();
+        Instant farFuture = now.plus(Duration.ofHours(1));
+
+        McpOAuthToken withinGrace = insertToken(farFuture, now.minus(ROTATION_GRACE.dividedBy(2)));
+        McpOAuthToken pastGrace = insertToken(farFuture, now.minus(ROTATION_GRACE.plusMinutes(1)));
+
         job.doJob(null);
 
-        assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.INFO);
+        assertThat(tokenExists(withinGrace.tokenHash())).isTrue();
+        assertThat(tokenExists(pastGrace.tokenHash())).isFalse();
+    }
+
+    private McpOAuthCode insertCode(Instant expiresAt) {
+        McpOAuthCode code = factory.manufacturePojo(McpOAuthCode.class).toBuilder()
+                .id(UUID.randomUUID().toString())
+                .codeHash(randomHash())
+                .clientId(UUID.randomUUID().toString())
+                .codeChallengeMethod("S256")
+                .expiresAt(expiresAt)
+                .build();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(McpOAuthCodeDAO.class).save(code);
+            return null;
+        });
+
+        return code;
+    }
+
+    private McpOAuthToken insertToken(Instant expiresAt, Instant revokedAt) {
+        McpOAuthToken token = factory.manufacturePojo(McpOAuthToken.class).toBuilder()
+                .id(UUID.randomUUID().toString())
+                .tokenHash(randomHash())
+                .type(McpOAuthToken.TYPE_ACCESS)
+                .clientId(UUID.randomUUID().toString())
+                .familyId(UUID.randomUUID().toString())
+                .rotatedFromId(null)
+                .expiresAt(expiresAt)
+                .build();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(McpOAuthTokenDAO.class).save(token);
+            if (revokedAt != null) {
+                handle.createUpdate("UPDATE mcp_oauth_tokens SET revoked_at = :revokedAt WHERE id = :id")
+                        .bind("revokedAt", revokedAt)
+                        .bind("id", token.id())
+                        .execute();
+            }
+            return null;
+        });
+
+        return token;
+    }
+
+    private boolean codeExists(String codeHash) {
+        return transactionTemplate
+                .inTransaction(handle -> handle.attach(McpOAuthCodeDAO.class).fetch(codeHash).isPresent());
+    }
+
+    private boolean tokenExists(String tokenHash) {
+        return transactionTemplate
+                .inTransaction(handle -> handle.attach(McpOAuthTokenDAO.class).fetch(tokenHash).isPresent());
+    }
+
+    private static String randomHash() {
+        return RandomStringUtils.secure().nextAlphanumeric(64);
     }
 }

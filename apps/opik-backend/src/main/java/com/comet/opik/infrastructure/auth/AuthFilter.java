@@ -21,8 +21,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
-
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AuthFilter implements ContainerRequestFilter {
 
@@ -48,7 +46,7 @@ public class AuthFilter implements ContainerRequestFilter {
                     .build();
             String authHeader = context.getHeaderString(HttpHeaders.AUTHORIZATION);
             if (opikConfig.getMcpOAuth().isEnabled() && McpOAuthTokenUtils.isMcpOAuthToken(authHeader)) {
-                String token = authHeader.substring(BEARER_PREFIX.length()).trim();
+                String token = McpOAuthTokenUtils.extractBearerToken(authHeader);
                 ValidatedToken validatedToken = mcpOAuthService.validateAccessTokenForWorkspace(
                         token, context.getHeaderString(RequestContext.WORKSPACE_HEADER));
                 authService.authorizeOAuth(validatedToken, contextInfo);

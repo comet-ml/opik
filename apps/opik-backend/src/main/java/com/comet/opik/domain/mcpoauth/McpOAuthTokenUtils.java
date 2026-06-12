@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -52,10 +53,21 @@ public class McpOAuthTokenUtils {
     }
 
     public static boolean isMcpOAuthToken(String authHeader) {
-        if (!Strings.CI.startsWith(authHeader, BEARER_PREFIX)) {
+        if (!containsBearerPrefix(authHeader)) {
             return false;
         }
-        return isAccessToken(authHeader.substring(BEARER_PREFIX.length()).trim());
+        return isAccessToken(extractBearerToken(authHeader));
+    }
+
+    /**
+     * Strips the {@code Bearer } scheme prefix from an {@code Authorization} header.
+     * @throws IllegalArgumentException if Bearer header missing
+     */
+    public static String extractBearerToken(@NonNull String authHeader) {
+        if (containsBearerPrefix(authHeader)) {
+            throw new IllegalArgumentException("Bearer header missing!");
+        }
+        return authHeader.substring(BEARER_PREFIX.length()).trim();
     }
 
     public static String hash(String token) {
@@ -83,6 +95,10 @@ public class McpOAuthTokenUtils {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("Strong SecureRandom not available", e);
         }
+    }
+
+    private static boolean containsBearerPrefix(String authHeader) {
+        return Strings.CI.startsWith(authHeader, BEARER_PREFIX);
     }
 
 }

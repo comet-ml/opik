@@ -61,6 +61,9 @@ public class OAuthConstants {
     public static final String REVOKE_PATH = "/oauth/revoke";
     public static final String REGISTER_PATH = "/oauth/register";
 
+    // Internal introspection endpoint: comet-backend posts an access-token bearer here to resolve its identity.
+    public static final String VALIDATE_RESOURCE_BASE_PATH = "/opik/auth-oauth";
+
     // RFC 6749 §4.1.2.1, §5.2 + RFC 8707 — error codes
     public static final String ERROR_INVALID_REQUEST = "invalid_request";
     public static final String ERROR_INVALID_CLIENT = "invalid_client";

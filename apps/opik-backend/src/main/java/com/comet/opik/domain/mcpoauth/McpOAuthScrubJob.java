@@ -6,6 +6,7 @@ import io.dropwizard.jobs.annotations.On;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
@@ -19,17 +20,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 @DisallowConcurrentExecution
 @On(value = "0 0/5 * * * ?", timeZone = "UTC") // every 5 minutes
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class McpOAuthScrubJob extends Job {
 
-    private final TransactionTemplate template;
-    private final OpikConfiguration opikConfig;
-
-    @Inject
-    public McpOAuthScrubJob(@NonNull TransactionTemplate template,
-            @NonNull OpikConfiguration opikConfig) {
-        this.template = template;
-        this.opikConfig = opikConfig;
-    }
+    private final @NonNull TransactionTemplate template;
+    private final @NonNull OpikConfiguration opikConfig;
 
     /**
      * Revoked tokens within the rotation grace window must remain queryable, so a duplicate refresh
