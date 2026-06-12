@@ -6,14 +6,12 @@ import {
   ExternalLink,
   type LucideIcon,
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
-
 import { Button } from "@/ui/button";
 import { cn } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import useNavigateToOptimizationStudio from "@/v2/pages-shared/optimizations/useNavigateToOptimizationStudio";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 
@@ -53,21 +51,11 @@ const OptimizationsEmptyState: React.FC<OptimizationsEmptyStateProps> = ({
   onOptimizeViaSdkClick,
 }) => {
   const { themeMode } = useTheme();
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const activeProjectId = useActiveProjectId();
-  const navigate = useNavigate();
+  const navigateToStudio = useNavigateToOptimizationStudio();
   const imageUrl =
     themeMode === THEME_MODE.DARK
       ? emptyOptStudioDarkUrl
       : emptyOptStudioLightUrl;
-
-  const navigateToStudio = (templateId?: string) => {
-    navigate({
-      to: "/$workspaceName/projects/$projectId/optimizations/new",
-      params: { workspaceName, projectId: activeProjectId! },
-      search: templateId ? { template: templateId } : undefined,
-    });
-  };
 
   const actionCards: ActionCardConfig[] = [
     {
