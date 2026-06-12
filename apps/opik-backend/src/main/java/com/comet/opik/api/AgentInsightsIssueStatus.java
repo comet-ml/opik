@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.db.HasValue;
 import com.fasterxml.jackson.annotation.JsonValue;
 import jakarta.ws.rs.BadRequestException;
 import lombok.AccessLevel;
@@ -10,7 +11,7 @@ import java.util.Arrays;
 
 @Getter
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
-public enum AgentInsightsIssueStatus {
+public enum AgentInsightsIssueStatus implements HasValue {
     OPEN("open"),
     RESOLVED("resolved"),
     CLOSED("closed");

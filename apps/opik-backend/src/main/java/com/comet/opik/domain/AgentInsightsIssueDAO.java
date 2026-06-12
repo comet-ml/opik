@@ -5,7 +5,6 @@ import com.comet.opik.api.AgentInsightsIssueDetail;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
-import com.comet.opik.infrastructure.db.AgentInsightsIssueStatusArgumentFactory;
 import com.comet.opik.infrastructure.db.AgentInsightsIssueStatusColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.utils.JsonUtils;
@@ -35,7 +34,7 @@ import java.util.UUID;
 @RegisterRowMapper(AgentInsightsIssueDAO.IssueWithDetailsRowMapper.class)
 @RegisterRowMapper(AgentInsightsIssueDAO.IssueDetailRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-@RegisterArgumentFactory(AgentInsightsIssueStatusArgumentFactory.class)
+@RegisterArgumentFactory(AgentInsightsIssueStatusColumnMapper.class)
 @RegisterColumnMapper(AgentInsightsIssueStatusColumnMapper.class)
 interface AgentInsightsIssueDAO {
 
@@ -45,6 +44,7 @@ interface AgentInsightsIssueDAO {
             VALUES (:id, :workspace_id, :project_id, :bean.name, :bean.description, :bean.cause, :bean.suggestedFix,
                     :bean.tracesQuery, :user_name, :user_name)
             ON DUPLICATE KEY UPDATE
+                name = :bean.name,
                 description = :bean.description,
                 cause = :bean.cause,
                 suggested_fix = :bean.suggestedFix,
