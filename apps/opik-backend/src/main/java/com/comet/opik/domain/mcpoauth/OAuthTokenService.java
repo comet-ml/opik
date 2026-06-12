@@ -38,10 +38,10 @@ public class OAuthTokenService {
             return issueFromRefreshToken(refreshToken, clientId);
         }
         if (StringUtils.isBlank(grantType)) {
-            log.warn("MCP OAuth token request rejected: missing grant_type [client_id={}]", clientId);
+            log.warn("MCP OAuth token request rejected: missing grant_type '{}'", clientId);
             throw new OAuthException(ERROR_INVALID_REQUEST);
         }
-        log.warn("MCP OAuth token request rejected: unsupported grant_type [grant_type={}, client_id={}]",
+        log.warn("MCP OAuth token request rejected: unsupported grant_type '{}', '{}'",
                 grantType, clientId);
         throw new OAuthException(ERROR_UNSUPPORTED_GRANT_TYPE);
     }
@@ -54,7 +54,7 @@ public class OAuthTokenService {
         try {
             mcpOAuthService.revoke(token);
         } catch (Exception e) {
-            log.warn("MCP OAuth revoke failed [token={}]", McpOAuthTokenUtils.maskToken(token), e);
+            log.warn("MCP OAuth revoke failed '{}'", McpOAuthTokenUtils.maskToken(token), e);
         }
     }
 
@@ -62,39 +62,39 @@ public class OAuthTokenService {
             String codeVerifier) {
         if (StringUtils.isBlank(code) || StringUtils.isBlank(redirectUri) || StringUtils.isBlank(clientId)
                 || StringUtils.isBlank(codeVerifier)) {
-            log.warn("MCP OAuth authorization_code request rejected: missing required parameters [client_id={}]",
+            log.warn("MCP OAuth authorization_code request rejected: missing required parameters '{}'",
                     clientId);
             throw new OAuthException(ERROR_INVALID_REQUEST);
         }
         if (clientService.resolve(clientId).isEmpty()) {
-            log.warn("MCP OAuth authorization_code request rejected: unknown client [client_id={}]", clientId);
+            log.warn("MCP OAuth authorization_code request rejected: unknown client '{}'", clientId);
             throw new OAuthException(ERROR_INVALID_CLIENT);
         }
         try {
             TokenResponse tokens = mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId);
-            log.info("MCP OAuth authorization_code exchanged [client_id={}]", clientId);
+            log.info("MCP OAuth authorization_code exchanged '{}'", clientId);
             return tokens;
         } catch (BadRequestException e) {
-            log.warn("MCP OAuth authorization_code exchange failed [client_id={}]", clientId, e);
+            log.warn("MCP OAuth authorization_code exchange failed '{}'", clientId, e);
             throw new OAuthException(ERROR_INVALID_GRANT);
         }
     }
 
     private TokenResponse issueFromRefreshToken(String refreshToken, String clientId) {
         if (StringUtils.isBlank(refreshToken) || StringUtils.isBlank(clientId)) {
-            log.warn("MCP OAuth refresh_token request rejected: missing required parameters [client_id={}]", clientId);
+            log.warn("MCP OAuth refresh_token request rejected: missing required parameters '{}'", clientId);
             throw new OAuthException(ERROR_INVALID_REQUEST);
         }
         if (clientService.resolve(clientId).isEmpty()) {
-            log.warn("MCP OAuth refresh_token request rejected: unknown client [client_id={}]", clientId);
+            log.warn("MCP OAuth refresh_token request rejected: unknown client '{}'", clientId);
             throw new OAuthException(ERROR_INVALID_CLIENT);
         }
         try {
             TokenResponse tokens = mcpOAuthService.refresh(refreshToken, clientId);
-            log.info("MCP OAuth refresh_token rotated [client_id={}]", clientId);
+            log.info("MCP OAuth refresh_token rotated '{}'", clientId);
             return tokens;
         } catch (BadRequestException e) {
-            log.warn("MCP OAuth refresh failed [client_id={}]", clientId, e);
+            log.warn("MCP OAuth refresh failed '{}'", clientId, e);
             throw new OAuthException(ERROR_INVALID_GRANT);
         }
     }

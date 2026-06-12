@@ -66,12 +66,12 @@ public class OAuthTokenResource {
             @FormParam(PARAM_CODE_VERIFIER) String codeVerifier,
             @FormParam(PARAM_REFRESH_TOKEN) String refreshToken) {
 
-        log.info("MCP OAuth token request [grant_type={}, client_id={}]", grantType, clientId);
+        log.info("MCP OAuth token request '{}', '{}'", grantType, clientId);
 
         Response response = okToken(
                 tokenService.issueToken(grantType, code, redirectUri, clientId, codeVerifier, refreshToken));
 
-        log.info("MCP OAuth token issued [grant_type={}, client_id={}]", grantType, clientId);
+        log.info("MCP OAuth token issued '{}', '{}'", grantType, clientId);
         return response;
     }
 
@@ -84,7 +84,7 @@ public class OAuthTokenResource {
             @FormParam(PARAM_TOKEN) String token,
             @FormParam(PARAM_CLIENT_ID) String clientId) {
 
-        log.info("MCP OAuth revoke request [token={}, client_id={}]", McpOAuthTokenUtils.maskToken(token), clientId);
+        log.info("MCP OAuth revoke request '{}', '{}'", McpOAuthTokenUtils.maskToken(token), clientId);
 
         // RFC 7009 §2.2: the AS returns 200 whether the token was revoked, never existed, or was invalid.
         if (!StringUtils.isBlank(token)) {
