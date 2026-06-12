@@ -209,7 +209,8 @@ class AgentInsightsResourceTest {
             var projectId = createProject();
             var nameA = rndName();
             var nameB = rndName();
-            long occurrences = rndOccurrences(), totalCount = rndTotalCount(), impacted = rndUserCount(), totalUsers = rndUserCount();
+            long occurrences = rndOccurrences(), totalCount = rndTotalCount(), impacted = rndUserCount(),
+                    totalUsers = rndUserCount();
 
             report(projectId, DAY_1, List.of(
                     reportedIssue(nameA, occurrences, totalCount, impacted, totalUsers),
@@ -249,9 +250,11 @@ class AgentInsightsResourceTest {
         void reportIssuesWhenSameDayReportedTwiceThenMetricsAreReplaced() {
             var projectId = createProject();
             var name = rndName();
-            long occurrences = rndOccurrences(), totalCount = rndTotalCount(), impacted = rndUserCount(), totalUsers = rndUserCount();
+            long occurrences = rndOccurrences(), totalCount = rndTotalCount(), impacted = rndUserCount(),
+                    totalUsers = rndUserCount();
 
-            report(projectId, DAY_1, List.of(reportedIssue(name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             report(projectId, DAY_1,
@@ -275,7 +278,8 @@ class AgentInsightsResourceTest {
             var name = rndName();
             var updatedDescription = rndName();
 
-            report(projectId, DAY_1, List.of(reportedIssue(name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             agentInsightsResourceClient.updateStatus(issueId,
@@ -305,8 +309,10 @@ class AgentInsightsResourceTest {
                     .projectId(projectId)
                     .reportDay(DAY_1)
                     .issues(List.of(
-                            reportedIssue(sharedId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount()),
-                            reportedIssue(sharedId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())))
+                            reportedIssue(sharedId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                                    rndUserCount()),
+                            reportedIssue(sharedId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                                    rndUserCount())))
                     .build();
 
             agentInsightsResourceClient.reportIssues(reportRequest, API_KEY, TEST_WORKSPACE,
@@ -319,7 +325,8 @@ class AgentInsightsResourceTest {
             var reportRequest = AgentInsightsReport.builder()
                     .projectId(UUID.randomUUID())
                     .reportDay(DAY_1)
-                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())))
+                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())))
                     .build();
 
             agentInsightsResourceClient.reportIssues(reportRequest, API_KEY, TEST_WORKSPACE,
@@ -327,7 +334,8 @@ class AgentInsightsResourceTest {
         }
 
         Stream<AgentInsightsReport> invalidReports() {
-            var validIssue = reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount());
+            var validIssue = reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                    rndUserCount());
             return Stream.of(
                     // missing report_day
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).issues(List.of(validIssue)).build(),
@@ -367,7 +375,8 @@ class AgentInsightsResourceTest {
             var reportRequest = AgentInsightsReport.builder()
                     .projectId(UUID.randomUUID())
                     .reportDay(DAY_1)
-                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())))
+                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())))
                     .build();
 
             agentInsightsResourceClient.reportIssues(reportRequest, FAKE_API_KEY, TEST_WORKSPACE,
@@ -389,15 +398,20 @@ class AgentInsightsResourceTest {
             var nameA = rndName();
             var nameB = rndName();
 
-            long occurrences1 = rndOccurrences(), totalCount1 = rndTotalCount(), impacted1 = rndUserCount(), users1 = rndUserCount();
-            long occurrences2 = rndOccurrences(), totalCount2 = rndTotalCount(), impacted2 = rndUserCount(), users2 = rndUserCount();
-            long occurrences3 = rndOccurrences(), totalCount3 = rndTotalCount(), impacted3 = rndUserCount(), users3 = rndUserCount();
+            long occurrences1 = rndOccurrences(), totalCount1 = rndTotalCount(), impacted1 = rndUserCount(),
+                    users1 = rndUserCount();
+            long occurrences2 = rndOccurrences(), totalCount2 = rndTotalCount(), impacted2 = rndUserCount(),
+                    users2 = rndUserCount();
+            long occurrences3 = rndOccurrences(), totalCount3 = rndTotalCount(), impacted3 = rndUserCount(),
+                    users3 = rndUserCount();
 
             report(projectId, DAY_1, List.of(
                     reportedIssue(issueAId, nameA, occurrences1, totalCount1, impacted1, users1),
                     reportedIssue(issueBId, nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
-            report(projectId, DAY_2, List.of(reportedIssue(issueAId, nameA, occurrences2, totalCount2, impacted2, users2)));
-            report(projectId, DAY_3, List.of(reportedIssue(issueAId, nameA, occurrences3, totalCount3, impacted3, users3)));
+            report(projectId, DAY_2,
+                    List.of(reportedIssue(issueAId, nameA, occurrences2, totalCount2, impacted2, users2)));
+            report(projectId, DAY_3,
+                    List.of(reportedIssue(issueAId, nameA, occurrences3, totalCount3, impacted3, users3)));
 
             // full window: both issues, nameA aggregated over 3 days
             var fullPage = findIssues(projectId, DAY_1, DAY_3);
@@ -435,8 +449,10 @@ class AgentInsightsResourceTest {
             var nameA = rndName();
             var nameB = rndName();
 
-            report(projectId, DAY_1, List.of(reportedIssue(nameA, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
-            report(projectId, DAY_3, List.of(reportedIssue(nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(nameA, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_3,
+                    List.of(reportedIssue(nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
 
             var page = agentInsightsResourceClient.findIssues(projectId, null, null, null, null, null, null,
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
@@ -549,7 +565,8 @@ class AgentInsightsResourceTest {
             var projectId = createProject();
 
             report(projectId, DAY_1,
-                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
 
             var page = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null, null, null, null,
                     OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_OK);
@@ -589,14 +606,20 @@ class AgentInsightsResourceTest {
             var issueAId = UUID.randomUUID();
             var name = rndName();
             var metadata = JsonUtils.getJsonNodeFromString("{\"sample_trace_ids\":[\"abc\",\"def\"]}");
-            long occurrences1 = rndOccurrences(), totalCount1 = rndTotalCount(), impacted1 = rndUserCount(), users1 = rndUserCount();
-            long occurrences2 = rndOccurrences(), totalCount2 = rndTotalCount(), impacted2 = rndUserCount(), users2 = rndUserCount();
-            long occurrences3 = rndOccurrences(), totalCount3 = rndTotalCount(), impacted3 = rndUserCount(), users3 = rndUserCount();
+            long occurrences1 = rndOccurrences(), totalCount1 = rndTotalCount(), impacted1 = rndUserCount(),
+                    users1 = rndUserCount();
+            long occurrences2 = rndOccurrences(), totalCount2 = rndTotalCount(), impacted2 = rndUserCount(),
+                    users2 = rndUserCount();
+            long occurrences3 = rndOccurrences(), totalCount3 = rndTotalCount(), impacted3 = rndUserCount(),
+                    users3 = rndUserCount();
 
-            report(projectId, DAY_2, List.of(reportedIssue(issueAId, name, occurrences2, totalCount2, impacted2, users2)));
+            report(projectId, DAY_2,
+                    List.of(reportedIssue(issueAId, name, occurrences2, totalCount2, impacted2, users2)));
             report(projectId, DAY_1, List.of(
-                    reportedIssue(issueAId, name, occurrences1, totalCount1, impacted1, users1).toBuilder().metadata(metadata).build()));
-            report(projectId, DAY_3, List.of(reportedIssue(issueAId, name, occurrences3, totalCount3, impacted3, users3)));
+                    reportedIssue(issueAId, name, occurrences1, totalCount1, impacted1, users1).toBuilder()
+                            .metadata(metadata).build()));
+            report(projectId, DAY_3,
+                    List.of(reportedIssue(issueAId, name, occurrences3, totalCount3, impacted3, users3)));
 
             var issueId = findIssues(projectId, DAY_1, DAY_3).content().getFirst().id();
             var issue = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_3, API_KEY,
@@ -632,11 +655,14 @@ class AgentInsightsResourceTest {
             var name = rndName();
 
             report(projectId, DAY_1,
-                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
             report(projectId, DAY_2,
-                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
             report(projectId, DAY_3,
-                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
 
             var issueId = findIssues(projectId, DAY_1, DAY_3).content().getFirst().id();
             var issue = agentInsightsResourceClient.getIssue(issueId, projectId, null, null, API_KEY,
@@ -652,7 +678,8 @@ class AgentInsightsResourceTest {
             var projectId = createProject();
 
             report(projectId, DAY_1,
-                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             var issue = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_2, DAY_3, API_KEY,
@@ -668,7 +695,8 @@ class AgentInsightsResourceTest {
             var projectId = createProject();
 
             report(projectId, DAY_1,
-                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             agentInsightsResourceClient.getIssue(UUID.randomUUID(), projectId, DAY_1, DAY_1, API_KEY,
@@ -691,7 +719,8 @@ class AgentInsightsResourceTest {
             var projectId = createProject();
 
             report(projectId, DAY_1,
-                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             agentInsightsResourceClient.updateStatus(issueId,
@@ -721,7 +750,8 @@ class AgentInsightsResourceTest {
             var projectId = createProject();
 
             report(projectId, DAY_1,
-                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             var update = AgentInsightsIssueUpdate.builder()

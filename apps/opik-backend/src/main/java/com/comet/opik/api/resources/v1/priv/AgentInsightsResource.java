@@ -17,6 +17,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
@@ -32,7 +33,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -41,7 +41,6 @@ import java.util.UUID;
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 @Timed
-@Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Agent Insights", description = "Agent Insights report results")
 public class AgentInsightsResource {
@@ -62,10 +61,7 @@ public class AgentInsightsResource {
             @QueryParam("status") AgentInsightsIssueStatus status,
             @QueryParam("sort_by") AgentInsightsSortBy sortBy,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
-
-        log.info("Finding agent insights issues for project '{}', window '{}'..'{}', page {}",
-                projectId, fromDate, toDate, page);
+            @QueryParam("size") @Min(1) @Max(100) @DefaultValue("10") int size) {
 
         AgentInsightsIssue.AgentInsightsIssuePage issuesPage = agentInsightsIssueService.findIssues(
                 projectId, fromDate, toDate, status, sortBy, page, size);
@@ -87,9 +83,6 @@ public class AgentInsightsResource {
             @QueryParam("from_date") LocalDate fromDate,
             @QueryParam("to_date") LocalDate toDate) {
 
-        log.info("Retrieving agent insights issue '{}' for project '{}', window '{}'..'{}'",
-                issueId, projectId, fromDate, toDate);
-
         AgentInsightsIssueWithDetails issue = agentInsightsIssueService.getIssue(issueId, projectId, fromDate,
                 toDate);
 
@@ -107,9 +100,6 @@ public class AgentInsightsResource {
     public Response reportIssues(
             @RequestBody(content = @Content(schema = @Schema(implementation = AgentInsightsReport.class))) @NotNull @Valid AgentInsightsReport report) {
 
-        log.info("Storing agent insights report with '{}' issues for project '{}' on report day '{}'",
-                report.issues().size(), report.projectId(), report.reportDay());
-
         agentInsightsIssueService.reportIssues(report);
 
         return Response.noContent().build();
@@ -126,9 +116,6 @@ public class AgentInsightsResource {
     public Response updateIssue(
             @PathParam("issue_id") UUID issueId,
             @RequestBody(content = @Content(schema = @Schema(implementation = AgentInsightsIssueUpdate.class))) @NotNull @Valid AgentInsightsIssueUpdate update) {
-
-        log.info("Updating agent insights issue '{}' status to '{}' for project '{}'",
-                issueId, update.status(), update.projectId());
 
         agentInsightsIssueService.updateStatus(issueId, update);
 

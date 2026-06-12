@@ -18,8 +18,9 @@ CREATE TABLE agent_insights_issues
     last_updated_by VARCHAR(255)                       NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6)                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
-    PRIMARY KEY (id),
-    UNIQUE KEY agent_insights_issues_workspace_project_id_uk (workspace_id, project_id, id)
+    -- Workspace-scoped identity: id is unique per (workspace_id, project_id), not globally. This composite key is
+    -- the upsert target, so a client-supplied id can only ever match a row within its own workspace and project.
+    PRIMARY KEY (workspace_id, project_id, id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 
