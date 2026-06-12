@@ -1,10 +1,11 @@
 export enum ActivityType {
+  TRACE_DAILY = "trace_daily",
   EXPERIMENT = "experiment",
   DATASET_VERSION = "dataset_version",
   TEST_SUITE_VERSION = "test_suite_version",
   ALERT_EVENT = "alert_event",
   OPTIMIZATION = "optimization",
-  AGENT_CONFIG_VERSION = "agent_config_version",
+  PROMPT_VERSION = "prompt_version",
 }
 
 export interface RecentActivityItem {
