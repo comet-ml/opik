@@ -1,7 +1,6 @@
 --liquibase formatted sql
 --changeset petrot:000081_create_agent_insights_issues_tables
---validCheckSum 9:c57df7793f2aee544c38687a18416ad0
---comment: Agent Insights report results. One row per detected issue plus one row per issue x report_day with the daily metrics. Issues are upserted on the natural key (workspace_id, project_id, name) so daily re-runs stay idempotent; status is owned by the user and never touched by the reporting agent.
+--comment: Agent Insights report results. One row per detected issue plus one row per issue x report_day with the daily metrics. Issues are upserted on the natural key (workspace_id, project_id, id) so daily re-runs stay idempotent; status is owned by the user and never touched by the reporting agent.
 
 CREATE TABLE agent_insights_issues
 (
@@ -11,15 +10,16 @@ CREATE TABLE agent_insights_issues
     status          ENUM ('open','resolved','closed')  NOT NULL DEFAULT 'open',
     name            VARCHAR(255)                       NOT NULL,
     description     TEXT                               NULL,
-    query           TEXT                               NULL,
+    cause           TEXT                               NULL,
+    suggested_fix   TEXT                               NULL,
+    traces_query    TEXT                               NULL,
     created_by      VARCHAR(255)                       NOT NULL DEFAULT 'admin',
     created_at      TIMESTAMP(6)                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_by VARCHAR(255)                       NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6)                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
     PRIMARY KEY (id),
-    -- Natural key: "one record per issue" per workspace+project; the upsert target for daily report runs
-    UNIQUE KEY agent_insights_issues_workspace_project_name_uk (workspace_id, project_id, name)
+    UNIQUE KEY agent_insights_issues_workspace_project_id_uk (workspace_id, project_id, id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 
