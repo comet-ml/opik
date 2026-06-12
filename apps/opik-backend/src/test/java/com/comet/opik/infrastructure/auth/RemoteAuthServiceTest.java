@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
@@ -241,6 +242,30 @@ class RemoteAuthServiceTest {
                         .build()))
                 .isExactlyInstanceOf(ClientErrorException.class)
                 .hasMessage(MISSING_API_KEY);
+    }
+
+    @Test
+    void testAuthNoApiKeyForSpanByIdAllowsPublicVisibility() {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var workspaceId = "workspace-id-" + UUID.randomUUID();
+        var spanId = UUID.randomUUID();
+
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces/workspace-id"))
+                .withQueryParam("name", equalTo(workspaceName))
+                .willReturn(ok(workspaceId)));
+
+        remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/v1/private/spans/%s".formatted(spanId)))
+                        .method("GET")
+                        .requiredPermissions(null)
+                        .build());
+
+        assertThat(requestContext.getWorkspaceId()).isEqualTo(workspaceId);
+        assertThat(requestContext.getWorkspaceName()).isEqualTo(workspaceName);
+        assertThat(requestContext.getVisibility()).isEqualTo(Visibility.PUBLIC);
+        assertThat(requestContext.getUserName()).isEqualTo("Public");
     }
 
     @ParameterizedTest
