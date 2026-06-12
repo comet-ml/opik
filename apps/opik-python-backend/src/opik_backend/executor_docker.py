@@ -388,18 +388,24 @@ class DockerExecutor(CodeExecutorBase):
         """
         with self.tracer.start_as_current_span("get_container"):
             if self.stop_event.is_set():
-                raise TimeoutError("Executor is shutting down, no containers available")
+                raise TimeoutError(SHUTDOWN_ERROR)
 
             self._update_container_pool_size_metric()
             try:
                 container = self.container_pool.get(timeout=self.pool_acquire_timeout)
             except Empty as e:
-                message = f"Container pool exhausted: no container available within {self.pool_acquire_timeout:.3f}s"
-                logger.warning(message)
+                # Detailed diagnostic stays in the log; the exception
+                # carries the wire-facing constant so internal config
+                # (pool_acquire_timeout) can't leak to a downstream
+                # `str(exc)`.
+                logger.warning(
+                    f"Container pool exhausted: no container available within "
+                    f"{self.pool_acquire_timeout:.3f}s"
+                )
                 # Refresh the gauge so the saturation event reports the
                 # zero-available state, not the pre-call value.
                 self._update_container_pool_size_metric()
-                raise TimeoutError(message) from e
+                raise TimeoutError(SATURATED_ERROR) from e
             self._update_container_pool_size_metric()
             return container
 

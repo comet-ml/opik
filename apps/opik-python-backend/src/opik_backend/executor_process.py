@@ -253,34 +253,53 @@ class ProcessExecutor(CodeExecutorBase):
     def get_worker(self):
         """Acquire a worker from the pool.
 
-        Blocks up to ``pool_acquire_timeout`` seconds and raises
-        :class:`TimeoutError` if no worker becomes available, or if the
-        executor is shutting down. ``run_scoring`` translates this into HTTP
-        503 so callers can retry with backoff.
+        Single-pass: one queue read and one liveness check. Raises
+        :class:`TimeoutError` on saturation, executor shutdown, or when the
+        retrieved worker is dead. Holding the request thread on the
+        SIGTERM/SIGKILL handshake of a stale worker was the latent thread-
+        pinning hazard OPIK-6308 set out to remove, so dead-worker cleanup
+        is dispatched asynchronously and the caller is asked to retry via
+        the same 503 path as saturation. ``run_scoring`` translates this
+        into HTTP 503.
         """
         if self.stop_event.is_set():
-            raise TimeoutError("Executor is shutting down, no workers available")
+            raise TimeoutError(SHUTDOWN_ERROR)
         self._update_pool_size_metric()
         try:
             worker = self.process_pool.get(timeout=self.pool_acquire_timeout)
         except Empty as e:
-            message = (
+            # Detailed diagnostic stays in the log; the exception carries
+            # the wire-facing constant so internal config (timeout,
+            # max_parallel) can't leak to a downstream `str(exc)`.
+            logger.warning(
                 f"Process pool exhausted: no worker available within "
                 f"{self.pool_acquire_timeout:.3f}s (max_parallel={self.max_parallel})"
             )
-            logger.warning(message)
             # Refresh the gauge so the saturation event reports the
             # zero-available state, not the pre-call value.
             self._update_pool_size_metric()
-            raise TimeoutError(message) from e
+            raise TimeoutError(SATURATED_ERROR) from e
         self._update_pool_size_metric()
         if not worker['process'].is_alive():
-            logger.warning(f"Got a dead worker {worker['id']} from pool. Terminating and retrying.")
-            terminate_worker(worker)
-            # Bounded recursion: each retry drops one dead worker from the pool.
-            # A non-zero pool_acquire_timeout will compound across retries.
-            return self.get_worker()
+            logger.warning(
+                f"Dead worker {worker['id']} retrieved from pool; "
+                f"terminating asynchronously and surfacing as saturation"
+            )
+            self._async_terminate(worker)
+            raise TimeoutError(SATURATED_ERROR)
         return worker
+
+    def _async_terminate(self, worker):
+        """Schedule worker termination off the request thread.
+
+        Falls back to inline termination when the releaser pool isn't up —
+        ``start_services`` hasn't run, e.g. in test fixtures or pre-init —
+        where the request thread isn't on the line and inline is fine.
+        """
+        if self.releaser_executor is not None:
+            self.releaser_executor.submit(terminate_worker, worker)
+        else:
+            terminate_worker(worker)
 
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
