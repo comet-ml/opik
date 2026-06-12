@@ -67,12 +67,12 @@ class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
+    public UserWorkspace authorizeWorkspace(Cookie sessionToken, @NonNull String workspaceName) {
         return AUTHORIZED_WORKSPACE;
     }
 
     @Override
-    public void authorizeOAuth(ValidatedToken token, ContextInfoHolder contextInfo) {
+    public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         requestContext.get().setUserName(token.userName());
         requestContext.get().setWorkspaceId(token.workspaceId());
         requestContext.get().setWorkspaceName(token.workspaceName());

@@ -187,7 +187,7 @@ class RemoteAuthServiceTest {
                         NOT_ALLOWED_TO_ACCESS_WORKSPACE),
                 arguments(HttpStatus.SC_SERVER_ERROR,
                         InternalServerErrorException.class,
-                        "HTTP 500 Internal Server Error"));
+                        "Unexpected error while authenticating user"));
     }
 
     @ParameterizedTest
@@ -341,8 +341,8 @@ class RemoteAuthServiceTest {
     @Test
     void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();
-        var production = WorkspaceInfo.builder().id("ws-1").name("production").build();
-        var staging = WorkspaceInfo.builder().id("ws-2").name("staging").build();
+        var production = podamFactory.manufacturePojo(WorkspaceInfo.class);
+        var staging = podamFactory.manufacturePojo(WorkspaceInfo.class);
         var responseJson = OBJECT_MAPPER.writeValueAsString(Arrays.asList(
                 Map.of("workspaceId", production.id(), "workspaceName", production.name()),
                 Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME),
@@ -369,7 +369,7 @@ class RemoteAuthServiceTest {
                 arguments(HttpStatus.SC_UNAUTHORIZED, ClientErrorException.class, NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_FORBIDDEN, ClientErrorException.class, NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class,
-                        "HTTP 500 Internal Server Error"));
+                        "Unexpected error while listing workspaces"));
     }
 
     @ParameterizedTest

@@ -14,6 +14,7 @@ import { useSearchPanelTheme } from "@/shared/SyntaxHighlighter/hooks/useSearchP
 import { useCodeMirrorSearch } from "@/shared/SyntaxHighlighter/hooks/useCodeMirrorSearch";
 import { useMarkdownSearch } from "@/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
 import { createBase64ExpandExtension } from "@/shared/SyntaxHighlighter/base64Extension";
+import { createFoldingExtension } from "@/shared/SyntaxHighlighter/foldingExtension";
 import { EXTENSION_MAP, MODE_TYPE } from "@/shared/SyntaxHighlighter/constants";
 import { CodeOutput } from "@/shared/SyntaxHighlighter/types";
 import { cn, isStringMarkdown } from "@/lib/utils";
@@ -86,6 +87,7 @@ const CodeMirrorBody: React.FC<CodeBlockBodyProps> = ({
   });
 
   const base64Extension = useMemo(() => createBase64ExpandExtension(), []);
+  const foldingExtension = useMemo(() => createFoldingExtension(), []);
 
   const handleCreateEditor = (view: EditorView) => {
     viewRef.current = view;
@@ -111,6 +113,7 @@ const CodeMirrorBody: React.FC<CodeBlockBodyProps> = ({
           searchExtension,
           hyperLink,
           base64Extension,
+          foldingExtension,
           EXTENSION_MAP[code.mode] as LRLanguage,
         ]}
         maxHeight="700px"

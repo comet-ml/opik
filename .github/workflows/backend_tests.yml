@@ -65,10 +65,10 @@ jobs:
               with:
                 fetch-depth: 1
 
-            - name: Set up JDK 21
+            - name: Set up JDK 25
               uses: actions/setup-java@v4
               with:
-                java-version: '21'
+                java-version: '25'
                 distribution: 'corretto'
                 cache: maven
 
