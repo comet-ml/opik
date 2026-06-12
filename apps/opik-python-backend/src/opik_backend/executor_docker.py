@@ -122,6 +122,13 @@ class DockerExecutor(CodeExecutorBase):
 
         self.stop_event = Event()
 
+        # Initialize the tracer before pre-warm and the pool monitor — both
+        # paths call create_container, which opens a span on self.tracer.
+        # Setting it later left pre-warm raising AttributeError silently
+        # (futures swallowed the exception), so the pool started empty and
+        # only refilled on the next scheduler tick.
+        self.tracer = trace.get_tracer(__name__)
+
         # Log container configuration for debugging
         logger.debug(f"Docker executor configuration: cpu_shares={self.cpu_shares}, mem_limit={self.mem_limit}, "
                     f"nano_cpus={self.nano_cpus}, exec_timeout={self.exec_timeout}s, "
@@ -132,8 +139,6 @@ class DockerExecutor(CodeExecutorBase):
 
         # Start the pool monitor
         self._start_pool_monitor()
-
-        self.tracer = trace.get_tracer(__name__)
 
         atexit.register(self.cleanup)
 
