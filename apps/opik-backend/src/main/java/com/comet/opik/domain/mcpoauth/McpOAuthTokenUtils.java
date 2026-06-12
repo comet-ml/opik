@@ -64,7 +64,7 @@ public class McpOAuthTokenUtils {
      * @throws IllegalArgumentException if Bearer header missing
      */
     public static String extractBearerToken(@NonNull String authHeader) {
-        if (containsBearerPrefix(authHeader)) {
+        if (!containsBearerPrefix(authHeader)) {
             throw new IllegalArgumentException("Bearer header missing!");
         }
         return authHeader.substring(BEARER_PREFIX.length()).trim();
