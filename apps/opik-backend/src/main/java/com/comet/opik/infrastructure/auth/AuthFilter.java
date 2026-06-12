@@ -5,6 +5,7 @@ import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Cookie;
@@ -27,7 +28,7 @@ public class AuthFilter implements ContainerRequestFilter {
     private final AuthService authService;
     private final McpOAuthService mcpOAuthService;
     private final OpikConfiguration opikConfig;
-    private final jakarta.inject.Provider<RequestContext> requestContext;
+    private final Provider<RequestContext> requestContext;
 
     @Override
     public void filter(ContainerRequestContext context) throws IOException {

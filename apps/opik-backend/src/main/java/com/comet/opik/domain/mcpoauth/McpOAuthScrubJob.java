@@ -46,9 +46,6 @@ public class McpOAuthScrubJob extends Job {
             log.error("MCP OAuth scrub failed", e);
             return;
         }
-
-        if (codes > 0 || tokens > 0) {
-            log.info("MCP OAuth scrub: removed '{}' expired codes, '{}' expired/revoked tokens", codes, tokens);
-        }
+        log.info("MCP OAuth scrub: removed '{}' expired codes, '{}' expired/revoked tokens", codes, tokens);
     }
 }

@@ -23,16 +23,10 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_VALIDATE_RESOURCE_BASE_PATH;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_TYPE_BEARER;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.VALIDATE_RESOURCE_BASE_PATH;
 
-/**
- * Internal access-token introspection endpoint. comet-backend posts a bearer access token here and gets
- * back the identity the token resolves to ({@link ValidatedToken}); anything that is not a live MCP OAuth
- * access token is rejected as {@code 401}. The resource only parses the {@code Authorization} header and
- * delegates the lookup to {@link McpOAuthService}.
- */
-@Path(VALIDATE_RESOURCE_BASE_PATH)
+@Path(OAUTH_VALIDATE_RESOURCE_BASE_PATH)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
