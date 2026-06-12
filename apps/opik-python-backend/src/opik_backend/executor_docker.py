@@ -432,6 +432,12 @@ class DockerExecutor(CodeExecutorBase):
         try:
             container = self.get_container()
         except TimeoutError:
+            # Re-check stop_event: shutdown can fire between get_container's
+            # pre-check and the bounded Queue.get, in which case the failure
+            # is really shutdown, not pool saturation. Report it as the
+            # former so monitoring doesn't false-positive on saturation.
+            if self.stop_event.is_set():
+                return {"code": 503, "error": SHUTDOWN_ERROR}
             self._record_execution_outcome("saturated", payload_type)
             return {"code": 503, "error": SATURATED_ERROR}
         get_container_latency = self._calculate_latency_ms(start_time)

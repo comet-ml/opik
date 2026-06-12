@@ -98,6 +98,23 @@ def test_run_scoring_returns_shutdown_body_when_stopping(empty_pool_executor):
     assert response["error"] != SATURATED_ERROR
 
 
+def test_run_scoring_returns_shutdown_body_when_stop_event_wins_race(empty_pool_executor):
+    """If stop_event fires between get_container's pre-check and the bounded
+    Queue.get, the resulting TimeoutError should surface as shutdown, not as
+    pool saturation — and must not tick the saturated outcome counter."""
+
+    def stop_then_raise():
+        empty_pool_executor.stop_event.set()
+        raise TimeoutError("Container pool exhausted: simulated race")
+
+    with patch.object(empty_pool_executor, "get_container", side_effect=stop_then_raise):
+        with patch.object(empty_pool_executor, "_record_execution_outcome") as record:
+            response = empty_pool_executor.run_scoring(code="<unused>", data=DATA)
+
+    assert response == {"code": 503, "error": SHUTDOWN_ERROR}
+    assert all(call.args[0] != "saturated" for call in record.call_args_list)
+
+
 @pytest.mark.parametrize("payload_type", [None, "trace", "trace_thread"])
 def test_run_scoring_records_saturated_outcome(empty_pool_executor, payload_type):
     with patch.object(empty_pool_executor, "_record_execution_outcome") as record:

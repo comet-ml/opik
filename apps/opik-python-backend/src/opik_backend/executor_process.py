@@ -288,6 +288,13 @@ class ProcessExecutor(CodeExecutorBase):
         try:
             worker = self.get_worker()
         except TimeoutError:
+            # Re-check stop_event: a SIGTERM/SIGINT during the bounded
+            # Queue.get races into the TimeoutError branch, in which case
+            # the failure is really shutdown, not pool saturation. Report
+            # it as the former so monitoring doesn't false-positive on
+            # saturation.
+            if self.stop_event.is_set():
+                return {"code": 503, "error": SHUTDOWN_ERROR}
             return {"code": 503, "error": SATURATED_ERROR}
         try:
             worker_id = worker.get('id', 'unknown')
