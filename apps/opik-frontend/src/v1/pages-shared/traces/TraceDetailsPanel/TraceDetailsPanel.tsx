@@ -22,6 +22,7 @@ import { Span } from "@/types/traces";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import CommentsViewer from "./CommentsViewer/CommentsViewer";
 import useLazySpansList from "@/api/traces/useLazySpansList";
+import useSpanById from "@/api/traces/useSpanById";
 import {
   DetailsActionSection,
   useDetailsActionSectionState,
@@ -32,6 +33,7 @@ import get from "lodash/get";
 import { METADATA_AGENT_GRAPH_KEY } from "@/constants/traces";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
+const MAX_SPANS_FULL_DATA_LOAD_SIZE = 500;
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -114,7 +116,26 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       placeholderData: keepPreviousData,
       enabled: Boolean(traceId) && Boolean(projectId),
     },
+    {
+      maxFullDataSpans: MAX_SPANS_FULL_DATA_LOAD_SIZE,
+    },
   );
+
+  const selectedSpanFromList = useMemo(
+    () => find(spansData?.content || [], (span: Span) => span.id === spanId),
+    [spanId, spansData?.content],
+  );
+  const { data: selectedSpanData, isPending: isSelectedSpanPending } =
+    useSpanById(
+      {
+        spanId,
+        stripAttachments: true, // Keep attachments stripped - frontend fetches them separately
+      },
+      {
+        placeholderData: selectedSpanFromList,
+        enabled: Boolean(spanId),
+      },
+    );
 
   const agentGraphData = get(
     trace,
@@ -129,11 +150,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const dataToView = useMemo(() => {
-    return spanId
-      ? find(spansData?.content || [], (span: Span) => span.id === spanId) ??
-          trace
-      : trace;
-  }, [spanId, spansData?.content, trace]);
+    return spanId ? selectedSpanData ?? selectedSpanFromList : trace;
+  }, [spanId, selectedSpanData, selectedSpanFromList, trace]);
 
   const treeData = useMemo(() => {
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
@@ -217,7 +235,9 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               traceId={traceId}
               activeSection={activeSection}
               setActiveSection={setActiveSection}
-              isSpansLazyLoading={isSpansLazyLoading}
+              isSpansLazyLoading={
+                isSpansLazyLoading || (Boolean(spanId) && isSelectedSpanPending)
+              }
               search={search}
             />
           </ResizablePanel>
