@@ -2,6 +2,7 @@ package com.comet.opik.domain.mcpoauth;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
@@ -10,6 +11,8 @@ import java.net.URISyntaxException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -25,7 +28,23 @@ public class OAuthClientService {
         return strategy.register(request);
     }
 
-    public boolean matchesRedirectUri(@NonNull McpOAuthClient client, @NonNull String requestedRedirectUri) {
+    /**
+     * Resolves the client and validates the {@code redirect_uri} against its registered URIs.
+     * <p>
+     * Per RFC 6749 §3.1.2 the redirection endpoint URI MUST NOT include a fragment, otherwise the appended
+     * {@code code}/{@code error}/{@code state} query params would land inside the fragment and be unreadable
+     * by the client.
+     */
+    public McpOAuthClient resolveForRedirect(@NonNull String clientId, String redirectUri) {
+        McpOAuthClient client = resolve(clientId)
+                .orElseThrow(() -> new BadRequestException(ERROR_INVALID_CLIENT));
+        if (redirectUri == null || redirectUri.contains("#") || !matchesRedirectUri(client, redirectUri)) {
+            throw new BadRequestException("invalid redirect_uri");
+        }
+        return client;
+    }
+
+    private boolean matchesRedirectUri(McpOAuthClient client, String requestedRedirectUri) {
         Set<String> allowed = client.redirectUris();
         if (allowed == null) {
             return false;
