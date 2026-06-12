@@ -27,6 +27,7 @@ import NoData from "@/shared/NoData/NoData";
 import { BASE_TRACE_DATA_TYPE, Span } from "@/types/traces";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import useLazySpansList from "@/api/traces/useLazySpansList";
+import useSpanById from "@/api/traces/useSpanById";
 import {
   DetailsActionSection,
   useDetailsActionSectionState,
@@ -50,6 +51,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useVisibleSpans } from "@/v2/pages-shared/traces/hiddenSpans";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
+const MAX_SPANS_FULL_DATA_LOAD_SIZE = 500;
 const EMPTY_FILTERS: unknown[] = [];
 
 const TREE_ROW_INDENTS = [
@@ -187,7 +189,27 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       enabled: Boolean(traceId) && Boolean(projectId),
       refetchInterval,
     },
+    {
+      maxFullDataSpans: MAX_SPANS_FULL_DATA_LOAD_SIZE,
+    },
   );
+
+  const selectedSpanFromList = useMemo(
+    () => find(spansData?.content || [], (span: Span) => span.id === spanId),
+    [spanId, spansData?.content],
+  );
+  const { data: selectedSpanData, isPending: isSelectedSpanPending } =
+    useSpanById(
+      {
+        spanId,
+        stripAttachments: true,
+      },
+      {
+        placeholderData: selectedSpanFromList,
+        enabled: Boolean(spanId),
+        refetchInterval,
+      },
+    );
 
   const agentGraphData = get(
     trace,
@@ -200,11 +222,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const dataToView = useMemo(() => {
-    return spanId
-      ? find(spansData?.content || [], (span: Span) => span.id === spanId) ??
-          trace
-      : trace;
-  }, [spanId, spansData?.content, trace]);
+    return spanId ? selectedSpanData ?? selectedSpanFromList : trace;
+  }, [spanId, selectedSpanData, selectedSpanFromList, trace]);
 
   const treeData = useMemo(() => {
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
@@ -379,7 +398,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     spanId={spanId}
                     traceId={traceId}
                     setActiveSection={setActiveSection}
-                    isSpansLazyLoading={isSpansLazyLoading}
+                    isSpansLazyLoading={
+                      isSpansLazyLoading ||
+                      (Boolean(spanId) && isSelectedSpanPending)
+                    }
                     search={search}
                   />
                 )}
