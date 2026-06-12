@@ -2,7 +2,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from opik.rest_api.core.api_error import ApiError
 
-from .routes import datasets, experiments, health, projects, test_suites, traces
+from .routes import (
+    datasets,
+    experiments,
+    feedback_definitions,
+    health,
+    projects,
+    test_suites,
+    traces,
+)
 
 app = FastAPI(title="opik-sdk-driver", version="0.0.1")
 
@@ -18,6 +26,7 @@ async def _api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
 app.include_router(health.router)
 app.include_router(projects.router)
 app.include_router(traces.router)
+app.include_router(feedback_definitions.router)
 app.include_router(datasets.router)
 app.include_router(experiments.router)
 app.include_router(test_suites.router)
