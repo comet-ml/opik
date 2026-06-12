@@ -16,12 +16,9 @@ public record SpendUserRow(
         String userUuid,
         String userEmail,
         String userDisplayName,
-        String model,
-        // Raw cache-tier sums from cc.billing — priced in the FE.
-        Long inputTokens,
-        Long cacheReadTokens,
-        Long cacheCreationTokens,
-        Long outputTokens,
+        // Per-model cache-tier sums from cc.billing — priced in the FE, which
+        // also derives the displayed model chip from the dominant entry.
+        List<ModelTiers> byModel,
         Long totalTokens,
         long requests,
         long skills,

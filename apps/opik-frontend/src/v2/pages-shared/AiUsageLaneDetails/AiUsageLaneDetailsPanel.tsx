@@ -13,7 +13,7 @@ import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import { cn, formatNumberInK } from "@/lib/utils";
 import { formatCost } from "@/lib/money";
-import { tierCost } from "@/api/ai-spend/claudePricing";
+import { tiersCost } from "@/api/ai-spend/claudePricing";
 import { getSpendInterval, SPEND_WINDOWS, SpendWindow } from "@/lib/aiSpend";
 import { getLaneMeta } from "@/v2/pages-shared/AiUsageBreakdown/laneRegistry";
 import { laneWeight, lanePct } from "@/v2/pages-shared/AiUsageBreakdown/utils";
@@ -97,17 +97,7 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
   const title = breakdown?.title ?? laneLabel ?? meta.labelFallback;
 
   const totalTokens = breakdown?.total_tokens ?? 0;
-  const cost = breakdown
-    ? tierCost(
-        {
-          input_tokens: breakdown.input_tokens,
-          cache_read_tokens: breakdown.cache_read_tokens,
-          cache_creation_tokens: breakdown.cache_creation_tokens,
-          output_tokens: breakdown.output_tokens,
-        },
-        breakdown.model,
-      )
-    : null;
+  const cost = breakdown ? tiersCost(breakdown.by_model) : null;
 
   const renderItems = (items: AiSpendBreakdownItemApi[], unit?: string) => {
     const totalWeight = Math.max(...items.map(laneWeight), 0);
@@ -124,7 +114,7 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
           const weight = laneWeight(item);
           const pct = lanePct(weight, weightSum);
           const barPct = lanePct(weight, totalWeight);
-          const itemCost = tierCost(item, breakdown?.model);
+          const itemCost = tiersCost(item.by_model);
           return (
             <React.Fragment key={item.label}>
               <TooltipWrapper content={item.label}>

@@ -1,5 +1,3 @@
-import { AiSpendLaneApi } from "./useAiSpendComposition";
-
 // Hardcoded $/1M-token rates for Claude Code models (source: litellm
 // model_prices_and_context_window.json, anthropic provider, 2026-06-11).
 // FE-side pricing by design: the BE passes raw cache-tier token sums
@@ -142,13 +140,16 @@ export interface TierTokens {
   output_tokens?: number | null;
 }
 
-// Cost of a set of tier columns, in USD. Returns null when the model is
-// unknown or no tier data is present (e.g. pre-billing traces).
-export const tierCost = (
-  tiers: TierTokens,
-  model?: string | null,
-): number | null => {
-  const rates = ratesForModel(model);
+// Per-model cache-tier sums from cc.billing. The BE groups every tier-bearing
+// figure by model so a workspace mixing models is priced exactly.
+export interface ModelTiers extends TierTokens {
+  model: string;
+}
+
+// Cost of one model's tier columns at that model's rates, in USD. Null when
+// the model is unknown or no tier data is present (e.g. pre-billing traces).
+const tierCost = (tiers: ModelTiers): number | null => {
+  const rates = ratesForModel(tiers.model);
   if (!rates) return null;
   const {
     input_tokens,
@@ -173,19 +174,31 @@ export const tierCost = (
   );
 };
 
-export const laneCost = (
-  lane: AiSpendLaneApi,
-  model?: string | null,
-): number | null => tierCost(lane, model);
+// Total USD across a per-model tier breakdown: each model priced at its own
+// rate, then summed. Null when nothing could be priced (every model unknown
+// or no tier data), so the UI hides the figure instead of showing $0.
+export const tiersCost = (byModel?: ModelTiers[] | null): number | null => {
+  if (!byModel || byModel.length === 0) return null;
+  let total: number | null = null;
+  for (const tiers of byModel) {
+    const cost = tierCost(tiers);
+    if (cost == null) continue;
+    total = (total ?? 0) + cost;
+  }
+  return total;
+};
 
-// Prices token-denominated savings estimates at the window's blended
-// per-token rate (total cost / total tokens) — approximate by design, the
-// rules themselves are heuristics.
-export const priceTokensAtBlendedRate = (
-  tokens: number | null | undefined,
-  totalCost: number | null,
-  totalTokens: number,
-): number | null => {
-  if (tokens == null || totalCost == null || totalTokens <= 0) return null;
-  return (tokens / totalTokens) * totalCost;
+const tierTotal = (tiers: ModelTiers): number =>
+  (tiers.input_tokens ?? 0) +
+  (tiers.cache_read_tokens ?? 0) +
+  (tiers.cache_creation_tokens ?? 0) +
+  (tiers.output_tokens ?? 0);
+
+// The model carrying the most tokens, for a single-chip label. Null when the
+// breakdown is empty.
+export const dominantModel = (byModel?: ModelTiers[] | null): string | null => {
+  if (!byModel || byModel.length === 0) return null;
+  return byModel.reduce((best, tiers) =>
+    tierTotal(tiers) > tierTotal(best) ? tiers : best,
+  ).model;
 };

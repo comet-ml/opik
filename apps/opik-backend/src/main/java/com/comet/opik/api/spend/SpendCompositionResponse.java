@@ -15,10 +15,7 @@ import java.util.List;
 public record SpendCompositionResponse(
         Side input,
         List<HarnessEntry> harness,
-        Side output,
-        // Distinct cc.billing.model values in the window — the FE uses
-        // these to price the tier columns.
-        List<String> models) {
+        Side output) {
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -35,12 +32,9 @@ public record SpendCompositionResponse(
             String key,
             String label,
             Long totalTokens,
-            // Raw cache-tier sums from cc.billing — the FE prices these
-            // (hardcoded Claude rates); the BE ships data, not dollars.
-            Long inputTokens,
-            Long cacheReadTokens,
-            Long cacheCreationTokens,
-            Long outputTokens,
+            // Per-model cache-tier sums from cc.billing — the FE prices each
+            // model at its own rate and sums (the BE ships data, not dollars).
+            List<ModelTiers> byModel,
             boolean hasBreakdown) {
     }
 
