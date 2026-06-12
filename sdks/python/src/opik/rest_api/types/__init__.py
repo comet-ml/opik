@@ -401,13 +401,10 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
-from .harness_entry import HarnessEntry
 from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
-from .item import Item
-from .item_impact import ItemImpact
 from .item_lock_info import ItemLockInfo
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
@@ -423,7 +420,6 @@ from .json_schema import JsonSchema
 from .kpi_card_response import KpiCardResponse
 from .kpi_metric import KpiMetric
 from .kpi_metric_type import KpiMetricType
-from .lane import Lane
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -569,7 +565,6 @@ from .retention_rule_public_retention import RetentionRulePublicRetention
 from .score_name import ScoreName
 from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
-from .side import Side
 from .span import Span
 from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
@@ -601,12 +596,6 @@ from .span_write import SpanWrite
 from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
-from .spend_breakdown_response import SpendBreakdownResponse
-from .spend_composition_response import SpendCompositionResponse
-from .spend_metric_request import SpendMetricRequest
-from .spend_recommendations_response import SpendRecommendationsResponse
-from .spend_user_page import SpendUserPage
-from .spend_user_row import SpendUserRow
 from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
 from .studio_evaluation import StudioEvaluation
@@ -1064,13 +1053,10 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
-    "HarnessEntry",
     "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",
-    "Item",
-    "ItemImpact",
     "ItemLockInfo",
     "JsonListString",
     "JsonListStringCompare",
@@ -1086,7 +1072,6 @@ __all__ = [
     "KpiCardResponse",
     "KpiMetric",
     "KpiMetricType",
-    "Lane",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1230,7 +1215,6 @@ __all__ = [
     "ScoreName",
     "ScoreNamePublic",
     "ServiceTogglesConfig",
-    "Side",
     "Span",
     "SpanBatch",
     "SpanEnrichmentOptions",
@@ -1262,12 +1246,6 @@ __all__ = [
     "SpanWriteSource",
     "SpanWriteType",
     "SpansCountResponse",
-    "SpendBreakdownResponse",
-    "SpendCompositionResponse",
-    "SpendMetricRequest",
-    "SpendRecommendationsResponse",
-    "SpendUserPage",
-    "SpendUserRow",
     "StartMultipartUploadResponse",
     "StreamOptions",
     "StudioEvaluation",

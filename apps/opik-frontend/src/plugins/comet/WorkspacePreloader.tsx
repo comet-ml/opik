@@ -19,7 +19,6 @@ import Logo from "@/shared/Logo/Logo";
 import { identifyReoUser } from "./analytics/reo";
 import useSegment from "./analytics/useSegment";
 import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";
-import { isHiddenSpendWorkspace } from "./lib/aiSpend";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
@@ -149,14 +148,9 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return <Loader />;
   }
 
-  const matchedWorkspace = workspaceNameFromURL
+  const workspace = workspaceNameFromURL
     ? allWorkspaces.find((ws) => ws.workspaceName === workspaceNameFromURL)
     : null;
-
-  // Hidden spend workspace resolves as "not found" → private-project message.
-  const workspace = isHiddenSpendWorkspace(matchedWorkspace, pathname)
-    ? null
-    : matchedWorkspace;
 
   if (workspace) {
     if (organizations && !hasWorkspaceAccess(workspace, organizations)) {

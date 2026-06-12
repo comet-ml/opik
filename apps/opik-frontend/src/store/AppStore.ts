@@ -84,12 +84,11 @@ export const useSetPreviousWorkspaceName = () =>
 // The workspace that shared navigation (logo, breadcrumbs, account settings,
 // invites, "Back to Opik") should target. Normally this is the active
 // workspace, but special sections can run inside a workspace the user should
-// not be sent "home" into — today the hidden AI-Spend workspace
-// (`__ai_spend_<orgId>__`), where the active workspace is the spend workspace
-// but those links must point back at the user's real workspace. That feature
-// sets `opikWorkspaceOverride` to the real workspace while active and clears it
-// on exit; generic components read `useOpikWorkspaceName()` and stay unaware of
-// the feature. When no override is set it falls back to the active workspace.
+// not be sent "home" into, where those links must point back at the user's
+// real workspace. Such a section sets `opikWorkspaceOverride` to the real
+// workspace while active and clears it on exit; generic components read
+// `useOpikWorkspaceName()` and stay unaware of the feature. When no override
+// is set it falls back to the active workspace.
 export const useSetOpikWorkspaceOverride = () =>
   useAppStore((state) => state.setOpikWorkspaceOverride);
 

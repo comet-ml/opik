@@ -15,7 +15,6 @@ import {
   Organization,
   ORGANIZATION_ROLE_TYPE,
 } from "@/plugins/comet/types";
-import { isAiSpendWorkspace } from "@/plugins/comet/lib/aiSpend";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { buildUrl } from "@/plugins/comet/utils";
 
@@ -67,8 +66,7 @@ const useWorkspaceSelectorData = () => {
         allWorkspaces?.filter(
           (workspace) =>
             workspace.organizationId === newOrganization.id &&
-            workspace.workspaceName !== DEFAULT_WORKSPACE_NAME &&
-            !isAiSpendWorkspace(workspace),
+            workspace.workspaceName !== DEFAULT_WORKSPACE_NAME,
         ) || [];
 
       if (newOrganizationWorkspaces.length === 0) {
@@ -107,8 +105,7 @@ const useWorkspaceSelectorData = () => {
     return allWorkspaces.filter(
       (workspace) =>
         workspace.organizationId === currentOrganization.id &&
-        workspace.workspaceName !== DEFAULT_WORKSPACE_NAME &&
-        !isAiSpendWorkspace(workspace),
+        workspace.workspaceName !== DEFAULT_WORKSPACE_NAME,
     );
   }, [allWorkspaces, currentOrganization]);
 

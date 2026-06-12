@@ -25,10 +25,6 @@ const WorkspaceGuard = ({
   const AssistantPrewarmer = usePluginStore(
     (state) => state.AssistantPrewarmer,
   );
-  const AiSpendProviderPlugin = usePluginStore(
-    (state) => state.AiSpendProvider,
-  );
-
   if (!WorkspacePreloader) {
     return <Loader />;
   }
@@ -41,23 +37,17 @@ const WorkspaceGuard = ({
     </FeatureTogglesProvider>
   );
 
-  const layout = AiSpendProviderPlugin ? (
-    <AiSpendProviderPlugin>{baseLayout}</AiSpendProviderPlugin>
-  ) : (
-    baseLayout
-  );
-
   return (
     <WorkspacePreloader>
       {AssistantPrewarmer ? <AssistantPrewarmer /> : null}
       <WorkspaceVersionResolver>
         {PermissionsProviderPlugin ? (
           <PermissionsProviderPlugin>
-            <PermissionsGuard>{layout}</PermissionsGuard>
+            <PermissionsGuard>{baseLayout}</PermissionsGuard>
           </PermissionsProviderPlugin>
         ) : (
           <PermissionsProvider value={DEFAULT_PERMISSIONS}>
-            {layout}
+            {baseLayout}
           </PermissionsProvider>
         )}
       </WorkspaceVersionResolver>

@@ -40,8 +40,6 @@ tags:
   description: System usage related resource
 - name: Agent Configs
   description: Agent configuration management
-- name: AI Spend
-  description: Coding-agent spend analytics
 - name: Alerts
   description: Alert resources
 - name: Annotation Queues
@@ -842,162 +840,6 @@ paths:
           description: No changes needed (no config or keys already removed)
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/composition:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend composition
-      description: Get coding-agent token-flow composition (Sankey)
-      operationId: getSpendComposition
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Spend composition
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendCompositionResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/composition/{laneKey}/breakdown:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend lane breakdown
-      description: Get the per-item breakdown for a composition lane
-      operationId: getSpendLaneBreakdown
-      parameters:
-      - name: laneKey
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Lane breakdown
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendBreakdownResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/recommendations:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend recommendations
-      description: Get coding-agent cost-saving recommendations
-      operationId: getSpendRecommendations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Recommendations
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendRecommendationsResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/summary:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend summary
-      description: Get coding-agent spend KPI summary
-      operationId: getSpendSummary
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Spend summary
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WorkspaceMetricsSummaryResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/users:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend user leaderboard
-      description: Get coding-agent spend per user
-      operationId: getSpendUsers
-      parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          maximum: 1000
-          minimum: 1
-          type: integer
-          format: int32
-          default: 25
-      - name: sorting
-        in: query
-        schema:
-          type: string
-      - name: name
-        in: query
-        schema:
-          type: string
-          description: "Filter users by name or email (partial match, case insensitive)"
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: User leaderboard
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendUserPage"
-        "400":
-          description: Bad Request
           content:
             application/json:
               schema:
@@ -9507,237 +9349,6 @@ components:
       properties:
         blueprint_name:
           type: string
-    HarnessEntry:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-    Lane:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-        total_tokens:
-          type: integer
-          format: int64
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-        has_breakdown:
-          type: boolean
-    Side:
-      type: object
-      properties:
-        total_tokens:
-          type: integer
-          format: int64
-        lanes:
-          type: array
-          items:
-            $ref: "#/components/schemas/Lane"
-    SpendCompositionResponse:
-      type: object
-      properties:
-        input:
-          $ref: "#/components/schemas/Side"
-        harness:
-          type: array
-          items:
-            $ref: "#/components/schemas/HarnessEntry"
-        output:
-          $ref: "#/components/schemas/Side"
-        models:
-          type: array
-          items:
-            type: string
-    SpendMetricRequest:
-      required:
-      - interval_end
-      - interval_start
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
-        interval_start:
-          type: string
-          format: date-time
-        interval_end:
-          type: string
-          format: date-time
-        user_id:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        start_before_end:
-          type: boolean
-        project_provided:
-          type: boolean
-    Item:
-      type: object
-      properties:
-        id:
-          type: string
-        title:
-          type: string
-        body:
-          type: string
-        impact:
-          type: string
-          enum:
-          - high
-          - medium
-          - low
-        estimated_savings_tokens:
-          type: integer
-          format: int64
-        docs_url:
-          type: string
-        related_lane_key:
-          type: string
-    SpendBreakdownResponse:
-      type: object
-      properties:
-        lane_key:
-          type: string
-        title:
-          type: string
-        subtitle:
-          type: string
-        total_tokens:
-          type: integer
-          format: int64
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-        model:
-          type: string
-        item_count:
-          type: integer
-          format: int32
-        item_unit:
-          type: string
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Item"
-    SpendRecommendationsResponse:
-      type: object
-      properties:
-        total_savings_tokens:
-          type: integer
-          format: int64
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Item"
-    Result:
-      type: object
-      properties:
-        name:
-          type: string
-        current:
-          type: number
-          format: double
-        previous:
-          type: number
-          format: double
-    WorkspaceMetricsSummaryResponse:
-      type: object
-      properties:
-        results:
-          type: array
-          items:
-            $ref: "#/components/schemas/Result"
-    SpendUserPage:
-      type: object
-      properties:
-        page:
-          type: integer
-          format: int32
-        size:
-          type: integer
-          format: int32
-        total:
-          type: integer
-          format: int64
-        content:
-          type: array
-          items:
-            $ref: "#/components/schemas/SpendUserRow"
-        sortable_by:
-          type: array
-          items:
-            type: string
-    SpendUserRow:
-      type: object
-      properties:
-        user_uuid:
-          type: string
-        user_email:
-          type: string
-        user_display_name:
-          type: string
-        model:
-          type: string
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-        total_tokens:
-          type: integer
-          format: int64
-        requests:
-          type: integer
-          format: int64
-        skills:
-          type: integer
-          format: int64
-        mcps:
-          type: integer
-          format: int64
-        mcp_calls:
-          type: integer
-          format: int64
-        repositories:
-          type: array
-          items:
-            type: string
-        flags:
-          type: array
-          items:
-            type: string
     Alert:
       required:
       - webhook
@@ -10873,6 +10484,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10882,10 +10497,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -11410,6 +11021,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -11419,10 +11034,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -11765,6 +11376,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -11774,10 +11389,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -12216,6 +11827,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -12225,10 +11840,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -12310,6 +11921,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -12319,10 +11934,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -18638,10 +18249,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -19254,10 +18865,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -19415,10 +19026,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -19535,10 +19146,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         project_id:
           type: string
           description: Project ID. Takes precedence over project_name when both are
@@ -19574,10 +19185,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -21589,6 +21200,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Permission"
+    Result:
+      type: object
+      properties:
+        name:
+          type: string
+        current:
+          type: number
+          format: double
+        previous:
+          type: number
+          format: double
     WorkspaceMetricsSummaryRequest:
       required:
       - interval_end
@@ -21688,3 +21310,10 @@ components:
         Workspace version response.
         The opik_version field indicates which navigation mode the frontend should render:
         'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
+    WorkspaceMetricsSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"

@@ -4,7 +4,6 @@ import typing
 
 import httpx
 from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
-from .ai_spend.client import AiSpendClient, AsyncAiSpendClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .assertion_results.client import AssertionResultsClient, AsyncAssertionResultsClient
@@ -109,7 +108,6 @@ class OpikApi:
         self.mcp_o_auth = McpOAuthClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
-        self.ai_spend = AiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AssertionResultsClient(client_wrapper=self._client_wrapper)
@@ -261,7 +259,6 @@ class AsyncOpikApi:
         self.mcp_o_auth = AsyncMcpOAuthClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
-        self.ai_spend = AsyncAiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AsyncAssertionResultsClient(client_wrapper=self._client_wrapper)
