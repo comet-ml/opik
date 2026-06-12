@@ -90,6 +90,21 @@ def test_run_scoring_returns_shutdown_body_when_stopping(empty_pool_executor):
     assert response["error"] != SATURATED_ERROR
 
 
+def test_run_scoring_returns_shutdown_body_when_stop_event_wins_race(empty_pool_executor):
+    """If a SIGTERM/SIGINT fires during the bounded Queue.get inside
+    get_worker, the resulting TimeoutError should surface as shutdown, not
+    as pool saturation."""
+
+    def stop_then_raise():
+        empty_pool_executor.stop_event.set()
+        raise TimeoutError("Process pool exhausted: simulated race")
+
+    with patch.object(empty_pool_executor, "get_worker", side_effect=stop_then_raise):
+        response = empty_pool_executor.run_scoring(code="<unused>", data=DATA)
+
+    assert response == {"code": 503, "error": SHUTDOWN_ERROR}
+
+
 @pytest.mark.parametrize("raw, expected", [
     ("0",    0.0),
     ("0.25", 0.25),
