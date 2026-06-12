@@ -68,6 +68,20 @@ export interface PythonSdkClient {
       score_value: number;
     }>;
   }>;
+  createTextPrompt(args: {
+    name: string;
+    prompt: string;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  createChatPrompt(args: {
+    name: string;
+    messages: Array<{ role: string; content: string }>;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
   createTestSuite(args: {
     name: string;
     project_name: string;
@@ -210,6 +224,12 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async createTextPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/text', args);
+    },
+    async createChatPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/chat', args);
     },
     async evaluateExperiment(args) {
       return request<{
