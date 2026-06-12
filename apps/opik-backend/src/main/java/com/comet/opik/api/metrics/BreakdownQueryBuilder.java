@@ -1,5 +1,6 @@
 package com.comet.opik.api.metrics;
 
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 
 import static com.comet.opik.api.metrics.BreakdownField.SPAN_METRICS;
@@ -62,13 +63,15 @@ public class BreakdownQueryBuilder {
 
     /**
      * Maps sub-metric names (p50, p90, p99) to ClickHouse quantile values (0.5, 0.9, 0.99).
+     * The result is substituted as a numeric literal into the SQL, so the allow-list is
+     * enforced to FE input enum {@code DURATION_METRIC_OPTIONS}
      */
-    public static String mapSubMetric(String subMetric) {
+    public static String mapQuantile(String subMetric) {
         return switch (subMetric.toLowerCase()) {
             case "p50" -> "0.5";
             case "p90" -> "0.9";
             case "p99" -> "0.99";
-            default -> subMetric;
+            default -> throw new BadRequestException("Invalid sub_metric: " + subMetric);
         };
     }
 

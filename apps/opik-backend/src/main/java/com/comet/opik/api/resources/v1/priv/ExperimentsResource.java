@@ -80,7 +80,6 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Collections;
@@ -520,9 +519,6 @@ public class ExperimentsResource {
     public Response experimentItemsBulk(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemBulkUpload.class))) @NotNull @Valid @JsonView(ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class) ExperimentItemBulkUpload request) {
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-
         log.info("Recording experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
                 request.experimentId());
 
@@ -542,9 +538,11 @@ public class ExperimentsResource {
                 .projectName(request.projectName())
                 .build();
 
-        experimentItemBulkIngestionService.ingest(experiment, request.projectName(), items)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+        // The service resolves the project (explicit project_name, else derived from the existing experiment
+        // or dataset, else the default project) and reports which deprecated fallback (if any) it used.
+        ExperimentItemBulkIngestionService.ProjectFallback fallback = experimentItemBulkIngestionService
+                .ingest(experiment, request.projectName(), items)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
@@ -552,17 +550,22 @@ public class ExperimentsResource {
                 request.experimentId());
 
         Response.ResponseBuilder responseBuilder = Response.noContent();
-        // Warn only when a fallback to the default project actually happened: no request-level project_name AND
-        // at least one item without its own project (no trace, or a trace with a blank project_name).
-        boolean usedDefaultProjectFallback = StringUtils.isBlank(request.projectName())
-                && items.stream().anyMatch(
-                        item -> item.trace() == null || StringUtils.isBlank(item.trace().projectName()));
-        if (usedDefaultProjectFallback) {
-            // Nudge clients to set project_name so experiments stay in their intended project.
-            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
-                    ("project_name was not provided; traces without a project were placed in the default project "
-                            + "'%s'. This fallback is deprecated, please provide project_name.")
+
+        // Surface the deprecated implicit-fallback as the X-Opik-Deprecation header (on the request thread, so
+        // the request-scoped fallback message can be set/read safely — same mechanism as other resources).
+        switch (fallback) {
+            case DATASET -> {
+                requestContext.get().setWorkspaceFallbackFor("Dataset", request.datasetName());
+                responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
+                        requestContext.get().getWorkspaceFallbackMessage());
+            }
+            case DEFAULT -> responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
+                    ("project_name could not be resolved; traces without a project were placed in the default "
+                            + "project '%s'. This fallback is deprecated, please provide project_name.")
                             .formatted(ProjectService.DEFAULT_PROJECT));
+            case NONE -> {
+                // no deprecation
+            }
         }
 
         return responseBuilder.build();

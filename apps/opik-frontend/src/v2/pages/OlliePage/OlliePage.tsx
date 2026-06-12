@@ -12,11 +12,10 @@ const OlliePage = () => {
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
 
-  // TODO: OPIK-6260 - Restore fallback to /home once home page redesign is enabled
   if (!AssistantSidebar || !ollieEnabled) {
     return (
       <Navigate
-        to="/$workspaceName/projects/$projectId/logs"
+        to="/$workspaceName/projects/$projectId/home"
         params={{ workspaceName, projectId }}
         replace
       />
