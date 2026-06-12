@@ -25,7 +25,8 @@ const VisibleSpanCount: React.FC<VisibleSpanCountProps> = ({
   // Count hidden over spans only — `total` excludes the trace root, so counting it here
   // (treeData includes the trace) would undercount `displayed` if a trace were ever hidden.
   const hiddenCount = useMemo(
-    () => spans.filter((s) => isObjectSpan(s) && isSpanHiddenByDefault(s)).length,
+    () =>
+      spans.filter((s) => isObjectSpan(s) && isSpanHiddenByDefault(s)).length,
     [spans],
   );
 

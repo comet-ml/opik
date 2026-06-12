@@ -114,14 +114,15 @@ def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
         if tool_description:
             metadata["tool_description"] = tool_description
 
-    # Tag LangGraph plumbing spans so the UI can hide them by default. Written under a
+    # Tag framework-plumbing spans so the UI can hide them by default. Written under a
     # namespaced "_opik" container that can carry further categorization info over time.
+    # The category is framework-neutral on purpose — the UI only keys on it, never on which
+    # integration produced the span.
     if is_internal_langgraph_run(run_dict):
         # "_opik" is reserved for us; if something non-dict occupies it, overwrite so the
         # tag is always written and the span stays matchable by the UI's hide logic.
         if not isinstance(metadata.get("_opik"), dict):
             metadata["_opik"] = {}
-        metadata["_opik"]["framework"] = "langgraph"
         metadata["_opik"]["category"] = "internal"
 
     return metadata
