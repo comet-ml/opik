@@ -6,15 +6,13 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
-class Lane(UniversalBaseModel):
-    key: typing.Optional[str] = None
-    label: typing.Optional[str] = None
-    total_tokens: typing.Optional[int] = None
-    input_tokens: typing.Optional[int] = None
-    cache_read_tokens: typing.Optional[int] = None
-    cache_creation_tokens: typing.Optional[int] = None
-    output_tokens: typing.Optional[int] = None
-    has_breakdown: typing.Optional[bool] = None
+class TokenResponse(UniversalBaseModel):
+    access_token: typing.Optional[str] = None
+    refresh_token: typing.Optional[str] = None
+    token_type: typing.Optional[str] = None
+    expires_in: typing.Optional[int] = None
+    workspace_id: typing.Optional[str] = None
+    workspace_name: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -8,13 +8,11 @@ export const HarnessEntry: core.serialization.ObjectSchema<serializers.HarnessEn
     core.serialization.object({
         key: core.serialization.string().optional(),
         label: core.serialization.string().optional(),
-        totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
     });
 
 export declare namespace HarnessEntry {
     export interface Raw {
         key?: string | null;
         label?: string | null;
-        total_estimated_cost?: number | null;
     }
 }

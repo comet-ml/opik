@@ -8,7 +8,7 @@ from .item import Item
 
 
 class SpendRecommendationsResponse(UniversalBaseModel):
-    total_savings: typing.Optional[float] = None
+    total_savings_tokens: typing.Optional[int] = None
     items: typing.Optional[typing.List[Item]] = None
 
     if IS_PYDANTIC_V2:

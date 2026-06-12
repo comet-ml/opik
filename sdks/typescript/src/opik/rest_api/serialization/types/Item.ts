@@ -10,7 +10,10 @@ export const Item: core.serialization.ObjectSchema<serializers.Item.Raw, OpikApi
     title: core.serialization.string().optional(),
     body: core.serialization.string().optional(),
     impact: ItemImpact.optional(),
-    estSaving: core.serialization.property("est_saving", core.serialization.number().optional()),
+    estimatedSavingsTokens: core.serialization.property(
+        "estimated_savings_tokens",
+        core.serialization.number().optional(),
+    ),
     docsUrl: core.serialization.property("docs_url", core.serialization.string().optional()),
     relatedLaneKey: core.serialization.property("related_lane_key", core.serialization.string().optional()),
 });
@@ -21,7 +24,7 @@ export declare namespace Item {
         title?: string | null;
         body?: string | null;
         impact?: ItemImpact.Raw | null;
-        est_saving?: number | null;
+        estimated_savings_tokens?: number | null;
         docs_url?: string | null;
         related_lane_key?: string | null;
     }
