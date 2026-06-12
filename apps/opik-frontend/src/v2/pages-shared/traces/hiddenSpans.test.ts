@@ -30,7 +30,7 @@ const hiddenMeta = { [METADATA_OPIK_KEY]: { category: "internal" } };
 
 describe("hiddenSpans", () => {
   describe("isSpanHiddenByDefault / hasHiddenSpans", () => {
-    it("flags spans whose SDK category is hidden by default", () => {
+    it("should flag a span when its SDK category is hidden by default", () => {
       expect(
         isSpanHiddenByDefault(makeSpan({ id: "a", metadata: hiddenMeta })),
       ).toBe(true);
@@ -42,7 +42,7 @@ describe("hiddenSpans", () => {
       ).toBe(false);
     });
 
-    it("detects whether a span list contains any hidden-by-default span", () => {
+    it("should report true when a span list contains a hidden-by-default span", () => {
       expect(hasHiddenSpans([makeSpan({ id: "a" })])).toBe(false);
       expect(
         hasHiddenSpans([
@@ -54,7 +54,7 @@ describe("hiddenSpans", () => {
   });
 
   describe("excludeHiddenSpans", () => {
-    it("drops hidden spans and re-parents children to the nearest visible ancestor", () => {
+    it("should drop hidden spans and re-parent children to the nearest visible ancestor when collapsing", () => {
       const spans = [
         makeSpan({ id: "root", parent_span_id: "" }),
         makeSpan({
@@ -78,7 +78,7 @@ describe("hiddenSpans", () => {
       expect(byId.get("visibleChild")?.parent_span_id).toBe("root");
     });
 
-    it("re-parents to the trace root when all ancestors are hidden", () => {
+    it("should re-parent to the trace root when all ancestors are hidden", () => {
       const spans = [
         makeSpan({ id: "hiddenA", parent_span_id: "", metadata: hiddenMeta }),
         makeSpan({
@@ -95,7 +95,7 @@ describe("hiddenSpans", () => {
       expect(result[0].parent_span_id).toBe("");
     });
 
-    it("does not mutate the original spans", () => {
+    it("should not mutate the original spans when excluding hidden ones", () => {
       const spans = [
         makeSpan({ id: "hidden", parent_span_id: "", metadata: hiddenMeta }),
         makeSpan({ id: "child", parent_span_id: "hidden" }),

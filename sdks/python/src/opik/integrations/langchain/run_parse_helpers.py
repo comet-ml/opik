@@ -117,10 +117,12 @@ def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
     # Tag LangGraph plumbing spans so the UI can hide them by default. Written under a
     # namespaced "_opik" container that can carry further categorization info over time.
     if is_internal_langgraph_run(run_dict):
-        opik_metadata = metadata.setdefault("_opik", {})
-        if isinstance(opik_metadata, dict):
-            opik_metadata["framework"] = "langgraph"
-            opik_metadata["category"] = "internal"
+        # "_opik" is reserved for us; if something non-dict occupies it, overwrite so the
+        # tag is always written and the span stays matchable by the UI's hide logic.
+        if not isinstance(metadata.get("_opik"), dict):
+            metadata["_opik"] = {}
+        metadata["_opik"]["framework"] = "langgraph"
+        metadata["_opik"]["category"] = "internal"
 
     return metadata
 
