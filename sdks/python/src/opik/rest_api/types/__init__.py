@@ -64,6 +64,7 @@ from .audio_url_public import AudioUrlPublic
 from .audio_url_write import AudioUrlWrite
 from .auth_details_holder import AuthDetailsHolder
 from .authorization_server_metadata import AuthorizationServerMetadata
+from .authorize_context import AuthorizeContext
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
@@ -220,6 +221,7 @@ from .comment_public import CommentPublic
 from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
+from .consent_response import ConsentResponse
 from .count_value_stat_public import CountValueStatPublic
 from .create_session_response import CreateSessionResponse
 from .dashboard_page_public import DashboardPagePublic
@@ -683,6 +685,7 @@ from .webhook_test_result_status import WebhookTestResultStatus
 from .webhook_write import WebhookWrite
 from .welcome_wizard_tracking import WelcomeWizardTracking
 from .workspace_configuration import WorkspaceConfiguration
+from .workspace_info import WorkspaceInfo
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
@@ -757,6 +760,7 @@ __all__ = [
     "AudioUrlWrite",
     "AuthDetailsHolder",
     "AuthorizationServerMetadata",
+    "AuthorizeContext",
     "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorAction",
     "AutomationRuleEvaluatorLlmAsJudge",
@@ -877,6 +881,7 @@ __all__ = [
     "CompleteMultipartUploadRequest",
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
+    "ConsentResponse",
     "CountValueStatPublic",
     "CreateSessionResponse",
     "DashboardPagePublic",
@@ -1331,6 +1336,7 @@ __all__ = [
     "WebhookWrite",
     "WelcomeWizardTracking",
     "WorkspaceConfiguration",
+    "WorkspaceInfo",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
     "WorkspaceMetricsSummaryRequest",

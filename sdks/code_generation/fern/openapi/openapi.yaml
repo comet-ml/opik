@@ -110,6 +110,99 @@ tags:
 - name: Redirect
   description: Redirects for SDK generated links
 paths:
+  /oauth/authorize:
+    get:
+      tags:
+      - MCP OAuth
+      summary: OAuth Authorization Endpoint
+      description: "OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the\
+        \ client and PKCE parameters, then redirects to the login or consent page"
+      operationId: authorize
+      parameters:
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: redirect_uri
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: response_type
+        in: query
+        schema:
+          type: string
+      - name: code_challenge
+        in: query
+        schema:
+          type: string
+      - name: code_challenge_method
+        in: query
+        schema:
+          type: string
+      - name: resource
+        in: query
+        schema:
+          type: string
+      - name: state
+        in: query
+        schema:
+          type: string
+      responses:
+        "302":
+          description: "Redirect to login, consent, or client redirect_uri with an\
+            \ error"
+    post:
+      tags:
+      - MCP OAuth
+      summary: Submit Authorization Consent
+      description: "Submit the user's consent, issue an authorization code, and return\
+        \ the client redirect target"
+      operationId: consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentRequest"
+        required: true
+      responses:
+        "200":
+          description: Consent response with the client redirect target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentResponse"
+  /oauth/authorize/context:
+    get:
+      tags:
+      - MCP OAuth
+      summary: Get Authorization Consent Context
+      description: "Get the client details, eligible workspaces, and a CSRF token\
+        \ used to render the consent screen"
+      operationId: getAuthorizeContext
+      parameters:
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: redirect_uri
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      responses:
+        "200":
+          description: Authorization consent context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizeContext"
   /.well-known/oauth-authorization-server:
     get:
       tags:
@@ -8676,6 +8769,64 @@ paths:
             application/json: {}
 components:
   schemas:
+    ConsentResponse:
+      type: object
+      properties:
+        redirect_to:
+          type: string
+    ConsentRequest:
+      required:
+      - client_id
+      - code_challenge
+      - code_challenge_method
+      - redirect_uri
+      - resource
+      type: object
+      properties:
+        client_id:
+          minLength: 1
+          type: string
+        redirect_uri:
+          minLength: 1
+          type: string
+        code_challenge:
+          minLength: 1
+          type: string
+        code_challenge_method:
+          minLength: 1
+          pattern: S256
+          type: string
+        resource:
+          minLength: 1
+          type: string
+        state:
+          type: string
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+        csrf:
+          type: string
+    AuthorizeContext:
+      type: object
+      properties:
+        client_name:
+          type: string
+        client_logo_uri:
+          type: string
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceInfo"
+        csrf_token:
+          type: string
+    WorkspaceInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
     AuthorizationServerMetadata:
       type: object
       properties:
