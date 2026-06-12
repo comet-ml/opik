@@ -156,6 +156,15 @@ export function makeBackendClient(apiKey: string | null = null) {
       }
     },
 
+    async deletePrompt(id: string): Promise<void> {
+      try {
+        await opik.api.prompts.deletePrompt(id);
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
+    },
+
     async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
       const page = await opik.api.datasets.getDatasetItems(datasetId);
       const content = page.content ?? [];

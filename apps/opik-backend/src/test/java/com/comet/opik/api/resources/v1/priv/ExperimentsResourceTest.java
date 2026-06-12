@@ -4,6 +4,7 @@ import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.AssertionScoreAverage;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemChanges;
@@ -71,9 +72,11 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetEventInfoHolder;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
@@ -6492,6 +6495,30 @@ class ExperimentsResourceTest {
                     .build();
         }
 
+        private record BulkDataset(String datasetName, DatasetItem item) {
+        }
+
+        private BulkDataset createDatasetWithItem() {
+            var dataset = buildDataset();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
+                    TEST_WORKSPACE, API_KEY);
+            return new BulkDataset(dataset.name(), datasetItem);
+        }
+
+        private String newExperimentName() {
+            return "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+        }
+
+        private String newProjectName() {
+            return "project-" + RandomStringUtils.secure().nextAlphanumeric(20);
+        }
+
         private Span creatrSpan() {
             Instant now = Instant.now();
             return podamFactory.manufacturePojo(Span.class).toBuilder()
@@ -6519,33 +6546,21 @@ class ExperimentsResourceTest {
         @Test
         void experimentItemsBulk__whenProcessingBatchWithNoTraceButWithFeedbackScores__thenReturnNoContent() {
             // given
-            var dataset = buildDataset();
-            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
-            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .datasetId(datasetId)
-                    .build();
-
-            datasetResourceClient.createDatasetItems(
-                    DatasetItemBatch.builder().datasetName(dataset.name())
-                            .items(List.of(datasetItem)).build(),
-                    TEST_WORKSPACE,
-                    API_KEY);
-
-            // Create a bulk upload request with a single item
+            var datasetWithItem = createDatasetWithItem();
 
             var feedbackScore = createScore();
 
-            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore, null);
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetWithItem.item(), null, feedbackScore, null);
 
-            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var experimentName = newExperimentName();
             var bulkItemRecord = ExperimentItemBulkRecord.builder()
-                    .datasetItemId(datasetItem.id())
+                    .datasetItemId(datasetWithItem.item().id())
                     .feedbackScores(List.of(feedbackScore))
                     .build();
 
             var bulkUploadRequest = ExperimentItemBulkUpload.builder()
                     .experimentName(experimentName)
-                    .datasetName(dataset.name())
+                    .datasetName(datasetWithItem.datasetName())
                     .items(List.of(bulkItemRecord))
                     .build();
 
@@ -6556,19 +6571,407 @@ class ExperimentsResourceTest {
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
                     API_KEY, TEST_WORKSPACE);
 
-            String[] ignoringFields = Stream
-                    .concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
-                            Stream.of("traceId", "id", "experimentId"))
-                    .toArray(String[]::new);
+            // No project_name on the request: the auto-created trace and its experiment item land in the default project.
+            UUID defaultProjectId = projectResourceClient.getByName(ProjectService.DEFAULT_PROJECT, API_KEY,
+                    TEST_WORKSPACE).id();
+            expectedItems = expectedItems.stream()
+                    .map(item -> item.toBuilder().projectId(defaultProjectId).build())
+                    .toList();
 
             ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
-                    ignoringFields);
+                    ExperimentTestAssertions.BULK_EXPERIMENT_ITEMS_IGNORED_FIELDS);
 
             Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
                     API_KEY);
 
             assertThat(trace).isNotNull();
             assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
+        }
+
+        @Test
+        @DisplayName("when items have no trace and project_name is provided, then auto-created traces use that project without a deprecation header")
+        void experimentItemsBulk__whenNoTraceAndProjectNameProvided__thenTracesUseProjectAndNoDeprecationHeader() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            var projectName = newProjectName();
+            UUID projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var experimentName = newExperimentName();
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetWithItem.item().id())
+                    .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"42\"}"))
+                    .feedbackScores(List.of(createScore()))
+                    .build();
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .projectName(projectName)
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(actualExperimentItems).hasSize(1);
+
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+            assertThat(trace.projectId()).isEqualTo(projectId);
+            assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
+        }
+
+        @Test
+        @DisplayName("when items have no trace and no project_name, then auto-created traces use the default project and a deprecation header is returned")
+        void experimentItemsBulk__whenNoTraceAndNoProjectName__thenDefaultProjectAndDeprecationHeader() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            var experimentName = newExperimentName();
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetWithItem.item().id())
+                    .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"42\"}"))
+                    .feedbackScores(List.of(createScore()))
+                    .build();
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isNotNull()
+                        .contains(ProjectService.DEFAULT_PROJECT);
+            }
+
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(actualExperimentItems).hasSize(1);
+
+            Project defaultProject = projectResourceClient.getByName(ProjectService.DEFAULT_PROJECT, API_KEY,
+                    TEST_WORKSPACE);
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+            assertThat(trace.projectId()).isEqualTo(defaultProject.id());
+        }
+
+        @Test
+        @DisplayName("when project_name is provided on the request but not on an item trace, then the trace inherits the request project")
+        void experimentItemsBulk__whenProjectNameOnRequestButNotOnTrace__thenTraceInheritsRequestProject() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            var projectName = newProjectName();
+            UUID projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            // explicit trace without its own project_name
+            var trace = createTrace().toBuilder()
+                    .projectName(null)
+                    .projectId(null)
+                    .build();
+
+            var experimentName = newExperimentName();
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetWithItem.item().id())
+                    .trace(trace)
+                    .feedbackScores(List.of(createScore()))
+                    .build();
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .projectName(projectName)
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(actualExperimentItems).hasSize(1);
+
+            Trace actualTrace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+            assertThat(actualTrace.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("when an item trace project_name differs from the request project_name, then return unprocessable entity")
+        void experimentItemsBulk__whenTraceProjectNameMismatchesRequestProjectName__thenReturnUnprocessableEntity() {
+            // given
+            var requestProjectName = newProjectName();
+            var trace = createTrace().toBuilder()
+                    .projectName("other-" + RandomStringUtils.secure().nextAlphanumeric(20))
+                    .build();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(newExperimentName())
+                    .datasetName("Test Dataset")
+                    .projectName(requestProjectName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(podamFactory.manufacturePojo(UUID.class))
+                            .trace(trace)
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+                assertThat(errorMessage.errors())
+                        .contains("items trace project_name must match the request project_name");
+            }
+        }
+
+        @Test
+        @DisplayName("when no project_name and an item trace has no project, then the trace lands in the default project with a deprecation header")
+        void experimentItemsBulk__whenNoProjectNameAndTraceWithoutProject__thenDefaultProjectAndDeprecationHeader() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            // explicit trace without its own project_name and no request-level project_name
+            var trace = createTrace().toBuilder()
+                    .projectName(null)
+                    .projectId(null)
+                    .build();
+
+            var experimentName = newExperimentName();
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetWithItem.item().id())
+                            .trace(trace)
+                            .feedbackScores(List.of(createScore()))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isNotNull()
+                        .contains(ProjectService.DEFAULT_PROJECT);
+            }
+
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(actualExperimentItems).hasSize(1);
+
+            Project defaultProject = projectResourceClient.getByName(ProjectService.DEFAULT_PROJECT, API_KEY,
+                    TEST_WORKSPACE);
+            Trace actualTrace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+            assertThat(actualTrace.projectId()).isEqualTo(defaultProject.id());
+        }
+
+        @Test
+        @DisplayName("when no project_name but an item trace has its own project, then the trace keeps its project and no deprecation header is returned")
+        void experimentItemsBulk__whenNoProjectNameButTraceHasOwnProject__thenTraceKeepsProjectAndNoDeprecationHeader() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            var projectName = newProjectName();
+            UUID projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            // trace carries its own project and there is no request-level project_name -> no fallback, no warning
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .projectId(null)
+                    .build();
+
+            var experimentName = newExperimentName();
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetWithItem.item().id())
+                            .trace(trace)
+                            .feedbackScores(List.of(createScore()))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(actualExperimentItems).hasSize(1);
+
+            Trace actualTrace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+            assertThat(actualTrace.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("when project_name is provided and the experiment and dataset don't exist, then both are created in that project")
+        void experimentItemsBulk__whenProjectNameProvidedAndExperimentAndDatasetDoNotExist__thenBothCreatedInProject() {
+            // given — project exists (so we know its id), but dataset and experiment do not
+            var projectName = newProjectName();
+            UUID projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(20);
+            var experimentName = newExperimentName();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetName)
+                    .projectName(projectName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(podamFactory.manufacturePojo(UUID.class))
+                            .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"42\"}"))
+                            .feedbackScores(List.of(createScore()))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(actualExperimentItems).hasSize(1);
+
+            // the experiment was created in the requested project
+            Experiment experiment = experimentResourceClient.getExperiment(
+                    actualExperimentItems.getFirst().experimentId(), API_KEY, TEST_WORKSPACE);
+            assertThat(experiment.projectId()).isEqualTo(projectId);
+
+            // the dataset was created in the requested project
+            Dataset dataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(datasetName).build(), API_KEY, TEST_WORKSPACE);
+            assertThat(dataset).isNotNull();
+            assertThat(dataset.name()).isEqualTo(datasetName);
+            assertThat(dataset.projectId()).isEqualTo(projectId);
+
+            // and the auto-created trace landed in the same project
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+            assertThat(trace.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("when project_name is provided and an item has spans, then the spans land in the request project (same as their trace)")
+        void experimentItemsBulk__whenProjectNameProvidedAndItemHasSpans__thenSpansLandInRequestProject() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            var projectName = newProjectName();
+            UUID projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            // trace and span without their own project — both should inherit the request project
+            var trace = createTrace().toBuilder()
+                    .projectName(null)
+                    .projectId(null)
+                    .build();
+            var span = creatrSpan().toBuilder()
+                    .traceId(trace.id())
+                    .projectName(null)
+                    .projectId(null)
+                    .build();
+
+            var experimentName = newExperimentName();
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .projectName(projectName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetWithItem.item().id())
+                            .trace(trace)
+                            .spans(List.of(span))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+
+            // both the trace and its span land in the request project
+            Trace actualTrace = traceResourceClient.getById(trace.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.projectId()).isEqualTo(projectId);
+
+            Span actualSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actualSpan.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("when experimentId points to an existing experiment and a different project_name is provided, then return conflict")
+        void experimentItemsBulk__whenExistingExperimentAndMismatchedProjectName__thenReturnConflict() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            var projectA = newProjectName();
+            var projectB = newProjectName();
+            projectResourceClient.createProject(projectB, API_KEY, TEST_WORKSPACE);
+
+            var experimentId = podamFactory.manufacturePojo(UUID.class);
+            var experimentName = newExperimentName();
+
+            // create the experiment in project A via a first bulk upload
+            experimentResourceClient.bulkUploadExperimentItem(
+                    ExperimentItemBulkUpload.builder()
+                            .experimentId(experimentId)
+                            .experimentName(experimentName)
+                            .datasetName(datasetWithItem.datasetName())
+                            .projectName(projectA)
+                            .items(List.of(ExperimentItemBulkRecord.builder()
+                                    .datasetItemId(datasetWithItem.item().id())
+                                    .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"42\"}"))
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            // when — upload again to the same experiment but with a different project
+            var mismatched = ExperimentItemBulkUpload.builder()
+                    .experimentId(experimentId)
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .projectName(projectB)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetWithItem.item().id())
+                            .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"43\"}"))
+                            .build()))
+                    .build();
+
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(mismatched, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
         }
 
         @Test
@@ -6773,37 +7176,28 @@ class ExperimentsResourceTest {
         @Test
         void experimentItemsBulk__whenOnlyEvaluateTaskResultProvided__thenSucceed() {
             // given
-            var dataset = buildDataset();
-            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
-            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .datasetId(datasetId)
-                    .build();
-
-            datasetResourceClient.createDatasetItems(
-                    DatasetItemBatch.builder().datasetName(dataset.name())
-                            .items(List.of(datasetItem)).build(),
-                    TEST_WORKSPACE,
-                    API_KEY);
+            var datasetWithItem = createDatasetWithItem();
 
             // Create a bulk upload request with only evaluateTaskResult
             var evaluateTaskResult = podamFactory.manufacturePojo(JsonNode.class);
-            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var experimentName = newExperimentName();
 
             var feedbackScore = createScore();
 
             var bulkItemRecord = ExperimentItemBulkRecord.builder()
-                    .datasetItemId(datasetItem.id())
+                    .datasetItemId(datasetWithItem.item().id())
                     .evaluateTaskResult(evaluateTaskResult)
                     .feedbackScores(List.of(feedbackScore))
                     .build();
 
             var bulkUploadRequest = ExperimentItemBulkUpload.builder()
                     .experimentName(experimentName)
-                    .datasetName(dataset.name())
+                    .datasetName(datasetWithItem.datasetName())
                     .items(List.of(bulkItemRecord))
                     .build();
 
-            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore, evaluateTaskResult);
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetWithItem.item(), null, feedbackScore,
+                    evaluateTaskResult);
 
             // when
             experimentResourceClient.bulkUploadExperimentItem(bulkUploadRequest, API_KEY, TEST_WORKSPACE);
@@ -6812,13 +7206,15 @@ class ExperimentsResourceTest {
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
                     API_KEY, TEST_WORKSPACE);
 
-            String[] ignoringFields = Stream
-                    .concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
-                            Stream.of("traceId", "id", "experimentId"))
-                    .toArray(String[]::new);
+            // No project_name on the request: the auto-created trace and its experiment item land in the default project.
+            UUID defaultProjectId = projectResourceClient.getByName(ProjectService.DEFAULT_PROJECT, API_KEY,
+                    TEST_WORKSPACE).id();
+            expectedItems = expectedItems.stream()
+                    .map(item -> item.toBuilder().projectId(defaultProjectId).build())
+                    .toList();
 
             ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
-                    ignoringFields);
+                    ExperimentTestAssertions.BULK_EXPERIMENT_ITEMS_IGNORED_FIELDS);
 
             Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
                     API_KEY);
