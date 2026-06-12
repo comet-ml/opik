@@ -416,6 +416,7 @@ class ExperimentsClient:
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
         experiment_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -431,6 +432,9 @@ class ExperimentsClient:
 
         experiment_id : typing.Optional[str]
             Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
+
+        project_name : typing.Optional[str]
+            Project for traces auto-created from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default project is used; relying on this fallback is deprecated, please provide project_name explicitly.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -451,6 +455,7 @@ class ExperimentsClient:
             dataset_name=dataset_name,
             items=items,
             experiment_id=experiment_id,
+            project_name=project_name,
             request_options=request_options,
         )
         return _response.data
@@ -1231,6 +1236,7 @@ class AsyncExperimentsClient:
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
         experiment_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1246,6 +1252,9 @@ class AsyncExperimentsClient:
 
         experiment_id : typing.Optional[str]
             Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
+
+        project_name : typing.Optional[str]
+            Project for traces auto-created from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default project is used; relying on this fallback is deprecated, please provide project_name explicitly.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1269,6 +1278,7 @@ class AsyncExperimentsClient:
             dataset_name=dataset_name,
             items=items,
             experiment_id=experiment_id,
+            project_name=project_name,
             request_options=request_options,
         )
         return _response.data
