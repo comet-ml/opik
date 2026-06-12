@@ -19,29 +19,33 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public enum SpendLane {
 
-    USER_PROMPTS("user_prompts", "User prompts",
+    USER_PROMPTS("user_prompts", "User prompts", "prompt",
             "Tokens billed for the text your team typed, re-billed on every turn after it."),
-    FILE_ATTACHMENTS("file_attachments", "File attachments",
+    FILE_ATTACHMENTS("file_attachments", "File attachments", "file",
             "Tokens billed for attached files, resent in every request after they're attached."),
-    BUILT_IN_TOOLS("built_in_tools", "Built-in tools",
+    BUILT_IN_TOOLS("built_in_tools", "Built-in tools", "call",
             "Tokens billed for built-in tool activity (Bash, Read...), re-billed each turn."),
-    PRIOR_ASSISTANT("prior_assistant", "Prior assistant context",
+    PRIOR_ASSISTANT("prior_assistant", "Prior assistant context", null,
             "Tokens billed replaying Claude's own text and thinking - the cost of session length."),
-    SKILLS("skills", "Skills",
+    SKILLS("skills", "Skills", "load",
             "Tokens billed for skills: always-on menu entries plus bodies loaded on use."),
-    CUSTOM_AGENTS("custom_agents", "Custom agents",
+    CUSTOM_AGENTS("custom_agents", "Custom agents", null,
             "Tokens billed for subagent dispatch blurbs, riding on every request."),
-    MCP_SERVERS("mcp_servers", "MCP servers",
+    MCP_SERVERS("mcp_servers", "MCP servers", "call",
             "Tokens billed for MCP servers: schemas + instructions every request, plus tool usage."),
-    MEMORY("memory", "Memory",
+    MEMORY("memory", "Memory", null,
             "Tokens billed for project instructions (CLAUDE.md, rules, auto-memory) in every request."),
-    STATIC_OVERHEAD("static_overhead", "Static overhead",
+    STATIC_OVERHEAD("static_overhead", "Static overhead", null,
             "Tokens billed for Claude Code itself: system prompt + built-in tool schemas."),
-    UNATTRIBUTED("unattributed", "Unattributed",
+    UNATTRIBUTED("unattributed", "Unattributed", null,
             "Billed tokens not yet attributable to a lane (system reminders, request envelope, estimation drift).");
 
     private final String key;
     private final String label;
+    // Singular noun for item.count events ("prompt", "call", "load"). Null for
+    // lanes whose items are definition-only or counted output-side — their
+    // counts are structurally 0 and the UI hides the column.
+    private final String itemUnit;
     private final String description;
 
     /** The unattributed lane has no entity items by design. */

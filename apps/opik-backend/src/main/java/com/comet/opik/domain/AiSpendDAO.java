@@ -136,7 +136,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
     public Mono<SpendBreakdownResponse> getBreakdown(@NonNull SpendMetricRequest request, @NonNull SpendLane lane) {
         Optional<String> userUuid = resolveUserUuid(request);
         return runBreakdown(queryBuilder.breakdown(lane), "ai_spend_breakdown", lane.getKey(),
-                lane.getLabel(), lane.getDescription(), request, userUuid);
+                lane.getLabel(), lane.getDescription(), lane.getItemUnit(), request, userUuid);
     }
 
     @Override
@@ -144,11 +144,12 @@ class AiSpendDAOImpl implements AiSpendDAO {
             @NonNull OutputLane lane) {
         Optional<String> userUuid = resolveUserUuid(request);
         return runBreakdown(queryBuilder.outputBreakdown(lane), "ai_spend_output_breakdown", lane.getKey(),
-                lane.getLabel(), null, request, userUuid);
+                lane.getLabel(), null, lane.getItemUnit(), request, userUuid);
     }
 
     private Mono<SpendBreakdownResponse> runBreakdown(AiSpendQueryBuilder.TemplatedQuery query, String queryName,
-            String laneKey, String title, String subtitle, SpendMetricRequest request, Optional<String> userUuid) {
+            String laneKey, String title, String subtitle, String itemUnit, SpendMetricRequest request,
+            Optional<String> userUuid) {
         return queryList(query, queryName, laneKey, userFlag(userUuid),
                 statement -> {
                     bindComposition(statement, request, userUuid);
@@ -160,6 +161,10 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         getLong(row.get("definition_tokens", Long.class)),
                         getLong(row.get("usage_tokens", Long.class)),
                         getLong(row.get("events", Long.class)),
+                        getLong(row.get("input_tokens", Long.class)),
+                        getLong(row.get("cache_read_tokens", Long.class)),
+                        getLong(row.get("cache_creation_tokens", Long.class)),
+                        getLong(row.get("output_tokens", Long.class)),
                         getLong(row.get("grand_total", Long.class)),
                         getLong(row.get("group_count", Long.class)),
                         getLong(row.get("total_events", Long.class)),
@@ -168,7 +173,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         getLong(row.get("total_cache_creation", Long.class)),
                         getLong(row.get("total_output", Long.class)),
                         row.get("model", String.class)))
-                .map(rows -> mapper.breakdown(laneKey, title, subtitle, rows));
+                .map(rows -> mapper.breakdown(laneKey, title, subtitle, itemUnit, rows));
     }
 
     @Override

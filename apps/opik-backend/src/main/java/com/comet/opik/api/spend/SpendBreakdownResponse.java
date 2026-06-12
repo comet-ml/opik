@@ -27,6 +27,10 @@ public record SpendBreakdownResponse(
         // Total occurrences across the lane (the "calls" figure), not the
         // distinct-entity count.
         int itemCount,
+        // Singular noun for itemCount / item.count ("prompt", "call", "load").
+        // Null when counts are structurally 0 for the lane; the UI then hides
+        // the count column and header segment.
+        String itemUnit,
         List<Item> items) {
 
     @Builder(toBuilder = true)
@@ -39,6 +43,11 @@ public record SpendBreakdownResponse(
             // conversation-driven usage cost. Sum == totalTokens.
             Long definitionTokens,
             Long usageTokens,
+            // Per-item tier sums so the FE can price each row.
+            Long inputTokens,
+            Long cacheReadTokens,
+            Long cacheCreationTokens,
+            Long outputTokens,
             // New events this turn summed across traces = true counts
             // (loads, calls, prompts, files).
             Long count) {

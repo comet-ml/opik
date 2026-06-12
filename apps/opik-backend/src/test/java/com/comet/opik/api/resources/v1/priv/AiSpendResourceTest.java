@@ -413,6 +413,7 @@ class AiSpendResourceTest {
         assertThat(breakdown.laneKey()).isEqualTo("skills");
         assertThat(breakdown.title()).isEqualTo("Skills");
         assertThat(breakdown.subtitle()).isEqualTo(SpendLane.SKILLS.getDescription());
+        assertThat(breakdown.itemUnit()).isEqualTo("load");
         // itemCount is the total occurrence count: opik-frontend (1 usage) +
         // find-skills (1 usage), across 3 traces = 6 calls.
         assertThat(breakdown.itemCount()).isEqualTo(6);
@@ -430,6 +431,9 @@ class AiSpendResourceTest {
         assertThat(byLabel.get("opik-frontend").definitionTokens()).isEqualTo(300L);
         assertThat(byLabel.get("opik-frontend").usageTokens()).isEqualTo(1500L);
         assertThat(byLabel.get("opik-frontend").count()).isEqualTo(3L);
+        // Per-item tier sums ride along so the FE can price each row.
+        assertThat(byLabel.get("opik-frontend").cacheReadTokens()).isEqualTo(1800L);
+        assertThat(byLabel.get("opik-frontend").inputTokens()).isEqualTo(0L);
         assertThat(byLabel.get("find-skills").totalTokens()).isEqualTo(900L);
         assertThat(byLabel.get("find-skills").definitionTokens()).isEqualTo(0L);
         assertThat(byLabel.get("find-skills").usageTokens()).isEqualTo(900L);
@@ -491,6 +495,7 @@ class AiSpendResourceTest {
         assertThat(builtIn.totalTokens()).isEqualTo(90L);
         // Output lanes have no description, so no subtitle.
         assertThat(builtIn.subtitle()).isNull();
+        assertThat(builtIn.itemUnit()).isEqualTo("call");
         // Bash tool call: 1 per trace, across 3 traces = 3 calls.
         assertThat(builtIn.itemCount()).isEqualTo(3);
         assertThat(builtIn.items().getFirst().label()).isEqualTo("Bash");
@@ -526,7 +531,8 @@ class AiSpendResourceTest {
 
         var thinking = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "thinking");
         assertThat(thinking.totalTokens()).isEqualTo(450L);
-        // thinking items carry no call count (count=0), so 0 calls.
+        assertThat(thinking.itemUnit()).isEqualTo("block");
+        // The fixture's thinking items carry no event count, so 0 blocks.
         assertThat(thinking.itemCount()).isEqualTo(0);
         assertThat(thinking.items().getFirst().label()).isEqualTo("thinking");
         assertThat(thinking.items().getFirst().totalTokens()).isEqualTo(450L);

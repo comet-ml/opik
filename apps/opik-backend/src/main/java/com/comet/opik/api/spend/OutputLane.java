@@ -18,14 +18,16 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public enum OutputLane {
 
-    THINKING("thinking", "Thinking"),
-    ASSISTANT_TEXT("assistant_text", "Assistant text"),
-    BUILT_IN_TOOL_CALLS("built_in_tool_calls", "Built-in tool calls"),
-    MCP_TOOL_CALLS("mcp_tool_calls", "MCP tool calls"),
-    SKILL_INVOCATIONS("skill_invocations", "Skill invocations");
+    THINKING("thinking", "Thinking", "block"),
+    ASSISTANT_TEXT("assistant_text", "Assistant text", "block"),
+    BUILT_IN_TOOL_CALLS("built_in_tool_calls", "Built-in tool calls", "call"),
+    MCP_TOOL_CALLS("mcp_tool_calls", "MCP tool calls", "call"),
+    SKILL_INVOCATIONS("skill_invocations", "Skill invocations", "call");
 
     private final String key;
     private final String label;
+    /** Singular noun for item.count events (blocks emitted / tool calls made). */
+    private final String itemUnit;
 
     public boolean hasBreakdown() {
         return true;

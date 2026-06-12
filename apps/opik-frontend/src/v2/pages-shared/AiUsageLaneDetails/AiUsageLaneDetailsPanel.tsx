@@ -22,6 +22,14 @@ import RecommendationCard from "@/v2/pages-shared/AiUsageRecommendations/Recomme
 
 const PROMPT_SIZE_ORDER = ["small", "medium", "large", "xlarge"];
 
+// Counts and tokens run on different clocks: count increments only when a new
+// event happens, while tokens re-bill the whole context every turn.
+const COUNT_TOOLTIP =
+  "Events in the selected window. Tokens and cost also include re-billing of earlier context on every turn, so an item can have cost without new events.";
+
+const formatCount = (count: number, unit: string) =>
+  `${count} ${count === 1 ? unit : `${unit}s`}`;
+
 interface AiUsageLaneDetailsPanelProps {
   laneKey: string | null;
   laneLabel?: string;
@@ -104,13 +112,19 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
   const renderItems = (items: AiSpendBreakdownItemApi[], unit?: string) => {
     const totalWeight = Math.max(...items.map(laneWeight), 0);
     const weightSum = items.reduce((acc, item) => acc + laneWeight(item), 0);
+    // No unit means counts are structurally 0 for this lane - hide the column.
+    const countUnit = unit ?? breakdown?.item_unit;
     const hasCounts = items.some((item) => item.count != null);
+    // The BE emits definition/usage sums for every lane (0 when the lane has
+    // no definition concept) - only lanes declaring the split render it.
+    const hasDefinitionSplit = Boolean(meta.definitionSplit);
     return (
       <div className="grid grid-cols-[minmax(0,160px)_minmax(80px,1fr)_auto] items-center gap-x-4 gap-y-3">
         {items.map((item) => {
           const weight = laneWeight(item);
           const pct = lanePct(weight, weightSum);
           const barPct = lanePct(weight, totalWeight);
+          const itemCost = tierCost(item, breakdown?.model);
           return (
             <React.Fragment key={item.label}>
               <TooltipWrapper content={item.label}>
@@ -118,7 +132,9 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
                   {item.label}
                 </span>
               </TooltipWrapper>
-              {item.definition_tokens != null && item.usage_tokens != null ? (
+              {hasDefinitionSplit &&
+              item.definition_tokens != null &&
+              item.usage_tokens != null ? (
                 <TooltipWrapper
                   content={`Definition ${item.definition_tokens.toLocaleString()} tok · Usage ${item.usage_tokens.toLocaleString()} tok`}
                 >
@@ -156,20 +172,22 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
                   content={`${item.total_tokens.toLocaleString()} tokens`}
                 >
                   <span className="comet-body-xs-accented w-12 shrink-0 text-right text-foreground">
-                    {formatNumberInK(item.total_tokens)}
+                    {itemCost != null
+                      ? formatCost(itemCost)
+                      : formatNumberInK(item.total_tokens)}
                   </span>
                 </TooltipWrapper>
                 <span className="comet-body-xs w-11 shrink-0 text-right text-light-slate">
                   {pct.toFixed(1)}%
                 </span>
-                {hasCounts && (
-                  <span className="comet-body-xs w-20 shrink-0 text-right text-light-slate">
-                    {item.count != null
-                      ? `${item.count} ${
-                          unit ?? breakdown?.item_unit ?? "calls"
-                        }`
-                      : ""}
-                  </span>
+                {countUnit && hasCounts && (
+                  <TooltipWrapper content={COUNT_TOOLTIP}>
+                    <span className="comet-body-xs w-20 shrink-0 text-right text-light-slate">
+                      {item.count != null
+                        ? formatCount(item.count, countUnit)
+                        : ""}
+                    </span>
+                  </TooltipWrapper>
                 )}
               </div>
             </React.Fragment>
@@ -304,10 +322,19 @@ const AiUsageLaneDetailsPanel: React.FC<AiUsageLaneDetailsPanelProps> = ({
                 <span className="comet-body-s text-muted-slate">tokens</span>
               </>
             )}
-            <span className="comet-body-s text-light-slate">·</span>
-            <span className="comet-body-s text-muted-slate">
-              {breakdown?.item_count ?? 0} {breakdown?.item_unit ?? "calls"}
-            </span>
+            {breakdown?.item_unit && (
+              <>
+                <span className="comet-body-s text-light-slate">·</span>
+                <TooltipWrapper content={COUNT_TOOLTIP}>
+                  <span className="comet-body-s text-muted-slate">
+                    {formatCount(
+                      breakdown.item_count ?? 0,
+                      breakdown.item_unit,
+                    )}
+                  </span>
+                </TooltipWrapper>
+              </>
+            )}
           </div>
           {meta.description && (
             <p className="comet-body-xs text-muted-slate">{meta.description}</p>

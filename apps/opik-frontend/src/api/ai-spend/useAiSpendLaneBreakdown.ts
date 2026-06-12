@@ -10,6 +10,11 @@ export interface AiSpendBreakdownItemApi {
   // cost (muted) + on-demand usage cost (solid). Sum = total_tokens.
   definition_tokens?: number;
   usage_tokens?: number;
+  // Per-item tier sums; priced FE-side (claudePricing).
+  input_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  output_tokens?: number;
 }
 
 export interface AiSpendBreakdownSectionApi {
@@ -32,7 +37,9 @@ export interface AiSpendBreakdownResponse {
   // Representative cc.billing model, for FE pricing.
   model?: string;
   item_count: number;
-  // Noun for item counts (e.g. "prompts") - UI falls back to "items".
+  // Singular noun for item_count / item.count ("prompt", "call", "load").
+  // Absent when counts are structurally 0 for the lane - the UI then hides
+  // the count column and header segment.
   item_unit?: string;
   items: AiSpendBreakdownItemApi[];
   // Title of the main items card - defaults to "Cost breakdown" in the UI

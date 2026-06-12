@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 
 @Singleton
@@ -80,13 +81,18 @@ class AiSpendMapper {
                 .build();
     }
 
-    SpendBreakdownResponse breakdown(String laneKey, String title, String subtitle, List<BreakdownRow> rows) {
+    SpendBreakdownResponse breakdown(String laneKey, String title, String subtitle, String itemUnit,
+            List<BreakdownRow> rows) {
         List<SpendBreakdownResponse.Item> items = rows.stream()
                 .map(row -> SpendBreakdownResponse.Item.builder()
                         .label(row.label())
                         .totalTokens(row.totalTokens())
                         .definitionTokens(row.definitionTokens())
                         .usageTokens(row.usageTokens())
+                        .inputTokens(row.inputTokens())
+                        .cacheReadTokens(row.cacheReadTokens())
+                        .cacheCreationTokens(row.cacheCreationTokens())
+                        .outputTokens(row.outputTokens())
                         .count(row.events())
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));
@@ -100,6 +106,10 @@ class AiSpendMapper {
             items.add(SpendBreakdownResponse.Item.builder()
                     .label("Other (%d items)".formatted(hidden))
                     .totalTokens(grandTotal - shown)
+                    .inputTokens(first.totalInput() - sumOf(rows, BreakdownRow::inputTokens))
+                    .cacheReadTokens(first.totalCacheRead() - sumOf(rows, BreakdownRow::cacheReadTokens))
+                    .cacheCreationTokens(first.totalCacheCreation() - sumOf(rows, BreakdownRow::cacheCreationTokens))
+                    .outputTokens(first.totalOutput() - sumOf(rows, BreakdownRow::outputTokens))
                     .build());
         }
 
@@ -108,12 +118,13 @@ class AiSpendMapper {
                 .title(title)
                 .subtitle(subtitle)
                 .totalTokens(grandTotal)
-                .inputTokens(first == null ? 0L : first.inputTokens())
-                .cacheReadTokens(first == null ? 0L : first.cacheReadTokens())
-                .cacheCreationTokens(first == null ? 0L : first.cacheCreationTokens())
-                .outputTokens(first == null ? 0L : first.outputTokens())
+                .inputTokens(first == null ? 0L : first.totalInput())
+                .cacheReadTokens(first == null ? 0L : first.totalCacheRead())
+                .cacheCreationTokens(first == null ? 0L : first.totalCacheCreation())
+                .outputTokens(first == null ? 0L : first.totalOutput())
                 .model(first == null ? null : first.model())
                 .itemCount((int) (first == null ? 0L : first.totalEvents()))
+                .itemUnit(itemUnit)
                 .items(items)
                 .build();
     }
@@ -122,6 +133,10 @@ class AiSpendMapper {
         return rows.stream()
                 .filter(row -> row.lane() != null && !row.lane().isEmpty())
                 .collect(Collectors.toMap(OutputLaneRow::lane, OutputLaneRow::tokens));
+    }
+
+    private long sumOf(List<BreakdownRow> rows, ToLongFunction<BreakdownRow> field) {
+        return rows.stream().mapToLong(field).sum();
     }
 
     private WorkspaceMetricsSummaryResponse.Result result(String name, Double current, Double previous) {
@@ -159,8 +174,9 @@ class AiSpendMapper {
     }
 
     record BreakdownRow(String label, long totalTokens, long definitionTokens, long usageTokens, long events,
-            long grandTotal, long groupCount, long totalEvents, long inputTokens, long cacheReadTokens,
-            long cacheCreationTokens, long outputTokens, String model) {
+            long inputTokens, long cacheReadTokens, long cacheCreationTokens, long outputTokens,
+            long grandTotal, long groupCount, long totalEvents, long totalInput, long totalCacheRead,
+            long totalCacheCreation, long totalOutput, String model) {
     }
 
     record OutputLaneRow(String lane, long tokens) {

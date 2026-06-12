@@ -25,6 +25,10 @@ export interface LaneMeta {
   // Shown in the lane breakdown side panel. Numbers mean "input tokens
   // billed" (replay-weighted), so copy phrases cost accordingly.
   description?: string;
+  // The lane's items split into definition (always-on cost) vs usage tokens -
+  // drives the stacked bar in the breakdown panel. Lanes without the concept
+  // get a plain bar.
+  definitionSplit?: boolean;
 }
 
 const REGISTRY: Record<string, LaneMeta> = {
@@ -68,6 +72,7 @@ const REGISTRY: Record<string, LaneMeta> = {
   },
   // Merged successor of skills_available + skills_loaded (menu + bodies).
   skills: {
+    definitionSplit: true,
     icon: Sparkles,
     color: "#f59e0b",
     iconColor: "text-foreground",
@@ -76,6 +81,7 @@ const REGISTRY: Record<string, LaneMeta> = {
       "Tokens billed for skills: the always-on menu entry of every installed skill, plus the full body of any skill loaded on use.",
   },
   custom_agents: {
+    definitionSplit: true,
     icon: UserCog,
     color: "#06b6d4",
     iconColor: "text-white",
@@ -96,6 +102,7 @@ const REGISTRY: Record<string, LaneMeta> = {
     labelFallback: "Tools schema",
   },
   memory: {
+    definitionSplit: true,
     icon: NotebookText,
     color: "#64748b",
     iconColor: "text-white",
@@ -112,6 +119,7 @@ const REGISTRY: Record<string, LaneMeta> = {
       "Tokens billed for attached files and images, resent in every request after they're attached.",
   },
   mcp_servers: {
+    definitionSplit: true,
     icon: Plug,
     color: "#ef4444",
     iconColor: "text-white",
@@ -128,6 +136,7 @@ const REGISTRY: Record<string, LaneMeta> = {
       "Billed tokens not yet attributable to a lane: system reminders, request envelope and residual estimation drift. Shrinks as anchoring improves.",
   },
   static_overhead: {
+    definitionSplit: true,
     icon: Layers,
     color: "#19a979",
     iconColor: "text-white",
