@@ -4,5 +4,9 @@ export interface Lane {
     key?: string;
     label?: string;
     totalTokens?: number;
+    inputTokens?: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
+    outputTokens?: number;
     hasBreakdown?: boolean;
 }

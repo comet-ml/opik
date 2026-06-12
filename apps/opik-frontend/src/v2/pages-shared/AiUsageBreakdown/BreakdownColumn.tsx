@@ -1,5 +1,6 @@
 import React from "react";
 import TokenCount from "@/shared/TokenCount/TokenCount";
+import { formatCost } from "@/lib/money";
 import LaneCard from "./LaneCard";
 import { sideWeightTotal as computeSideWeightTotal } from "./utils";
 import { LaneSide, LaneView } from "./types";
@@ -8,6 +9,7 @@ interface BreakdownColumnProps {
   title: string;
   side: LaneSide;
   totalTokens: number;
+  totalCost?: number | null;
   lanes: LaneView[];
   onLaneClick?: (laneKey: string) => void;
   onLaneHover?: (laneKey: string | null) => void;
@@ -26,6 +28,7 @@ const BreakdownColumn: React.FC<BreakdownColumnProps> = ({
   title,
   side,
   totalTokens,
+  totalCost,
   lanes,
   onLaneClick,
   onLaneHover,
@@ -41,10 +44,17 @@ const BreakdownColumn: React.FC<BreakdownColumnProps> = ({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <span className="comet-body-s text-foreground">{title}</span>
-        <TokenCount
-          tokens={totalTokens}
-          className="comet-body-s text-light-slate"
-        />
+        <div className="flex items-center gap-2">
+          <TokenCount
+            tokens={totalTokens}
+            className="comet-body-s text-light-slate"
+          />
+          {totalCost != null && (
+            <span className="comet-body-s-accented text-foreground">
+              {formatCost(totalCost)}
+            </span>
+          )}
+        </div>
       </div>
       {lanes.length === 0 ? (
         <div className="comet-body-xs rounded-md border border-dashed p-3 text-center text-muted-slate">

@@ -8,7 +8,7 @@ public class SpendUserSortingFactory extends SortingFactory {
 
     @Override
     public List<String> getSortableFields() {
-        return List.of(SpendUserField.TOTAL_ESTIMATED_COST, SpendUserField.REQUESTS, SpendUserField.SKILLS,
+        return List.of(SpendUserField.TOTAL_TOKENS, SpendUserField.REQUESTS, SpendUserField.SKILLS,
                 SpendUserField.MCPS, SpendUserField.MCP_CALLS);
     }
 }

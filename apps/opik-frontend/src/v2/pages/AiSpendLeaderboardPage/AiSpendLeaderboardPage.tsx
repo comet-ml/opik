@@ -35,7 +35,7 @@ const AiSpendLeaderboardPage: React.FC = () => {
   const { projectName } = useAiSpend();
   const [windowDays, setWindowDays] = useState<SpendWindow>(30);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<LeaderboardSortKey>("total_estimated_cost");
+  const [sort, setSort] = useState<LeaderboardSortKey>("total_tokens");
   const [expandedUuid, setExpandedUuid] = useState<string | null>(null);
   const [detailsLaneKey, setDetailsLaneKey] = useState<string | null>(null);
 

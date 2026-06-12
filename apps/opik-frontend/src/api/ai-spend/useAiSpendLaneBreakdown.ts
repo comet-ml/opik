@@ -4,6 +4,23 @@ import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
 export interface AiSpendBreakdownItemApi {
   label: string;
   total_tokens: number;
+  count?: number;
+  // When present, the bar renders as stacked segments: always-on definition
+  // cost (muted) + on-demand usage cost (solid). Sum = total_tokens.
+  definition_tokens?: number;
+  usage_tokens?: number;
+  // Per-item tier sums; priced FE-side (claudePricing).
+  input_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  output_tokens?: number;
+}
+
+export interface AiSpendBreakdownSectionApi {
+  title: string;
+  items: AiSpendBreakdownItemApi[];
+  // Noun for this section's item counts (e.g. "calls").
+  item_unit?: string;
 }
 
 export interface AiSpendBreakdownResponse {
@@ -11,8 +28,28 @@ export interface AiSpendBreakdownResponse {
   title: string;
   subtitle?: string;
   total_tokens: number;
+  // Tier sums for the lane's window total; priced FE-side (claudePricing).
+  input_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  output_tokens?: number;
+  // Representative cc.billing model, for FE pricing.
+  model?: string;
   item_count: number;
+  // Singular noun for item_count / item.count ("prompt", "call", "load").
+  // Absent when counts are structurally 0 for the lane - the UI then hides
+  // the count column and header segment.
+  item_unit?: string;
   items: AiSpendBreakdownItemApi[];
+  // Title of the main items card - defaults to "Cost breakdown" in the UI
+  // (e.g. "Top MCP servers").
+  items_title?: string;
+  // Noun for the main items' per-row counts (e.g. "calls") when it differs
+  // from item_unit (the header noun, e.g. "servers").
+  items_unit?: string;
+  // Additional independent slices of the lane, rendered as separate cards
+  // below the main breakdown.
+  sections?: AiSpendBreakdownSectionApi[];
 }
 
 type UseAiSpendLaneBreakdownParams = {

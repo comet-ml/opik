@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
@@ -18,7 +17,12 @@ public record SpendUserRow(
         String userEmail,
         String userDisplayName,
         String model,
-        BigDecimal totalEstimatedCost,
+        // Raw cache-tier sums from cc.billing — priced in the FE.
+        Long inputTokens,
+        Long cacheReadTokens,
+        Long cacheCreationTokens,
+        Long outputTokens,
+        Long totalTokens,
         long requests,
         long skills,
         long mcps,

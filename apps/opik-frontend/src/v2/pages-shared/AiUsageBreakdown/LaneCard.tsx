@@ -2,6 +2,7 @@ import React from "react";
 import { Lightbulb, PieChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TokenCount from "@/shared/TokenCount/TokenCount";
+import { formatCost } from "@/lib/money";
 import { getLaneMeta } from "./laneRegistry";
 import { lanePct } from "./utils";
 import { LaneView } from "./types";
@@ -98,6 +99,11 @@ const LaneCard = React.forwardRef<HTMLDivElement, LaneCardProps>(
             tokens={lane.tokens}
             className="comet-body-xs text-muted-slate"
           />
+          {lane.cost != null && (
+            <span className="comet-body-xs-accented text-foreground">
+              {formatCost(lane.cost)}
+            </span>
+          )}
         </div>
       </div>
     );
