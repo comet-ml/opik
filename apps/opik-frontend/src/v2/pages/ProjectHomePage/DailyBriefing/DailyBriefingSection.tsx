@@ -1,15 +1,9 @@
 import { type ReactNode, useState } from "react";
 import { useParams } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  Lightbulb,
-  Loader2,
-  Play,
-  Pause,
-  Settings2,
-} from "lucide-react";
+import { AlertTriangle, Loader2, Play, Pause, Settings2 } from "lucide-react";
 import briefingBulbIcon from "@/icons/briefing-bulb.svg";
 import briefingBubbleIcon from "@/icons/briefing-bubble.svg";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   formatRelativeDateTime,
   formatUtcTimeAsLocal,
@@ -156,7 +150,7 @@ function ScheduledRow({
       <Button
         variant="ghost"
         size="2xs"
-        className="h-auto gap-1 p-0 text-muted-slate"
+        className="h-auto gap-1 p-0 text-foreground"
         onClick={onRunNow}
       >
         <Play className="size-3" />
@@ -213,13 +207,16 @@ function ReportRow({
   const actionCount = report.recommended_actions?.length ?? 0;
   return (
     <BriefingRow onClick={() => onSelect(report)}>
-      <span>{formatRelativeDateTime(report.created_at)}</span>
-      {actionCount > 0 && (
-        <span className="flex items-center gap-1 text-muted-slate">
-          <Lightbulb className="size-3" />
-          {actionCount} {actionCount === 1 ? "action" : "actions"}
+      <span className="flex items-center gap-2">
+        <span className="text-foreground">
+          {formatRelativeDateTime(report.created_at)}
         </span>
-      )}
+        {actionCount > 0 && (
+          <span className="text-muted-slate">
+            {actionCount} {actionCount === 1 ? "action" : "actions"}
+          </span>
+        )}
+      </span>
     </BriefingRow>
   );
 }
@@ -327,19 +324,21 @@ export default function DailyBriefingSection() {
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-1.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="comet-body-s-accented">Daily briefing</h2>
           {!isLoading &&
             (isPaused ? <PausedBadge /> : <StatusBadge enabled={isEnabled} />)}
         </div>
         {isEnabled && (
-          <button
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => setShowSettingsDialog(true)}
-          >
-            <Settings2 className="size-4" />
-          </button>
+          <TooltipWrapper content="Briefing settings">
+            <button
+              className="text-foreground hover:text-foreground"
+              onClick={() => setShowSettingsDialog(true)}
+            >
+              <Settings2 className="size-4" />
+            </button>
+          </TooltipWrapper>
         )}
       </div>
 
@@ -366,7 +365,7 @@ export default function DailyBriefingSection() {
       )}
 
       {(isEnabled || isPaused) && reports.length > 0 && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {isPaused && <PausedRow onReactivate={handleReactivate} />}
 
           {isEnabled && hasRunning && <RunningRow />}

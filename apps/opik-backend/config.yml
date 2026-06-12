@@ -1090,6 +1090,9 @@ serviceToggles:
   # Description: Whether or not the Ollie AI assistant integration is enabled.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
   # Default: false
+  # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
+  projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
+  # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
   agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}

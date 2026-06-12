@@ -5,7 +5,8 @@ import { formatLocalTimeAsUtc, parseUtcTimeToLocalDate } from "@/lib/date";
 import { Button } from "@/ui/button";
 import { Textarea } from "@/ui/textarea";
 import { Switch } from "@/ui/switch";
-import TimePicker from "@/shared/TimePicker/TimePicker";
+import { Separator } from "@/ui/separator";
+import TimeInput from "@/shared/TimeInput/TimeInput";
 import {
   Dialog,
   DialogContent,
@@ -48,8 +49,6 @@ export default function SettingsDialog({
     }
   }, [open, enabled, scheduleTime, customPrompt]);
 
-  const scheduleTimeLocal = timeDate ? dayjs(timeDate).format("h:mm A") : "";
-
   const handleSave = () => {
     const utcTime = timeDate
       ? formatLocalTimeAsUtc(dayjs(timeDate).format("HH:mm:ss"))
@@ -66,8 +65,8 @@ export default function SettingsDialog({
       <DialogContent className="max-w-lg sm:max-w-[580px]">
         <DialogHeader>
           <DialogTitle>Daily briefing settings</DialogTitle>
-          <DialogDescription asChild className="pt-6">
-            <div className="flex flex-col gap-6">
+          <DialogDescription asChild className="pt-4">
+            <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <Switch
                   checked={localEnabled}
@@ -98,35 +97,40 @@ export default function SettingsDialog({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <p className="font-medium text-foreground">Schedule time</p>
-                <p className="text-light-slate">
-                  Reports run daily at {scheduleTimeLocal} (your local time).
-                </p>
-                <TimePicker date={timeDate} setDate={setTimeDate} />
-              </div>
+              <Separator />
 
-              <div className="flex flex-col gap-2">
-                <p className="font-medium text-foreground">
-                  Custom instructions
-                </p>
-                <p className="text-light-slate">
-                  Add extra instructions to tailor the report to your needs.
-                </p>
-                <Textarea
-                  value={localCustomPrompt}
-                  onChange={(e) => setLocalCustomPrompt(e.target.value)}
-                  placeholder='e.g. "Focus on latency regressions and cost anomalies"'
-                  rows={4}
-                  maxLength={5000}
-                  className="min-h-0"
-                />
-              </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <p className="font-medium text-foreground">Scheduled for</p>
+                  <TimeInput
+                    date={timeDate}
+                    setDate={setTimeDate}
+                    disabled={!localEnabled}
+                  />
+                </div>
 
-              <p className="text-foreground">
-                <span className="font-medium">Billing:</span> Runs on your Ollie
-                tokens. {BillingLink && <BillingLink />}
-              </p>
+                <div className="flex flex-col gap-1">
+                  <p className="font-medium text-foreground">
+                    Custom instructions
+                  </p>
+                  <Textarea
+                    value={localCustomPrompt}
+                    onChange={(e) => setLocalCustomPrompt(e.target.value)}
+                    placeholder="Add custom instructions to tailor the report"
+                    rows={4}
+                    maxLength={5000}
+                    className="min-h-0"
+                    disabled={!localEnabled}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1 py-2">
+                  <p className="font-medium text-foreground">Billing</p>
+                  <p className="text-foreground">
+                    Runs on your Ollie tokens. {BillingLink && <BillingLink />}
+                  </p>
+                </div>
+              </div>
             </div>
           </DialogDescription>
         </DialogHeader>
