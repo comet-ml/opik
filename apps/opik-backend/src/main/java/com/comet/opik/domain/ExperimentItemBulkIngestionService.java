@@ -46,6 +46,17 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 public interface ExperimentItemBulkIngestionService {
 
     /**
+     * Which deprecated implicit fallback (if any) was used to resolve the project for traces that don't carry
+     * their own project. Returned so the caller can surface the {@code X-Opik-Deprecation} header on the
+     * request thread (the service must not mutate the request-scoped context from the reactive chain).
+     */
+    enum ProjectFallback {
+        NONE,
+        DATASET,
+        DEFAULT
+    }
+
+    /**
      * Ingests a batch of experiment items.
      *
      * @param experiment the experiment to add items to
@@ -53,9 +64,9 @@ public interface ExperimentItemBulkIngestionService {
      *                    project is derived from the existing experiment or dataset; if neither resolves, the
      *                    default project is used.
      * @param items the list of experiment items to ingest
-     * @return {@code true} when traces fell back to the default project (deprecated), {@code false} otherwise
+     * @return the deprecated fallback used (if any) to resolve the bulk project
      */
-    Mono<Boolean> ingest(Experiment experiment, String projectName, List<ExperimentItemBulkRecord> items);
+    Mono<ProjectFallback> ingest(Experiment experiment, String projectName, List<ExperimentItemBulkRecord> items);
 }
 
 @Singleton
@@ -72,7 +83,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     private final @NonNull DatasetService datasetService;
     private final @NonNull IdGenerator idGenerator;
 
-    private record ResolvedProject(String name, boolean fallback) {
+    private record ResolvedProject(String name, ProjectFallback fallback) {
     }
 
     /**
@@ -80,10 +91,11 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
      *
      * @param experiment the experiment to add items to
      * @param items the list of experiment items to ingest
-     * @return a list of feedback score batch items
+     * @return the deprecated fallback used (if any) to resolve the bulk project
      */
     @Override
-    public Mono<Boolean> ingest(Experiment experiment, String projectName, List<ExperimentItemBulkRecord> items) {
+    public Mono<ProjectFallback> ingest(Experiment experiment, String projectName,
+            List<ExperimentItemBulkRecord> items) {
 
         return Mono.deferContextual(ctx -> {
 
@@ -98,15 +110,20 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                                 // from evaluate_task_result, or explicit traces with a blank project_name).
                                 String bulkProjectName = resolvedProject.name();
 
-                                // Flag the deprecated default-project fallback only when it actually applies to
-                                // at least one item without its own project.
-                                boolean usedDefaultProjectFallback = resolvedProject.fallback()
-                                        && items.stream().anyMatch(item -> item.trace() == null
-                                                || StringUtils.isBlank(item.trace().projectName()));
+                                // A deprecated fallback is only reported when it actually applies to at least
+                                // one item without its own project. Returned to the caller (request thread) to
+                                // emit the X-Opik-Deprecation header — the request-scoped context must not be
+                                // mutated from this reactive chain.
+                                boolean usesBulkProject = items.stream().anyMatch(item -> item.trace() == null
+                                        || StringUtils.isBlank(item.trace().projectName()));
+                                ProjectFallback fallback = usesBulkProject
+                                        ? resolvedProject.fallback()
+                                        : ProjectFallback.NONE;
 
                                 // When the project was explicitly provided or derived, create the experiment
-                                // (and its dataset) in it too so everything stays in one project.
-                                Experiment experimentToCreate = resolvedProject.fallback()
+                                // (and its dataset) in it too so everything stays in one project; on the default
+                                // fallback leave the experiment as-is.
+                                Experiment experimentToCreate = resolvedProject.fallback() == ProjectFallback.DEFAULT
                                         ? experiment
                                         : experiment.toBuilder().projectName(bulkProjectName).build();
 
@@ -158,7 +175,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                                                                         "Recorded experiment items in bulk, experiment items count '{}', traces count '{}', spans count '{}' and feedback scores count '{}'",
                                                                         experimentItems.size(), traces.size(),
                                                                         spans.size(), feedbackScores.size()))
-                                                                .thenReturn(usedDefaultProjectFallback);
+                                                                .thenReturn(fallback);
                                                     });
                                         });
                             }));
@@ -189,16 +206,16 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
             Optional<Experiment> existingExperiment) {
 
         if (StringUtils.isNotBlank(projectName)) {
-            return Mono.just(new ResolvedProject(projectName, false));
+            return Mono.just(new ResolvedProject(projectName, ProjectFallback.NONE));
         }
 
         if (existingExperiment.isPresent() && StringUtils.isNotBlank(existingExperiment.get().projectName())) {
-            return Mono.just(new ResolvedProject(existingExperiment.get().projectName(), false));
+            return Mono.just(new ResolvedProject(existingExperiment.get().projectName(), ProjectFallback.NONE));
         }
 
         return resolveDatasetProjectName(experiment.datasetName())
-                .map(datasetProjectName -> new ResolvedProject(datasetProjectName, false))
-                .defaultIfEmpty(new ResolvedProject(ProjectService.DEFAULT_PROJECT, true));
+                .map(datasetProjectName -> new ResolvedProject(datasetProjectName, ProjectFallback.DATASET))
+                .defaultIfEmpty(new ResolvedProject(ProjectService.DEFAULT_PROJECT, ProjectFallback.DEFAULT));
     }
 
     private Mono<String> resolveDatasetProjectName(String datasetName) {

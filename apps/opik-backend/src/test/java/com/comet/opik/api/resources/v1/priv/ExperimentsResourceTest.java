@@ -7079,9 +7079,9 @@ class ExperimentsResourceTest {
             // when
             try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
                     TEST_WORKSPACE)) {
-                // then — derived from the dataset, no fallback
+                // then — derived from the dataset (workspace-wide), which is a deprecated implicit fallback
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNotNull();
             }
 
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,

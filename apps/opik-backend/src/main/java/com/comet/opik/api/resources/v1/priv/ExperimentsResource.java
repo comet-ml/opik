@@ -539,32 +539,33 @@ public class ExperimentsResource {
                 .build();
 
         // The service resolves the project (explicit project_name, else derived from the existing experiment
-        // or dataset, else the default project) and returns whether the deprecated default-project fallback
-        // was used for any item.
-        boolean usedDefaultProjectFallback = Boolean.TRUE.equals(experimentItemBulkIngestionService
+        // or dataset, else the default project) and reports which deprecated fallback (if any) it used.
+        ExperimentItemBulkIngestionService.ProjectFallback fallback = experimentItemBulkIngestionService
                 .ingest(experiment, request.projectName(), items)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
-                .block());
+                .block();
 
         log.info("Recorded experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
                 request.experimentId());
 
         Response.ResponseBuilder responseBuilder = Response.noContent();
 
-        // Two deprecation fallbacks can surface on this endpoint, both via the X-Opik-Deprecation header:
-        // 1) the project fallback — traces without a project were placed in the default project;
-        if (usedDefaultProjectFallback) {
-            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
+        // Surface the deprecated implicit-fallback as the X-Opik-Deprecation header (on the request thread, so
+        // the request-scoped fallback message can be set/read safely — same mechanism as other resources).
+        switch (fallback) {
+            case DATASET -> {
+                requestContext.get().setWorkspaceFallbackFor("Dataset", request.datasetName());
+                responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
+                        requestContext.get().getWorkspaceFallbackMessage());
+            }
+            case DEFAULT -> responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
                     ("project_name could not be resolved; traces without a project were placed in the default "
                             + "project '%s'. This fallback is deprecated, please provide project_name.")
                             .formatted(ProjectService.DEFAULT_PROJECT));
-        }
-        // 2) the workspace fallback — an entity (e.g. the dataset) was resolved via workspace-wide search,
-        //    set on the request context during resolution (same mechanism used by other resources).
-        String workspaceFallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
-        if (workspaceFallbackMessage != null) {
-            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, workspaceFallbackMessage);
+            case NONE -> {
+                // no deprecation
+            }
         }
 
         return responseBuilder.build();
