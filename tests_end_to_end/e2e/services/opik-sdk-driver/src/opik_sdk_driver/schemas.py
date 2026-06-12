@@ -202,3 +202,28 @@ class TestSuiteRunResponse(BaseModel):
     items_passed: int
     items_failed: int
     items_total: int
+
+
+class TextPromptCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    prompt: str
+    description: str | None = None
+    project_name: str | None = None
+    workspace: str | None = None
+
+
+class ChatPromptCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    messages: list[dict[str, str]]
+    description: str | None = None
+    project_name: str | None = None
+    workspace: str | None = None
+
+
+class PromptResponse(BaseModel):
+    id: str
+    name: str
