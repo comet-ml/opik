@@ -1,10 +1,32 @@
 import {
   EVALUATION_METHOD,
   Experiment,
+  ExperimentPromptVersion,
   EXPERIMENT_STATUS,
   TestSuiteExperiment,
 } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
+
+/**
+ * Human-readable label for a prompt version linked to an experiment: the
+ * prompt name plus its version (e.g. "My Prompt (v3)"). Prefers the sequential
+ * version number, falls back to the commit hash when it's unavailable, and
+ * omits the parenthetical entirely when neither is present (OPIK-6838).
+ *
+ * Single source of truth so the experiments table, the single-experiment
+ * Configuration tab, and the dashboard leaderboard widget stay consistent.
+ */
+export const formatPromptVersionLabel = (
+  promptVersion: Pick<
+    ExperimentPromptVersion,
+    "prompt_name" | "version_number" | "commit"
+  >,
+): string => {
+  const version = promptVersion.version_number ?? promptVersion.commit;
+  return version
+    ? `${promptVersion.prompt_name} (${version})`
+    : promptVersion.prompt_name;
+};
 
 export const isExperimentTerminal = (
   status: EXPERIMENT_STATUS | undefined | null,
