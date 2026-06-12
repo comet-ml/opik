@@ -3,6 +3,6 @@
 import type * as OpikApi from "../index.js";
 
 export interface SpendRecommendationsResponse {
-    totalSavings?: number;
+    totalSavingsTokens?: number;
     items?: OpikApi.Item[];
 }

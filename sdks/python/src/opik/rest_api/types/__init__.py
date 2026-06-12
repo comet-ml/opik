@@ -474,6 +474,7 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
+from .o_auth_error import OAuthError
 from .ollama_connection_test_response import OllamaConnectionTestResponse
 from .ollama_instance_base_url_request import OllamaInstanceBaseUrlRequest
 from .ollama_model import OllamaModel
@@ -621,6 +622,7 @@ from .studio_optimizer_write import StudioOptimizerWrite
 from .studio_prompt import StudioPrompt
 from .studio_prompt_public import StudioPromptPublic
 from .studio_prompt_write import StudioPromptWrite
+from .token_response import TokenResponse
 from .token_usage_names import TokenUsageNames
 from .tool import Tool
 from .tool_call import ToolCall
@@ -1130,6 +1132,7 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
+    "OAuthError",
     "OllamaConnectionTestResponse",
     "OllamaInstanceBaseUrlRequest",
     "OllamaModel",
@@ -1275,6 +1278,7 @@ __all__ = [
     "StudioPrompt",
     "StudioPromptPublic",
     "StudioPromptWrite",
+    "TokenResponse",
     "TokenUsageNames",
     "Tool",
     "ToolCall",

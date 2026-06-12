@@ -8,6 +8,10 @@ export const Lane: core.serialization.ObjectSchema<serializers.Lane.Raw, OpikApi
     key: core.serialization.string().optional(),
     label: core.serialization.string().optional(),
     totalTokens: core.serialization.property("total_tokens", core.serialization.number().optional()),
+    inputTokens: core.serialization.property("input_tokens", core.serialization.number().optional()),
+    cacheReadTokens: core.serialization.property("cache_read_tokens", core.serialization.number().optional()),
+    cacheCreationTokens: core.serialization.property("cache_creation_tokens", core.serialization.number().optional()),
+    outputTokens: core.serialization.property("output_tokens", core.serialization.number().optional()),
     hasBreakdown: core.serialization.property("has_breakdown", core.serialization.boolean().optional()),
 });
 
@@ -16,6 +20,10 @@ export declare namespace Lane {
         key?: string | null;
         label?: string | null;
         total_tokens?: number | null;
+        input_tokens?: number | null;
+        cache_read_tokens?: number | null;
+        cache_creation_tokens?: number | null;
+        output_tokens?: number | null;
         has_breakdown?: boolean | null;
     }
 }
