@@ -1444,7 +1444,7 @@ def test_langgraph__internal_span_classifier__only_meaningful_spans_stay_visible
 
     def is_internal(span):
         opik_meta = (span.metadata or {}).get("_opik")
-        return isinstance(opik_meta, dict) and opik_meta.get("category") == "internal"
+        return isinstance(opik_meta, dict) and opik_meta.get("is_internal") is True
 
     def collect(spans, visible, hidden):
         for span_ in spans:

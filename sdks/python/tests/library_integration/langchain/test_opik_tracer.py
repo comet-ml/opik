@@ -482,12 +482,12 @@ def test_is_internal_langgraph_run__real_langgraph_runs(
     assert run_parse_helpers.is_internal_langgraph_run(run_dict) is expected_internal
 
 
-def test_get_run_metadata__real_internal_run__tagged_with_opik_category(
+def test_get_run_metadata__real_internal_run__tagged_with_opik_is_internal(
     langgraph_run_dicts,
 ):
     metadata = run_parse_helpers.get_run_metadata(langgraph_run_dicts["route"])
 
-    assert metadata["_opik"] == {"category": "internal"}
+    assert metadata["_opik"] == {"is_internal": True}
 
 
 @pytest.mark.parametrize("span_name", ["classify", "get_weather"])
@@ -509,7 +509,7 @@ def test_get_run_metadata__existing_opik_dict__extended_not_replaced(
 
     assert metadata["_opik"] == {
         "existing": "kept",
-        "category": "internal",
+        "is_internal": True,
     }
 
 
@@ -523,7 +523,7 @@ def test_get_run_metadata__non_dict_opik_value__coerced_then_tagged(
 
     metadata = run_parse_helpers.get_run_metadata(run_dict)
 
-    assert metadata["_opik"] == {"category": "internal"}
+    assert metadata["_opik"] == {"is_internal": True}
 
 
 @pytest.mark.parametrize(

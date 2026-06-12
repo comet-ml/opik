@@ -3,7 +3,7 @@ import { Span, SPAN_TYPE } from "@/types/traces";
 import { hasHiddenSpans, excludeHiddenSpans } from "./hiddenSpans";
 import { isSpanHiddenByDefault } from "./spanVisibility";
 
-// Matches the SDK-written metadata for a hidden-by-default span (category "internal").
+// Matches the SDK-written metadata for a hidden-by-default span (is_internal flag).
 const METADATA_OPIK_KEY = "_opik";
 
 const makeSpan = (overrides: Partial<Span> & { id: string }): Span => ({
@@ -25,12 +25,12 @@ const makeSpan = (overrides: Partial<Span> & { id: string }): Span => ({
   ...overrides,
 });
 
-// The SDK currently marks hidden-by-default spans with category "internal".
-const hiddenMeta = { [METADATA_OPIK_KEY]: { category: "internal" } };
+// The SDK marks hidden-by-default spans with the is_internal flag.
+const hiddenMeta = { [METADATA_OPIK_KEY]: { is_internal: true } };
 
 describe("hiddenSpans", () => {
   describe("isSpanHiddenByDefault / hasHiddenSpans", () => {
-    it("should flag a span when its SDK category is hidden by default", () => {
+    it("should flag a span when the SDK marks it internal", () => {
       expect(
         isSpanHiddenByDefault(makeSpan({ id: "a", metadata: hiddenMeta })),
       ).toBe(true);
