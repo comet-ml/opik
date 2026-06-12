@@ -1,7 +1,40 @@
 import os
+import threading
 
 import pytest
 import logging
+
+from opik.api_objects import opik_client
+from opik.message_processing.replay import replay_manager
+
+
+@pytest.fixture(autouse=True)
+def shutdown_opik_background_threads():
+    """Stop Opik background threads after every unit test.
+
+    Constructing a real Opik client starts daemon threads — the streamer's queue
+    consumers and batch preprocessor, plus a ReplayManager that periodically probes the
+    server through a ConnectionMonitor. Unit tests rarely tear their clients down, so
+    across the suite these threads accumulate into hundreds of live threads, the
+    ReplayManager probe loops in particular generating ongoing scheduling/IO pressure.
+    That contention can push an unrelated test past pytest's per-test --timeout, and with
+    --timeout-method=thread the whole run is hard-killed (no report, exit 1).
+
+    Ending the cached global client closes its streamer (idempotent, fire-and-forget — no
+    network wait); we then close any ReplayManager left behind by directly-constructed
+    clients. close() only signals a stop event, so this never blocks on the network.
+    """
+    yield
+
+    client = opik_client.get_current_client_raw()
+    if client is not None:
+        client.end(flush=False)
+    opik_client.reset_global_client(end_client=False)
+
+    for thread in threading.enumerate():
+        if isinstance(thread, replay_manager.ReplayManager) and thread.is_alive():
+            thread.close()
+            thread.join(timeout=5)
 
 
 @pytest.fixture
