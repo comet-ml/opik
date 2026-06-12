@@ -80,7 +80,11 @@ class AiSpendQueryBuilder {
     private static final String COST_SUMMARY = """
             SELECT
                 SUMIf(total_estimated_cost, %1$s) AS spend_current,
-                SUMIf(total_estimated_cost, %2$s) AS spend_previous
+                SUMIf(total_estimated_cost, %2$s) AS spend_previous,
+                SUMIf(JSONExtractInt(metadata, 'cc', 'llm_call', 'attributed_output_tokens'), %1$s)
+                    AS output_tokens_current,
+                SUMIf(JSONExtractInt(metadata, 'cc', 'llm_call', 'attributed_output_tokens'), %2$s)
+                    AS output_tokens_previous
             FROM spans final
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -94,9 +98,19 @@ class AiSpendQueryBuilder {
                 countIf(%3$s) AS messages_previous,
                 uniqExactIf(user_uuid, %2$s AND user_uuid != '') AS active_users_current,
                 uniqExactIf(user_uuid, %3$s AND user_uuid != '') AS active_users_previous,
-                uniqExactIf(user_uuid, user_uuid != '') AS total_users
+                uniqExactIf(user_uuid, user_uuid != '') AS total_users,
+                SUMIf(input_tokens, %2$s) AS input_tokens_current,
+                SUMIf(input_tokens, %3$s) AS input_tokens_previous
             FROM (
-                SELECT %1$s AS user_uuid, id, start_time
+                SELECT %1$s AS user_uuid, id, start_time,
+                    JSONExtractInt(metadata, 'cc', 'prior_assistant', 'summary', 'total_tokens')
+                        + JSONExtractInt(metadata, 'cc', 'tool_results', 'summary', 'total_tokens')
+                        + JSONExtractInt(metadata, 'cc', 'user_prompts', 'summary', 'total_tokens')
+                        + JSONExtractInt(metadata, 'cc', 'skills', 'summary', 'menu_tokens')
+                        + JSONExtractInt(metadata, 'cc', 'skills', 'summary', 'loaded_tokens')
+                        + JSONExtractInt(metadata, 'cc', 'tools', 'summary', 'schema_tokens')
+                        + JSONExtractInt(metadata, 'cc', 'memory', 'summary', 'total_tokens')
+                        + JSONExtractInt(metadata, 'cc', 'file_attachments', 'summary', 'total_tokens') AS input_tokens
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                     AND project_id = :project_id

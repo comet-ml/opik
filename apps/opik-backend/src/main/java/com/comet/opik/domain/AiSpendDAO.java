@@ -75,7 +75,9 @@ class AiSpendDAOImpl implements AiSpendDAO {
                 statement -> bindSummaryRange(statement, request),
                 (row, metadata) -> new AiSpendMapper.CostRow(
                         row.get("spend_current", BigDecimal.class),
-                        row.get("spend_previous", BigDecimal.class)),
+                        row.get("spend_previous", BigDecimal.class),
+                        row.get("output_tokens_current", Long.class),
+                        row.get("output_tokens_previous", Long.class)),
                 AiSpendMapper.CostRow.empty());
 
         Mono<AiSpendMapper.CountsRow> counts = querySingle(queryBuilder.summaryCountsSql(), "ai_spend_summary_counts",
@@ -86,7 +88,9 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         row.get("messages_previous", Long.class),
                         row.get("active_users_current", Long.class),
                         row.get("active_users_previous", Long.class),
-                        row.get("total_users", Long.class)),
+                        row.get("total_users", Long.class),
+                        row.get("input_tokens_current", Long.class),
+                        row.get("input_tokens_previous", Long.class)),
                 AiSpendMapper.CountsRow.empty());
 
         return Mono.zip(cost, counts).map(tuple -> mapper.summaryResults(tuple.getT1(), tuple.getT2()));

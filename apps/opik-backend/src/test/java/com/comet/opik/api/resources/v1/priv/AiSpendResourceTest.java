@@ -161,6 +161,8 @@ class AiSpendResourceTest {
 
         assertThat(byName.get("total_spend").current()).isCloseTo(8.0, within(0.0001));
         assertThat(byName.get("total_spend").previous()).isCloseTo(4.0, within(0.0001));
+        assertThat(byName.get("total_tokens").current()).isEqualTo(7890.0);
+        assertThat(byName.get("total_tokens").previous()).isEqualTo(2630.0);
         assertThat(byName.get("total_messages").current()).isEqualTo(3.0);
         assertThat(byName.get("total_messages").previous()).isEqualTo(1.0);
         assertThat(byName.get("active_users").current()).isEqualTo(2.0);
@@ -361,6 +363,7 @@ class AiSpendResourceTest {
                 .collect(Collectors.toMap(WorkspaceMetricsSummaryResponse.Result::name, Function.identity()));
 
         assertThat(byName.get("total_spend").current()).isEqualTo(0.0);
+        assertThat(byName.get("total_tokens").current()).isEqualTo(0.0);
         assertThat(byName.get("total_messages").current()).isEqualTo(0.0);
         assertThat(byName.get("active_users").current()).isEqualTo(0.0);
         assertThat(byName.get("total_users").current()).isEqualTo(0.0);

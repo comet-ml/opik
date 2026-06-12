@@ -25,6 +25,8 @@ class AiSpendMapper {
     List<WorkspaceMetricsSummaryResponse.Result> summaryResults(CostRow cost, CountsRow counts) {
         return List.of(
                 result("total_spend", toDouble(cost.current()), toDouble(cost.previous())),
+                result("total_tokens", sumTokens(counts.inputTokensCurrent(), cost.outputTokensCurrent()),
+                        sumTokens(counts.inputTokensPrevious(), cost.outputTokensPrevious())),
                 result("total_messages", toDouble(counts.messagesCurrent()), toDouble(counts.messagesPrevious())),
                 result("avg_cost_per_user", average(cost.current(), counts.activeUsersCurrent()),
                         average(cost.previous(), counts.activeUsersPrevious())),
@@ -124,16 +126,23 @@ class AiSpendMapper {
         return value == null ? null : value.doubleValue();
     }
 
-    record CostRow(BigDecimal current, BigDecimal previous) {
+    private Double sumTokens(Long input, Long output) {
+        if (input == null && output == null) {
+            return null;
+        }
+        return (double) ((input == null ? 0L : input) + (output == null ? 0L : output));
+    }
+
+    record CostRow(BigDecimal current, BigDecimal previous, Long outputTokensCurrent, Long outputTokensPrevious) {
         static CostRow empty() {
-            return new CostRow(null, null);
+            return new CostRow(null, null, 0L, 0L);
         }
     }
 
     record CountsRow(Long messagesCurrent, Long messagesPrevious, Long activeUsersCurrent, Long activeUsersPrevious,
-            Long totalUsers) {
+            Long totalUsers, Long inputTokensCurrent, Long inputTokensPrevious) {
         static CountsRow empty() {
-            return new CountsRow(0L, 0L, 0L, 0L, 0L);
+            return new CountsRow(0L, 0L, 0L, 0L, 0L, 0L, 0L);
         }
     }
 

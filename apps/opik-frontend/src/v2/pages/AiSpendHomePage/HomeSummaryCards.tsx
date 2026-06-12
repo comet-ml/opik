@@ -4,7 +4,7 @@ import {
   ArrowRightToLine,
   CircleDollarSign,
   MessagesSquare,
-  PiggyBank,
+  Sigma,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -60,6 +60,7 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
 
   const get = (name: string): SpendMetric => metrics[name] ?? EMPTY_METRIC;
   const totalSpend = get("total_spend");
+  const totalTokens = get("total_tokens");
   const avgCost = get("avg_cost_per_user");
   const totalMessages = get("total_messages");
   const activeUsers = get("active_users");
@@ -99,9 +100,10 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
         loading={isPending}
       />
       <KpiCard
-        icon={PiggyBank}
-        label="Budget remaining"
-        value={NO_DATA}
+        icon={Sigma}
+        label="Total tokens"
+        value={showData ? formatSpendCount(totalTokens.current) : NO_DATA}
+        trend={renderTrend(totalTokens)}
         loading={isPending}
       />
       <KpiCard
