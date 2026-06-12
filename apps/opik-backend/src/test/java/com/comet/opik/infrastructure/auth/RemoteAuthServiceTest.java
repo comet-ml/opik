@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
@@ -43,9 +44,11 @@ import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_PARAM;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -236,6 +239,30 @@ class RemoteAuthServiceTest {
                         .build()))
                 .isExactlyInstanceOf(ClientErrorException.class)
                 .hasMessage(MISSING_API_KEY);
+    }
+
+    @Test
+    void testAuthNoApiKeyForSpanByIdAllowsPublicVisibility() {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var workspaceId = "workspace-id-" + UUID.randomUUID();
+        var spanId = UUID.randomUUID();
+
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces/workspace-id"))
+                .withQueryParam("name", equalTo(workspaceName))
+                .willReturn(ok(workspaceId)));
+
+        remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/v1/private/spans/%s".formatted(spanId)))
+                        .method("GET")
+                        .requiredPermissions(null)
+                        .build());
+
+        assertThat(requestContext.getWorkspaceId()).isEqualTo(workspaceId);
+        assertThat(requestContext.getWorkspaceName()).isEqualTo(workspaceName);
+        assertThat(requestContext.getVisibility()).isEqualTo(Visibility.PUBLIC);
+        assertThat(requestContext.getUserName()).isEqualTo("Public");
     }
 
     @ParameterizedTest

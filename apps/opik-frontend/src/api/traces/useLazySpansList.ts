@@ -5,6 +5,7 @@ import useSpansList, {
 } from "@/api/traces/useSpansList";
 
 type UseLazySpansListConfig = {
+  loadFullData?: boolean;
   maxFullDataSpans?: number;
 };
 
@@ -21,7 +22,8 @@ export default function useLazySpansList(
   const canLoadFullData =
     !lightQuery.isPlaceholderData &&
     lightQuery.data?.total !== undefined &&
-    (config.maxFullDataSpans === undefined ||
+    (config.loadFullData ||
+      config.maxFullDataSpans === undefined ||
       lightQuery.data.total <= config.maxFullDataSpans);
 
   const fullQuery = useSpansList(params, {
@@ -30,7 +32,9 @@ export default function useLazySpansList(
   });
 
   const query =
-    fullQuery.data && !fullQuery.isPlaceholderData ? fullQuery : lightQuery;
+    canLoadFullData && fullQuery.data && !fullQuery.isPlaceholderData
+      ? fullQuery
+      : lightQuery;
 
   return {
     query,

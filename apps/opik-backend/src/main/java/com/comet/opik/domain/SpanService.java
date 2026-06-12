@@ -9,6 +9,7 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
@@ -28,6 +29,7 @@ import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -109,10 +111,16 @@ public class SpanService {
         return Mono.deferContextual(ctx -> spanDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
                 .flatMap(span -> {
-                    Project project = projectService.get(span.projectId(), ctx.get(RequestContext.WORKSPACE_ID));
-                    return Mono.just(span.toBuilder()
-                            .projectName(project.name())
-                            .build());
+                    return projectService.getOrFail(span.projectId())
+                            .map(project -> span.toBuilder()
+                                    .projectName(project.name())
+                                    .build())
+                            .onErrorResume(NotFoundException.class, exception -> {
+                                if (ctx.get(RequestContext.VISIBILITY) == Visibility.PUBLIC) {
+                                    return Mono.error(exception);
+                                }
+                                return Mono.just(span);
+                            });
                 }))
                 .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, !stripAttachments));
     }

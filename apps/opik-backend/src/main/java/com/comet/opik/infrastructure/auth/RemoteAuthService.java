@@ -52,6 +52,8 @@ class RemoteAuthService implements AuthService {
                     Set.of("POST"));
             put("^/v1/private/projects/retrieve/?$", Set.of("POST"));
             put("^/v1/private/spans/?$", Set.of("GET"));
+            put("^/v1/private/spans/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+                    Set.of("GET"));
             put("^/v1/private/spans/stats/?$", Set.of("GET"));
             put("^/v1/private/spans/feedback-scores/names/?$", Set.of("GET"));
             put("^/v1/private/spans/search/?$", Set.of("POST"));

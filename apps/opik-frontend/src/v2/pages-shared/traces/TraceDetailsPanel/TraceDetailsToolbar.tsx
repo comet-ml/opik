@@ -8,7 +8,6 @@ import isArray from "lodash/isArray";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAILS_ID,
-  COLUMN_CUSTOM_ID,
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
   OnChangeFn,
@@ -114,33 +113,6 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
                         path.substring(path.indexOf(".") + 1),
                       )
                     : [],
-                );
-              }, []),
-            )
-              .sort()
-              .map((key) => ({ value: key, label: key })),
-            placeholder: "key",
-          },
-        },
-        [COLUMN_CUSTOM_ID]: {
-          keyComponent: (
-            props: {
-              onValueChange: SelectBoxProps<string>["onChange"];
-            } & SelectBoxProps<string>,
-          ) => <SelectBox {...props} onChange={props.onValueChange} />,
-          keyComponentProps: {
-            options: uniq(
-              treeData.reduce<string[]>((acc, d) => {
-                return acc.concat(
-                  (["input", "output"] as const).reduce<string[]>(
-                    (internalAcc, key) =>
-                      internalAcc.concat(
-                        isObject(d[key]) || isArray(d[key])
-                          ? getJSONPaths(d[key], key).map((path) => path)
-                          : [],
-                      ),
-                    [],
-                  ),
                 );
               }, []),
             )

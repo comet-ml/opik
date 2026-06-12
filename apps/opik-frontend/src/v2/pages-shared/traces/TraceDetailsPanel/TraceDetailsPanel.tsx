@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { BooleanParam, JsonParam, useQueryParam } from "use-query-params";
-import find from "lodash/find";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
 import useLocalStorageState from "use-local-storage-state";
@@ -24,10 +23,11 @@ import AnnotatePanel from "./AnnotatePanel/AnnotatePanel";
 import AgentGraphHeader from "./AgentGraphHeader";
 import AgentGraphTab from "./TraceDataViewer/AgentGraphTab";
 import NoData from "@/shared/NoData/NoData";
-import { BASE_TRACE_DATA_TYPE, Span } from "@/types/traces";
+import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import useLazySpansList from "@/api/traces/useLazySpansList";
-import useSpanById from "@/api/traces/useSpanById";
+import useSelectedSpanData from "@/api/traces/useSelectedSpanData";
+import shouldLoadFullSpansData from "@/api/traces/shouldLoadFullSpansData";
 import {
   DetailsActionSection,
   useDetailsActionSectionState,
@@ -44,13 +44,13 @@ import {
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/treeConfig";
 import get from "lodash/get";
 import {
+  MAX_SPANS_FULL_DATA_LOAD_SIZE,
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
-const MAX_SPANS_FULL_DATA_LOAD_SIZE = 500;
 const EMPTY_FILTERS: unknown[] = [];
 
 const TREE_ROW_INDENTS = [
@@ -171,6 +171,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const projectId = externalProjectId || trace?.project_id || "";
+  const loadFullSpansData = shouldLoadFullSpansData(search, filters);
 
   const {
     query: { data: spansData, isPending: isSpansPending },
@@ -190,25 +191,22 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     },
     {
       maxFullDataSpans: MAX_SPANS_FULL_DATA_LOAD_SIZE,
+      loadFullData: loadFullSpansData,
     },
   );
 
-  const selectedSpanFromList = useMemo(
-    () => find(spansData?.content || [], (span: Span) => span.id === spanId),
-    [spanId, spansData?.content],
+  const { dataToView, isSelectedSpanPending } = useSelectedSpanData(
+    {
+      spanId,
+      traceId,
+      spans: spansData?.content,
+      trace,
+      stripAttachments: true,
+    },
+    {
+      refetchInterval,
+    },
   );
-  const { data: selectedSpanData, isPending: isSelectedSpanPending } =
-    useSpanById(
-      {
-        spanId,
-        stripAttachments: true,
-      },
-      {
-        placeholderData: selectedSpanFromList,
-        enabled: Boolean(spanId),
-        refetchInterval,
-      },
-    );
 
   const agentGraphData = get(
     trace,
@@ -219,10 +217,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     (id: string) => setSpanId(id === traceId ? "" : id),
     [setSpanId, traceId],
   );
-
-  const dataToView = useMemo(() => {
-    return spanId ? selectedSpanData ?? selectedSpanFromList : trace;
-  }, [spanId, selectedSpanData, selectedSpanFromList, trace]);
 
   const treeData = useMemo(() => {
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
