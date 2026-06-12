@@ -948,12 +948,12 @@ ollieStateConfig:
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
 reportGeneration:
-  # Default: http://localhost:9080/reports/generate
+  # Default: "" (blank disables report generation)
   # Description: URL for triggering Ollie report generation. Blank disables report generation.
-  # Locally: points to Ollie directly (e.g. http://localhost:9080/reports/generate).
+  # Locally: set REPORT_GENERATION_URL=http://localhost:9080/reports/generate
   # Deployed: points to the Comet API (e.g. http://comet-api/opik/ollie/generate-report)
   #   which resolves workspace credentials and proxies to Ollie.
-  url: ${REPORT_GENERATION_URL:-http://localhost:9080/reports/generate}
+  url: ${REPORT_GENERATION_URL:-""}
 
 
 # Attachments configuration

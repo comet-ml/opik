@@ -52,21 +52,12 @@ public class ReportService {
                 .stream().findFirst().map(p -> p.name())
                 .orElseThrow(() -> new NotFoundException("Project not found: " + projectId));
 
-        UUID existingPending = transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(OllieReportDAO.class)
-                        .findPendingByProjectId(workspaceId, projectId)
-                        .orElse(null));
-        if (existingPending != null) {
-            log.info("Report already pending for project '{}', returning existing '{}'", projectId, existingPending);
-            return existingPending;
-        }
-
         UUID reportId = idGenerator.generateId();
 
         int inserted = transactionTemplate.inTransaction(WRITE, handle -> handle.attach(OllieReportDAO.class)
                 .insert(reportId, workspaceId, projectId, ReportStatus.PENDING.getValue()));
         if (inserted == 0) {
-            log.warn("Concurrent pending report created for project '{}', skipping", projectId);
+            log.info("Report already pending for project '{}', skipping", projectId);
             return null;
         }
 
