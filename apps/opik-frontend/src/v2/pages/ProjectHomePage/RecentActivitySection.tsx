@@ -1,5 +1,4 @@
 import { Link, useParams } from "@tanstack/react-router";
-import dayjs from "dayjs";
 import {
   FlaskConical,
   Database,
@@ -33,10 +32,7 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
       )}`,
     icon: ListTree,
     color: "text-chart-teal",
-    getLink: (item, base) => {
-      const date = dayjs(item.created_at).format("YYYY-MM-DD");
-      return `${base}/logs?time_range=${date},${date}&logsType=traces`;
-    },
+    getLink: (_item, base) => `${base}/logs?logsType=traces`,
   },
   [ActivityType.OPTIMIZATION]: {
     label: "Optimization run created",

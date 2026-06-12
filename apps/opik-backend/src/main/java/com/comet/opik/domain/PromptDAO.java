@@ -347,7 +347,7 @@ public interface PromptDAO {
             WHERE pv.workspace_id = :workspace_id
               AND p.project_id = :project_id
               AND pv.version_type = 'prompt_version'
-            ORDER BY pv.created_at DESC
+            ORDER BY pv.id DESC
             LIMIT :limit
             """)
     @RegisterConstructorMapper(value = RecentActivity.RecentPromptVersion.class)

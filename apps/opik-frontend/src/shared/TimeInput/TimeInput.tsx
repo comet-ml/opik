@@ -22,7 +22,7 @@ const TimeInput: React.FC<TimeInputProps> = ({
   date,
   setDate,
   disabled,
-  placeholder = "12:00",
+  placeholder = dayjs().format("h:mm"),
 }) => {
   const [timeText, setTimeText] = useState("");
   const [period, setPeriod] = useState<Period>("AM");

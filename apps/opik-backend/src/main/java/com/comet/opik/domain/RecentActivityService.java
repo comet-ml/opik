@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.InstantToUUIDMapper;
@@ -26,6 +27,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -202,45 +204,55 @@ public class RecentActivityService {
     }
 
     private Mono<List<RecentActivityItem>> fetchTraceDailyCounts(UUID projectId, int size) {
-        Instant start = Instant.now().minus(LOOKBACK_DAYS, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
-        var visibilityFilter = TraceFilter.builder()
-                .field(TraceField.VISIBILITY_MODE)
-                .operator(Operator.EQUAL)
-                .value("default")
-                .build();
+        Instant now = Instant.now();
+        Instant start = now.minus(LOOKBACK_DAYS, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
         var request = ProjectMetricRequest.builder()
                 .metricType(MetricType.TRACE_COUNT)
                 .interval(TimeInterval.DAILY)
                 .intervalStart(start)
-                .traceFilters(List.of(visibilityFilter))
+                .traceFilters(List.of(defaultVisibilityFilter()))
                 .build();
-
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
 
         return projectMetricsService.getProjectMetrics(projectId, request)
                 .map(response -> response.results().stream()
                         .flatMap(r -> r.data().stream())
-                        .filter(dp -> dp.value() != null && dp.value().longValue() > 0)
-                        .sorted((a, b) -> b.time().compareTo(a.time()))
+                        .filter(this::hasPositiveValue)
+                        .sorted(Comparator.<DataPoint<Number>, Instant>comparing(DataPoint::time).reversed())
                         .limit(size)
-                        .map(dp -> {
-                            boolean isToday = dp.time().atZone(ZoneOffset.UTC).toLocalDate().equals(today);
-                            // Noon keeps the date stable across all timezones when the FE converts to local time
-                            Instant createdAt = isToday
-                                    ? Instant.now()
-                                    : dp.time().atZone(ZoneOffset.UTC).toLocalDate()
-                                            .atTime(12, 0).toInstant(ZoneOffset.UTC);
-                            return RecentActivityItem.builder()
-                                    .type(ActivityType.TRACE_DAILY)
-                                    .id(UUID.nameUUIDFromBytes(dp.time().toString().getBytes()))
-                                    .name(String.valueOf(dp.value().longValue()))
-                                    .createdAt(createdAt)
-                                    .build();
-                        })
+                        .map(dp -> toTraceDailyItem(dp, today, now))
                         .toList())
                 .onErrorResume(e -> {
                     log.warn("Failed to fetch daily trace counts for project '{}'", projectId, e);
                     return Mono.just(List.of());
                 });
+    }
+
+    private TraceFilter defaultVisibilityFilter() {
+        return TraceFilter.builder()
+                .field(TraceField.VISIBILITY_MODE)
+                .operator(Operator.EQUAL)
+                .value("default")
+                .build();
+    }
+
+    private boolean hasPositiveValue(DataPoint<Number> dp) {
+        return dp.value() != null && dp.value().longValue() > 0;
+    }
+
+    private RecentActivityItem toTraceDailyItem(DataPoint<Number> dp, LocalDate today, Instant now) {
+        LocalDate date = dp.time().atZone(ZoneOffset.UTC).toLocalDate();
+        // Noon keeps the date stable across all timezones when the FE converts to local time
+        Instant createdAt = date.equals(today)
+                ? now
+                : date.atTime(12, 0).toInstant(ZoneOffset.UTC);
+
+        return RecentActivityItem.builder()
+                .type(ActivityType.TRACE_DAILY)
+                .id(UUID.nameUUIDFromBytes(dp.time().toString().getBytes(StandardCharsets.UTF_8)))
+                .name(String.valueOf(dp.value().longValue()))
+                .createdAt(createdAt)
+                .build();
     }
 }

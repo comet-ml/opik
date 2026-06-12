@@ -1,5 +1,6 @@
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import { ChevronsRight, Lightbulb } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/ui/separator";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import { OllieReport, RecommendedAction } from "@/types/ollie-reports";
@@ -63,12 +64,18 @@ export default function ReportPanel({
                 const style = CARD_STYLES[i % CARD_STYLES.length];
                 return (
                   <button
-                    key={i}
-                    className={`flex flex-1 flex-col rounded-md border p-3 pb-2 text-left shadow-sm transition-colors ${style.card}`}
+                    key={action.name}
+                    className={cn(
+                      "flex flex-1 flex-col rounded-md border p-3 pb-2 text-left shadow-sm transition-colors",
+                      style.card,
+                    )}
                     onClick={() => onStartConversation(action)}
                   >
                     <div
-                      className={`mb-2 flex size-5 items-center justify-center rounded-[6px] ${style.iconBg}`}
+                      className={cn(
+                        "mb-2 flex size-5 items-center justify-center rounded-[6px]",
+                        style.iconBg,
+                      )}
                     >
                       <Lightbulb className="size-3 shrink-0 text-foreground-secondary dark:text-background" />
                     </div>
