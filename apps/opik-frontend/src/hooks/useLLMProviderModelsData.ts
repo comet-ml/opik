@@ -17,9 +17,11 @@ import {
   setLatestModelFlags,
   setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
+import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
+  preferredProvider?: COMPOSED_PROVIDER_TYPE | "",
 ) => COMPOSED_PROVIDER_TYPE | "";
 
 export type ModelResolver = (
@@ -72,7 +74,10 @@ const transformFetched = (
   for (const [provider, models] of Object.entries(fetched)) {
     const filtered = onlyVisible ? models.filter(isDropdownVisible) : models;
     out[provider] = filtered.map((m) => ({
-      value: (m.qualifiedName ?? m.id) as PROVIDER_MODEL_TYPE,
+      value: getRoutableProviderModelValue(
+        provider as COMPOSED_PROVIDER_TYPE,
+        m.qualifiedName ?? m.id,
+      ),
       label: m.label ?? m.id,
     }));
   }
@@ -83,7 +88,7 @@ const buildFlagsIndex = (
   fetched: LlmModelsByProvider,
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
-  for (const models of Object.values(fetched)) {
+  for (const [provider, models] of Object.entries(fetched)) {
     for (const m of models) {
       const flags: ModelFlags = {
         reasoning: m.reasoning,
@@ -93,6 +98,13 @@ const buildFlagsIndex = (
       if (m.qualifiedName) {
         index.set(m.qualifiedName, flags);
       }
+      index.set(
+        getRoutableProviderModelValue(
+          provider as COMPOSED_PROVIDER_TYPE,
+          m.qualifiedName ?? m.id,
+        ),
+        flags,
+      );
     }
   }
   return index;
@@ -171,7 +183,7 @@ const useLLMProviderModelsData = () => {
   }, [fetched, openAICompatibleModels]);
 
   const calculateModelProvider: ProviderResolver = useCallback(
-    (modelName) => {
+    (modelName, preferredProvider) => {
       if (!modelName) {
         return "";
       }
@@ -203,6 +215,21 @@ const useLLMProviderModelsData = () => {
 
       const entries = Object.entries(fullProviderModels);
 
+      if (preferredProvider && isKnownProvider(preferredProvider)) {
+        const normalizedModel = getRoutableProviderModelValue(
+          preferredProvider,
+          modelName,
+        );
+        const preferredModels = fullProviderModels[preferredProvider] ?? [];
+        if (
+          preferredModels.some(
+            (pm) => pm.value === normalizedModel || pm.value === modelName,
+          )
+        ) {
+          return preferredProvider;
+        }
+      }
+
       // Pass 1: exact value match.
       const exact = entries.find(
         ([providerName, models]) =>
@@ -231,7 +258,10 @@ const useLLMProviderModelsData = () => {
 
   const calculateDefaultModel: ModelResolver = useCallback(
     (lastPickedModel, setupProviders, preferredProvider?) => {
-      const lastPickedModelProvider = calculateModelProvider(lastPickedModel);
+      const lastPickedModelProvider = calculateModelProvider(
+        lastPickedModel,
+        preferredProvider,
+      );
 
       const isLastPickedModelValid =
         !!lastPickedModelProvider &&

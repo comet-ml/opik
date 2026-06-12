@@ -10,14 +10,14 @@ import {
 } from "@/ui/dropdown-menu";
 
 export type LeaderboardSortKey =
-  | "total_estimated_cost"
+  | "total_tokens"
   | "requests"
   | "skills"
   | "mcps"
   | "mcp_calls";
 
 const SORT_OPTIONS: { key: LeaderboardSortKey; label: string }[] = [
-  { key: "total_estimated_cost", label: "By spend" },
+  { key: "total_tokens", label: "By spend" },
   { key: "requests", label: "By requests" },
   { key: "skills", label: "By skills" },
   { key: "mcps", label: "By MCPs" },

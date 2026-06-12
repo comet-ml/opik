@@ -2,6 +2,7 @@ import React from "react";
 import { Mail } from "lucide-react";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
+import { useOpikWorkspaceName } from "@/store/AppStore";
 import useUsernameAutocomplete from "@/plugins/comet/api/useUsernameAutocomplete";
 import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMutation";
 import { useWorkspaceUserRolesMap } from "@/plugins/comet/hooks/useWorkspaceUserRolesMap";
@@ -30,7 +31,8 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   side = "bottom",
   asSubContent = false,
 }) => {
-  const workspace = useWorkspace();
+  const opikWorkspaceName = useOpikWorkspaceName();
+  const workspace = useWorkspace(opikWorkspaceName);
   const workspaceId = workspace?.workspaceId;
   const workspaceName = workspace?.workspaceName;
 

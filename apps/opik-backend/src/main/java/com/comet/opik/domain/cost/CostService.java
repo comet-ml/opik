@@ -336,6 +336,23 @@ public class CostService {
         BigDecimal audioInputCharacterPrice = Optional.ofNullable(modelCost.inputCostPerCharacter())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
+        // Tier rates: above_200k_tokens variants. Models without a tier (most) leave these null
+        // in the LiteLLM JSON; we default to zero and the effective-price helpers on ModelPrice
+        // fall through to the base rate in that case.
+        BigDecimal inputPriceAbove200kTokens = Optional.ofNullable(modelCost.inputCostPerTokenAbove200kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal outputPriceAbove200kTokens = Optional.ofNullable(modelCost.outputCostPerTokenAbove200kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal cacheCreationInputTokenPriceAbove200kTokens = Optional
+                .ofNullable(modelCost.cacheCreationInputTokenCostAbove200kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal cacheReadInputTokenPriceAbove200kTokens = Optional
+                .ofNullable(modelCost.cacheReadInputTokenCostAbove200kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
         ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
         BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
@@ -343,7 +360,9 @@ public class CostService {
                 videoOutputPrice, audioInputCharacterPrice);
 
         return new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                cacheReadInputTokenPrice, videoOutputPrice, audioInputCharacterPrice, calculator);
+                cacheReadInputTokenPrice, videoOutputPrice, audioInputCharacterPrice, calculator,
+                inputPriceAbove200kTokens, outputPriceAbove200kTokens,
+                cacheCreationInputTokenPriceAbove200kTokens, cacheReadInputTokenPriceAbove200kTokens);
     }
 
     private static String parseModelName(String modelName) {

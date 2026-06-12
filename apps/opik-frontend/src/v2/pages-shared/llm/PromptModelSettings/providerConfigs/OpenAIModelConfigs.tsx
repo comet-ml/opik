@@ -78,7 +78,10 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.topP) && (
+      {!isUndefined(configs.topP) && !isReasoning && (
+        // OpenAI rejects top_p with "Unsupported parameter: 'top_p' is not supported with this
+        // model." on reasoning models (gpt-5.x, o-series). Hide the slider rather than send a
+        // value the backend will surface as a 400. Mirrors the temperature pinning above.
         <SliderInputControl
           value={configs.topP}
           onChange={(v) => onChange({ topP: v })}

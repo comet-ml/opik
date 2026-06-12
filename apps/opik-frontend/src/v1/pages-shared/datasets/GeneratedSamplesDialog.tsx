@@ -422,8 +422,8 @@ const GeneratedSamplesDialog: React.FunctionComponent<
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button onClick={handleAddToDataset} disabled={noneSelected}>
-            Add {selectedSamples.size} Sample
-            {selectedSamples.size !== 1 ? "s" : ""} to Dataset
+            Add {selectedSamples.size} sample
+            {selectedSamples.size !== 1 ? "s" : ""} to dataset
           </Button>
         </DialogFooter>
       </DialogContent>

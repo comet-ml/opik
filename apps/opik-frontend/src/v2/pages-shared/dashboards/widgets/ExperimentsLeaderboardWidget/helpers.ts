@@ -2,6 +2,7 @@ import uniq from "lodash/uniq";
 import get from "lodash/get";
 
 import { Experiment } from "@/types/datasets";
+import { formatPromptVersionLabel } from "@/lib/experiments";
 import {
   COLUMN_TYPE,
   ColumnData,
@@ -107,12 +108,17 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
   {
     id: "prompt",
-    label: "Prompt commit",
+    label: "Prompt",
     type: COLUMN_TYPE.list,
-    accessorFn: (row) => get(row, ["prompt_versions"], []),
+    // Show the prompt name plus its version (OPIK-6838).
+    accessorFn: (row) =>
+      (row.prompt_versions ?? []).map((v) => ({
+        ...v,
+        version_label: formatPromptVersionLabel(v),
+      })),
     cell: MultiResourceCell as never,
     customMeta: {
-      nameKey: "commit",
+      nameKey: "version_label",
       idKey: "prompt_id",
       resource: RESOURCE_TYPE.prompt,
       getSearch: (data: Experiment) => ({

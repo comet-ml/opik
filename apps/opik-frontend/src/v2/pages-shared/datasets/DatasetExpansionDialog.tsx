@@ -293,7 +293,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
     };
 
     mutate(
-      { datasetId: initialDatasetId, ...requestData },
+      { datasetId: initialDatasetId, entityName, ...requestData },
       {
         onSuccess: (response) => {
           complete();
@@ -308,6 +308,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
     );
   }, [
     initialDatasetId,
+    entityName,
     model,
     validateForm,
     sampleCount,
@@ -670,7 +671,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                 </div>
               </div>
             ) : (
-              "Generate Samples"
+              "Generate samples"
             )}
           </Button>
         </DialogFooter>

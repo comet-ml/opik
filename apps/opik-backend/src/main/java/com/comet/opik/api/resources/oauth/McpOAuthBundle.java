@@ -20,7 +20,9 @@ public class McpOAuthBundle implements GuiceyBundle {
         OpikConfiguration config = environment.configuration();
         if (!config.getMcpOAuth().isEnabled()) {
             environment.disableExtensions(
-                    OAuthMetadataResource.class);
+                    OAuthMetadataResource.class,
+                    OAuthAuthorizeResource.class,
+                    OAuthTokenResource.class);
         }
     }
 }

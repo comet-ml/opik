@@ -35,6 +35,7 @@ import {
 } from "@/types/annotation-queues";
 import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotationQueueCreateMutation";
 import useAnnotationQueueUpdateMutation from "@/api/annotation-queues/useAnnotationQueueUpdateMutation";
+import { DEFAULT_LOCK_TIMEOUT_SECONDS } from "@/lib/annotation-queues";
 import { Separator } from "@/ui/separator";
 import { Description } from "@/ui/description";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -64,6 +65,12 @@ const formSchema = z.object({
   comments_enabled: z.boolean(),
   feedback_definition_names: z.array(z.string()).default([]),
   annotators_per_item: z.coerce.number().int().min(1).default(1),
+  lock_timeout_minutes: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(60)
+    .default(DEFAULT_LOCK_TIMEOUT_SECONDS / 60),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -103,6 +110,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       feedback_definition_names: defaultQueue?.feedback_definition_names || [],
       comments_enabled: defaultQueue?.comments_enabled || true,
       annotators_per_item: defaultQueue?.annotators_per_item || 1,
+      lock_timeout_minutes:
+        (defaultQueue?.lock_timeout_seconds ?? DEFAULT_LOCK_TIMEOUT_SECONDS) /
+        60,
     },
   });
 
@@ -119,9 +129,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   const getQueue = useCallback(() => {
     const formData = form.getValues();
+    const { lock_timeout_minutes, ...rest } = formData;
     return {
-      ...formData,
+      ...rest,
       project_id: formData.project_id,
+      lock_timeout_seconds: lock_timeout_minutes * 60,
     };
   }, [form]);
 
@@ -313,6 +325,28 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                       </Description>
                       <FormControl>
                         <Input type="number" min={1} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="lock_timeout_minutes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Lock timeout (minutes)</FormLabel>
+                      <Description>
+                        How long an item stays reserved for an annotator while
+                        they are reviewing it. After this time, the item becomes
+                        available to other annotators. When multiple annotators
+                        are required, the item is only fully reserved once all
+                        annotator slots are occupied.
+                      </Description>
+                      <FormControl>
+                        <Input type="number" min={1} max={60} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

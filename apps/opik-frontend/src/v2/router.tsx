@@ -67,6 +67,7 @@ import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashb
 import AiSpend from "@/v2/pages/AiSpend/AiSpend";
 import AiSpendHomePage from "@/v2/pages/AiSpendHomePage/AiSpendHomePage";
 import AiSpendLeaderboardPage from "@/v2/pages/AiSpendLeaderboardPage/AiSpendLeaderboardPage";
+import AiSpendSessionsPage from "@/v2/pages/LogsPage/AiSpendSessionsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -646,6 +647,15 @@ const aiSpendLeaderboardRoute = createRoute({
   },
 });
 
+const aiSpendSessionsRoute = createRoute({
+  path: "/sessions",
+  getParentRoute: () => aiSpendRoute,
+  component: AiSpendSessionsPage,
+  staticData: {
+    title: "Sessions",
+  },
+});
+
 // ----------- Automation logs
 const automationLogsRoute = createRoute({
   path: "/$workspaceName/automation-logs",
@@ -679,6 +689,7 @@ const routeTree = rootRoute.addChildren([
       aiSpendIndexRoute,
       aiSpendHomeRoute,
       aiSpendLeaderboardRoute,
+      aiSpendSessionsRoute,
     ]),
     workspaceRoute.addChildren([
       workspaceIndexRoute,
