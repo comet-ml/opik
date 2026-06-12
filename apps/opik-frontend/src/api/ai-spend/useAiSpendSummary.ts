@@ -1,6 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { useAiSpend } from "@/contexts/AiSpendContext";
 
 export interface SpendSummaryResult {
   name: string;
@@ -16,17 +15,11 @@ type UseAiSpendSummaryParams = {
   projectName: string;
   intervalStart: string;
   intervalEnd: string;
-  workspaceName?: string;
 };
 
 const getAiSpendSummary = async (
   { signal }: QueryFunctionContext,
-  {
-    projectName,
-    intervalStart,
-    intervalEnd,
-    workspaceName,
-  }: UseAiSpendSummaryParams,
+  { projectName, intervalStart, intervalEnd }: UseAiSpendSummaryParams,
 ) => {
   const { data } = await api.post<SpendSummaryResponse>(
     `${AI_SPEND_REST_ENDPOINT}summary`,
@@ -35,27 +28,19 @@ const getAiSpendSummary = async (
       interval_start: intervalStart,
       interval_end: intervalEnd,
     },
-    {
-      signal,
-      ...(workspaceName && {
-        headers: { "Comet-Workspace": workspaceName },
-      }),
-    },
+    { signal },
   );
 
   return data;
 };
 
 export default function useAiSpendSummary(
-  params: Omit<UseAiSpendSummaryParams, "workspaceName">,
+  params: UseAiSpendSummaryParams,
   options?: QueryConfig<SpendSummaryResponse>,
 ) {
-  const { spendWorkspaceName } = useAiSpend();
-  const queryParams = { ...params, workspaceName: spendWorkspaceName };
-
   return useQuery({
-    queryKey: ["ai-spend-summary", queryParams],
-    queryFn: (context) => getAiSpendSummary(context, queryParams),
+    queryKey: ["ai-spend-summary", params],
+    queryFn: (context) => getAiSpendSummary(context, params),
     ...options,
   });
 }

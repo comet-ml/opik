@@ -1,8 +1,8 @@
 import React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Trophy, Undo2, Zap } from "lucide-react";
+import { LayoutDashboard, ScrollText, Trophy, Undo2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useOpikWorkspaceName } from "@/store/AppStore";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
@@ -28,6 +28,13 @@ const OVERVIEW_ITEMS: MenuItem[] = [
     icon: Trophy,
     label: "User leaderboard",
   },
+  {
+    id: "ai_spend_sessions",
+    path: "/$workspaceName/ai-spend/sessions",
+    type: MENU_ITEM_TYPE.router,
+    icon: ScrollText,
+    label: "Sessions",
+  },
 ];
 
 const groupLabelClasses =
@@ -40,12 +47,15 @@ interface AiSpendSidebarContentProps {
 const AiSpendSidebarContent: React.FC<AiSpendSidebarContentProps> = ({
   expanded,
 }) => {
-  const workspaceName = useActiveWorkspaceName();
   const navigate = useNavigate();
   const { organizationName } = useAiSpend();
+  const opikWorkspaceName = useOpikWorkspaceName();
 
   const goBackToOpik = () =>
-    navigate({ to: "/$workspaceName/home", params: { workspaceName } });
+    navigate({
+      to: "/$workspaceName/home",
+      params: { workspaceName: opikWorkspaceName },
+    });
 
   const header = expanded ? (
     <div className="flex items-center gap-2 px-1 py-0.5">

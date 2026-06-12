@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Coins, PieChart } from "lucide-react";
+import { Coins } from "lucide-react";
 import useAiSpendComposition from "@/api/ai-spend/useAiSpendComposition";
 import useAiSpendRecommendations from "@/api/ai-spend/useAiSpendRecommendations";
 import { Card } from "@/ui/card";
@@ -10,7 +10,7 @@ import AnthropicIcon from "@/icons/integrations/anthropic.svg?react";
 import BreakdownColumn from "./BreakdownColumn";
 import SankeyLinks, { RibbonPath } from "./SankeyLinks";
 import { getLaneMeta } from "./laneRegistry";
-import { lanePct, ribbonWidth, toLaneViews } from "./utils";
+import { ribbonWidth, sideCostTotal, toLaneViews } from "./utils";
 import { LaneSide, LaneView } from "./types";
 
 export interface AiUsageBreakdownProps {
@@ -87,13 +87,20 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
     [recommendationsData],
   );
 
-  const inputLanes = useMemo(() => toLaneViews(data?.input), [data]);
-  const outputLanes = useMemo(() => toLaneViews(data?.output), [data]);
-  const harness = data?.harness ?? [];
-  const harnessTotal = harness.reduce(
-    (acc, h) => acc + (h.total_estimated_cost ?? 0),
-    0,
+  const model = data?.models?.[0] ?? null;
+  const inputLanes = useMemo(
+    () => toLaneViews(data?.input, model),
+    [data, model],
   );
+  const outputLanes = useMemo(
+    () => toLaneViews(data?.output, model),
+    [data, model],
+  );
+  const harness = data?.harness ?? [];
+  // FE-priced from the lanes' tier columns; the harness card shows the
+  // window's whole bill (input side + output side).
+  const harnessTotal =
+    (sideCostTotal(inputLanes) ?? 0) + (sideCostTotal(outputLanes) ?? 0);
 
   const columnWidth = compact ? "w-52" : "w-60";
 
@@ -236,6 +243,7 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
               title="Input"
               side="input"
               totalTokens={data.input?.total_tokens ?? 0}
+              totalCost={sideCostTotal(inputLanes)}
               lanes={inputLanes}
               onLaneClick={onLaneClick}
               onLaneHover={handleHover}
@@ -275,16 +283,8 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
                     </div>
                     <div className="flex items-center gap-3 py-0.5">
                       <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
-                        <PieChart className="size-3" />
-                        {lanePct(
-                          entry.total_estimated_cost ?? 0,
-                          harnessTotal,
-                        ).toFixed(0)}
-                        %
-                      </span>
-                      <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
                         <Coins className="size-3" />
-                        {formatCost(entry.total_estimated_cost)}
+                        {formatCost(harnessTotal)}
                       </span>
                     </div>
                   </div>
@@ -298,6 +298,7 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
               title="Output"
               side="output"
               totalTokens={data.output?.total_tokens ?? 0}
+              totalCost={sideCostTotal(outputLanes)}
               lanes={outputLanes}
               onLaneClick={onLaneClick}
               onLaneHover={handleHover}

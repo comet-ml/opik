@@ -13,6 +13,7 @@ export const SpendCompositionResponse: core.serialization.ObjectSchema<
     input: Side.optional(),
     harness: core.serialization.list(HarnessEntry).optional(),
     output: Side.optional(),
+    models: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace SpendCompositionResponse {
@@ -20,5 +21,6 @@ export declare namespace SpendCompositionResponse {
         input?: Side.Raw | null;
         harness?: HarnessEntry.Raw[] | null;
         output?: Side.Raw | null;
+        models?: string[] | null;
     }
 }

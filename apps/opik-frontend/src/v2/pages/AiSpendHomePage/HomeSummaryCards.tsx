@@ -12,6 +12,8 @@ import PercentageTrend, {
   PercentageTrendType,
 } from "@/shared/PercentageTrend/PercentageTrend";
 import useAiSpendSummary from "@/api/ai-spend/useAiSpendSummary";
+import useAiSpendComposition from "@/api/ai-spend/useAiSpendComposition";
+import { tierCost } from "@/api/ai-spend/claudePricing";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 import KpiCard from "./KpiCard";
 import {
@@ -43,6 +45,12 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
     },
     { placeholderData: keepPreviousData },
   );
+  const { data: composition } = useAiSpendComposition({
+    projectName,
+    intervalStart,
+    intervalEnd,
+  });
+  const model = composition?.models?.[0] ?? null;
 
   const metrics = useMemo(() => {
     const map: Record<string, SpendMetric> = {};
@@ -59,8 +67,29 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
   const showData = !isPending && hasData;
 
   const get = (name: string): SpendMetric => metrics[name] ?? EMPTY_METRIC;
-  const totalSpend = get("total_spend");
-  const avgCost = get("avg_cost_per_user");
+  // The BE ships raw cache-tier token sums; dollars are FE-priced with the
+  // window's model (composition is fetched by the breakdown on this page,
+  // so this hook call is a react-query cache hit).
+  const priceTiers = (which: "current" | "previous"): number | null =>
+    tierCost(
+      {
+        input_tokens: get("spend_input_tokens")[which],
+        cache_read_tokens: get("spend_cache_read_tokens")[which],
+        cache_creation_tokens: get("spend_cache_creation_tokens")[which],
+        output_tokens: get("spend_output_tokens")[which],
+      },
+      model,
+    );
+  const totalSpend: SpendMetric = {
+    current: priceTiers("current"),
+    previous: priceTiers("previous"),
+  };
+  const perUser = (spend: number | null, users: number | null) =>
+    spend != null && users ? spend / users : null;
+  const avgCost: SpendMetric = {
+    current: perUser(totalSpend.current, get("active_users").current),
+    previous: perUser(totalSpend.previous, get("active_users").previous),
+  };
   const totalMessages = get("total_messages");
   const activeUsers = get("active_users");
   const totalUsers = get("total_users");

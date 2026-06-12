@@ -5,7 +5,11 @@ export interface SpendUserRow {
     userEmail?: string;
     userDisplayName?: string;
     model?: string;
-    totalEstimatedCost?: number;
+    inputTokens?: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
     requests?: number;
     skills?: number;
     mcps?: number;

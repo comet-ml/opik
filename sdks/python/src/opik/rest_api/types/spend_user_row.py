@@ -11,7 +11,11 @@ class SpendUserRow(UniversalBaseModel):
     user_email: typing.Optional[str] = None
     user_display_name: typing.Optional[str] = None
     model: typing.Optional[str] = None
-    total_estimated_cost: typing.Optional[float] = None
+    input_tokens: typing.Optional[int] = None
+    cache_read_tokens: typing.Optional[int] = None
+    cache_creation_tokens: typing.Optional[int] = None
+    output_tokens: typing.Optional[int] = None
+    total_tokens: typing.Optional[int] = None
     requests: typing.Optional[int] = None
     skills: typing.Optional[int] = None
     mcps: typing.Optional[int] = None

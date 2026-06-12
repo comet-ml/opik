@@ -1,11 +1,15 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { useAiSpend } from "@/contexts/AiSpendContext";
 
 export interface AiSpendLaneApi {
   key: string;
   label: string;
   total_tokens: number;
+  // Raw cache-tier sums from cc.billing; priced FE-side (claudePricing).
+  input_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  output_tokens?: number;
   has_breakdown: boolean;
 }
 
@@ -17,13 +21,14 @@ export interface AiSpendSideApi {
 export interface AiSpendHarnessApi {
   key: string;
   label: string;
-  total_estimated_cost: number | null;
 }
 
 export interface AiSpendCompositionResponse {
   input: AiSpendSideApi;
   harness: AiSpendHarnessApi[];
   output: AiSpendSideApi;
+  // Distinct cc.billing.model values in the window, for FE pricing.
+  models?: string[];
 }
 
 type UseAiSpendCompositionParams = {
@@ -31,7 +36,6 @@ type UseAiSpendCompositionParams = {
   intervalStart: string;
   intervalEnd: string;
   userUuid?: string;
-  workspaceName?: string;
 };
 
 const buildBody = ({
@@ -53,27 +57,19 @@ const getAiSpendComposition = async (
   const { data } = await api.post<AiSpendCompositionResponse>(
     `${AI_SPEND_REST_ENDPOINT}composition`,
     buildBody(params),
-    {
-      signal,
-      ...(params.workspaceName && {
-        headers: { "Comet-Workspace": params.workspaceName },
-      }),
-    },
+    { signal },
   );
 
   return data;
 };
 
 export default function useAiSpendComposition(
-  params: Omit<UseAiSpendCompositionParams, "workspaceName">,
+  params: UseAiSpendCompositionParams,
   options?: QueryConfig<AiSpendCompositionResponse>,
 ) {
-  const { spendWorkspaceName } = useAiSpend();
-  const queryParams = { ...params, workspaceName: spendWorkspaceName };
-
   return useQuery({
-    queryKey: ["ai-spend-composition", queryParams],
-    queryFn: (context) => getAiSpendComposition(context, queryParams),
+    queryKey: ["ai-spend-composition", params],
+    queryFn: (context) => getAiSpendComposition(context, params),
     ...options,
   });
 }
