@@ -33,6 +33,65 @@ class TraceResponse(BaseModel):
     project_id: str
 
 
+class SpanSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: str = "general"
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    # LLM-span fields. usage keys follow the OpenAI shape (prompt_tokens,
+    # completion_tokens, total_tokens) so the UI renders token counts; model +
+    # provider + total_cost drive the cost cell.
+    model: str | None = None
+    provider: str | None = None
+    usage: dict[str, int] | None = None
+    total_cost: float | None = None
+    # Index into the same request's spans list identifying this span's parent.
+    # None means the span is a direct child of the trace (a root span).
+    parent_index: int | None = None
+
+
+class NestedTraceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    name: str
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    thread_id: str | None = None
+    feedback_scores: list[dict[str, Any]] | None = None
+    spans: list[SpanSeed]
+    workspace: str | None = None
+
+
+class NestedTraceResponse(BaseModel):
+    id: str
+    name: str
+    project_id: str
+    span_count: int
+
+
+class FeedbackDefinitionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    # Numerical definition bounds. The UI's manual-score editor only renders a
+    # named-score control once a matching feedback definition exists in the
+    # workspace, so tests seed one before annotating through the panel.
+    min: float = 0.0
+    max: float = 1.0
+    workspace: str | None = None
+
+
+class FeedbackDefinitionResponse(BaseModel):
+    id: str
+    name: str
+
+
 class DatasetCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
