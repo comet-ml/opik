@@ -34,6 +34,7 @@ type PluginStore = {
   AssistantPrewarmer: React.ComponentType | null;
   AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
+  BillingLink: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -58,6 +59,7 @@ const PLUGIN_NAMES = [
   "AssistantPrewarmer",
   "AssistantDebugInfo",
   "UpgradeButton",
+  "BillingLink",
   "init",
 ];
 
@@ -80,6 +82,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   AssistantPrewarmer: null,
   AssistantDebugInfo: null,
   UpgradeButton: null,
+  BillingLink: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

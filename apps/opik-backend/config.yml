@@ -947,6 +947,14 @@ ollieStateConfig:
   # Description: Maximum upload size in bytes for ollie state persistence
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
+reportGeneration:
+  # Default: http://localhost:9080/reports/generate
+  # Description: URL for triggering Ollie report generation. Blank disables report generation.
+  # Locally: points to Ollie directly (e.g. http://localhost:9080/reports/generate).
+  # Deployed: points to the Comet API (e.g. http://comet-api/opik/ollie/generate-report)
+  #   which resolves workspace credentials and proxies to Ollie.
+  url: ${REPORT_GENERATION_URL:-http://localhost:9080/reports/generate}
+
 
 # Attachments configuration
 attachmentsConfig:
@@ -1081,6 +1089,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the Ollie AI assistant integration is enabled.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
+  projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
   # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
