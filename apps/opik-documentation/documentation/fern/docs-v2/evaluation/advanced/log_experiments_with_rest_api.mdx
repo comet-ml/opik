@@ -263,12 +263,11 @@ print(f"Prepared {len(evaluation_items)} evaluation items")
 Use the bulk endpoint to efficiently log multiple evaluation results at once.
 
 <Note>
-  Pass `project_name` on the bulk request so the experiment, its dataset (when it
-  doesn't exist yet), and any traces auto-created from `evaluate_task_result` are
-  placed in that project. If you omit it, those traces fall back to the
-  `Default Project` — this fallback is deprecated and the response includes an
-  `X-Opik-Deprecation` header. The value should match the `project_name` you used
-  when creating the experiment.
+  `project_name` sets the project for the experiment, dataset, and auto-created traces.
+  When provided, it is used — and the request fails (409) if it conflicts with the existing
+  experiment's or dataset's project. When omitted, the project is derived from the existing
+  experiment or dataset; if neither applies, it falls back to the deprecated `Default Project`
+  (the response includes an `X-Opik-Deprecation` header).
 </Note>
 
 <CodeBlocks>
