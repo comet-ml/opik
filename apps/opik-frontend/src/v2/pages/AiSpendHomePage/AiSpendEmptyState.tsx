@@ -54,7 +54,7 @@ const AiSpendEmptyState: React.FC = () => {
           collecting data.
         </p>
       </div>
-      <div className="flex w-full max-w-[640px] flex-col gap-2">
+      <div className="flex w-full max-w-screen-sm flex-col gap-2">
         <span className="comet-body-s text-foreground">
           Add this to your organization&apos;s managed settings or each
           developer&apos;s .claude/settings.json:
