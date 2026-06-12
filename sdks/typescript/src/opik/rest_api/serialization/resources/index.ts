@@ -3,8 +3,6 @@ export * as agentConfigs from "./agentConfigs/index.js";
 export * from "./agentInsights/client/requests/index.js";
 export * as agentInsights from "./agentInsights/index.js";
 export * from "./agentInsights/types/index.js";
-export * from "./agentInsightsInternal/client/requests/index.js";
-export * as agentInsightsInternal from "./agentInsightsInternal/index.js";
 export * as alerts from "./alerts/index.js";
 export * from "./alerts/types/index.js";
 export * from "./annotationQueues/client/requests/index.js";

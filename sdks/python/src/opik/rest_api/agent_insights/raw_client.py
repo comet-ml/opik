@@ -10,11 +10,13 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
+from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unauthorized_error import UnauthorizedError
 from ..types.agent_insights_issue_page import AgentInsightsIssuePage
 from ..types.agent_insights_issue_with_details import AgentInsightsIssueWithDetails
+from ..types.reported_issue import ReportedIssue
 from .types.agent_insights_issue_update_status import AgentInsightsIssueUpdateStatus
 from .types.find_agent_insights_issues_request_sort_by import FindAgentInsightsIssuesRequestSortBy
 from .types.find_agent_insights_issues_request_status import FindAgentInsightsIssuesRequestStatus
@@ -31,8 +33,8 @@ class RawAgentInsightsClient:
         self,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
         sort_by: typing.Optional[FindAgentInsightsIssuesRequestSortBy] = None,
         page: typing.Optional[int] = None,
@@ -46,9 +48,9 @@ class RawAgentInsightsClient:
         ----------
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
 
@@ -71,8 +73,8 @@ class RawAgentInsightsClient:
             method="GET",
             params={
                 "project_id": project_id,
-                "from_date": str(from_date),
-                "to_date": str(to_date),
+                "from_date": str(from_date) if from_date is not None else None,
+                "to_date": str(to_date) if to_date is not None else None,
                 "status": status,
                 "sort_by": sort_by,
                 "page": page,
@@ -117,13 +119,96 @@ class RawAgentInsightsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def report_agent_insights_issues(
+        self,
+        *,
+        project_id: str,
+        report_day: dt.date,
+        issues: typing.Sequence[ReportedIssue],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Upserts the detected issues and their per-day metrics for the given report day in a single transaction. Issue status is never modified by this endpoint.
+
+        Parameters
+        ----------
+        project_id : str
+
+        report_day : dt.date
+
+        issues : typing.Sequence[ReportedIssue]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/agent-insights/issues",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "report_day": report_day,
+                "issues": convert_and_respect_annotation_metadata(
+                    object_=issues, annotation=typing.Sequence[ReportedIssue], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_agent_insights_issue_by_id(
         self,
         issue_id: str,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[AgentInsightsIssueWithDetails]:
         """
@@ -135,9 +220,9 @@ class RawAgentInsightsClient:
 
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -152,8 +237,8 @@ class RawAgentInsightsClient:
             method="GET",
             params={
                 "project_id": project_id,
-                "from_date": str(from_date),
-                "to_date": str(to_date),
+                "from_date": str(from_date) if from_date is not None else None,
+                "to_date": str(to_date) if to_date is not None else None,
             },
             request_options=request_options,
         )
@@ -294,8 +379,8 @@ class AsyncRawAgentInsightsClient:
         self,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
         sort_by: typing.Optional[FindAgentInsightsIssuesRequestSortBy] = None,
         page: typing.Optional[int] = None,
@@ -309,9 +394,9 @@ class AsyncRawAgentInsightsClient:
         ----------
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
 
@@ -334,8 +419,8 @@ class AsyncRawAgentInsightsClient:
             method="GET",
             params={
                 "project_id": project_id,
-                "from_date": str(from_date),
-                "to_date": str(to_date),
+                "from_date": str(from_date) if from_date is not None else None,
+                "to_date": str(to_date) if to_date is not None else None,
                 "status": status,
                 "sort_by": sort_by,
                 "page": page,
@@ -380,13 +465,96 @@ class AsyncRawAgentInsightsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def report_agent_insights_issues(
+        self,
+        *,
+        project_id: str,
+        report_day: dt.date,
+        issues: typing.Sequence[ReportedIssue],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Upserts the detected issues and their per-day metrics for the given report day in a single transaction. Issue status is never modified by this endpoint.
+
+        Parameters
+        ----------
+        project_id : str
+
+        report_day : dt.date
+
+        issues : typing.Sequence[ReportedIssue]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/agent-insights/issues",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "report_day": report_day,
+                "issues": convert_and_respect_annotation_metadata(
+                    object_=issues, annotation=typing.Sequence[ReportedIssue], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_agent_insights_issue_by_id(
         self,
         issue_id: str,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[AgentInsightsIssueWithDetails]:
         """
@@ -398,9 +566,9 @@ class AsyncRawAgentInsightsClient:
 
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -415,8 +583,8 @@ class AsyncRawAgentInsightsClient:
             method="GET",
             params={
                 "project_id": project_id,
-                "from_date": str(from_date),
-                "to_date": str(to_date),
+                "from_date": str(from_date) if from_date is not None else None,
+                "to_date": str(to_date) if to_date is not None else None,
             },
             request_options=request_options,
         )

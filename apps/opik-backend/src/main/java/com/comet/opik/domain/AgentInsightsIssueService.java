@@ -22,10 +22,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -38,6 +36,9 @@ public interface AgentInsightsIssueService {
             AgentInsightsIssueStatus status, AgentInsightsSortBy sortBy, int page, int size);
 
     AgentInsightsIssueWithDetails getIssue(UUID issueId, UUID projectId, LocalDate fromDate, LocalDate toDate);
+
+    LocalDate DEFAULT_FROM_DATE = LocalDate.of(1970, 1, 1);
+    LocalDate DEFAULT_TO_DATE = LocalDate.of(9999, 12, 31);
 
     void updateStatus(UUID issueId, AgentInsightsIssueUpdate update);
 }
@@ -57,12 +58,12 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        long distinctNames = report.issues().stream()
-                .map(AgentInsightsReport.ReportedIssue::name)
-                .distinct()
-                .count();
-        if (distinctNames != report.issues().size()) {
-            throw new BadRequestException("Duplicate issue names in request");
+        var explicitIds = report.issues().stream()
+                .map(AgentInsightsReport.ReportedIssue::id)
+                .filter(Objects::nonNull)
+                .toList();
+        if (explicitIds.size() != explicitIds.stream().distinct().count()) {
+            throw new BadRequestException("Duplicate issue ids in request");
         }
 
         projectService.get(report.projectId(), workspaceId);
@@ -73,19 +74,11 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            List<UUID> candidateIds = report.issues().stream()
-                    .map(issue -> idGenerator.generateId())
+            List<UUID> issueIds = report.issues().stream()
+                    .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
                     .toList();
-            dao.upsertIssues(workspaceId, report.projectId(), userName, candidateIds, report.issues());
+            dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
 
-            List<String> names = report.issues().stream()
-                    .map(AgentInsightsReport.ReportedIssue::name)
-                    .toList();
-            Map<String, UUID> idsByName = dao.findIdsByNames(workspaceId, report.projectId(), names).stream()
-                    .collect(Collectors.toMap(AgentInsightsIssueDAO.IssueIdName::name,
-                            AgentInsightsIssueDAO.IssueIdName::id));
-
-            List<UUID> issueIds = names.stream().map(idsByName::get).toList();
             List<UUID> detailIds = report.issues().stream()
                     .map(issue -> idGenerator.generateId())
                     .toList();
@@ -101,24 +94,26 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
     }
 
     @Override
-    public AgentInsightsIssue.AgentInsightsIssuePage findIssues(@NonNull UUID projectId, @NonNull LocalDate fromDate,
-            @NonNull LocalDate toDate, AgentInsightsIssueStatus status, AgentInsightsSortBy sortBy, int page,
+    public AgentInsightsIssue.AgentInsightsIssuePage findIssues(@NonNull UUID projectId, LocalDate fromDate,
+            LocalDate toDate, AgentInsightsIssueStatus status, AgentInsightsSortBy sortBy, int page,
             int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        validateDateRange(fromDate, toDate);
+        LocalDate effectiveFrom = Objects.requireNonNullElse(fromDate, DEFAULT_FROM_DATE);
+        LocalDate effectiveTo = Objects.requireNonNullElse(toDate, DEFAULT_TO_DATE);
+        validateDateRange(effectiveFrom, effectiveTo);
         String orderBy = toOrderByClause(Objects.requireNonNullElse(sortBy, AgentInsightsSortBy.LAST_SEEN));
 
         log.info("Retrieving agent insights issues for project '{}' in workspace '{}', window '{}'..'{}', page {}",
-                projectId, workspaceId, fromDate, toDate, page);
+                projectId, workspaceId, effectiveFrom, effectiveTo, page);
 
         return transactionTemplate.inTransaction(handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
             int offset = (page - 1) * size;
-            List<AgentInsightsIssue> issues = dao.findIssues(workspaceId, projectId, fromDate, toDate, status,
-                    orderBy, size, offset);
-            long total = dao.countIssues(workspaceId, projectId, fromDate, toDate, status);
+            List<AgentInsightsIssue> issues = dao.findIssues(workspaceId, projectId, effectiveFrom, effectiveTo,
+                    status, orderBy, size, offset);
+            long total = dao.countIssues(workspaceId, projectId, effectiveFrom, effectiveTo, status);
 
             return AgentInsightsIssue.AgentInsightsIssuePage.builder()
                     .page(page)
@@ -131,13 +126,15 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
     @Override
     public AgentInsightsIssueWithDetails getIssue(@NonNull UUID issueId, @NonNull UUID projectId,
-            @NonNull LocalDate fromDate, @NonNull LocalDate toDate) {
+            LocalDate fromDate, LocalDate toDate) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        validateDateRange(fromDate, toDate);
+        LocalDate effectiveFrom = Objects.requireNonNullElse(fromDate, DEFAULT_FROM_DATE);
+        LocalDate effectiveTo = Objects.requireNonNullElse(toDate, DEFAULT_TO_DATE);
+        validateDateRange(effectiveFrom, effectiveTo);
 
         log.info("Retrieving agent insights issue '{}' for project '{}' in workspace '{}', window '{}'..'{}'",
-                issueId, projectId, workspaceId, fromDate, toDate);
+                issueId, projectId, workspaceId, effectiveFrom, effectiveTo);
 
         return transactionTemplate.inTransaction(handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
@@ -147,8 +144,8 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 throw new NotFoundException("Agent insights issue '%s' not found".formatted(issueId));
             }
 
-            List<AgentInsightsIssueDetail> details = dao.findDetails(workspaceId, projectId, issueId, fromDate,
-                    toDate);
+            List<AgentInsightsIssueDetail> details = dao.findDetails(workspaceId, projectId, issueId, effectiveFrom,
+                    effectiveTo);
 
             return issue.toBuilder()
                     .details(details)

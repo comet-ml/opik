@@ -12,8 +12,10 @@ class AgentInsightsIssue(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     description: typing.Optional[str] = None
+    cause: typing.Optional[str] = None
+    suggested_fix: typing.Optional[str] = None
     status: typing.Optional[AgentInsightsIssueStatus] = None
-    query: typing.Optional[str] = None
+    traces_query: typing.Optional[str] = None
     total_occurrences: typing.Optional[int] = pydantic.Field(default=None)
     """
     SUM(count) over the requested window

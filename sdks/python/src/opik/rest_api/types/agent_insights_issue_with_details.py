@@ -13,8 +13,10 @@ class AgentInsightsIssueWithDetails(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     description: typing.Optional[str] = None
+    cause: typing.Optional[str] = None
+    suggested_fix: typing.Optional[str] = None
     status: typing.Optional[AgentInsightsIssueWithDetailsStatus] = None
-    query: typing.Optional[str] = None
+    traces_query: typing.Optional[str] = None
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None

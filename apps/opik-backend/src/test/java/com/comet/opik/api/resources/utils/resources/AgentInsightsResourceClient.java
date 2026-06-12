@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class AgentInsightsResourceClient {
 
-    private static final String INTERNAL_ISSUES_PATH = "%s/v1/internal/agent-insights/issues";
+    private static final String INTERNAL_ISSUES_PATH = "%s/v1/private/agent-insights/issues";
     private static final String ISSUES_PATH = "%s/v1/private/agent-insights/issues";
     private static final String ISSUE_BY_ID_PATH = ISSUES_PATH + "/%s";
 
@@ -106,11 +106,15 @@ public class AgentInsightsResourceClient {
 
     public AgentInsightsIssueWithDetails getIssue(UUID issueId, UUID projectId, LocalDate fromDate, LocalDate toDate,
             String apiKey, String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(ISSUE_BY_ID_PATH.formatted(baseURI, issueId))
-                .queryParam("project_id", projectId)
-                .queryParam("from_date", fromDate)
-                .queryParam("to_date", toDate)
-                .request()
+        WebTarget target = client.target(ISSUE_BY_ID_PATH.formatted(baseURI, issueId))
+                .queryParam("project_id", projectId);
+        if (fromDate != null) {
+            target = target.queryParam("from_date", fromDate);
+        }
+        if (toDate != null) {
+            target = target.queryParam("to_date", toDate);
+        }
+        try (var actualResponse = target.request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

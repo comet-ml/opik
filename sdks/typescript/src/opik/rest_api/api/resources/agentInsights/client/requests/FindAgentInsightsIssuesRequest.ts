@@ -5,15 +5,13 @@ import type * as OpikApi from "../../../../index.js";
 /**
  * @example
  *     {
- *         projectId: "project_id",
- *         fromDate: "2023-01-15",
- *         toDate: "2023-01-15"
+ *         projectId: "project_id"
  *     }
  */
 export interface FindAgentInsightsIssuesRequest {
     projectId: string;
-    fromDate: string;
-    toDate: string;
+    fromDate?: string;
+    toDate?: string;
     status?: OpikApi.FindAgentInsightsIssuesRequestStatus;
     sortBy?: OpikApi.FindAgentInsightsIssuesRequestSortBy;
     page?: number;

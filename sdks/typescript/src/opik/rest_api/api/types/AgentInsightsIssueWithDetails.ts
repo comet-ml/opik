@@ -6,8 +6,10 @@ export interface AgentInsightsIssueWithDetails {
     id?: string;
     name?: string;
     description?: string;
+    cause?: string;
+    suggestedFix?: string;
     status?: OpikApi.AgentInsightsIssueWithDetailsStatus;
-    query?: string;
+    tracesQuery?: string;
     createdBy?: string;
     createdAt?: Date;
     lastUpdatedBy?: string;

@@ -28,9 +28,12 @@ public record AgentInsightsReport(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ReportedIssue(
+            UUID id,
             @NotBlank @Size(max = 255) String name,
             String description,
-            String query,
+            String cause,
+            String suggestedFix,
+            String tracesQuery,
             @NotNull @PositiveOrZero Long count,
             @NotNull @PositiveOrZero Long totalCount,
             @NotNull @PositiveOrZero Long usersImpacted,

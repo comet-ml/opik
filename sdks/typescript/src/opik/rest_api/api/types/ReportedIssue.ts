@@ -3,9 +3,12 @@
 import type * as OpikApi from "../index.js";
 
 export interface ReportedIssue {
+    id?: string;
     name: string;
     description?: string;
-    query?: string;
+    cause?: string;
+    suggestedFix?: string;
+    tracesQuery?: string;
     count: number;
     totalCount: number;
     usersImpacted: number;

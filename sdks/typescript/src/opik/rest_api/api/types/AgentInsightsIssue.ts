@@ -6,8 +6,10 @@ export interface AgentInsightsIssue {
     id?: string;
     name?: string;
     description?: string;
+    cause?: string;
+    suggestedFix?: string;
     status?: OpikApi.AgentInsightsIssueStatus;
-    query?: string;
+    tracesQuery?: string;
     /** SUM(count) over the requested window */
     totalOccurrences?: number;
     /** SUM(total_count) over the requested window */

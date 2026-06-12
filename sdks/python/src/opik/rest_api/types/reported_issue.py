@@ -8,9 +8,12 @@ from .json_node import JsonNode
 
 
 class ReportedIssue(UniversalBaseModel):
+    id: typing.Optional[str] = None
     name: str
     description: typing.Optional[str] = None
-    query: typing.Optional[str] = None
+    cause: typing.Optional[str] = None
+    suggested_fix: typing.Optional[str] = None
+    traces_query: typing.Optional[str] = None
     count: int
     total_count: int
     users_impacted: int

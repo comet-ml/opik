@@ -37,9 +37,7 @@ export class AgentInsightsClient {
      *
      * @example
      *     await client.agentInsights.findAgentInsightsIssues({
-     *         projectId: "project_id",
-     *         fromDate: "2023-01-15",
-     *         toDate: "2023-01-15"
+     *         projectId: "project_id"
      *     })
      */
     public findAgentInsightsIssues(
@@ -136,6 +134,99 @@ export class AgentInsightsClient {
     }
 
     /**
+     * Upserts the detected issues and their per-day metrics for the given report day in a single transaction. Issue status is never modified by this endpoint.
+     *
+     * @param {OpikApi.AgentInsightsReport} request
+     * @param {AgentInsightsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.agentInsights.reportAgentInsightsIssues({
+     *         projectId: "project_id",
+     *         reportDay: "2023-01-15",
+     *         issues: [{
+     *                 name: "name",
+     *                 count: 1000000,
+     *                 totalCount: 1000000,
+     *                 usersImpacted: 1000000,
+     *                 totalUsers: 1000000
+     *             }]
+     *     })
+     */
+    public reportAgentInsightsIssues(
+        request: OpikApi.AgentInsightsReport,
+        requestOptions?: AgentInsightsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__reportAgentInsightsIssues(request, requestOptions));
+    }
+
+    private async __reportAgentInsightsIssues(
+        request: OpikApi.AgentInsightsReport,
+        requestOptions?: AgentInsightsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/agent-insights/issues",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.AgentInsightsReport.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/agent-insights/issues",
+        );
+    }
+
+    /**
      * Returns the issue together with its per-day breakdown within the requested time window
      *
      * @param {string} issue_id
@@ -148,9 +239,7 @@ export class AgentInsightsClient {
      *
      * @example
      *     await client.agentInsights.getAgentInsightsIssueById("issue_id", {
-     *         projectId: "project_id",
-     *         fromDate: "2023-01-15",
-     *         toDate: "2023-01-15"
+     *         projectId: "project_id"
      *     })
      */
     public getAgentInsightsIssueById(

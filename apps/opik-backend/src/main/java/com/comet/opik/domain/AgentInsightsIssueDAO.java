@@ -18,7 +18,6 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
-import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
@@ -33,7 +32,6 @@ import java.util.List;
 import java.util.UUID;
 
 @RegisterConstructorMapper(AgentInsightsIssue.class)
-@RegisterConstructorMapper(AgentInsightsIssueDAO.IssueIdName.class)
 @RegisterRowMapper(AgentInsightsIssueDAO.IssueWithDetailsRowMapper.class)
 @RegisterRowMapper(AgentInsightsIssueDAO.IssueDetailRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -41,16 +39,16 @@ import java.util.UUID;
 @RegisterColumnMapper(AgentInsightsIssueStatusColumnMapper.class)
 interface AgentInsightsIssueDAO {
 
-    record IssueIdName(UUID id, String name) {
-    }
-
     @SqlBatch("""
             INSERT INTO agent_insights_issues
-                (id, workspace_id, project_id, name, description, `query`, created_by, last_updated_by)
-            VALUES (:id, :workspace_id, :project_id, :bean.name, :bean.description, :bean.query, :user_name, :user_name)
+                (id, workspace_id, project_id, name, description, cause, suggested_fix, traces_query, created_by, last_updated_by)
+            VALUES (:id, :workspace_id, :project_id, :bean.name, :bean.description, :bean.cause, :bean.suggestedFix,
+                    :bean.tracesQuery, :user_name, :user_name)
             ON DUPLICATE KEY UPDATE
                 description = :bean.description,
-                `query` = :bean.query,
+                cause = :bean.cause,
+                suggested_fix = :bean.suggestedFix,
+                traces_query = :bean.tracesQuery,
                 last_updated_by = :user_name
             """)
     void upsertIssues(
@@ -59,15 +57,6 @@ interface AgentInsightsIssueDAO {
             @Bind("user_name") String userName,
             @Bind("id") List<UUID> ids,
             @BindMethods("bean") List<AgentInsightsReport.ReportedIssue> issues);
-
-    @SqlQuery("""
-            SELECT id, name FROM agent_insights_issues
-            WHERE workspace_id = :workspace_id AND project_id = :project_id AND name IN (<names>)
-            """)
-    List<IssueIdName> findIdsByNames(
-            @Bind("workspace_id") String workspaceId,
-            @Bind("project_id") UUID projectId,
-            @BindList("names") List<String> names);
 
     @SqlBatch("""
             INSERT INTO agent_insights_issues_details
@@ -94,7 +83,7 @@ interface AgentInsightsIssueDAO {
             @Bind("metadata") List<String> metadata);
 
     @SqlQuery("""
-            SELECT i.id, i.name, i.description, i.status, i.`query`,
+            SELECT i.id, i.name, i.description, i.cause, i.suggested_fix, i.status, i.traces_query,
                    SUM(d.`count`) AS total_occurrences,
                    SUM(d.total_count) AS total,
                    SUM(d.users_impacted) AS users_impacted,
@@ -150,7 +139,7 @@ interface AgentInsightsIssueDAO {
             @Define("status") @Bind("status") AgentInsightsIssueStatus status);
 
     @SqlQuery("""
-            SELECT id, name, description, status, `query`, created_by, created_at, last_updated_by, last_updated_at
+            SELECT id, name, description, cause, suggested_fix, status, traces_query, created_by, created_at, last_updated_by, last_updated_at
             FROM agent_insights_issues
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND id = :id
             """)
@@ -195,8 +184,10 @@ interface AgentInsightsIssueDAO {
                     .id(UUID.fromString(rs.getString("id")))
                     .name(rs.getString("name"))
                     .description(rs.getString("description"))
+                    .cause(rs.getString("cause"))
+                    .suggestedFix(rs.getString("suggested_fix"))
                     .status(AgentInsightsIssueStatus.fromString(rs.getString("status")))
-                    .query(rs.getString("query"))
+                    .tracesQuery(rs.getString("traces_query"))
                     .createdBy(rs.getString("created_by"))
                     .createdAt(rs.getTimestamp("created_at").toInstant())
                     .lastUpdatedBy(rs.getString("last_updated_by"))

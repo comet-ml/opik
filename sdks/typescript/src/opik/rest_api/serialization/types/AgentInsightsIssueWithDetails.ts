@@ -13,8 +13,10 @@ export const AgentInsightsIssueWithDetails: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     name: core.serialization.string().optional(),
     description: core.serialization.string().optional(),
+    cause: core.serialization.string().optional(),
+    suggestedFix: core.serialization.property("suggested_fix", core.serialization.string().optional()),
     status: AgentInsightsIssueWithDetailsStatus.optional(),
-    query: core.serialization.string().optional(),
+    tracesQuery: core.serialization.property("traces_query", core.serialization.string().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
@@ -27,8 +29,10 @@ export declare namespace AgentInsightsIssueWithDetails {
         id?: string | null;
         name?: string | null;
         description?: string | null;
+        cause?: string | null;
+        suggested_fix?: string | null;
         status?: AgentInsightsIssueWithDetailsStatus.Raw | null;
-        query?: string | null;
+        traces_query?: string | null;
         created_by?: string | null;
         created_at?: string | null;
         last_updated_by?: string | null;

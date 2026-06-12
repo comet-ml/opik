@@ -5,6 +5,7 @@ import com.comet.opik.api.AgentInsightsIssue;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
+import com.comet.opik.api.AgentInsightsReport;
 import com.comet.opik.api.AgentInsightsSortBy;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AgentInsightsIssueService;
@@ -22,6 +23,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -55,8 +57,8 @@ public class AgentInsightsResource {
     })
     public Response findIssues(
             @QueryParam("project_id") @NotNull UUID projectId,
-            @QueryParam("from_date") @NotNull LocalDate fromDate,
-            @QueryParam("to_date") @NotNull LocalDate toDate,
+            @QueryParam("from_date") LocalDate fromDate,
+            @QueryParam("to_date") LocalDate toDate,
             @QueryParam("status") AgentInsightsIssueStatus status,
             @QueryParam("sort_by") AgentInsightsSortBy sortBy,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -82,8 +84,8 @@ public class AgentInsightsResource {
     public Response getIssueById(
             @PathParam("issue_id") UUID issueId,
             @QueryParam("project_id") @NotNull UUID projectId,
-            @QueryParam("from_date") @NotNull LocalDate fromDate,
-            @QueryParam("to_date") @NotNull LocalDate toDate) {
+            @QueryParam("from_date") LocalDate fromDate,
+            @QueryParam("to_date") LocalDate toDate) {
 
         log.info("Retrieving agent insights issue '{}' for project '{}', window '{}'..'{}'",
                 issueId, projectId, fromDate, toDate);
@@ -92,6 +94,25 @@ public class AgentInsightsResource {
                 toDate);
 
         return Response.ok(issue).build();
+    }
+
+    @POST
+    @Path("/issues")
+    @Operation(operationId = "reportAgentInsightsIssues", summary = "Store agent insights report results", description = "Upserts the detected issues and their per-day metrics for the given report day in a single transaction. Issue status is never modified by this endpoint.", responses = {
+            @ApiResponse(responseCode = "204", description = "Report stored"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response reportIssues(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentInsightsReport.class))) @NotNull @Valid AgentInsightsReport report) {
+
+        log.info("Storing agent insights report with '{}' issues for project '{}' on report day '{}'",
+                report.issues().size(), report.projectId(), report.reportDay());
+
+        agentInsightsIssueService.reportIssues(report);
+
+        return Response.noContent().build();
     }
 
     @PATCH

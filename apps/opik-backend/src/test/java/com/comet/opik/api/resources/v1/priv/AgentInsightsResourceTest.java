@@ -145,10 +145,18 @@ class AgentInsightsResourceTest {
 
     private AgentInsightsReport.ReportedIssue reportedIssue(String name, long count, long totalCount,
             long usersImpacted, long totalUsers) {
+        return reportedIssue(null, name, count, totalCount, usersImpacted, totalUsers);
+    }
+
+    private AgentInsightsReport.ReportedIssue reportedIssue(UUID id, String name, long count, long totalCount,
+            long usersImpacted, long totalUsers) {
         return AgentInsightsReport.ReportedIssue.builder()
+                .id(id)
                 .name(name)
                 .description("Description of " + name)
-                .query("SELECT 1")
+                .cause("Cause of " + name)
+                .suggestedFix("Fix for " + name)
+                .tracesQuery("SELECT 1")
                 .count(count)
                 .totalCount(totalCount)
                 .usersImpacted(usersImpacted)
@@ -198,7 +206,9 @@ class AgentInsightsResourceTest {
                     .findFirst()
                     .orElseThrow();
             assertThat(issueA.description()).isEqualTo("Description of issue-a");
-            assertThat(issueA.query()).isEqualTo("SELECT 1");
+            assertThat(issueA.cause()).isEqualTo("Cause of issue-a");
+            assertThat(issueA.suggestedFix()).isEqualTo("Fix for issue-a");
+            assertThat(issueA.tracesQuery()).isEqualTo("SELECT 1");
             assertThat(issueA.status()).isEqualTo(AgentInsightsIssueStatus.OPEN);
             assertThat(issueA.totalOccurrences()).isEqualTo(10);
             assertThat(issueA.total()).isEqualTo(100);
@@ -211,19 +221,19 @@ class AgentInsightsResourceTest {
         }
 
         @Test
-        @DisplayName("Idempotency: re-reporting the same day replaces metrics instead of duplicating")
+        @DisplayName("Idempotency: re-reporting with the same id replaces metrics instead of duplicating")
         void reportIssuesWhenSameDayReportedTwiceThenMetricsAreReplaced() {
             var projectId = createProject();
 
             report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
-            var firstPage = findIssues(projectId, DAY_1, DAY_1);
+            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 20, 200, 6, 60)));
+            report(projectId, DAY_1, List.of(reportedIssue(issueId, "issue-a", 20, 200, 6, 60)));
             var secondPage = findIssues(projectId, DAY_1, DAY_1);
 
             assertThat(secondPage.total()).isEqualTo(1);
             var issue = secondPage.content().getFirst();
-            assertThat(issue.id()).isEqualTo(firstPage.content().getFirst().id());
+            assertThat(issue.id()).isEqualTo(issueId);
             assertThat(issue.totalOccurrences()).isEqualTo(20);
             assertThat(issue.total()).isEqualTo(200);
             assertThat(issue.usersImpacted()).isEqualTo(6);
@@ -247,7 +257,8 @@ class AgentInsightsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             report(projectId, DAY_2, List.of(
-                    reportedIssue("issue-a", 7, 50, 2, 20).toBuilder().description("updated description").build()));
+                    reportedIssue(issueId, "issue-a", 7, 50, 2, 20).toBuilder().description("updated description")
+                            .build()));
 
             var issue = findIssues(projectId, DAY_1, DAY_2).content().getFirst();
             assertThat(issue.id()).isEqualTo(issueId);
@@ -256,16 +267,17 @@ class AgentInsightsResourceTest {
         }
 
         @Test
-        @DisplayName("Duplicate issue names in one request return 400")
-        void reportIssuesWhenDuplicateNamesThenBadRequest() {
+        @DisplayName("Duplicate explicit issue ids in one request return 400")
+        void reportIssuesWhenDuplicateIdsThenBadRequest() {
             var projectId = createProject();
+            var sharedId = UUID.randomUUID();
 
             var reportRequest = AgentInsightsReport.builder()
                     .projectId(projectId)
                     .reportDay(DAY_1)
                     .issues(List.of(
-                            reportedIssue("issue-a", 1, 10, 1, 10),
-                            reportedIssue("issue-a", 2, 10, 1, 10)))
+                            reportedIssue(sharedId, "issue-a", 1, 10, 1, 10),
+                            reportedIssue(sharedId, "issue-b", 2, 10, 1, 10)))
                     .build();
 
             agentInsightsResourceClient.reportIssues(reportRequest, API_KEY, TEST_WORKSPACE,
@@ -343,12 +355,14 @@ class AgentInsightsResourceTest {
         @DisplayName("Only issues with details inside the window are returned, aggregates are window-bounded")
         void findIssuesWhenWindowIsRestrictedThenOnlyMatchingIssuesAndAggregates() {
             var projectId = createProject();
+            var issueAId = UUID.randomUUID();
+            var issueBId = UUID.randomUUID();
 
             report(projectId, DAY_1, List.of(
-                    reportedIssue("issue-a", 10, 100, 3, 40),
-                    reportedIssue("issue-b", 1, 100, 1, 10)));
-            report(projectId, DAY_2, List.of(reportedIssue("issue-a", 20, 200, 4, 50)));
-            report(projectId, DAY_3, List.of(reportedIssue("issue-a", 30, 300, 5, 60)));
+                    reportedIssue(issueAId, "issue-a", 10, 100, 3, 40),
+                    reportedIssue(issueBId, "issue-b", 1, 100, 1, 10)));
+            report(projectId, DAY_2, List.of(reportedIssue(issueAId, "issue-a", 20, 200, 4, 50)));
+            report(projectId, DAY_3, List.of(reportedIssue(issueAId, "issue-a", 30, 300, 5, 60)));
 
             // full window: both issues, issue-a aggregated over 3 days
             var fullPage = findIssues(projectId, DAY_1, DAY_3);
@@ -377,6 +391,21 @@ class AgentInsightsResourceTest {
             assertThat(restrictedIssueA.firstSeen()).isEqualTo(DAY_2);
             assertThat(restrictedIssueA.lastSeen()).isEqualTo(DAY_3);
             assertThat(restrictedIssueA.daysReported()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("Omitting dates returns all issues across all history")
+        void findIssuesWhenNoDatesProvidedThenAllIssuesReturned() {
+            var projectId = createProject();
+
+            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_3, List.of(reportedIssue("issue-b", 5, 50, 1, 20)));
+
+            var page = agentInsightsResourceClient.findIssues(projectId, null, null, null, null, null, null,
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(page.total()).isEqualTo(2);
+            assertThat(page.content()).extracting(AgentInsightsIssue::name)
+                    .containsExactlyInAnyOrder("issue-a", "issue-b");
         }
 
         @Test
@@ -512,12 +541,13 @@ class AgentInsightsResourceTest {
         @DisplayName("Success: returns the issue header with the per-day breakdown ordered ascending")
         void getIssueById() {
             var projectId = createProject();
+            var issueAId = UUID.randomUUID();
             var metadata = JsonUtils.getJsonNodeFromString("{\"sample_trace_ids\":[\"abc\",\"def\"]}");
 
-            report(projectId, DAY_2, List.of(reportedIssue("issue-a", 20, 200, 4, 50)));
+            report(projectId, DAY_2, List.of(reportedIssue(issueAId, "issue-a", 20, 200, 4, 50)));
             report(projectId, DAY_1, List.of(
-                    reportedIssue("issue-a", 10, 100, 3, 40).toBuilder().metadata(metadata).build()));
-            report(projectId, DAY_3, List.of(reportedIssue("issue-a", 30, 300, 5, 60)));
+                    reportedIssue(issueAId, "issue-a", 10, 100, 3, 40).toBuilder().metadata(metadata).build()));
+            report(projectId, DAY_3, List.of(reportedIssue(issueAId, "issue-a", 30, 300, 5, 60)));
 
             var issueId = findIssues(projectId, DAY_1, DAY_3).content().getFirst().id();
 
@@ -544,6 +574,25 @@ class AgentInsightsResourceTest {
                     TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(restricted.details()).hasSize(1);
             assertThat(restricted.details().getFirst().reportDay()).isEqualTo(DAY_2);
+        }
+
+        @Test
+        @DisplayName("Omitting dates returns all available details")
+        void getIssueByIdWhenNoDatesProvidedThenAllDetailsReturned() {
+            var projectId = createProject();
+            var issueAId = UUID.randomUUID();
+
+            report(projectId, DAY_1, List.of(reportedIssue(issueAId, "issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_2, List.of(reportedIssue(issueAId, "issue-a", 20, 200, 4, 50)));
+            report(projectId, DAY_3, List.of(reportedIssue(issueAId, "issue-a", 30, 300, 5, 60)));
+
+            var issueId = findIssues(projectId, DAY_1, DAY_3).content().getFirst().id();
+
+            var issue = agentInsightsResourceClient.getIssue(issueId, projectId, null, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(issue.id()).isEqualTo(issueId);
+            assertThat(issue.details()).hasSize(3);
         }
 
         @Test

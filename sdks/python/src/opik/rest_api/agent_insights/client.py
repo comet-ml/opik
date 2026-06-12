@@ -7,6 +7,7 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.agent_insights_issue_page import AgentInsightsIssuePage
 from ..types.agent_insights_issue_with_details import AgentInsightsIssueWithDetails
+from ..types.reported_issue import ReportedIssue
 from .raw_client import AsyncRawAgentInsightsClient, RawAgentInsightsClient
 from .types.agent_insights_issue_update_status import AgentInsightsIssueUpdateStatus
 from .types.find_agent_insights_issues_request_sort_by import FindAgentInsightsIssuesRequestSortBy
@@ -35,8 +36,8 @@ class AgentInsightsClient:
         self,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
         sort_by: typing.Optional[FindAgentInsightsIssuesRequestSortBy] = None,
         page: typing.Optional[int] = None,
@@ -50,9 +51,9 @@ class AgentInsightsClient:
         ----------
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
 
@@ -73,9 +74,8 @@ class AgentInsightsClient:
         Examples
         --------
         from Opik import OpikApi
-        import datetime
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.agent_insights.find_agent_insights_issues(project_id='project_id', from_date=datetime.date.fromisoformat("2023-01-15", ), to_date=datetime.date.fromisoformat("2023-01-15", ), )
+        client.agent_insights.find_agent_insights_issues(project_id='project_id', )
         """
         _response = self._raw_client.find_agent_insights_issues(
             project_id=project_id,
@@ -89,13 +89,52 @@ class AgentInsightsClient:
         )
         return _response.data
 
+    def report_agent_insights_issues(
+        self,
+        *,
+        project_id: str,
+        report_day: dt.date,
+        issues: typing.Sequence[ReportedIssue],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Upserts the detected issues and their per-day metrics for the given report day in a single transaction. Issue status is never modified by this endpoint.
+
+        Parameters
+        ----------
+        project_id : str
+
+        report_day : dt.date
+
+        issues : typing.Sequence[ReportedIssue]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        from Opik import ReportedIssue
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_insights.report_agent_insights_issues(project_id='project_id', report_day=datetime.date.fromisoformat("2023-01-15", ), issues=[ReportedIssue(name='name', count=1000000, total_count=1000000, users_impacted=1000000, total_users=1000000, )], )
+        """
+        _response = self._raw_client.report_agent_insights_issues(
+            project_id=project_id, report_day=report_day, issues=issues, request_options=request_options
+        )
+        return _response.data
+
     def get_agent_insights_issue_by_id(
         self,
         issue_id: str,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AgentInsightsIssueWithDetails:
         """
@@ -107,9 +146,9 @@ class AgentInsightsClient:
 
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -122,9 +161,8 @@ class AgentInsightsClient:
         Examples
         --------
         from Opik import OpikApi
-        import datetime
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.agent_insights.get_agent_insights_issue_by_id(issue_id='issue_id', project_id='project_id', from_date=datetime.date.fromisoformat("2023-01-15", ), to_date=datetime.date.fromisoformat("2023-01-15", ), )
+        client.agent_insights.get_agent_insights_issue_by_id(issue_id='issue_id', project_id='project_id', )
         """
         _response = self._raw_client.get_agent_insights_issue_by_id(
             issue_id, project_id=project_id, from_date=from_date, to_date=to_date, request_options=request_options
@@ -188,8 +226,8 @@ class AsyncAgentInsightsClient:
         self,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
         sort_by: typing.Optional[FindAgentInsightsIssuesRequestSortBy] = None,
         page: typing.Optional[int] = None,
@@ -203,9 +241,9 @@ class AsyncAgentInsightsClient:
         ----------
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
 
@@ -226,11 +264,10 @@ class AsyncAgentInsightsClient:
         Examples
         --------
         from Opik import AsyncOpikApi
-        import datetime
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.agent_insights.find_agent_insights_issues(project_id='project_id', from_date=datetime.date.fromisoformat("2023-01-15", ), to_date=datetime.date.fromisoformat("2023-01-15", ), )
+            await client.agent_insights.find_agent_insights_issues(project_id='project_id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.find_agent_insights_issues(
@@ -245,13 +282,55 @@ class AsyncAgentInsightsClient:
         )
         return _response.data
 
+    async def report_agent_insights_issues(
+        self,
+        *,
+        project_id: str,
+        report_day: dt.date,
+        issues: typing.Sequence[ReportedIssue],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Upserts the detected issues and their per-day metrics for the given report day in a single transaction. Issue status is never modified by this endpoint.
+
+        Parameters
+        ----------
+        project_id : str
+
+        report_day : dt.date
+
+        issues : typing.Sequence[ReportedIssue]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        from Opik import ReportedIssue
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_insights.report_agent_insights_issues(project_id='project_id', report_day=datetime.date.fromisoformat("2023-01-15", ), issues=[ReportedIssue(name='name', count=1000000, total_count=1000000, users_impacted=1000000, total_users=1000000, )], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.report_agent_insights_issues(
+            project_id=project_id, report_day=report_day, issues=issues, request_options=request_options
+        )
+        return _response.data
+
     async def get_agent_insights_issue_by_id(
         self,
         issue_id: str,
         *,
         project_id: str,
-        from_date: dt.date,
-        to_date: dt.date,
+        from_date: typing.Optional[dt.date] = None,
+        to_date: typing.Optional[dt.date] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AgentInsightsIssueWithDetails:
         """
@@ -263,9 +342,9 @@ class AsyncAgentInsightsClient:
 
         project_id : str
 
-        from_date : dt.date
+        from_date : typing.Optional[dt.date]
 
-        to_date : dt.date
+        to_date : typing.Optional[dt.date]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -278,11 +357,10 @@ class AsyncAgentInsightsClient:
         Examples
         --------
         from Opik import AsyncOpikApi
-        import datetime
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.agent_insights.get_agent_insights_issue_by_id(issue_id='issue_id', project_id='project_id', from_date=datetime.date.fromisoformat("2023-01-15", ), to_date=datetime.date.fromisoformat("2023-01-15", ), )
+            await client.agent_insights.get_agent_insights_issue_by_id(issue_id='issue_id', project_id='project_id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.get_agent_insights_issue_by_id(

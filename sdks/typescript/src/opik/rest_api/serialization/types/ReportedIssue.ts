@@ -7,9 +7,12 @@ import { JsonNode } from "./JsonNode.js";
 
 export const ReportedIssue: core.serialization.ObjectSchema<serializers.ReportedIssue.Raw, OpikApi.ReportedIssue> =
     core.serialization.object({
+        id: core.serialization.string().optional(),
         name: core.serialization.string(),
         description: core.serialization.string().optional(),
-        query: core.serialization.string().optional(),
+        cause: core.serialization.string().optional(),
+        suggestedFix: core.serialization.property("suggested_fix", core.serialization.string().optional()),
+        tracesQuery: core.serialization.property("traces_query", core.serialization.string().optional()),
         count: core.serialization.number(),
         totalCount: core.serialization.property("total_count", core.serialization.number()),
         usersImpacted: core.serialization.property("users_impacted", core.serialization.number()),
@@ -19,9 +22,12 @@ export const ReportedIssue: core.serialization.ObjectSchema<serializers.Reported
 
 export declare namespace ReportedIssue {
     export interface Raw {
+        id?: string | null;
         name: string;
         description?: string | null;
-        query?: string | null;
+        cause?: string | null;
+        suggested_fix?: string | null;
+        traces_query?: string | null;
         count: number;
         total_count: number;
         users_impacted: number;
