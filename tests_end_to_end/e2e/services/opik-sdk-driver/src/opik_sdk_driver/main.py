@@ -8,7 +8,7 @@ from .routes import (
     feedback_definitions,
     health,
     projects,
-    test_suites,
+    prompts, test_suites,
     traces,
 )
 
@@ -29,4 +29,5 @@ app.include_router(traces.router)
 app.include_router(feedback_definitions.router)
 app.include_router(datasets.router)
 app.include_router(experiments.router)
+app.include_router(prompts.router)
 app.include_router(test_suites.router)

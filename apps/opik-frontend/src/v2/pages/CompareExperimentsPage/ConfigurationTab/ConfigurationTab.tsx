@@ -25,6 +25,7 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import NavigationTag from "@/shared/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
+import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
@@ -192,7 +193,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             <NavigationTag
               key={pv.id}
               id={pv.prompt_id}
-              name={`${pv.prompt_name}${pv.commit ? ` (${pv.commit})` : ""}`}
+              name={formatPromptVersionLabel(pv)}
               resource={RESOURCE_TYPE.prompt}
               search={{ activeVersionId: pv.id }}
             />

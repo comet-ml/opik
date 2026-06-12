@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, Eye } from "lucide-react";
 import FeedbackScoresEditor from "@/v2/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor";
 import UserCommentForm from "@/shared/UserComment/UserCommentForm";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
@@ -34,6 +34,7 @@ const CommentAndScoreViewer: React.FC = () => {
     currentAnnotationState,
     annotationQueue,
     itemStates,
+    currentItemLockDenied,
     updateComment,
     updateFeedbackScore,
     deleteFeedbackScore,
@@ -57,7 +58,13 @@ const CommentAndScoreViewer: React.FC = () => {
       )
     : false;
 
-  const isLockedForUser = isCompleted && !userHasAnnotated;
+  const isInReview = currentItem
+    ? itemStates[getAnnotationQueueItemId(currentItem)] === ITEM_STATE.IN_REVIEW
+    : false;
+
+  const completedByOthers = isCompleted && !userHasAnnotated;
+  const cannotAnnotate =
+    completedByOthers || isInReview || currentItemLockDenied;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackScoresRef = useRef<HTMLDivElement>(null);
@@ -69,13 +76,13 @@ const CommentAndScoreViewer: React.FC = () => {
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].key,
     (keyboardEvent: KeyboardEvent) => {
-      if (isLockedForUser) return;
+      if (cannotAnnotate) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       textareaRef.current?.focus();
     },
     { enableOnFormTags: true },
-    [isLockedForUser],
+    [cannotAnnotate],
   );
 
   useHotkeys(
@@ -90,7 +97,7 @@ const CommentAndScoreViewer: React.FC = () => {
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].key,
     (keyboardEvent: KeyboardEvent) => {
-      if (!hasFeedbackDefinitions || isLockedForUser) return;
+      if (!hasFeedbackDefinitions || cannotAnnotate) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       const firstInput = feedbackScoresRef.current?.querySelector(
@@ -99,15 +106,26 @@ const CommentAndScoreViewer: React.FC = () => {
       firstInput?.focus();
     },
     { enableOnFormTags: true },
-    [hasFeedbackDefinitions, isLockedForUser],
+    [hasFeedbackDefinitions, cannotAnnotate],
   );
 
-  if (isLockedForUser) {
+  if (completedByOthers) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
         <CircleCheck className="size-5 text-success" />
         <p className="comet-body-xs max-w-[250px]">
           This item has already been scored by the required number of annotators
+        </p>
+      </div>
+    );
+  }
+
+  if (isInReview || currentItemLockDenied) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
+        <Eye className="size-5 text-orange-400" />
+        <p className="comet-body-xs max-w-[250px]">
+          This item is currently being reviewed by another annotator
         </p>
       </div>
     );

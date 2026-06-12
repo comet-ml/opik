@@ -21,6 +21,7 @@ class AnnotationQueueWrite(UniversalBaseModel):
     comments_enabled: typing.Optional[bool] = None
     feedback_definition_names: typing.Optional[typing.List[str]] = None
     annotators_per_item: typing.Optional[int] = None
+    lock_timeout_seconds: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
