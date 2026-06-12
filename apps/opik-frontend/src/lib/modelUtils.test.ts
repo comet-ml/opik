@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   sanitizeConfigForRequest,
   supportsOpenAIReasoningEffort,
@@ -16,6 +17,35 @@ import {
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
+
+describe("getRoutableProviderModelValue", () => {
+  it("qualifies bare Vertex AI Gemini ids", () => {
+    expect(
+      getRoutableProviderModelValue(
+        PROVIDER_TYPE.VERTEX_AI,
+        PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      ),
+    ).toBe(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO);
+  });
+
+  it("keeps already-qualified Vertex AI values unchanged", () => {
+    expect(
+      getRoutableProviderModelValue(
+        PROVIDER_TYPE.VERTEX_AI,
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      ),
+    ).toBe(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO);
+  });
+
+  it("keeps non-Vertex provider values unchanged", () => {
+    expect(
+      getRoutableProviderModelValue(
+        PROVIDER_TYPE.GEMINI,
+        PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      ),
+    ).toBe(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO);
+  });
+});
 
 describe("supportsSamplingParams", () => {
   it("returns true for an empty model selector", () => {
