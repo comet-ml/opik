@@ -1,12 +1,13 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.api.spend.ModelTiers;
 import com.comet.opik.api.spend.OutputLane;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
+import com.comet.opik.api.spend.SpendSummaryResponse;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.api.spend.SpendUserRow;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -27,7 +28,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(AiSpendDAOImpl.class)
 public interface AiSpendDAO {
 
-    Mono<List<WorkspaceMetricsSummaryResponse.Result>> getSummary(SpendMetricRequest request);
+    Mono<SpendSummaryResponse> getSummary(SpendMetricRequest request);
 
     Mono<SpendCompositionResponse> getComposition(SpendMetricRequest request);
 
@@ -67,11 +68,12 @@ class AiSpendDAOImpl implements AiSpendDAO {
     private final @NonNull AiSpendMapper mapper;
 
     @Override
-    public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getSummary(@NonNull SpendMetricRequest request) {
-        Mono<AiSpendMapper.TiersRow> tiers = querySingle(queryBuilder.summaryTiers(), "ai_spend_summary_tiers",
-                request.resolvedProjectId(), NO_TEMPLATE,
+    public Mono<SpendSummaryResponse> getSummary(@NonNull SpendMetricRequest request) {
+        Mono<List<AiSpendMapper.SummaryTierRow>> tiers = queryList(queryBuilder.summaryTiers(),
+                "ai_spend_summary_tiers", request.resolvedProjectId(), NO_TEMPLATE,
                 statement -> bindSummaryRange(statement, request),
-                (row, metadata) -> new AiSpendMapper.TiersRow(
+                (row, metadata) -> new AiSpendMapper.SummaryTierRow(
+                        row.get("model", String.class),
                         getLong(row.get("input_current", Long.class)),
                         getLong(row.get("cache_read_current", Long.class)),
                         getLong(row.get("cache_creation_current", Long.class)),
@@ -79,8 +81,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         getLong(row.get("input_previous", Long.class)),
                         getLong(row.get("cache_read_previous", Long.class)),
                         getLong(row.get("cache_creation_previous", Long.class)),
-                        getLong(row.get("output_previous", Long.class))),
-                AiSpendMapper.TiersRow.empty());
+                        getLong(row.get("output_previous", Long.class))));
 
         Mono<AiSpendMapper.CountsRow> counts = querySingle(queryBuilder.summaryCounts(), "ai_spend_summary_counts",
                 request.resolvedProjectId(), NO_TEMPLATE,
@@ -93,14 +94,14 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         row.get("total_users", Long.class)),
                 AiSpendMapper.CountsRow.empty());
 
-        return Mono.zip(tiers, counts).map(tuple -> mapper.summaryResults(tuple.getT1(), tuple.getT2()));
+        return Mono.zip(tiers, counts).map(tuple -> mapper.summary(tuple.getT1(), tuple.getT2()));
     }
 
     @Override
     public Mono<SpendCompositionResponse> getComposition(@NonNull SpendMetricRequest request) {
         Optional<String> userUuid = resolveUserUuid(request);
 
-        Mono<AiSpendMapper.InputLanesRow> inputTokens = querySingle(queryBuilder.compositionTokens(),
+        Mono<List<AiSpendMapper.ModelLanesRow>> inputTokens = queryList(queryBuilder.compositionTokens(),
                 "ai_spend_composition_tokens", request.resolvedProjectId(), userFlag(userUuid),
                 statement -> bindComposition(statement, request, userUuid),
                 (row, metadata) -> {
@@ -113,20 +114,16 @@ class AiSpendDAOImpl implements AiSpendDAO {
                                 getLong(row.get(lane.getKey() + "_cache_creation", Long.class)),
                                 getLong(row.get(lane.getKey() + "_output", Long.class))));
                     }
-                    List<String> models = Optional.ofNullable(row.get("models", String[].class))
-                            .map(Arrays::asList)
-                            .orElse(List.of());
-                    return new AiSpendMapper.InputLanesRow(lanes, models);
-                },
-                AiSpendMapper.InputLanesRow.empty());
+                    return new AiSpendMapper.ModelLanesRow(row.get("model", String.class), lanes);
+                });
 
-        Mono<Map<String, Long>> outputTokens = queryList(queryBuilder.compositionOutput(),
+        Mono<List<AiSpendMapper.OutputModelRow>> outputTokens = queryList(queryBuilder.compositionOutput(),
                 "ai_spend_composition_output", request.resolvedProjectId(), userFlag(userUuid),
                 statement -> bindComposition(statement, request, userUuid),
-                (row, metadata) -> new AiSpendMapper.OutputLaneRow(
+                (row, metadata) -> new AiSpendMapper.OutputModelRow(
                         row.get("lane", String.class),
-                        getLong(row.get("tokens", Long.class))))
-                .map(mapper::outputTokens);
+                        row.get("model", String.class),
+                        getLong(row.get("tokens", Long.class))));
 
         return Mono.zip(inputTokens, outputTokens)
                 .map(tuple -> mapper.composition(tuple.getT1(), tuple.getT2()));
@@ -157,6 +154,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                 },
                 (row, metadata) -> new AiSpendMapper.BreakdownRow(
                         row.get("label", String.class),
+                        row.get("model", String.class),
                         getLong(row.get("total_tokens", Long.class)),
                         getLong(row.get("definition_tokens", Long.class)),
                         getLong(row.get("usage_tokens", Long.class)),
@@ -167,12 +165,7 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         getLong(row.get("output_tokens", Long.class)),
                         getLong(row.get("grand_total", Long.class)),
                         getLong(row.get("group_count", Long.class)),
-                        getLong(row.get("total_events", Long.class)),
-                        getLong(row.get("total_input", Long.class)),
-                        getLong(row.get("total_cache_read", Long.class)),
-                        getLong(row.get("total_cache_creation", Long.class)),
-                        getLong(row.get("total_output", Long.class)),
-                        row.get("model", String.class)))
+                        getLong(row.get("total_events", Long.class))))
                 .map(rows -> mapper.breakdown(laneKey, title, subtitle, itemUnit, rows));
     }
 
@@ -207,13 +200,9 @@ class AiSpendDAOImpl implements AiSpendDAO {
                                 .skills(getLong(row.get("skills", Long.class)))
                                 .mcps(getLong(row.get("mcps", Long.class)))
                                 .repositories(toList(row.get("repositories", String[].class)))
-                                .inputTokens(getLong(row.get("input_tokens", Long.class)))
-                                .cacheReadTokens(getLong(row.get("cache_read_tokens", Long.class)))
-                                .cacheCreationTokens(getLong(row.get("cache_creation_tokens", Long.class)))
-                                .outputTokens(getLong(row.get("output_tokens", Long.class)))
                                 .totalTokens(getLong(row.get("total_tokens", Long.class)))
                                 .mcpCalls(getLong(row.get("mcp_calls", Long.class)))
-                                .model(row.get("model", String.class))
+                                .byModel(userByModel(row))
                                 .flags(getLong(row.get("high_spend", Long.class)) == 1L
                                         ? List.of("high_spend")
                                         : List.of())
@@ -294,6 +283,40 @@ class AiSpendDAOImpl implements AiSpendDAO {
 
     private Optional<String> resolveUserUuid(SpendMetricRequest request) {
         return Optional.ofNullable(request.userId()).filter(StringUtils::isNotBlank);
+    }
+
+    private List<ModelTiers> userByModel(Row row) {
+        String[] models = row.get("models", String[].class);
+        if (models == null) {
+            return List.of();
+        }
+        // ClickHouse Array(Int64) maps to a primitive long[] over r2dbc.
+        long[] input = row.get("model_input", long[].class);
+        long[] cacheRead = row.get("model_cache_read", long[].class);
+        long[] cacheCreation = row.get("model_cache_creation", long[].class);
+        long[] output = row.get("model_output", long[].class);
+        List<ModelTiers> byModel = new ArrayList<>();
+        for (int i = 0; i < models.length; i++) {
+            long in = arrayValue(input, i);
+            long cacheReadValue = arrayValue(cacheRead, i);
+            long cacheCreationValue = arrayValue(cacheCreation, i);
+            long out = arrayValue(output, i);
+            if (in + cacheReadValue + cacheCreationValue + out <= 0L) {
+                continue;
+            }
+            byModel.add(ModelTiers.builder()
+                    .model(models[i])
+                    .inputTokens(in)
+                    .cacheReadTokens(cacheReadValue)
+                    .cacheCreationTokens(cacheCreationValue)
+                    .outputTokens(out)
+                    .build());
+        }
+        return byModel;
+    }
+
+    private long arrayValue(long[] values, int index) {
+        return values == null || index >= values.length ? 0L : values[index];
     }
 
     private long getLong(Long value) {

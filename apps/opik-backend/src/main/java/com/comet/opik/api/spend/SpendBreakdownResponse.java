@@ -17,13 +17,9 @@ public record SpendBreakdownResponse(
         String title,
         String subtitle,
         Long totalTokens,
-        // Tier-token sums for the lane's window total — the FE prices these.
-        Long inputTokens,
-        Long cacheReadTokens,
-        Long cacheCreationTokens,
-        Long outputTokens,
-        // Representative billing model so the FE can resolve a rate.
-        String model,
+        // Per-model tier sums for the lane's window total — the FE prices
+        // each model at its own rate and sums.
+        List<ModelTiers> byModel,
         // Total occurrences across the lane (the "calls" figure), not the
         // distinct-entity count.
         int itemCount,
@@ -43,11 +39,9 @@ public record SpendBreakdownResponse(
             // conversation-driven usage cost. Sum == totalTokens.
             Long definitionTokens,
             Long usageTokens,
-            // Per-item tier sums so the FE can price each row.
-            Long inputTokens,
-            Long cacheReadTokens,
-            Long cacheCreationTokens,
-            Long outputTokens,
+            // Per-model tier sums so the FE can price each row at the right
+            // rate when an item spans more than one model.
+            List<ModelTiers> byModel,
             // New events this turn summed across traces = true counts
             // (loads, calls, prompts, files).
             Long count) {

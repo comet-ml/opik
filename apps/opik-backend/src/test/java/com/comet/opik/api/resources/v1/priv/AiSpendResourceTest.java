@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.spend.Impact;
+import com.comet.opik.api.spend.ModelTiers;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
@@ -161,13 +162,22 @@ class AiSpendResourceTest {
         Map<String, WorkspaceMetricsSummaryResponse.Result> byName = summary.results().stream()
                 .collect(Collectors.toMap(WorkspaceMetricsSummaryResponse.Result::name, Function.identity()));
 
-        assertThat(byName.get("spend_input_tokens").current()).isEqualTo(150.0);
-        assertThat(byName.get("spend_input_tokens").previous()).isEqualTo(50.0);
-        assertThat(byName.get("spend_cache_read_tokens").current()).isEqualTo(8130.0);
-        assertThat(byName.get("spend_cache_read_tokens").previous()).isEqualTo(2710.0);
-        assertThat(byName.get("spend_cache_creation_tokens").current()).isEqualTo(120.0);
-        assertThat(byName.get("spend_output_tokens").current()).isEqualTo(840.0);
-        assertThat(byName.get("spend_output_tokens").previous()).isEqualTo(280.0);
+        // Spend tiers ship per model so the FE prices each at its own rate.
+        assertThat(summary.spendCurrent()).hasSize(1);
+        ModelTiers current = summary.spendCurrent().getFirst();
+        assertThat(current.model()).isEqualTo("claude-opus-4-8");
+        assertThat(current.inputTokens()).isEqualTo(150L);
+        assertThat(current.cacheReadTokens()).isEqualTo(8130L);
+        assertThat(current.cacheCreationTokens()).isEqualTo(120L);
+        assertThat(current.outputTokens()).isEqualTo(840L);
+
+        assertThat(summary.spendPrevious()).hasSize(1);
+        ModelTiers previous = summary.spendPrevious().getFirst();
+        assertThat(previous.model()).isEqualTo("claude-opus-4-8");
+        assertThat(previous.inputTokens()).isEqualTo(50L);
+        assertThat(previous.cacheReadTokens()).isEqualTo(2710L);
+        assertThat(previous.outputTokens()).isEqualTo(280L);
+
         assertThat(byName.get("total_messages").current()).isEqualTo(3.0);
         assertThat(byName.get("total_messages").previous()).isEqualTo(1.0);
         assertThat(byName.get("active_users").current()).isEqualTo(2.0);
@@ -215,11 +225,13 @@ class AiSpendResourceTest {
         assertThat(inputLanes.get("static_overhead").totalTokens()).isEqualTo(300L);
         assertThat(inputLanes.get("unattributed").totalTokens()).isEqualTo(120L);
 
-        // Tier columns ride along so the FE can price each lane.
-        assertThat(inputLanes.get("user_prompts").inputTokens()).isEqualTo(150L);
-        assertThat(inputLanes.get("user_prompts").cacheReadTokens()).isEqualTo(0L);
-        assertThat(inputLanes.get("prior_assistant").cacheReadTokens()).isEqualTo(3000L);
-        assertThat(inputLanes.get("unattributed").cacheCreationTokens()).isEqualTo(120L);
+        // Per-model tier columns ride along so the FE can price each lane.
+        assertThat(inputLanes.get("user_prompts").byModel()).hasSize(1);
+        assertThat(inputLanes.get("user_prompts").byModel().getFirst().model()).isEqualTo("claude-opus-4-8");
+        assertThat(inputLanes.get("user_prompts").byModel().getFirst().inputTokens()).isEqualTo(150L);
+        assertThat(inputLanes.get("user_prompts").byModel().getFirst().cacheReadTokens()).isEqualTo(0L);
+        assertThat(inputLanes.get("prior_assistant").byModel().getFirst().cacheReadTokens()).isEqualTo(3000L);
+        assertThat(inputLanes.get("unattributed").byModel().getFirst().cacheCreationTokens()).isEqualTo(120L);
         assertThat(inputLanes.get("unattributed").hasBreakdown()).isFalse();
 
         assertThat(outputTokens.get("thinking")).isEqualTo(450L);
@@ -230,8 +242,6 @@ class AiSpendResourceTest {
 
         assertThat(composition.input().totalTokens()).isEqualTo(3 * TRACE_INPUT_SIDE);
         assertThat(composition.output().totalTokens()).isEqualTo(3 * TRACE_OUTPUT_SIDE);
-
-        assertThat(composition.models()).containsExactly("claude-opus-4-8");
 
         assertThat(composition.harness()).hasSize(1);
         assertThat(composition.harness().getFirst().key()).isEqualTo("claude_code");
@@ -377,10 +387,8 @@ class AiSpendResourceTest {
         Map<String, WorkspaceMetricsSummaryResponse.Result> byName = summary.results().stream()
                 .collect(Collectors.toMap(WorkspaceMetricsSummaryResponse.Result::name, Function.identity()));
 
-        assertThat(byName.get("spend_input_tokens").current()).isEqualTo(0.0);
-        assertThat(byName.get("spend_cache_read_tokens").current()).isEqualTo(0.0);
-        assertThat(byName.get("spend_cache_creation_tokens").current()).isEqualTo(0.0);
-        assertThat(byName.get("spend_output_tokens").current()).isEqualTo(0.0);
+        assertThat(summary.spendCurrent()).isEmpty();
+        assertThat(summary.spendPrevious()).isEmpty();
         assertThat(byName.get("total_messages").current()).isEqualTo(0.0);
         assertThat(byName.get("active_users").current()).isEqualTo(0.0);
         assertThat(byName.get("total_users").current()).isEqualTo(0.0);
@@ -419,11 +427,12 @@ class AiSpendResourceTest {
         assertThat(breakdown.itemCount()).isEqualTo(6);
         assertThat(breakdown.totalTokens()).isEqualTo(2700L);
 
-        // Tier sums + model ride along so the FE can price the lane total.
-        assertThat(breakdown.cacheReadTokens()).isEqualTo(2700L);
-        assertThat(breakdown.inputTokens()).isEqualTo(0L);
-        assertThat(breakdown.outputTokens()).isEqualTo(0L);
-        assertThat(breakdown.model()).isEqualTo("claude-opus-4-8");
+        // Per-model tier sums ride along so the FE can price the lane total.
+        assertThat(breakdown.byModel()).hasSize(1);
+        assertThat(breakdown.byModel().getFirst().model()).isEqualTo("claude-opus-4-8");
+        assertThat(breakdown.byModel().getFirst().cacheReadTokens()).isEqualTo(2700L);
+        assertThat(breakdown.byModel().getFirst().inputTokens()).isEqualTo(0L);
+        assertThat(breakdown.byModel().getFirst().outputTokens()).isEqualTo(0L);
 
         Map<String, SpendBreakdownResponse.Item> byLabel = breakdown.items().stream()
                 .collect(Collectors.toMap(SpendBreakdownResponse.Item::label, Function.identity()));
@@ -431,9 +440,9 @@ class AiSpendResourceTest {
         assertThat(byLabel.get("opik-frontend").definitionTokens()).isEqualTo(300L);
         assertThat(byLabel.get("opik-frontend").usageTokens()).isEqualTo(1500L);
         assertThat(byLabel.get("opik-frontend").count()).isEqualTo(3L);
-        // Per-item tier sums ride along so the FE can price each row.
-        assertThat(byLabel.get("opik-frontend").cacheReadTokens()).isEqualTo(1800L);
-        assertThat(byLabel.get("opik-frontend").inputTokens()).isEqualTo(0L);
+        // Per-item, per-model tier sums ride along so the FE can price each row.
+        assertThat(byLabel.get("opik-frontend").byModel().getFirst().cacheReadTokens()).isEqualTo(1800L);
+        assertThat(byLabel.get("opik-frontend").byModel().getFirst().inputTokens()).isEqualTo(0L);
         assertThat(byLabel.get("find-skills").totalTokens()).isEqualTo(900L);
         assertThat(byLabel.get("find-skills").definitionTokens()).isEqualTo(0L);
         assertThat(byLabel.get("find-skills").usageTokens()).isEqualTo(900L);
@@ -636,20 +645,23 @@ class AiSpendResourceTest {
         assertThat(top.userUuid()).isEqualTo(userA);
         assertThat(top.requests()).isEqualTo(2);
         assertThat(top.totalTokens()).isEqualTo(2 * TRACE_TOTAL_TOKENS);
-        assertThat(top.inputTokens()).isEqualTo(100L);
-        assertThat(top.cacheReadTokens()).isEqualTo(5420L);
-        assertThat(top.cacheCreationTokens()).isEqualTo(80L);
-        assertThat(top.outputTokens()).isEqualTo(560L);
+        assertThat(top.byModel()).hasSize(1);
+        ModelTiers topModel = top.byModel().getFirst();
+        assertThat(topModel.model()).isEqualTo("claude-opus-4-8");
+        assertThat(topModel.inputTokens()).isEqualTo(100L);
+        assertThat(topModel.cacheReadTokens()).isEqualTo(5420L);
+        assertThat(topModel.cacheCreationTokens()).isEqualTo(80L);
+        assertThat(topModel.outputTokens()).isEqualTo(560L);
         assertThat(top.flags()).contains("high_spend");
         assertThat(top.repositories()).containsExactly("repo-a");
         assertThat(top.skills()).isEqualTo(4L);
         assertThat(top.mcps()).isEqualTo(1L);
         assertThat(top.mcpCalls()).isEqualTo(2L);
-        assertThat(top.model()).isEqualTo("claude-opus-4-8");
 
         SpendUserRow second = page.content().get(1);
         assertThat(second.userUuid()).isEqualTo(userB);
         assertThat(second.totalTokens()).isEqualTo(0L);
+        assertThat(second.byModel()).isEmpty();
         assertThat(second.flags()).doesNotContain("high_spend");
     }
 
