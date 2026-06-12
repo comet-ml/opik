@@ -12,6 +12,15 @@ export interface CreateTestSuiteDialogFields {
 
 export class TestSuitesPage {
   private projectId: string | null = null;
+  /**
+   * Assertions/policy stashed by fillCreateDialog. The SDK create flow only takes
+   * name + description; assertions and pass criteria are applied after creation
+   * via the in-suite Test settings dialog (see submitCreateDialog).
+   */
+  private pendingCriteria: Pick<
+    CreateTestSuiteDialogFields,
+    'assertions' | 'runsPerItem' | 'passThreshold'
+  > = {};
 
   constructor(private readonly page: Page) {}
 
@@ -51,74 +60,97 @@ export class TestSuitesPage {
     return new TestSuiteItemsPage(this.page, projectId, suiteId);
   }
 
+  /**
+   * Opens the create sidebar in SDK mode. The empty state shows "Upload a file"
+   * and "Use SDK" cards directly; once the list has rows the header button is a
+   * dropdown trigger with the same two options. Handle both so the method works
+   * regardless of list state.
+   */
   async clickCreateTestSuite(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Create test suite' }).click();
+    const emptyStateUseSdk = this.page.getByRole('button', { name: 'Use SDK' });
+    if (await emptyStateUseSdk.count()) {
+      await emptyStateUseSdk.first().click();
+    } else {
+      await this.page.getByRole('button', { name: 'Create test suite' }).click();
+      await this.page.getByRole('menuitem', { name: 'Use SDK' }).click();
+    }
     await this.createDialog.waitFor({ state: 'visible' });
     await this.waitForCreateDialogTransform('translateX(0');
   }
 
+  /**
+   * SDK-mode create takes only name + description. Assertions and pass criteria
+   * have no input in this flow — they're stashed and applied after creation via
+   * the in-suite Test settings dialog (see submitCreateDialog).
+   */
   async fillCreateDialog(fields: CreateTestSuiteDialogFields): Promise<void> {
     await this.createDialog.getByRole('textbox', { name: 'Name' }).fill(fields.name);
     if (fields.description !== undefined) {
-      await this.createDialog.getByRole('textbox', { name: 'Description' }).fill(fields.description);
+      await this.createDialog
+        .getByRole('textbox', { name: 'Description (optional)' })
+        .fill(fields.description);
     }
-    await this.createDialog.getByRole('button', { name: 'Next' }).click();
-    await this.createDialog
-      .getByRole('heading', { name: 'Add test data', level: 3 })
-      .waitFor({ state: 'visible' });
-
-    const hasAdvanced =
-      fields.assertions?.length || fields.runsPerItem !== undefined || fields.passThreshold !== undefined;
-    if (hasAdvanced) {
-      await this.createDialog.getByRole('heading', { name: 'Advanced settings', level: 3 }).click();
-      if (fields.runsPerItem !== undefined) {
-        await this.createDialog
-          .getByRole('spinbutton', { name: 'Default runs per item' })
-          .fill(String(fields.runsPerItem));
-      }
-      if (fields.passThreshold !== undefined) {
-        await this.createDialog
-          .getByRole('spinbutton', { name: 'Default pass threshold' })
-          .fill(String(fields.passThreshold));
-      }
-      for (const assertion of fields.assertions ?? []) {
-        // Trigger button is "No assertions added yet" before any are added; becomes
-        // "Assertion" (with a plus icon) once at least one exists.
-        const addAssertionTrigger = this.createDialog
-          .getByRole('button', { name: 'No assertions added yet' })
-          .or(this.createDialog.getByRole('button', { name: 'Assertion', exact: true }));
-        await addAssertionTrigger.first().click();
-        const inputs = this.createDialog.getByRole('textbox', {
-          name: /Response should be factually accurate/,
-        });
-        await inputs.last().fill(assertion);
-      }
-    }
+    this.pendingCriteria = {
+      assertions: fields.assertions,
+      runsPerItem: fields.runsPerItem,
+      passThreshold: fields.passThreshold,
+    };
   }
 
   /**
-   * Submits the dialog (already on step 2). Returns the new suite's items page.
-   *
-   * The dialog has a 3-step flow ending on a "Test suite created!" success screen
-   * with "Go to test suite" + "Create another" buttons (mirrors the dataset
-   * create flow). We click "Go to test suite" to land on the items page.
+   * Creates the (empty) suite via the SDK-mode footer button, lands on the items
+   * page, then applies any assertions/pass criteria stashed by fillCreateDialog
+   * through the Test settings dialog. Returns the new suite's items page.
    */
   async submitCreateDialog(name: string): Promise<TestSuiteItemsPage> {
     const projectId = this.resolveProjectId();
-    await this.createDialog.getByRole('button', { name: 'Create', exact: true }).click();
-    // Wait for the success screen.
-    await this.createDialog
-      .getByRole('heading', { name: 'Test suite created!' })
-      .waitFor({ state: 'visible', timeout: 15_000 });
-    await this.createDialog.getByRole('button', { name: 'Go to test suite' }).click();
+    await this.createDialog.getByRole('button', { name: 'Create test suite' }).click();
+    await this.waitForCreateDialogTransform('translateX(100%)');
 
-    // After "Go to test suite", the URL navigates to the items page.
-    await this.page.waitForURL(/\/test-suites\/[0-9a-f-]+\/items/, { timeout: 15_000 });
+    await this.openTestSuiteByName(name);
     const match = this.page.url().match(/\/test-suites\/([0-9a-f-]+)/);
     if (!match) {
       throw new Error('TestSuitesPage.submitCreateDialog: could not derive suiteId from URL');
     }
-    return new TestSuiteItemsPage(this.page, projectId, match[1]);
+    const items = new TestSuiteItemsPage(this.page, projectId, match[1]);
+
+    await this.applyTestSettings();
+    return items;
+  }
+
+  /** Apply the criteria stashed by fillCreateDialog via the in-suite Test settings dialog. */
+  private async applyTestSettings(): Promise<void> {
+    const { assertions, runsPerItem, passThreshold } = this.pendingCriteria;
+    this.pendingCriteria = {};
+    if (!assertions?.length && runsPerItem === undefined && passThreshold === undefined) {
+      return;
+    }
+
+    await this.page.getByRole('button', { name: 'Test settings' }).click();
+    const dialog = this.page.getByRole('dialog', { name: 'Test settings' });
+    await dialog.waitFor({ state: 'visible' });
+
+    if (runsPerItem !== undefined) {
+      await dialog.getByRole('spinbutton', { name: 'Default runs per item' }).fill(String(runsPerItem));
+    }
+    if (passThreshold !== undefined) {
+      await dialog.getByRole('spinbutton', { name: 'Default pass threshold' }).fill(String(passThreshold));
+    }
+    for (const assertion of assertions ?? []) {
+      // Trigger button is "Add assertion" before any are added; becomes
+      // "Assertion" (with a plus icon) once at least one exists.
+      const addAssertionTrigger = dialog
+        .getByRole('button', { name: 'Add assertion' })
+        .or(dialog.getByRole('button', { name: 'Assertion', exact: true }));
+      await addAssertionTrigger.first().click();
+      const inputs = dialog.getByRole('textbox', {
+        name: /Response should be factually accurate/,
+      });
+      await inputs.last().fill(assertion);
+    }
+
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await dialog.waitFor({ state: 'hidden' });
   }
 
   /** Read projectId from the instance (set by goto) or fall back to the current URL. */
