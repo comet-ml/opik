@@ -1,31 +1,48 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.spend.OutputLane;
 import com.comet.opik.api.spend.SpendLane;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.stringtemplate.v4.ST;
 
+import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 class AiSpendQueryBuilder {
+
+    /** A query template plus the consumer binding its SQL fragments as ST variables. */
+    record TemplatedQuery(String sql, Consumer<ST> fragments) {
+    }
+
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     private static final String USER_UUID_EXPR = "JSONExtractString(metadata, 'cc', 'identity', 'user_uuid')";
 
-    // Queries are rendered through StringTemplate (getSTWithLogComment), so the '<' operator must be escaped as
-    // '\\<' (see clickhouse.md / WorkspaceMetricsDAO). Only the current/previous predicates use '<'/'<='.
+    // Range fragments are bound as ST variables (st.add), never spliced into template
+    // text, so the '<' operators need no StringTemplate escaping.
     private static final String TS_CURRENT = "start_time >= parseDateTime64BestEffort(:ts_start, 9)"
-            + " AND start_time \\<= parseDateTime64BestEffort(:ts_end, 9)";
+            + " AND start_time <= parseDateTime64BestEffort(:ts_end, 9)";
     private static final String TS_PREVIOUS = "start_time >= parseDateTime64BestEffort(:ts_prior_start, 9)"
-            + " AND start_time \\< parseDateTime64BestEffort(:ts_start, 9)";
+            + " AND start_time < parseDateTime64BestEffort(:ts_start, 9)";
     private static final String TS_WINDOW = "start_time BETWEEN parseDateTime64BestEffort(:ts_prior_start, 9)"
             + " AND parseDateTime64BestEffort(:ts_end, 9)";
     private static final String TS_RANGE = "start_time BETWEEN parseDateTime64BestEffort(:ts_start, 9)"
             + " AND parseDateTime64BestEffort(:ts_end, 9)";
 
-    private static final String ID_CURRENT = "id >= :id_start AND id \\<= :id_end";
-    private static final String ID_PREVIOUS = "id >= :id_prior_start AND id \\< :id_start";
+    private static final String ID_CURRENT = "id >= :id_start AND id <= :id_end";
+    private static final String ID_PREVIOUS = "id >= :id_prior_start AND id < :id_start";
     private static final String ID_WINDOW = "id BETWEEN :id_prior_start AND :id_end";
     private static final String ID_RANGE = "id BETWEEN :id_start AND :id_end";
 
@@ -37,199 +54,219 @@ class AiSpendQueryBuilder {
             + " AND s.start_time BETWEEN parseDateTime64BestEffort(:ts_start, 9)"
             + " AND parseDateTime64BestEffort(:ts_end, 9)";
 
-    private static final String SPAN_WINDOW = WINDOW + " AND trace_id BETWEEN :id_prior_start AND :id_end";
-    private static final String SPAN_RANGE = RANGE + " AND trace_id BETWEEN :id_start AND :id_end";
     private static final String SPAN_RANGE_ALIASED = RANGE_ALIASED + " AND s.trace_id BETWEEN :id_start AND :id_end";
 
     private static final int BREAKDOWN_ITEM_LIMIT = 200;
 
-    private static final Map<SpendLane, String> TOKEN_EXPRESSIONS = new EnumMap<>(Map.of(
-            SpendLane.PRIOR_ASSISTANT, "cc.prior_assistant.summary.total_tokens",
-            SpendLane.TOOL_RESULTS, "cc.tool_results.summary.total_tokens",
-            SpendLane.USER_PROMPTS, "cc.user_prompts.summary.total_tokens",
-            SpendLane.SKILLS_AVAILABLE, "cc.skills.summary.menu_tokens",
-            SpendLane.SKILLS_LOADED, "cc.skills.summary.loaded_tokens",
-            SpendLane.TOOLS, "cc.tools.summary.schema_tokens",
-            SpendLane.MEMORY, "cc.memory.summary.total_tokens",
-            SpendLane.FILE_ATTACHMENTS, "cc.file_attachments.summary.total_tokens"));
+    private static final List<String> TIER_COLUMNS = List.of("total", "input", "cache_read", "cache_creation",
+            "output");
 
-    private static final Map<SpendLane, BreakdownSpec> BREAKDOWN_SPECS = new EnumMap<>(Map.of(
-            SpendLane.TOOL_RESULTS, new BreakdownSpec("'cc', 'tool_results', 'by_tool'", "name", "tokens"),
-            SpendLane.SKILLS_AVAILABLE, new BreakdownSpec("'cc', 'skills', 'available'", "name", "menu_tokens"),
-            SpendLane.SKILLS_LOADED, new BreakdownSpec("'cc', 'skills', 'loaded'", "name", "body_tokens"),
-            SpendLane.MEMORY, new BreakdownSpec("'cc', 'memory', 'files'", "path", "body_tokens"),
-            SpendLane.FILE_ATTACHMENTS,
-            new BreakdownSpec("'cc', 'file_attachments', 'files'", "content_type", "body_tokens")));
+    private static final String BILLING_TOTAL_EXPR = "JSONExtractInt(metadata, 'cc', 'billing', 'totals', '%s')";
 
-    private static final Map<OutputLane, OutputSpec> OUTPUT_SPECS = new EnumMap<>(Map.of(
-            OutputLane.THINKING, new OutputSpec("if(model != '', model, 'Unknown model')",
-                    "JSONExtractString(metadata, 'cc', 'llm_call', 'block_kind') = 'thinking'"),
-            OutputLane.ASSISTANT_TEXT, new OutputSpec("if(model != '', model, 'Unknown model')",
-                    "JSONExtractString(metadata, 'cc', 'llm_call', 'block_kind') = 'text'"),
-            OutputLane.BUILT_IN_TOOL_CALLS, new OutputSpec("name",
-                    "JSONExtractString(metadata, 'cc', 'llm_call', 'block_kind') = 'tool_use'"
-                            + " AND NOT startsWith(name, 'mcp__') AND name != 'Skill'"),
-            OutputLane.MCP_TOOL_CALLS, new OutputSpec(
-                    "if(splitByString('__', name)[2] != '', splitByString('__', name)[2], 'Unknown server')",
-                    "JSONExtractString(metadata, 'cc', 'llm_call', 'block_kind') = 'tool_use'"
-                            + " AND startsWith(name, 'mcp__')"),
-            OutputLane.SKILL_INVOCATIONS, new OutputSpec(
-                    "if(JSONExtractString(input, 'skill') != '', JSONExtractString(input, 'skill'), 'Unknown skill')",
-                    "JSONExtractString(metadata, 'cc', 'llm_call', 'block_kind') = 'tool_use' AND name = 'Skill'")));
+    // ClickHouse predicates and label expressions per output lane live here so the
+    // api enums carry no SQL. Output item names are `thinking`, `assistant_text`,
+    // or `<lane>/<entity>` for tool calls, so the breakdown label is the suffix.
+    private static final Map<OutputLane, String> OUTPUT_LANE_PREDICATES = new EnumMap<>(Map.of(
+            OutputLane.THINKING, "name = 'thinking'",
+            OutputLane.ASSISTANT_TEXT, "name = 'assistant_text'",
+            OutputLane.BUILT_IN_TOOL_CALLS, "startsWith(name, 'built_in_tools/')",
+            OutputLane.MCP_TOOL_CALLS, "startsWith(name, 'mcp_servers/')",
+            OutputLane.SKILL_INVOCATIONS, "startsWith(name, 'skills/')"));
 
-    private static final String COST_SUMMARY = """
+    private static final Map<OutputLane, String> OUTPUT_LANE_LABEL_EXPRESSIONS = new EnumMap<>(Map.of(
+            OutputLane.THINKING, "'thinking'",
+            OutputLane.ASSISTANT_TEXT, "'assistant_text'",
+            OutputLane.BUILT_IN_TOOL_CALLS, "substring(name, length('built_in_tools/') + 1)",
+            OutputLane.MCP_TOOL_CALLS, "substring(name, length('mcp_servers/') + 1)",
+            OutputLane.SKILL_INVOCATIONS, "substring(name, length('skills/') + 1)"));
+
+    private static final String OUTPUT_LANE_CASE = Arrays.stream(OutputLane.values())
+            .map(lane -> "%s, '%s'".formatted(OUTPUT_LANE_PREDICATES.get(lane), lane.getKey()))
+            .collect(Collectors.joining(",\n    ", "multiIf(\n    ", ",\n    '')"));
+
+    // One typed JSONExtract parses cc.billing.lanes once per row; summing one
+    // JSONExtractInt per lane x tier column re-parses the metadata blob for each
+    // of the 50 paths (~28x more CPU at 1M traces).
+    private static final String LANES_TUPLE_TYPE = Arrays.stream(SpendLane.values())
+            .map(lane -> "%s Tuple(%s)".formatted(lane.getKey(),
+                    TIER_COLUMNS.stream().map(col -> col + " Int64").collect(Collectors.joining(", "))))
+            .collect(Collectors.joining(", ", "Tuple(", ")"));
+
+    // The FE prices the tier columns; ship the distinct models too.
+    private static final String COMPOSITION_SELECT_LIST = Arrays.stream(SpendLane.values())
+            .flatMap(lane -> TIER_COLUMNS.stream()
+                    .map(col -> "SUM(lanes.%1$s.%2$s) AS %1$s_%2$s".formatted(lane.getKey(), col)))
+            .collect(Collectors.joining(",\n    "))
+            + ",\n    groupUniqArrayIf(model, model != '') AS models";
+
+    // Tier-token summary from cc.billing — the FE prices these (hardcoded
+    // Claude rates); no dollar amounts are computed in the backend.
+    private static final String TIER_SUMMARY = """
             SELECT
-                SUMIf(total_estimated_cost, %1$s) AS spend_current,
-                SUMIf(total_estimated_cost, %2$s) AS spend_previous
-            FROM spans final
+                SUMIf(<input_expr>, <current>) AS input_current,
+                SUMIf(<cache_read_expr>, <current>) AS cache_read_current,
+                SUMIf(<cache_creation_expr>, <current>) AS cache_creation_current,
+                SUMIf(<output_expr>, <current>) AS output_current,
+                SUMIf(<input_expr>, <previous>) AS input_previous,
+                SUMIf(<cache_read_expr>, <previous>) AS cache_read_previous,
+                SUMIf(<cache_creation_expr>, <previous>) AS cache_creation_previous,
+                SUMIf(<output_expr>, <previous>) AS output_previous
+            FROM traces final
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND %3$s
+                AND <window>
             ;
-            """.formatted(CURRENT, PREVIOUS, SPAN_WINDOW);
+            """;
 
     private static final String COUNTS_SUMMARY = """
             SELECT
-                countIf(%2$s) AS messages_current,
-                countIf(%3$s) AS messages_previous,
-                uniqExactIf(user_uuid, %2$s AND user_uuid != '') AS active_users_current,
-                uniqExactIf(user_uuid, %3$s AND user_uuid != '') AS active_users_previous,
+                countIf(<current>) AS messages_current,
+                countIf(<previous>) AS messages_previous,
+                uniqExactIf(user_uuid, <current> AND user_uuid != '') AS active_users_current,
+                uniqExactIf(user_uuid, <previous> AND user_uuid != '') AS active_users_previous,
                 uniqExactIf(user_uuid, user_uuid != '') AS total_users
             FROM (
-                SELECT %1$s AS user_uuid, id, start_time
+                SELECT <user_uuid_expr> AS user_uuid, id, start_time
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    AND %4$s
+                    AND <window>
             )
             ;
-            """.formatted(USER_UUID_EXPR, CURRENT, PREVIOUS, WINDOW);
+            """;
 
     private static final String COMPOSITION_TOKENS = """
             SELECT
-                %1$s
+                <select_list>
             FROM (
-                SELECT JSONExtract(metadata, 'cc',
-                    'Tuple(prior_assistant Tuple(summary Tuple(total_tokens Int64)),
-                           tool_results Tuple(summary Tuple(total_tokens Int64)),
-                           user_prompts Tuple(summary Tuple(total_tokens Int64)),
-                           skills Tuple(summary Tuple(menu_tokens Int64, loaded_tokens Int64)),
-                           tools Tuple(summary Tuple(schema_tokens Int64)),
-                           memory Tuple(summary Tuple(total_tokens Int64)),
-                           file_attachments Tuple(summary Tuple(total_tokens Int64)))') AS cc
+                SELECT JSONExtract(metadata, 'cc', 'billing', 'lanes', '<lanes_type>') AS lanes,
+                       JSONExtractString(metadata, 'cc', 'billing', 'model') AS model
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    AND %2$s
-                    <if(user_uuid)> AND %3$s = :user_uuid <endif>
+                    AND <range>
+                    <if(user_uuid)> AND <user_uuid_expr> = :user_uuid <endif>
             )
             ;
             """;
 
-    private static final String COMPOSITION_OUTPUT_COST = """
-            SELECT
-                multiIf(
-                    block_kind = 'thinking', 'thinking',
-                    block_kind = 'text', 'assistant_text',
-                    block_kind = 'tool_use' AND startsWith(name, 'mcp__'), 'mcp_tool_calls',
-                    block_kind = 'tool_use' AND name = 'Skill', 'skill_invocations',
-                    block_kind = 'tool_use', 'built_in_tool_calls',
-                    ''
-                ) AS lane,
-                SUM(output_tokens) AS tokens,
-                SUM(cost) AS lane_cost
+    // Output-side rows live in cc.billing.lanes.output.items.
+    private static final String OUTPUT_ITEMS = """
+            SELECT JSONExtractString(item, 'name') AS name,
+                   JSONExtractInt(item, 'output') AS item_output,
+                   JSONExtractInt(item, 'count') AS events,
+                   JSONExtractString(metadata, 'cc', 'billing', 'model') AS model
+            FROM traces final
+            ARRAY JOIN JSONExtractArrayRaw(metadata, 'cc', 'billing', 'lanes', 'output', 'items') AS item
+            WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND <range>
+                <if(user_uuid)> AND <user_uuid_expr> = :user_uuid <endif>""";
+
+    private static final String COMPOSITION_OUTPUT = """
+            SELECT <lane_case> AS lane,
+                   SUM(item_output) AS tokens
             FROM (
-                SELECT
-                    JSONExtractString(metadata, 'cc', 'llm_call', 'block_kind') AS block_kind,
-                    name,
-                    JSONExtractInt(metadata, 'cc', 'llm_call', 'attributed_output_tokens') AS output_tokens,
-                    total_estimated_cost AS cost
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND %1$s
-                    <if(user_uuid)> %2$s <endif>
+            %s
             )
             GROUP BY lane
+            HAVING lane != ''
             ;
-            """;
+            """.formatted(OUTPUT_ITEMS);
 
+    // group_count is the distinct-entity count (drives the "Other (N)" fold);
+    // total_events is the total occurrence count (the FE's "calls" figure).
+    // The tier sums let the FE price the lane's window total.
     private static final String BREAKDOWN_ENVELOPE = """
             SELECT label,
                    total_tokens,
+                   definition_tokens,
+                   usage_tokens,
+                   events,
+                   input_tokens,
+                   cache_read_tokens,
+                   cache_creation_tokens,
+                   output_tokens,
                    SUM(total_tokens) OVER () AS grand_total,
-                   COUNT() OVER () AS group_count
+                   COUNT() OVER () AS group_count,
+                   SUM(events) OVER () AS total_events,
+                   SUM(input_tokens) OVER () AS total_input,
+                   SUM(cache_read_tokens) OVER () AS total_cache_read,
+                   SUM(cache_creation_tokens) OVER () AS total_cache_creation,
+                   SUM(output_tokens) OVER () AS total_output,
+                   max(model) OVER () AS model
             FROM (
-            %1$s
+            %s
             )
             ORDER BY total_tokens DESC
             LIMIT :limit
             ;
             """;
 
-    private static final String BREAKDOWN = """
-            SELECT JSONExtractString(item, '%2$s') AS label,
-                   SUM(JSONExtractInt(item, '%3$s')) AS total_tokens
-            FROM traces final
-            ARRAY JOIN JSONExtractArrayRaw(metadata, %1$s) AS item
-            WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND %4$s
-                <if(user_uuid)> AND %5$s = :user_uuid <endif>
-            GROUP BY label
-            HAVING label != ''""";
-
-    private static final String TOOLS_BREAKDOWN = """
-            SELECT label, SUM(token_value) AS total_tokens
-            FROM (
-                SELECT label, token_value
-                FROM (
-                    SELECT
-                        JSONExtractArrayRaw(metadata, 'cc', 'tools', 'summary', 'by_server') AS by_server,
-                        JSONExtractInt(metadata, 'cc', 'tools', 'summary', 'schema_tokens') AS total_schema
+    private static final String BREAKDOWN = BREAKDOWN_ENVELOPE.formatted(
+            """
+                    SELECT JSONExtractString(item, 'name') AS label,
+                           SUM(JSONExtractInt(item, 'total')) AS total_tokens,
+                           SUMIf(JSONExtractInt(item, 'total'), JSONExtractString(item, 'kind') = 'definition') AS definition_tokens,
+                           SUMIf(JSONExtractInt(item, 'total'), JSONExtractString(item, 'kind') = 'usage') AS usage_tokens,
+                           SUM(JSONExtractInt(item, 'count')) AS events,
+                           SUM(JSONExtractInt(item, 'input')) AS input_tokens,
+                           SUM(JSONExtractInt(item, 'cache_read')) AS cache_read_tokens,
+                           SUM(JSONExtractInt(item, 'cache_creation')) AS cache_creation_tokens,
+                           SUM(JSONExtractInt(item, 'output')) AS output_tokens,
+                           anyLastIf(JSONExtractString(metadata, 'cc', 'billing', 'model'),
+                               JSONExtractString(metadata, 'cc', 'billing', 'model') != '') AS model
                     FROM traces final
+                    ARRAY JOIN JSONExtractArrayRaw(metadata, 'cc', 'billing', 'lanes', '<lane_key>', 'items') AS item
                     WHERE workspace_id = :workspace_id
                         AND project_id = :project_id
-                        AND %1$s
-                        <if(user_uuid)> AND %2$s = :user_uuid <endif>
-                )
-                ARRAY JOIN
-                    arrayPushBack(arrayMap(s -> JSONExtractString(s, 'server'), by_server), 'Built-in tools') AS label,
-                    arrayPushBack(arrayMap(s -> JSONExtractInt(s, 'schema_tokens'), by_server),
-                        total_schema - arraySum(arrayMap(s -> JSONExtractInt(s, 'schema_tokens'), by_server)))
-                        AS token_value
+                        AND <range>
+                        <if(user_uuid)> AND <user_uuid_expr> = :user_uuid <endif>
+                    GROUP BY label
+                    HAVING label != ''""");
+
+    private static final String OUTPUT_BREAKDOWN = BREAKDOWN_ENVELOPE.formatted("""
+            SELECT <lane_label_expr> AS label,
+                   SUM(item_output) AS total_tokens,
+                   toInt64(0) AS definition_tokens,
+                   SUM(item_output) AS usage_tokens,
+                   SUM(events) AS events,
+                   toInt64(0) AS input_tokens,
+                   toInt64(0) AS cache_read_tokens,
+                   toInt64(0) AS cache_creation_tokens,
+                   SUM(item_output) AS output_tokens,
+                   anyLastIf(model, model != '') AS model
+            FROM (
+            %s
             )
-            WHERE label != ''
+            WHERE <lane_predicate>
             GROUP BY label
-            HAVING total_tokens > 0""";
+            HAVING label != ''""".formatted(OUTPUT_ITEMS));
 
-    private static final String OUTPUT_BREAKDOWN = """
-            SELECT %1$s AS label,
-                   SUM(JSONExtractInt(metadata, 'cc', 'llm_call', 'attributed_output_tokens')) AS total_tokens
-            FROM spans final
-            WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND %3$s
-                AND %2$s
-                <if(user_uuid)> %4$s <endif>
-            GROUP BY label
-            HAVING label != ''""";
-
+    // One statement: aggregate traces and spans per user into CTEs, LEFT JOIN them, then sort + page in ClickHouse.
+    // The window functions run over the full aggregated set before LIMIT, so high_spend (threshold vs the average over
+    // all users) and total (COUNT() OVER ()) stay correct under pagination.
     private static final String USERS = """
             WITH
                 windowed_traces AS (
                     SELECT
                         id,
-                        %1$s AS user_uuid,
+                        <user_uuid_expr> AS user_uuid,
                         JSONExtractString(metadata, 'cc', 'identity', 'user_email') AS user_email,
                         JSONExtractString(metadata, 'cc', 'identity', 'user_display_name') AS user_display_name,
-                        JSONExtractInt(metadata, 'cc', 'skills', 'summary', 'loaded_count') AS skills_loaded,
-                        JSONExtractInt(metadata, 'cc', 'tools', 'summary', 'by_source', 'mcp', 'available_count') AS mcps_available,
-                        JSONExtractString(metadata, 'cc', 'git', 'repository') AS repository
+                        arraySum(arrayMap(x -> JSONExtractInt(x, 'count'),
+                            JSONExtractArrayRaw(metadata, 'cc', 'billing', 'lanes', 'skills', 'items'))) AS skills_loaded,
+                        arrayCount(x -> JSONExtractString(x, 'kind') = 'definition',
+                            JSONExtractArrayRaw(metadata, 'cc', 'billing', 'lanes', 'mcp_servers', 'items')) AS mcps_available,
+                        JSONExtractString(metadata, 'cc', 'git', 'repository') AS repository,
+                        <input_expr> AS tok_input,
+                        <cache_read_expr> AS tok_cache_read,
+                        <cache_creation_expr> AS tok_cache_creation,
+                        <output_expr> AS tok_output
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                         AND project_id = :project_id
-                        AND %2$s
+                        AND <range>
                 ),
                 trace_agg AS (
                     SELECT
@@ -239,7 +276,12 @@ class AiSpendQueryBuilder {
                         count() AS requests,
                         sum(skills_loaded) AS skills,
                         max(mcps_available) AS mcps,
-                        arrayFilter(x -> x != '', groupUniqArray(repository)) AS repositories
+                        arrayFilter(x -> x != '', groupUniqArray(repository)) AS repositories,
+                        sum(tok_input) AS input_tokens,
+                        sum(tok_cache_read) AS cache_read_tokens,
+                        sum(tok_cache_creation) AS cache_creation_tokens,
+                        sum(tok_output) AS output_tokens,
+                        sum(tok_input + tok_cache_read + tok_cache_creation + tok_output) AS total_tokens
                     FROM windowed_traces
                     WHERE user_uuid != ''
                     GROUP BY user_uuid
@@ -247,14 +289,13 @@ class AiSpendQueryBuilder {
                 spend_agg AS (
                     SELECT
                         t.user_uuid AS user_uuid,
-                        SUM(s.total_estimated_cost) AS spend,
                         countIf(startsWith(s.name, 'mcp__')) AS mcp_calls,
                         anyLastIf(s.model, s.model != '') AS model
                     FROM spans s final
                     INNER JOIN windowed_traces t ON s.trace_id = t.id
                     WHERE s.workspace_id = :workspace_id
                         AND s.project_id = :project_id
-                        AND %3$s
+                        AND <span_range>
                     GROUP BY t.user_uuid
                 )
             SELECT
@@ -265,17 +306,21 @@ class AiSpendQueryBuilder {
                 ta.skills AS skills,
                 ta.mcps AS mcps,
                 ta.repositories AS repositories,
-                ifNull(sa.spend, 0) AS total_estimated_cost,
+                ta.input_tokens AS input_tokens,
+                ta.cache_read_tokens AS cache_read_tokens,
+                ta.cache_creation_tokens AS cache_creation_tokens,
+                ta.output_tokens AS output_tokens,
+                ta.total_tokens AS total_tokens,
                 ifNull(sa.mcp_calls, 0) AS mcp_calls,
                 sa.model AS model,
-                toInt64(if(ifNull(sa.spend, 0) >= :high_spend_factor * avg(ifNull(sa.spend, 0)) OVER (), 1, 0)) AS high_spend,
+                toInt64(if(ta.total_tokens >= :high_spend_factor * avg(ta.total_tokens) OVER (), 1, 0)) AS high_spend,
                 COUNT() OVER () AS total
             FROM trace_agg ta
             LEFT ANY JOIN spend_agg sa ON ta.user_uuid = sa.user_uuid
             WHERE 1 = 1
-                <if(user_name)> AND (ilike(ta.user_email, concat('%%', :user_name, '%%'))
-                    OR ilike(ta.user_display_name, concat('%%', :user_name, '%%'))) <endif>
-            ORDER BY %4$s
+                <if(user_name)> AND (ilike(ta.user_email, concat('%', :user_name, '%'))
+                    OR ilike(ta.user_display_name, concat('%', :user_name, '%'))) <endif>
+            ORDER BY <if(sort_fields)><sort_fields>, <endif>total_tokens DESC
             LIMIT :limit OFFSET :offset
             ;
             """;
@@ -284,61 +329,73 @@ class AiSpendQueryBuilder {
         return BREAKDOWN_ITEM_LIMIT;
     }
 
-    String summaryCostSql() {
-        return COST_SUMMARY;
+    TemplatedQuery summaryTiers() {
+        return new TemplatedQuery(TIER_SUMMARY, st -> {
+            st.add("current", CURRENT);
+            st.add("previous", PREVIOUS);
+            st.add("window", WINDOW);
+            addTierExpressions(st);
+        });
     }
 
-    String summaryCountsSql() {
-        return COUNTS_SUMMARY;
+    TemplatedQuery summaryCounts() {
+        return new TemplatedQuery(COUNTS_SUMMARY, st -> {
+            st.add("current", CURRENT);
+            st.add("previous", PREVIOUS);
+            st.add("window", WINDOW);
+            st.add("user_uuid_expr", USER_UUID_EXPR);
+        });
     }
 
-    String compositionTokensSql() {
-        String selectList = TOKEN_EXPRESSIONS.entrySet().stream()
-                .map(entry -> "SUM(%s) AS %s".formatted(entry.getValue(), entry.getKey().getKey()))
-                .collect(Collectors.joining(",\n    "));
-        return COMPOSITION_TOKENS.formatted(selectList, RANGE, USER_UUID_EXPR);
+    TemplatedQuery compositionTokens() {
+        return new TemplatedQuery(COMPOSITION_TOKENS, st -> {
+            st.add("select_list", COMPOSITION_SELECT_LIST);
+            st.add("lanes_type", LANES_TUPLE_TYPE);
+            st.add("range", RANGE);
+            st.add("user_uuid_expr", USER_UUID_EXPR);
+        });
     }
 
-    String compositionOutputCostSql() {
-        return COMPOSITION_OUTPUT_COST.formatted(SPAN_RANGE, spanUserFilter());
+    TemplatedQuery compositionOutput() {
+        return new TemplatedQuery(COMPOSITION_OUTPUT, st -> {
+            st.add("lane_case", OUTPUT_LANE_CASE);
+            st.add("range", RANGE);
+            st.add("user_uuid_expr", USER_UUID_EXPR);
+        });
     }
 
-    String breakdownSql(SpendLane lane) {
-        String inner = lane == SpendLane.TOOLS
-                ? TOOLS_BREAKDOWN.formatted(RANGE, USER_UUID_EXPR)
-                : breakdownInner(lane);
-        return BREAKDOWN_ENVELOPE.formatted(inner);
+    TemplatedQuery breakdown(SpendLane lane) {
+        return new TemplatedQuery(BREAKDOWN, st -> {
+            st.add("lane_key", lane.getKey());
+            st.add("range", RANGE);
+            st.add("user_uuid_expr", USER_UUID_EXPR);
+        });
     }
 
-    String outputBreakdownSql(OutputLane lane) {
-        OutputSpec spec = OUTPUT_SPECS.get(lane);
-        String inner = OUTPUT_BREAKDOWN.formatted(spec.labelExpr(), spec.predicate(), SPAN_RANGE, spanUserFilter());
-        return BREAKDOWN_ENVELOPE.formatted(inner);
+    TemplatedQuery outputBreakdown(OutputLane lane) {
+        return new TemplatedQuery(OUTPUT_BREAKDOWN, st -> {
+            st.add("lane_label_expr", OUTPUT_LANE_LABEL_EXPRESSIONS.get(lane));
+            st.add("lane_predicate", OUTPUT_LANE_PREDICATES.get(lane));
+            st.add("range", RANGE);
+            st.add("user_uuid_expr", USER_UUID_EXPR);
+        });
     }
 
-    String usersSql(String orderBy) {
-        return USERS.formatted(USER_UUID_EXPR, RANGE, SPAN_RANGE_ALIASED, orderBy);
+    TemplatedQuery users(List<SortingField> sortingFields) {
+        return new TemplatedQuery(USERS, st -> {
+            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(sortingFields))
+                    .ifPresent(clause -> st.add("sort_fields", clause));
+            st.add("user_uuid_expr", USER_UUID_EXPR);
+            st.add("range", RANGE);
+            st.add("span_range", SPAN_RANGE_ALIASED);
+            addTierExpressions(st);
+        });
     }
 
-    private String breakdownInner(SpendLane lane) {
-        BreakdownSpec spec = BREAKDOWN_SPECS.get(lane);
-        return BREAKDOWN.formatted(spec.arrayPath(), spec.labelField(), spec.tokenField(), RANGE, USER_UUID_EXPR);
-    }
-
-    private String spanUserFilter() {
-        return """
-                 AND trace_id IN (
-                    SELECT id FROM traces final
-                    WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        AND %1$s
-                        AND %2$s = :user_uuid
-                )""".formatted(RANGE, USER_UUID_EXPR);
-    }
-
-    private record BreakdownSpec(String arrayPath, String labelField, String tokenField) {
-    }
-
-    private record OutputSpec(String labelExpr, String predicate) {
+    private static void addTierExpressions(ST st) {
+        st.add("input_expr", BILLING_TOTAL_EXPR.formatted("input"));
+        st.add("cache_read_expr", BILLING_TOTAL_EXPR.formatted("cache_read"));
+        st.add("cache_creation_expr", BILLING_TOTAL_EXPR.formatted("cache_creation"));
+        st.add("output_expr", BILLING_TOTAL_EXPR.formatted("output"));
     }
 }

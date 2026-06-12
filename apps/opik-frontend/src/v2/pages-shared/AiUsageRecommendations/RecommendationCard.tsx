@@ -19,12 +19,16 @@ interface RecommendationCardProps {
   recommendation: SpendRecommendation;
   variant?: RecommendationCardVariant;
   onHover?: (laneKey: string | null) => void;
+  // USD, priced by the parent at the window's blended per-token rate
+  // (savings arrive token-denominated from the BE).
+  estSavingUsd?: number | null;
 }
 
 const RecommendationCard: React.FC<RecommendationCardProps> = ({
   recommendation: rec,
   variant = "full",
   onHover,
+  estSavingUsd,
 }) => {
   const full = variant === "full";
   const Icon = getLaneMeta(rec.related_lane_key ?? "").icon;
@@ -65,9 +69,9 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
               {impact.label}
             </span>
           ) : (
-            rec.est_saving != null && (
+            estSavingUsd != null && (
               <Tag variant="gray" size="sm" className="shrink-0">
-                Save {formatCost(rec.est_saving)}
+                Save {formatCost(estSavingUsd)}
               </Tag>
             )
           )}
@@ -82,10 +86,10 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
           >
             {rec.body}
           </p>
-          {full && rec.est_saving != null && (
+          {full && estSavingUsd != null && (
             <div className="flex shrink-0 flex-col items-end text-right">
               <span className="comet-body-xs-accented text-foreground">
-                {formatCost(rec.est_saving)}
+                {formatCost(estSavingUsd)}
               </span>
               <span className="comet-body-xs text-muted-slate">
                 est. saving

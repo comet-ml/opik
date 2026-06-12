@@ -1,4 +1,5 @@
 import React from "react";
+import { tierCost } from "@/api/ai-spend/claudePricing";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatSpendCount, formatSpendUsd } from "@/lib/aiSpend";
@@ -84,7 +85,7 @@ const LeaderboardRow: React.FC<LeaderboardRowProps> = ({
 
           <UserMetric
             className="w-[72px]"
-            value={formatSpendUsd(row.total_estimated_cost)}
+            value={formatSpendUsd(tierCost(row, row.model))}
             label="spend"
           />
           <UserMetric

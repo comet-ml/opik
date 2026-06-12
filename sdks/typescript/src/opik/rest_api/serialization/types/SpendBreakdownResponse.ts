@@ -13,7 +13,13 @@ export const SpendBreakdownResponse: core.serialization.ObjectSchema<
     title: core.serialization.string().optional(),
     subtitle: core.serialization.string().optional(),
     totalTokens: core.serialization.property("total_tokens", core.serialization.number().optional()),
+    inputTokens: core.serialization.property("input_tokens", core.serialization.number().optional()),
+    cacheReadTokens: core.serialization.property("cache_read_tokens", core.serialization.number().optional()),
+    cacheCreationTokens: core.serialization.property("cache_creation_tokens", core.serialization.number().optional()),
+    outputTokens: core.serialization.property("output_tokens", core.serialization.number().optional()),
+    model: core.serialization.string().optional(),
     itemCount: core.serialization.property("item_count", core.serialization.number().optional()),
+    itemUnit: core.serialization.property("item_unit", core.serialization.string().optional()),
     items: core.serialization.list(Item).optional(),
 });
 
@@ -23,7 +29,13 @@ export declare namespace SpendBreakdownResponse {
         title?: string | null;
         subtitle?: string | null;
         total_tokens?: number | null;
+        input_tokens?: number | null;
+        cache_read_tokens?: number | null;
+        cache_creation_tokens?: number | null;
+        output_tokens?: number | null;
+        model?: string | null;
         item_count?: number | null;
+        item_unit?: string | null;
         items?: Item.Raw[] | null;
     }
 }

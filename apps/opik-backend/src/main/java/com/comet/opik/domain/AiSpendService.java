@@ -20,8 +20,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -107,31 +105,31 @@ class AiSpendServiceImpl implements AiSpendService {
     private static final List<Rule> RECOMMENDATION_RULES = List.of(
             new Rule("compact_threshold", "Tighten /compact threshold on long sessions",
                     "Prior assistant context is the largest input lane. Compacting earlier re-sends less history per turn.",
-                    Impact.HIGH, SpendLane.Side.INPUT, "prior_assistant", 0.4, 0.25),
+                    Impact.HIGH, Side.INPUT, "prior_assistant", 0.4, 0.25),
             new Rule("thinking_effort", "Lower thinking effort on routine sessions",
                     "Thinking dominates output tokens. Reducing effort on routine work cuts output cost with little quality impact.",
-                    Impact.MEDIUM, SpendLane.Side.OUTPUT, "thinking", 0.5, 0.3),
+                    Impact.MEDIUM, Side.OUTPUT, "thinking", 0.5, 0.3),
             new Rule("fewer_tools", "Trim unused tool/MCP schemas",
                     "Tool schemas (built-in and MCP) add overhead on every session whether used or not. Enabling only the tools you actually use reduces prompt cost.",
-                    Impact.LOW, SpendLane.Side.INPUT, "tools", 0.0, 0.5));
+                    Impact.LOW, Side.INPUT, "mcp_servers", 0.0, 0.5));
 
-    private record Rule(String id, String title, String body, Impact impact, SpendLane.Side side, String laneKey,
+    private enum Side {
+        INPUT,
+        OUTPUT
+    }
+
+    private record Rule(String id, String title, String body, Impact impact, Side side, String laneKey,
             double minShare, double factor) {
     }
 
     private SpendRecommendationsResponse buildRecommendations(SpendCompositionResponse composition) {
         long inputTotal = sideTotal(composition.input());
         long outputTotal = sideTotal(composition.output());
-        long grandTotal = inputTotal + outputTotal;
-        BigDecimal totalCost = composition.harness().stream()
-                .map(SpendCompositionResponse.HarnessEntry::totalEstimatedCost)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<SpendRecommendationsResponse.Item> items = RECOMMENDATION_RULES.stream()
                 .map(rule -> {
-                    var side = rule.side() == SpendLane.Side.INPUT ? composition.input() : composition.output();
-                    long sideTotal = rule.side() == SpendLane.Side.INPUT ? inputTotal : outputTotal;
+                    var side = rule.side() == Side.INPUT ? composition.input() : composition.output();
+                    long sideTotal = rule.side() == Side.INPUT ? inputTotal : outputTotal;
                     long laneTokens = laneTokens(side, rule.laneKey());
                     if (ratio(laneTokens, sideTotal) <= rule.minShare()) {
                         return null;
@@ -141,7 +139,7 @@ class AiSpendServiceImpl implements AiSpendService {
                             .title(rule.title())
                             .body(rule.body())
                             .impact(rule.impact())
-                            .estSaving(estimate(totalCost, laneTokens, grandTotal, rule.factor()))
+                            .estimatedSavingsTokens(Math.round(laneTokens * rule.factor()))
                             .docsUrl(DOCS_URL)
                             .relatedLaneKey(rule.laneKey())
                             .build();
@@ -149,11 +147,11 @@ class AiSpendServiceImpl implements AiSpendService {
                 .filter(Objects::nonNull)
                 .toList();
 
-        BigDecimal totalSavings = items.stream()
-                .map(SpendRecommendationsResponse.Item::estSaving)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long totalSavingsTokens = items.stream()
+                .mapToLong(SpendRecommendationsResponse.Item::estimatedSavingsTokens)
+                .sum();
 
-        return SpendRecommendationsResponse.builder().totalSavings(totalSavings).items(items).build();
+        return SpendRecommendationsResponse.builder().totalSavingsTokens(totalSavingsTokens).items(items).build();
     }
 
     private long sideTotal(SpendCompositionResponse.Side side) {
@@ -176,13 +174,4 @@ class AiSpendServiceImpl implements AiSpendService {
         return total == 0 ? 0.0 : (double) part / total;
     }
 
-    private BigDecimal estimate(BigDecimal totalCost, long laneTokens, long grandTotalTokens, double factor) {
-        if (totalCost == null || grandTotalTokens == 0) {
-            return BigDecimal.ZERO;
-        }
-        return totalCost
-                .multiply(BigDecimal.valueOf((double) laneTokens / grandTotalTokens))
-                .multiply(BigDecimal.valueOf(factor))
-                .setScale(2, RoundingMode.HALF_UP);
-    }
 }
