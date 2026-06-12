@@ -217,6 +217,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorizationServerMetadata"
+  /oauth/revoke:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Token Revocation Endpoint
+      description: "OAuth 2.0 token revocation endpoint (RFC 7009). Always returns\
+        \ 200, whether the token was revoked, never existed, or was invalid"
+      operationId: revoke
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                client_id:
+                  type: string
+      responses:
+        "200":
+          description: Revocation acknowledged
+  /oauth/token:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Token Endpoint
+      description: "OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization\
+        \ code with PKCE or a refresh token for an access/refresh token pair"
+      operationId: token
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
+                client_id:
+                  type: string
+                code_verifier:
+                  type: string
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: OAuth error (RFC 6749 §5.2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthError"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -8905,6 +8965,29 @@ components:
           type: array
           items:
             type: string
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+          format: int64
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+    OAuthError:
+      type: object
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
     BiInformation:
       type: object
       properties:
