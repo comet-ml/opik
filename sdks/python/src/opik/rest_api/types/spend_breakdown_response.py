@@ -12,7 +12,13 @@ class SpendBreakdownResponse(UniversalBaseModel):
     title: typing.Optional[str] = None
     subtitle: typing.Optional[str] = None
     total_tokens: typing.Optional[int] = None
+    input_tokens: typing.Optional[int] = None
+    cache_read_tokens: typing.Optional[int] = None
+    cache_creation_tokens: typing.Optional[int] = None
+    output_tokens: typing.Optional[int] = None
+    model: typing.Optional[str] = None
     item_count: typing.Optional[int] = None
+    item_unit: typing.Optional[str] = None
     items: typing.Optional[typing.List[Item]] = None
 
     if IS_PYDANTIC_V2:

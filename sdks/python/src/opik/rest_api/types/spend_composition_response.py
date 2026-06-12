@@ -12,6 +12,7 @@ class SpendCompositionResponse(UniversalBaseModel):
     input: typing.Optional[Side] = None
     harness: typing.Optional[typing.List[HarnessEntry]] = None
     output: typing.Optional[Side] = None
+    models: typing.Optional[typing.List[str]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

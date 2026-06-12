@@ -9,13 +9,13 @@ export const SpendRecommendationsResponse: core.serialization.ObjectSchema<
     serializers.SpendRecommendationsResponse.Raw,
     OpikApi.SpendRecommendationsResponse
 > = core.serialization.object({
-    totalSavings: core.serialization.property("total_savings", core.serialization.number().optional()),
+    totalSavingsTokens: core.serialization.property("total_savings_tokens", core.serialization.number().optional()),
     items: core.serialization.list(Item).optional(),
 });
 
 export declare namespace SpendRecommendationsResponse {
     export interface Raw {
-        total_savings?: number | null;
+        total_savings_tokens?: number | null;
         items?: Item.Raw[] | null;
     }
 }

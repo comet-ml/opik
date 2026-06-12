@@ -7,7 +7,7 @@ export interface Item {
     title?: string;
     body?: string;
     impact?: OpikApi.ItemImpact;
-    estSaving?: number;
+    estimatedSavingsTokens?: number;
     docsUrl?: string;
     relatedLaneKey?: string;
 }
