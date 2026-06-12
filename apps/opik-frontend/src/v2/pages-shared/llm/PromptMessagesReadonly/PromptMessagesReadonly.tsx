@@ -139,7 +139,7 @@ const PromptMessagesReadonly: React.FC<PromptMessagesReadonlyProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5" data-testid="prompt-chat-messages">
       {messages.map((message, index) => (
         <PromptMessageCard
           key={`${message.role}-${index}`}

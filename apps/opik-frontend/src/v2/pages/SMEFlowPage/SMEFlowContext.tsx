@@ -11,6 +11,8 @@ import { StringParam, useQueryParam } from "use-query-params";
 import { useSearch } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
+import useAnnotationQueueLocks from "@/api/annotation-queues/useAnnotationQueueLocks";
+import { useAnnotationQueueItemLockMutation } from "@/api/annotation-queues/useAnnotationQueueItemLockMutation";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadsList from "@/api/traces/useThreadsList";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
@@ -27,10 +29,12 @@ import {
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import { UpdateFeedbackScoreData } from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types";
 import {
+  DEFAULT_LOCK_TIMEOUT_SECONDS,
   getAnnotationQueueItemId,
   getFeedbackScoresByUser,
   getLastCommentByUser,
   getItemState,
+  hashCode,
   ITEM_STATE,
   AnnotationState,
 } from "@/lib/annotation-queues";
@@ -39,6 +43,7 @@ import { useAnnotationPersistence } from "./useAnnotationPersistence";
 export { ITEM_STATE } from "@/lib/annotation-queues";
 
 const POLLING_INTERVAL_MS = 30000;
+const LOCKS_POLLING_INTERVAL_MS = 5000;
 
 export type { AnnotationState } from "@/lib/annotation-queues";
 
@@ -58,11 +63,13 @@ interface SMEFlowContextValue {
   currentItem: Trace | Thread | undefined;
   nextDefaultItem: Trace | Thread | undefined;
   currentView: WORKFLOW_STATUS;
+  currentItemLockDenied: boolean;
 
   processedCount: number;
   totalCount: number;
   canStartAnnotation: boolean;
   itemStates: Record<string, ITEM_STATE>;
+  shuffledItemIds: string[];
 
   currentAnnotationState: AnnotationState;
 
@@ -179,6 +186,19 @@ export const SMEFlowProvider: React.FunctionComponent<{
     },
   );
 
+  const { data: locksData } = useAnnotationQueueLocks(
+    { queueId: queueId! },
+    {
+      enabled: !!queueId,
+      refetchInterval: LOCKS_POLLING_INTERVAL_MS,
+    },
+  );
+
+  const lockMutation = useAnnotationQueueItemLockMutation();
+  const { mutate: lockMutate, reset: lockReset } = lockMutation;
+
+  const locks = useMemo(() => locksData?.locks ?? {}, [locksData?.locks]);
+
   const isItemsError =
     annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.TRACE
       ? isTracesError
@@ -221,13 +241,14 @@ export const SMEFlowProvider: React.FunctionComponent<{
         feedbackScoreNames,
         currentUserName,
         annotatorsPerItem,
+        locks[itemId],
       );
 
       states[itemId] = state;
-      allIds.push(item.id);
+      allIds.push(itemId);
 
       if (state === ITEM_STATE.DEFAULT) {
-        defaultIds.push(item.id);
+        defaultIds.push(itemId);
       } else {
         processed++;
       }
@@ -246,6 +267,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
     annotationQueue?.feedback_definition_names,
     currentUserName,
     annotatorsPerItem,
+    locks,
   ]);
 
   const currentItem = useMemo(() => {
@@ -253,13 +275,33 @@ export const SMEFlowProvider: React.FunctionComponent<{
   }, [queueItems, currentIndex]);
   currentItemRef.current = currentItem;
 
+  // Per-user deterministic shuffle of items
+  const shuffledItemIds = useMemo(() => {
+    const seed = hashCode(
+      (currentUserName ?? "") + (annotationQueue?.id ?? ""),
+    );
+    return [...allItemIds].sort(
+      (a, b) => hashCode(a + seed) - hashCode(b + seed),
+    );
+  }, [allItemIds, currentUserName, annotationQueue?.id]);
+
   const nextDefaultItem = useMemo(() => {
     if (defaultItemIds.length === 0) return undefined;
-    const idx = defaultItemIds.indexOf(currentItem?.id ?? "");
-    const nextId = defaultItemIds[(idx + 1) % defaultItemIds.length];
-    if (nextId === currentItem?.id) return undefined;
-    return queueItems.find((item) => item.id === nextId);
-  }, [queueItems, currentItem, defaultItemIds]);
+    const currentItemId = currentItem
+      ? getAnnotationQueueItemId(currentItem)
+      : "";
+    const currentIdx = shuffledItemIds.indexOf(currentItemId);
+    for (let i = 1; i < shuffledItemIds.length; i++) {
+      const candidateId =
+        shuffledItemIds[(currentIdx + i) % shuffledItemIds.length];
+      if (itemStates[candidateId] === ITEM_STATE.DEFAULT) {
+        return queueItems.find(
+          (item) => getAnnotationQueueItemId(item) === candidateId,
+        );
+      }
+    }
+    return undefined;
+  }, [queueItems, currentItem, shuffledItemIds, defaultItemIds, itemStates]);
 
   // --- Persistence ---
 
@@ -274,10 +316,13 @@ export const SMEFlowProvider: React.FunctionComponent<{
 
   const handleStartAnnotating = useCallback(() => {
     setCurrentView(WORKFLOW_STATUS.ANNOTATING);
-    if (defaultItemIds.length > 0) {
-      setCurrentIndex(allItemIds.indexOf(defaultItemIds[0]));
+    const firstDefault = shuffledItemIds.find(
+      (id) => itemStates[id] === ITEM_STATE.DEFAULT,
+    );
+    if (firstDefault) {
+      setCurrentIndex(allItemIds.indexOf(firstDefault));
     }
-  }, [setCurrentView, defaultItemIds, allItemIds]);
+  }, [setCurrentView, shuffledItemIds, allItemIds, itemStates]);
 
   const handleReviewAnnotations = useCallback(() => {
     setCurrentView(WORKFLOW_STATUS.ANNOTATING);
@@ -292,7 +337,9 @@ export const SMEFlowProvider: React.FunctionComponent<{
       return;
     }
 
-    const nextIndex = allItemIds.indexOf(nextDefaultItem.id);
+    const nextIndex = allItemIds.indexOf(
+      getAnnotationQueueItemId(nextDefaultItem),
+    );
     if (nextIndex !== -1) {
       setCurrentIndex(nextIndex);
     } else {
@@ -358,6 +405,44 @@ export const SMEFlowProvider: React.FunctionComponent<{
     [scheduleSave],
   );
 
+  // --- Lock lifecycle: lock on view, heartbeat to keep alive ---
+
+  useEffect(() => {
+    if (!currentItem || !queueId || !annotationQueue) return;
+
+    const itemId = getAnnotationQueueItemId(currentItem);
+    const state = itemStates[itemId];
+
+    // Only lock items available for review — scored/completed/in-review items don't need locks
+    if (state && state !== ITEM_STATE.DEFAULT) {
+      lockReset();
+      return;
+    }
+
+    lockMutate({ queueId, itemId });
+
+    // Heartbeat at half the TTL to keep the lock alive while viewing
+    const heartbeatMs =
+      ((annotationQueue.lock_timeout_seconds ?? DEFAULT_LOCK_TIMEOUT_SECONDS) *
+        1000) /
+      2;
+    const heartbeatInterval = setInterval(() => {
+      lockMutate({ queueId, itemId });
+    }, heartbeatMs);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentItem,
+    queueId,
+    annotationQueue?.id,
+    annotationQueue?.lock_timeout_seconds,
+    lockMutate,
+    lockReset,
+  ]);
+
   // --- Initialize annotation state when navigating to a different item ---
 
   useEffect(() => {
@@ -416,32 +501,66 @@ export const SMEFlowProvider: React.FunctionComponent<{
 
   // --- Context value ---
 
-  const contextValue: SMEFlowContextValue = {
-    annotationQueue,
-    queueItems,
-    currentIndex,
-    currentItem,
-    nextDefaultItem,
-    currentView: currentView || WORKFLOW_STATUS.INITIAL,
-    processedCount,
-    totalCount,
-    canStartAnnotation,
-    itemStates,
-    currentAnnotationState,
-    setCurrentView,
-    handleStartAnnotating,
-    handleReviewAnnotations,
-    handleNextDefault,
-    navigateToItem,
-    flushPendingChanges,
-    updateComment,
-    updateFeedbackScore,
-    deleteFeedbackScore,
-    isLoading,
-    isError,
-    isItemsLoading,
-    isItemsError,
-  };
+  const currentItemLockDenied = lockMutation.data?.acquired === false;
+
+  const contextValue: SMEFlowContextValue = useMemo(
+    () => ({
+      annotationQueue,
+      queueItems,
+      currentIndex,
+      currentItem,
+      nextDefaultItem,
+      currentView: currentView || WORKFLOW_STATUS.INITIAL,
+      processedCount,
+      totalCount,
+      canStartAnnotation,
+      itemStates,
+      shuffledItemIds,
+      currentAnnotationState,
+      currentItemLockDenied,
+      setCurrentView,
+      handleStartAnnotating,
+      handleReviewAnnotations,
+      handleNextDefault,
+      navigateToItem,
+      flushPendingChanges,
+      updateComment,
+      updateFeedbackScore,
+      deleteFeedbackScore,
+      isLoading,
+      isError,
+      isItemsLoading,
+      isItemsError,
+    }),
+    [
+      annotationQueue,
+      queueItems,
+      currentIndex,
+      currentItem,
+      nextDefaultItem,
+      currentView,
+      processedCount,
+      totalCount,
+      canStartAnnotation,
+      itemStates,
+      shuffledItemIds,
+      currentAnnotationState,
+      currentItemLockDenied,
+      setCurrentView,
+      handleStartAnnotating,
+      handleReviewAnnotations,
+      handleNextDefault,
+      navigateToItem,
+      flushPendingChanges,
+      updateComment,
+      updateFeedbackScore,
+      deleteFeedbackScore,
+      isLoading,
+      isError,
+      isItemsLoading,
+      isItemsError,
+    ],
+  );
 
   return (
     <SMEFlowContext.Provider value={contextValue}>

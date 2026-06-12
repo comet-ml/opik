@@ -18,8 +18,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.ACCESS_PREFIX;
-import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.REFRESH_PREFIX;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokens.ACCESS_PREFIX;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokens.REFRESH_PREFIX;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;

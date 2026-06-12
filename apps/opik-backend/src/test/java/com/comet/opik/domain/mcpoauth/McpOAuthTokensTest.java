@@ -7,25 +7,25 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("McpOAuthTokenUtils")
-class McpOAuthTokenUtilsTest {
+@DisplayName("McpOAuthTokens")
+class McpOAuthTokensTest {
 
     @ParameterizedTest
     @NullAndEmptySource
     @DisplayName("maskToken returns empty for null/empty input")
     void maskToken_nullOrEmpty_returnsEmpty(String token) {
-        assertThat(McpOAuthTokenUtils.maskToken(token)).isEmpty();
+        assertThat(McpOAuthTokens.maskToken(token)).isEmpty();
     }
 
     @Test
     @DisplayName("maskToken returns a non-reversible hash prefix, never a token fragment")
     void maskToken_fullToken_returnsHashPrefix() {
-        String token = McpOAuthTokenUtils.generateAccessToken();
+        String token = McpOAuthTokens.generateAccessToken();
 
-        String masked = McpOAuthTokenUtils.maskToken(token);
+        String masked = McpOAuthTokens.maskToken(token);
 
         assertThat(masked)
-                .isEqualTo("sha256:" + McpOAuthTokenUtils.hash(token).substring(0, 12))
+                .isEqualTo("sha256:" + McpOAuthTokens.hash(token).substring(0, 12))
                 .doesNotContain(token);
     }
 
@@ -34,7 +34,7 @@ class McpOAuthTokenUtilsTest {
     void maskToken_shortValue_isMasked() {
         String shortSecret = "short-secret";
 
-        assertThat(McpOAuthTokenUtils.maskToken(shortSecret))
+        assertThat(McpOAuthTokens.maskToken(shortSecret))
                 .startsWith("sha256:")
                 .doesNotContain(shortSecret);
     }
