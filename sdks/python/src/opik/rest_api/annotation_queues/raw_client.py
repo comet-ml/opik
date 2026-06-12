@@ -18,6 +18,8 @@ from ..types.annotation_queue_page_public import AnnotationQueuePagePublic
 from ..types.annotation_queue_public import AnnotationQueuePublic
 from ..types.annotation_queue_write import AnnotationQueueWrite
 from ..types.annotation_queue_write_scope import AnnotationQueueWriteScope
+from ..types.lock_response import LockResponse
+from ..types.locks_response import LocksResponse
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -149,6 +151,7 @@ class RawAnnotationQueuesClient:
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -174,6 +177,8 @@ class RawAnnotationQueuesClient:
 
         annotators_per_item : typing.Optional[int]
 
+        lock_timeout_seconds : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -194,6 +199,7 @@ class RawAnnotationQueuesClient:
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
+                "lock_timeout_seconds": lock_timeout_seconds,
             },
             headers={
                 "content-type": "application/json",
@@ -414,6 +420,7 @@ class RawAnnotationQueuesClient:
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -435,6 +442,8 @@ class RawAnnotationQueuesClient:
 
         annotators_per_item : typing.Optional[int]
 
+        lock_timeout_seconds : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -452,6 +461,7 @@ class RawAnnotationQueuesClient:
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
+                "lock_timeout_seconds": lock_timeout_seconds,
             },
             headers={
                 "content-type": "application/json",
@@ -473,6 +483,84 @@ class RawAnnotationQueuesClient:
                         ),
                     ),
                 )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_annotation_queue_locks(
+        self, queue_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[LocksResponse]:
+        """
+        Returns lock status for all actively locked items in the queue
+
+        Parameters
+        ----------
+        queue_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[LocksResponse]
+            Queue locks
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(queue_id)}/locks",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    LocksResponse,
+                    parse_obj_as(
+                        type_=LocksResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def lock_annotation_queue_item(
+        self, queue_id: str, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[LockResponse]:
+        """
+        Claim an annotation queue item for the current user, or extend an existing lock
+
+        Parameters
+        ----------
+        queue_id : str
+
+        item_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[LockResponse]
+            Lock result
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(queue_id)}/items/{jsonable_encoder(item_id)}/lock",
+            method="PUT",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    LockResponse,
+                    parse_obj_as(
+                        type_=LockResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -655,6 +743,7 @@ class AsyncRawAnnotationQueuesClient:
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -680,6 +769,8 @@ class AsyncRawAnnotationQueuesClient:
 
         annotators_per_item : typing.Optional[int]
 
+        lock_timeout_seconds : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -700,6 +791,7 @@ class AsyncRawAnnotationQueuesClient:
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
+                "lock_timeout_seconds": lock_timeout_seconds,
             },
             headers={
                 "content-type": "application/json",
@@ -920,6 +1012,7 @@ class AsyncRawAnnotationQueuesClient:
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -941,6 +1034,8 @@ class AsyncRawAnnotationQueuesClient:
 
         annotators_per_item : typing.Optional[int]
 
+        lock_timeout_seconds : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -958,6 +1053,7 @@ class AsyncRawAnnotationQueuesClient:
                 "comments_enabled": comments_enabled,
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
+                "lock_timeout_seconds": lock_timeout_seconds,
             },
             headers={
                 "content-type": "application/json",
@@ -979,6 +1075,84 @@ class AsyncRawAnnotationQueuesClient:
                         ),
                     ),
                 )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_annotation_queue_locks(
+        self, queue_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[LocksResponse]:
+        """
+        Returns lock status for all actively locked items in the queue
+
+        Parameters
+        ----------
+        queue_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[LocksResponse]
+            Queue locks
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(queue_id)}/locks",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    LocksResponse,
+                    parse_obj_as(
+                        type_=LocksResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def lock_annotation_queue_item(
+        self, queue_id: str, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[LockResponse]:
+        """
+        Claim an annotation queue item for the current user, or extend an existing lock
+
+        Parameters
+        ----------
+        queue_id : str
+
+        item_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[LockResponse]
+            Lock result
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(queue_id)}/items/{jsonable_encoder(item_id)}/lock",
+            method="PUT",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    LockResponse,
+                    parse_obj_as(
+                        type_=LockResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

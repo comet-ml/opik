@@ -149,6 +149,35 @@ class SpanCostCalculatorTest {
     }
 
     @ParameterizedTest(name = "{1}")
+    @MethodSource("provideGoogleCacheCostCases")
+    void textGenerationWithCacheCostGoogle(Map<String, Integer> usage, String description, String expectedCost) {
+        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
+                BigDecimal.ZERO, new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
+                SpanCostCalculator::textGenerationWithCacheCostGoogle);
+
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostGoogle(modelPrice, usage);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGoogleCacheCostCases() {
+        return Stream.of(
+                // Gemini reports cached tokens under cached_content_token_count, included in prompt_token_count
+                // non-cached input = 1000 - 300 = 700 -> 700*0.01 + 100*0.02 + 300*0.005 = 7.00 + 2.00 + 1.50 = 10.50
+                Arguments.of(
+                        Map.of("original_usage.prompt_token_count", 1000, "completion_tokens", 100,
+                                "original_usage.cached_content_token_count", 300),
+                        "Gemini cached_content_token_count key",
+                        "10.50"),
+                // OTel fallback: cache_read_input_tokens key, prompt=1000, cache_read=200 -> non-cached input=800
+                // 800*0.01 + 100*0.02 + 200*0.005 = 8.00 + 2.00 + 1.00 = 11.00
+                Arguments.of(
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100, "cache_read_input_tokens", 200),
+                        "OTel cache_read_input_tokens key",
+                        "11.00"));
+    }
+
+    @ParameterizedTest(name = "{1}")
     @MethodSource("provideAnthropicBedrockCacheCostCases")
     void textGenerationWithCacheCostUsesOtelCacheKeyFallback(
             BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator, String description) {

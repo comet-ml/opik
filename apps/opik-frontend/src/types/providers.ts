@@ -107,6 +107,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
+  CLAUDE_FABLE_5 = "claude-fable-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -137,6 +138,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_3_5_SONNET = "anthropic/claude-3.5-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET = "anthropic/claude-3.7-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET_THINKING = "anthropic/claude-3.7-sonnet:thinking",
+  ANTHROPIC_CLAUDE_FABLE_5 = "anthropic/claude-fable-5",
   ANTHROPIC_CLAUDE_HAIKU_4_5 = "anthropic/claude-haiku-4.5",
   ANTHROPIC_CLAUDE_OPUS_4 = "anthropic/claude-opus-4",
   ANTHROPIC_CLAUDE_OPUS_4_1 = "anthropic/claude-opus-4.1",
@@ -371,6 +373,7 @@ export enum PROVIDER_MODEL_TYPE {
   NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B = "neversleep/llama-3.1-lumimaid-8b",
   NEVERSLEEP_NOROMAID_20B = "neversleep/noromaid-20b",
   NEX_AGI_DEEPSEEK_V3_1_NEX_N1 = "nex-agi/deepseek-v3.1-nex-n1",
+  NEX_AGI_NEX_N2_PRO_FREE = "nex-agi/nex-n2-pro:free",
   NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW = "nousresearch/deephermes-3-mistral-24b-preview",
   NOUSRESEARCH_HERMES_2_PRO_LLAMA_3_8B = "nousresearch/hermes-2-pro-llama-3-8b",
   NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B = "nousresearch/hermes-3-llama-3.1-405b",
@@ -616,6 +619,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_TURBO = "z-ai/glm-5-turbo",
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
+  ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
   ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
   ANTHROPIC_CLAUDE_SONNET_LATEST = "~anthropic/claude-sonnet-latest",
@@ -682,6 +686,16 @@ export type PROVIDER_MODELS_TYPE = {
   }[];
 };
 
+/** OpenAI (OPIK-6833): canonical set of pipeline-mode values. Lives in this lower-layer types/
+ * module, so the persisted-config type, the form schema's Zod enum, and the runtime normaliser all
+ * derive from the same source — adding a third mode requires editing only this tuple. */
+export const OPENAI_PIPELINE_MODE_VALUES = [
+  "chat_completions_api",
+  "responses_api",
+] as const;
+
+export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -693,6 +707,9 @@ export interface ProviderKeyConfiguration {
   auth_header_name?: string;
   /** Custom LLM (OPIK-4551): "true" to drop the default Authorization: Bearer header */
   suppress_default_auth?: string;
+  /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
+   * and falls back to chat_completions_api on unknown values. */
+  openai_pipeline_mode?: OpenAiPipelineMode;
 }
 
 export interface BaseProviderKey {

@@ -17,5 +17,7 @@ export interface ExperimentItemBulkUploadExperimentItemBulkWriteView {
     datasetName: string;
     /** Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName */
     experimentId?: string;
+    /** Project for traces auto-created from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default project is used; relying on this fallback is deprecated, please provide project_name explicitly. */
+    projectName?: string;
     items: OpikApi.ExperimentItemBulkRecordExperimentItemBulkWriteView[];
 }

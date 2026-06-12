@@ -269,7 +269,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   </span>
                   <EnvironmentBadgeList
                     names={activeVersionEnvironments}
-                    size="sm"
+                    size="pill"
                     withOverflow
                     maxWidth={200}
                   />
@@ -320,13 +320,16 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           {/* Toolbar */}
           <div className="flex items-center gap-2 px-4 pb-1.5 pt-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="comet-body-accented shrink-0 text-foreground">
+              <span
+                data-testid="active-version-label"
+                className="comet-body-accented shrink-0 text-foreground"
+              >
                 {activeVersionLabel || "v—"}
               </span>
               {activeStage && <StageTag value={activeStage} size="sm" />}
               <EnvironmentBadgeList
                 names={activeVersionEnvironments}
-                size="sm"
+                size="pill"
                 withOverflow
                 maxWidth={320}
               />

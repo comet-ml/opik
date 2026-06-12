@@ -45,8 +45,20 @@ export class DatasetsPage {
     return new DatasetItemsPage(this.page, this.projectId, datasetId);
   }
 
+  /**
+   * Opens the create sidebar in SDK mode. The empty state shows "Upload a file"
+   * and "Use SDK" cards directly; once the list has rows the header button is a
+   * dropdown trigger with the same two options. Handle both so the method works
+   * regardless of list state.
+   */
   async clickCreateDataset(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Create dataset' }).click();
+    const emptyStateUseSdk = this.page.getByRole('button', { name: 'Use SDK' });
+    if (await emptyStateUseSdk.count()) {
+      await emptyStateUseSdk.first().click();
+    } else {
+      await this.page.getByRole('button', { name: 'Create dataset' }).click();
+      await this.page.getByRole('menuitem', { name: 'Use SDK' }).click();
+    }
     await this.createDialog.waitFor({ state: 'visible' });
     await this.waitForCreateDialogTransform('translateX(0');
   }
@@ -54,21 +66,15 @@ export class DatasetsPage {
   async fillCreateDialog(args: { name: string; description?: string }): Promise<void> {
     await this.createDialog.getByRole('textbox', { name: 'Name' }).fill(args.name);
     if (args.description !== undefined) {
-      await this.createDialog.getByRole('textbox', { name: 'Description' }).fill(args.description);
+      await this.createDialog
+        .getByRole('textbox', { name: 'Description (optional)' })
+        .fill(args.description);
     }
   }
 
-  /** Three-step dialog: name+description → CSV/SDK chooser → success. Success step doesn't auto-close. */
+  /** SDK-mode create: footer "Create dataset" submits, then the sidebar closes (no success step). */
   async submitCreateDialog(): Promise<void> {
-    await this.createDialog.getByRole('button', { name: 'Next' }).click();
-    await this.createDialog
-      .getByRole('heading', { name: 'Add data', level: 3 })
-      .waitFor({ state: 'visible' });
-    await this.createDialog.getByRole('button', { name: 'Create' }).click();
-    await this.createDialog
-      .getByRole('heading', { name: 'Dataset created!', level: 3 })
-      .waitFor({ state: 'visible' });
-    await this.createDialog.getByRole('button', { name: 'Close' }).click();
+    await this.createDialog.getByRole('button', { name: 'Create dataset' }).click();
     await this.waitForCreateDialogTransform('translateX(100%)');
   }
 

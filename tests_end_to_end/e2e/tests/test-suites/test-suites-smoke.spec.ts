@@ -41,7 +41,22 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
   }) => {
     test.setTimeout(120_000);
 
+    // The LLM judge runs inside the SDK bridge via LiteLLM, which reads the
+    // provider key from the bridge process env (not the backend-stored key).
+    // Without a key every judge call raises AuthenticationError and the run
+    // reports 0 passing items. CI injects these secrets; locally they may be
+    // absent — skip rather than fail, mirroring Test B's ensureModelAvailable.
+    test.skip(
+      !process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY,
+      'Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set',
+    );
+
     const experimentName = `${testSuite.name}-sdk-run`;
+    // Match the judge model to whichever provider key the bridge has (Anthropic
+    // preferred, OpenAI fallback) so the LiteLLM judge can authenticate.
+    const judgeModel = process.env.ANTHROPIC_API_KEY
+      ? 'anthropic/claude-haiku-4-5'
+      : 'openai/gpt-4o-mini';
 
     await test.step('SDK-trigger a run against the seeded suite', async () => {
       const result = await sdkClient.python.runTestSuite({
@@ -49,7 +64,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
         project_name: testSuite.projectName,
         task_output: 'PASS',
         experiment_name: experimentName,
-        judge_model: 'anthropic/claude-haiku-4-5',
+        judge_model: judgeModel,
       });
       expect(result.items_total).toBe(3);
       // Assertions are tautological ("contains literal text PASS" + "non-empty"),
@@ -137,8 +152,9 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
       // committed item AND a latestVersion that the FE has picked up. Item-add
       // via UI stages a draft which the SDK can't see until version-committed.
       // Use the idempotent insert-items bridge route which calls
-      // get_or_create_test_suite under the hood and lands the item in a new
-      // version (v2 here).
+      // get_or_create_test_suite under the hood and commits the item as a
+      // version. The UI-created suite is born empty (SDK create flow), so this
+      // first insert lands as v1.
       await sdkClient.python.insertTestSuiteItems({
         suite_name: name,
         project_name: project.name,
@@ -147,12 +163,12 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
       // Reload the items page so the FE refetches the latest version.
       await items.goto();
       await items.waitForReady();
-      // Wait for the version label to be at v2 — only then has the FE picked
-      // up the new committed version and `latestVersion.id` will be populated
+      // Wait for the version label to be at v1 — only then has the FE picked
+      // up the committed version and `latestVersion.id` will be populated
       // (UseDatasetDropdown needs this to call loadPlayground successfully).
       await expect
         .poll(async () => items.readVersionLabel(), { timeout: 15_000 })
-        .toBe('v2');
+        .toBe('v1');
       await expect
         .poll(async () => items.countItems(), { timeout: 15_000 })
         .toBeGreaterThanOrEqual(1);

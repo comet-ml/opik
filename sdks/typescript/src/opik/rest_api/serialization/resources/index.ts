@@ -28,6 +28,8 @@ export * as llmModels from "./llmModels/index.js";
 export * from "./llmProviderKey/client/requests/index.js";
 export * as llmProviderKey from "./llmProviderKey/index.js";
 export * from "./llmProviderKey/types/index.js";
+export * from "./mcpOAuth/client/requests/index.js";
+export * as mcpOAuth from "./mcpOAuth/index.js";
 export * as ollama from "./ollama/index.js";
 export * from "./optimizations/client/requests/index.js";
 export * as optimizations from "./optimizations/index.js";
