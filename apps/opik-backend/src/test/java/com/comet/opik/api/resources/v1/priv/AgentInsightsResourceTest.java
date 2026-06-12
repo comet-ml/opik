@@ -25,6 +25,8 @@ import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.HttpHeaders;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -121,8 +124,7 @@ class AgentInsightsResourceTest {
         ClientSupportUtils.config(client);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), OTHER_API_KEY, OTHER_WORKSPACE, OTHER_WORKSPACE_ID,
-                USER);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), OTHER_API_KEY, OTHER_WORKSPACE, OTHER_WORKSPACE_ID, USER);
 
         wireMock.server().stubFor(
                 post(urlPathEqualTo("/opik/auth"))
@@ -180,6 +182,22 @@ class AgentInsightsResourceTest {
                 API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
     }
 
+    private static long rndOccurrences() {
+        return RandomUtils.secure().randomLong(1L, 100L);
+    }
+
+    private static long rndTotalCount() {
+        return RandomUtils.secure().randomLong(1L, 1000L);
+    }
+
+    private static long rndUserCount() {
+        return RandomUtils.secure().randomLong(1L, 50L);
+    }
+
+    private static String rndName() {
+        return RandomStringUtils.secure().nextAlphanumeric(10);
+    }
+
     @Nested
     @DisplayName("Report Issues:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -189,31 +207,34 @@ class AgentInsightsResourceTest {
         @DisplayName("Success: stored issues are returned by the list endpoint")
         void reportIssues() {
             var projectId = createProject();
+            var nameA = rndName();
+            var nameB = rndName();
+            long occurrences = rndOccurrences(), totalCount = rndTotalCount(), impacted = rndUserCount(), totalUsers = rndUserCount();
 
             report(projectId, DAY_1, List.of(
-                    reportedIssue("issue-a", 10, 100, 3, 40),
-                    reportedIssue("issue-b", 5, 100, 1, 10)));
+                    reportedIssue(nameA, occurrences, totalCount, impacted, totalUsers),
+                    reportedIssue(nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
 
             var page = findIssues(projectId, DAY_1, DAY_1);
 
             assertThat(page.total()).isEqualTo(2);
             assertThat(page.content())
                     .extracting(AgentInsightsIssue::name)
-                    .containsExactlyInAnyOrder("issue-a", "issue-b");
+                    .containsExactlyInAnyOrder(nameA, nameB);
 
             var issueA = page.content().stream()
-                    .filter(issue -> issue.name().equals("issue-a"))
+                    .filter(issue -> issue.name().equals(nameA))
                     .findFirst()
                     .orElseThrow();
-            assertThat(issueA.description()).isEqualTo("Description of issue-a");
-            assertThat(issueA.cause()).isEqualTo("Cause of issue-a");
-            assertThat(issueA.suggestedFix()).isEqualTo("Fix for issue-a");
+            assertThat(issueA.description()).isEqualTo("Description of " + nameA);
+            assertThat(issueA.cause()).isEqualTo("Cause of " + nameA);
+            assertThat(issueA.suggestedFix()).isEqualTo("Fix for " + nameA);
             assertThat(issueA.tracesQuery()).isEqualTo("SELECT 1");
             assertThat(issueA.status()).isEqualTo(AgentInsightsIssueStatus.OPEN);
-            assertThat(issueA.totalOccurrences()).isEqualTo(10);
-            assertThat(issueA.total()).isEqualTo(100);
-            assertThat(issueA.usersImpacted()).isEqualTo(3);
-            assertThat(issueA.totalUsers()).isEqualTo(40);
+            assertThat(issueA.totalOccurrences()).isEqualTo(occurrences);
+            assertThat(issueA.total()).isEqualTo(totalCount);
+            assertThat(issueA.usersImpacted()).isEqualTo(impacted);
+            assertThat(issueA.totalUsers()).isEqualTo(totalUsers);
             assertThat(issueA.firstSeen()).isEqualTo(DAY_1);
             assertThat(issueA.lastSeen()).isEqualTo(DAY_1);
             assertThat(issueA.daysReported()).isEqualTo(1);
@@ -227,20 +248,23 @@ class AgentInsightsResourceTest {
         @DisplayName("Idempotency: re-reporting with the same id replaces metrics instead of duplicating")
         void reportIssuesWhenSameDayReportedTwiceThenMetricsAreReplaced() {
             var projectId = createProject();
+            var name = rndName();
+            long occurrences = rndOccurrences(), totalCount = rndTotalCount(), impacted = rndUserCount(), totalUsers = rndUserCount();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_1, List.of(reportedIssue(name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
-            report(projectId, DAY_1, List.of(reportedIssue(issueId, "issue-a", 20, 200, 6, 60)));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(issueId, name, occurrences, totalCount, impacted, totalUsers)));
             var secondPage = findIssues(projectId, DAY_1, DAY_1);
 
             assertThat(secondPage.total()).isEqualTo(1);
             var issue = secondPage.content().getFirst();
             assertThat(issue.id()).isEqualTo(issueId);
-            assertThat(issue.totalOccurrences()).isEqualTo(20);
-            assertThat(issue.total()).isEqualTo(200);
-            assertThat(issue.usersImpacted()).isEqualTo(6);
-            assertThat(issue.totalUsers()).isEqualTo(60);
+            assertThat(issue.totalOccurrences()).isEqualTo(occurrences);
+            assertThat(issue.total()).isEqualTo(totalCount);
+            assertThat(issue.usersImpacted()).isEqualTo(impacted);
+            assertThat(issue.totalUsers()).isEqualTo(totalUsers);
             assertThat(issue.daysReported()).isEqualTo(1);
         }
 
@@ -248,8 +272,10 @@ class AgentInsightsResourceTest {
         @DisplayName("Re-reporting preserves user-owned status and issue id, but updates description")
         void reportIssuesWhenIssueAlreadyResolvedThenStatusIsPreserved() {
             var projectId = createProject();
+            var name = rndName();
+            var updatedDescription = rndName();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_1, List.of(reportedIssue(name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             agentInsightsResourceClient.updateStatus(issueId,
@@ -260,13 +286,13 @@ class AgentInsightsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             report(projectId, DAY_2, List.of(
-                    reportedIssue(issueId, "issue-a", 7, 50, 2, 20).toBuilder().description("updated description")
-                            .build()));
+                    reportedIssue(issueId, name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())
+                            .toBuilder().description(updatedDescription).build()));
 
             var issue = findIssues(projectId, DAY_1, DAY_2).content().getFirst();
             assertThat(issue.id()).isEqualTo(issueId);
             assertThat(issue.status()).isEqualTo(AgentInsightsIssueStatus.RESOLVED);
-            assertThat(issue.description()).isEqualTo("updated description");
+            assertThat(issue.description()).isEqualTo(updatedDescription);
         }
 
         @Test
@@ -279,8 +305,8 @@ class AgentInsightsResourceTest {
                     .projectId(projectId)
                     .reportDay(DAY_1)
                     .issues(List.of(
-                            reportedIssue(sharedId, "issue-a", 1, 10, 1, 10),
-                            reportedIssue(sharedId, "issue-b", 2, 10, 1, 10)))
+                            reportedIssue(sharedId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount()),
+                            reportedIssue(sharedId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())))
                     .build();
 
             agentInsightsResourceClient.reportIssues(reportRequest, API_KEY, TEST_WORKSPACE,
@@ -293,7 +319,7 @@ class AgentInsightsResourceTest {
             var reportRequest = AgentInsightsReport.builder()
                     .projectId(UUID.randomUUID())
                     .reportDay(DAY_1)
-                    .issues(List.of(reportedIssue("issue-a", 1, 10, 1, 10)))
+                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())))
                     .build();
 
             agentInsightsResourceClient.reportIssues(reportRequest, API_KEY, TEST_WORKSPACE,
@@ -301,7 +327,7 @@ class AgentInsightsResourceTest {
         }
 
         Stream<AgentInsightsReport> invalidReports() {
-            var validIssue = reportedIssue("issue-a", 1, 10, 1, 10);
+            var validIssue = reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount());
             return Stream.of(
                     // missing report_day
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).issues(List.of(validIssue)).build(),
@@ -341,7 +367,7 @@ class AgentInsightsResourceTest {
             var reportRequest = AgentInsightsReport.builder()
                     .projectId(UUID.randomUUID())
                     .reportDay(DAY_1)
-                    .issues(List.of(reportedIssue("issue-a", 1, 10, 1, 10)))
+                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())))
                     .build();
 
             agentInsightsResourceClient.reportIssues(reportRequest, FAKE_API_KEY, TEST_WORKSPACE,
@@ -360,96 +386,113 @@ class AgentInsightsResourceTest {
             var projectId = createProject();
             var issueAId = UUID.randomUUID();
             var issueBId = UUID.randomUUID();
+            var nameA = rndName();
+            var nameB = rndName();
+
+            long occurrences1 = rndOccurrences(), totalCount1 = rndTotalCount(), impacted1 = rndUserCount(), users1 = rndUserCount();
+            long occurrences2 = rndOccurrences(), totalCount2 = rndTotalCount(), impacted2 = rndUserCount(), users2 = rndUserCount();
+            long occurrences3 = rndOccurrences(), totalCount3 = rndTotalCount(), impacted3 = rndUserCount(), users3 = rndUserCount();
 
             report(projectId, DAY_1, List.of(
-                    reportedIssue(issueAId, "issue-a", 10, 100, 3, 40),
-                    reportedIssue(issueBId, "issue-b", 1, 100, 1, 10)));
-            report(projectId, DAY_2, List.of(reportedIssue(issueAId, "issue-a", 20, 200, 4, 50)));
-            report(projectId, DAY_3, List.of(reportedIssue(issueAId, "issue-a", 30, 300, 5, 60)));
+                    reportedIssue(issueAId, nameA, occurrences1, totalCount1, impacted1, users1),
+                    reportedIssue(issueBId, nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_2, List.of(reportedIssue(issueAId, nameA, occurrences2, totalCount2, impacted2, users2)));
+            report(projectId, DAY_3, List.of(reportedIssue(issueAId, nameA, occurrences3, totalCount3, impacted3, users3)));
 
-            // full window: both issues, issue-a aggregated over 3 days
+            // full window: both issues, nameA aggregated over 3 days
             var fullPage = findIssues(projectId, DAY_1, DAY_3);
             assertThat(fullPage.total()).isEqualTo(2);
             var issueA = fullPage.content().stream()
-                    .filter(issue -> issue.name().equals("issue-a"))
+                    .filter(issue -> issue.name().equals(nameA))
                     .findFirst()
                     .orElseThrow();
-            assertThat(issueA.totalOccurrences()).isEqualTo(60);
-            assertThat(issueA.total()).isEqualTo(600);
-            assertThat(issueA.usersImpacted()).isEqualTo(12);
-            assertThat(issueA.totalUsers()).isEqualTo(150);
+            assertThat(issueA.totalOccurrences()).isEqualTo(occurrences1 + occurrences2 + occurrences3);
+            assertThat(issueA.total()).isEqualTo(totalCount1 + totalCount2 + totalCount3);
+            assertThat(issueA.usersImpacted()).isEqualTo(impacted1 + impacted2 + impacted3);
+            assertThat(issueA.totalUsers()).isEqualTo(users1 + users2 + users3);
             assertThat(issueA.firstSeen()).isEqualTo(DAY_1);
             assertThat(issueA.lastSeen()).isEqualTo(DAY_3);
             assertThat(issueA.daysReported()).isEqualTo(3);
 
-            // restricted window: issue-b has no details, aggregates only cover DAY_2..DAY_3
+            // restricted window: nameB has no details, aggregates only cover DAY_2..DAY_3
             var restrictedPage = findIssues(projectId, DAY_2, DAY_3);
             assertThat(restrictedPage.total()).isEqualTo(1);
-            var restrictedIssueA = restrictedPage.content().getFirst();
-            assertThat(restrictedIssueA.name()).isEqualTo("issue-a");
-            assertThat(restrictedIssueA.totalOccurrences()).isEqualTo(50);
-            assertThat(restrictedIssueA.total()).isEqualTo(500);
-            assertThat(restrictedIssueA.usersImpacted()).isEqualTo(9);
-            assertThat(restrictedIssueA.totalUsers()).isEqualTo(110);
-            assertThat(restrictedIssueA.firstSeen()).isEqualTo(DAY_2);
-            assertThat(restrictedIssueA.lastSeen()).isEqualTo(DAY_3);
-            assertThat(restrictedIssueA.daysReported()).isEqualTo(2);
+            var restricted = restrictedPage.content().getFirst();
+            assertThat(restricted.name()).isEqualTo(nameA);
+            assertThat(restricted.totalOccurrences()).isEqualTo(occurrences2 + occurrences3);
+            assertThat(restricted.total()).isEqualTo(totalCount2 + totalCount3);
+            assertThat(restricted.usersImpacted()).isEqualTo(impacted2 + impacted3);
+            assertThat(restricted.totalUsers()).isEqualTo(users2 + users3);
+            assertThat(restricted.firstSeen()).isEqualTo(DAY_2);
+            assertThat(restricted.lastSeen()).isEqualTo(DAY_3);
+            assertThat(restricted.daysReported()).isEqualTo(2);
         }
 
         @Test
         @DisplayName("Omitting dates returns all issues across all history")
         void findIssuesWhenNoDatesProvidedThenAllIssuesReturned() {
             var projectId = createProject();
+            var nameA = rndName();
+            var nameB = rndName();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
-            report(projectId, DAY_3, List.of(reportedIssue("issue-b", 5, 50, 1, 20)));
+            report(projectId, DAY_1, List.of(reportedIssue(nameA, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_3, List.of(reportedIssue(nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
 
             var page = agentInsightsResourceClient.findIssues(projectId, null, null, null, null, null, null,
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(page.total()).isEqualTo(2);
             assertThat(page.content()).extracting(AgentInsightsIssue::name)
-                    .containsExactlyInAnyOrder("issue-a", "issue-b");
+                    .containsExactlyInAnyOrder(nameA, nameB);
         }
 
         @Test
         @DisplayName("Default sorting is last seen DESC, sort_by=total_occurrences sorts by occurrences DESC")
         void findIssuesSorting() {
             var projectId = createProject();
+            var nameA = rndName();
+            var nameB = rndName();
+            var nameC = rndName();
+            // nameA: most occurrences, seen earliest; nameC: fewest, seen latest
+            long countC = RandomUtils.secure().randomLong(1L, 50L);
+            long countB = RandomUtils.secure().randomLong(51L, 100L);
+            long countA = RandomUtils.secure().randomLong(101L, 200L);
+            long totalCount = rndTotalCount(), impacted = rndUserCount(), totalUsers = rndUserCount();
 
-            // issue-a: most occurrences, seen earliest; issue-c: fewest occurrences, seen latest
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 100, 1000, 1, 10)));
-            report(projectId, DAY_2, List.of(reportedIssue("issue-b", 50, 1000, 1, 10)));
-            report(projectId, DAY_3, List.of(reportedIssue("issue-c", 10, 1000, 1, 10)));
+            report(projectId, DAY_1, List.of(reportedIssue(nameA, countA, totalCount, impacted, totalUsers)));
+            report(projectId, DAY_2, List.of(reportedIssue(nameB, countB, totalCount, impacted, totalUsers)));
+            report(projectId, DAY_3, List.of(reportedIssue(nameC, countC, totalCount, impacted, totalUsers)));
 
             var defaultPage = findIssues(projectId, DAY_1, DAY_3);
             assertThat(defaultPage.content())
                     .extracting(AgentInsightsIssue::name)
-                    .containsExactly("issue-c", "issue-b", "issue-a");
+                    .containsExactly(nameC, nameB, nameA);
 
             var byOccurrences = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null,
                     AgentInsightsSortBy.TOTAL_OCCURRENCES, null, null, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(byOccurrences.content())
                     .extracting(AgentInsightsIssue::name)
-                    .containsExactly("issue-a", "issue-b", "issue-c");
+                    .containsExactly(nameA, nameB, nameC);
 
             var byLastSeen = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null,
                     AgentInsightsSortBy.LAST_SEEN, null, null, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(byLastSeen.content())
                     .extracting(AgentInsightsIssue::name)
-                    .containsExactly("issue-c", "issue-b", "issue-a");
+                    .containsExactly(nameC, nameB, nameA);
         }
 
         @Test
         @DisplayName("Status filter returns only issues with the requested status")
         void findIssuesWhenStatusFilterIsSetThenOnlyMatchingIssues() {
             var projectId = createProject();
+            var nameA = rndName();
+            var nameB = rndName();
 
             report(projectId, DAY_1, List.of(
-                    reportedIssue("issue-a", 1, 10, 1, 10),
-                    reportedIssue("issue-b", 2, 10, 1, 10)));
+                    reportedIssue(nameA, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount()),
+                    reportedIssue(nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
 
             var issueBId = findIssues(projectId, DAY_1, DAY_1).content().stream()
-                    .filter(issue -> issue.name().equals("issue-b"))
+                    .filter(issue -> issue.name().equals(nameB))
                     .findFirst()
                     .orElseThrow()
                     .id();
@@ -463,21 +506,27 @@ class AgentInsightsResourceTest {
             var resolvedPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1,
                     AgentInsightsIssueStatus.RESOLVED, null, null, null, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(resolvedPage.total()).isEqualTo(1);
-            assertThat(resolvedPage.content().getFirst().name()).isEqualTo("issue-b");
+            assertThat(resolvedPage.content().getFirst().name()).isEqualTo(nameB);
 
-            var allPage = findIssues(projectId, DAY_1, DAY_1);
-            assertThat(allPage.total()).isEqualTo(2);
+            assertThat(findIssues(projectId, DAY_1, DAY_1).total()).isEqualTo(2);
         }
 
         @Test
         @DisplayName("Pagination honors page and size and reports the full total")
         void findIssuesPagination() {
             var projectId = createProject();
+            var nameA = rndName();
+            var nameB = rndName();
+            var nameC = rndName();
+            long countC = RandomUtils.secure().randomLong(1L, 50L);
+            long countB = RandomUtils.secure().randomLong(51L, 100L);
+            long countA = RandomUtils.secure().randomLong(101L, 200L);
+            long totalCount = rndTotalCount(), impacted = rndUserCount(), totalUsers = rndUserCount();
 
             report(projectId, DAY_1, List.of(
-                    reportedIssue("issue-a", 30, 100, 1, 10),
-                    reportedIssue("issue-b", 20, 100, 1, 10),
-                    reportedIssue("issue-c", 10, 100, 1, 10)));
+                    reportedIssue(nameA, countA, totalCount, impacted, totalUsers),
+                    reportedIssue(nameB, countB, totalCount, impacted, totalUsers),
+                    reportedIssue(nameC, countC, totalCount, impacted, totalUsers)));
 
             var firstPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null,
                     AgentInsightsSortBy.TOTAL_OCCURRENCES, 1, 2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
@@ -485,13 +534,13 @@ class AgentInsightsResourceTest {
             assertThat(firstPage.size()).isEqualTo(2);
             assertThat(firstPage.content())
                     .extracting(AgentInsightsIssue::name)
-                    .containsExactly("issue-a", "issue-b");
+                    .containsExactly(nameA, nameB);
 
             var secondPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null,
                     AgentInsightsSortBy.TOTAL_OCCURRENCES, 2, 2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(secondPage.content())
                     .extracting(AgentInsightsIssue::name)
-                    .containsExactly("issue-c");
+                    .containsExactly(nameC);
         }
 
         @Test
@@ -499,7 +548,8 @@ class AgentInsightsResourceTest {
         void findIssuesWhenOtherWorkspaceThenIssuesAreNotVisible() {
             var projectId = createProject();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 1, 10, 1, 10)));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
 
             var page = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null, null, null, null,
                     OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_OK);
@@ -507,29 +557,21 @@ class AgentInsightsResourceTest {
             assertThat(page.content()).isEmpty();
         }
 
-        @Test
+        Stream<Arguments> invalidFindParams() {
+            return Stream.of(
+                    Arguments.of("2026-06-01", "2026-06-03", "unknown-status", null),
+                    Arguments.of("2026-06-01", "2026-06-03", null, "unknown-sort"),
+                    Arguments.of("not-a-date", "2026-06-03", null, null),
+                    Arguments.of("2026-06-03", "2026-06-01", null, null)); // from_date after to_date
+        }
+
+        @ParameterizedTest
+        @MethodSource("invalidFindParams")
         @DisplayName("Invalid query params return 400")
-        void findIssuesWhenQueryParamsAreInvalidThenBadRequest() {
-            var projectId = UUID.randomUUID();
-
-            try (var response = agentInsightsResourceClient.findIssuesWithResponse(projectId, "2026-06-01",
-                    "2026-06-03", "unknown-status", null, null, null, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            }
-
-            try (var response = agentInsightsResourceClient.findIssuesWithResponse(projectId, "2026-06-01",
-                    "2026-06-03", null, "unknown-sort", null, null, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            }
-
-            try (var response = agentInsightsResourceClient.findIssuesWithResponse(projectId, "not-a-date",
-                    "2026-06-03", null, null, null, null, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            }
-
-            // from_date after to_date
-            try (var response = agentInsightsResourceClient.findIssuesWithResponse(projectId, "2026-06-03",
-                    "2026-06-01", null, null, null, null, API_KEY, TEST_WORKSPACE)) {
+        void findIssuesWhenQueryParamsAreInvalidThenBadRequest(String fromDate, String toDate, String status,
+                String sortBy) {
+            try (var response = agentInsightsResourceClient.findIssuesWithResponse(UUID.randomUUID(), fromDate,
+                    toDate, status, sortBy, null, null, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
@@ -545,20 +587,23 @@ class AgentInsightsResourceTest {
         void getIssueById() {
             var projectId = createProject();
             var issueAId = UUID.randomUUID();
+            var name = rndName();
             var metadata = JsonUtils.getJsonNodeFromString("{\"sample_trace_ids\":[\"abc\",\"def\"]}");
+            long occurrences1 = rndOccurrences(), totalCount1 = rndTotalCount(), impacted1 = rndUserCount(), users1 = rndUserCount();
+            long occurrences2 = rndOccurrences(), totalCount2 = rndTotalCount(), impacted2 = rndUserCount(), users2 = rndUserCount();
+            long occurrences3 = rndOccurrences(), totalCount3 = rndTotalCount(), impacted3 = rndUserCount(), users3 = rndUserCount();
 
-            report(projectId, DAY_2, List.of(reportedIssue(issueAId, "issue-a", 20, 200, 4, 50)));
+            report(projectId, DAY_2, List.of(reportedIssue(issueAId, name, occurrences2, totalCount2, impacted2, users2)));
             report(projectId, DAY_1, List.of(
-                    reportedIssue(issueAId, "issue-a", 10, 100, 3, 40).toBuilder().metadata(metadata).build()));
-            report(projectId, DAY_3, List.of(reportedIssue(issueAId, "issue-a", 30, 300, 5, 60)));
+                    reportedIssue(issueAId, name, occurrences1, totalCount1, impacted1, users1).toBuilder().metadata(metadata).build()));
+            report(projectId, DAY_3, List.of(reportedIssue(issueAId, name, occurrences3, totalCount3, impacted3, users3)));
 
             var issueId = findIssues(projectId, DAY_1, DAY_3).content().getFirst().id();
-
             var issue = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_3, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
             assertThat(issue.id()).isEqualTo(issueId);
-            assertThat(issue.name()).isEqualTo("issue-a");
+            assertThat(issue.name()).isEqualTo(name);
             assertThat(issue.status()).isEqualTo(AgentInsightsIssueStatus.OPEN);
             assertThat(issue.details()).hasSize(3);
             assertThat(issue.details())
@@ -566,10 +611,10 @@ class AgentInsightsResourceTest {
                     .containsExactly(DAY_1, DAY_2, DAY_3);
 
             var firstDetail = issue.details().getFirst();
-            assertThat(firstDetail.count()).isEqualTo(10);
-            assertThat(firstDetail.totalCount()).isEqualTo(100);
-            assertThat(firstDetail.usersImpacted()).isEqualTo(3);
-            assertThat(firstDetail.totalUsers()).isEqualTo(40);
+            assertThat(firstDetail.count()).isEqualTo(occurrences1);
+            assertThat(firstDetail.totalCount()).isEqualTo(totalCount1);
+            assertThat(firstDetail.usersImpacted()).isEqualTo(impacted1);
+            assertThat(firstDetail.totalUsers()).isEqualTo(users1);
             assertThat(firstDetail.metadata()).isEqualTo(metadata);
 
             // window restricted to a single day
@@ -584,13 +629,16 @@ class AgentInsightsResourceTest {
         void getIssueByIdWhenNoDatesProvidedThenAllDetailsReturned() {
             var projectId = createProject();
             var issueAId = UUID.randomUUID();
+            var name = rndName();
 
-            report(projectId, DAY_1, List.of(reportedIssue(issueAId, "issue-a", 10, 100, 3, 40)));
-            report(projectId, DAY_2, List.of(reportedIssue(issueAId, "issue-a", 20, 200, 4, 50)));
-            report(projectId, DAY_3, List.of(reportedIssue(issueAId, "issue-a", 30, 300, 5, 60)));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_2,
+                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
+            report(projectId, DAY_3,
+                    List.of(reportedIssue(issueAId, name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
 
             var issueId = findIssues(projectId, DAY_1, DAY_3).content().getFirst().id();
-
             var issue = agentInsightsResourceClient.getIssue(issueId, projectId, null, null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
@@ -603,7 +651,8 @@ class AgentInsightsResourceTest {
         void getIssueByIdWhenNoDetailsInWindowThenEmptyDetails() {
             var projectId = createProject();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             var issue = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_2, DAY_3, API_KEY,
@@ -618,15 +667,14 @@ class AgentInsightsResourceTest {
         void getIssueByIdWhenNotAccessibleThenNotFound() {
             var projectId = createProject();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             agentInsightsResourceClient.getIssue(UUID.randomUUID(), projectId, DAY_1, DAY_1, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
-
             agentInsightsResourceClient.getIssue(issueId, UUID.randomUUID(), DAY_1, DAY_1, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
-
             agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, OTHER_API_KEY,
                     OTHER_WORKSPACE, HttpStatus.SC_NOT_FOUND);
         }
@@ -642,7 +690,8 @@ class AgentInsightsResourceTest {
         void updateIssueStatus() {
             var projectId = createProject();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             agentInsightsResourceClient.updateStatus(issueId,
@@ -652,11 +701,9 @@ class AgentInsightsResourceTest {
                             .build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            var issue = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_OK);
-            assertThat(issue.status()).isEqualTo(AgentInsightsIssueStatus.CLOSED);
+            assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).status()).isEqualTo(AgentInsightsIssueStatus.CLOSED);
 
-            // reopen
             agentInsightsResourceClient.updateStatus(issueId,
                     AgentInsightsIssueUpdate.builder()
                             .projectId(projectId)
@@ -664,9 +711,8 @@ class AgentInsightsResourceTest {
                             .build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            issue = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_OK);
-            assertThat(issue.status()).isEqualTo(AgentInsightsIssueStatus.OPEN);
+            assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).status()).isEqualTo(AgentInsightsIssueStatus.OPEN);
         }
 
         @Test
@@ -674,7 +720,8 @@ class AgentInsightsResourceTest {
         void updateIssueStatusWhenNotAccessibleThenNotFound() {
             var projectId = createProject();
 
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
             var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
 
             var update = AgentInsightsIssueUpdate.builder()
@@ -684,32 +731,27 @@ class AgentInsightsResourceTest {
 
             agentInsightsResourceClient.updateStatus(UUID.randomUUID(), update, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
-
             agentInsightsResourceClient.updateStatus(issueId,
                     update.toBuilder().projectId(UUID.randomUUID()).build(), API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
-
             agentInsightsResourceClient.updateStatus(issueId, update, OTHER_API_KEY, OTHER_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
         }
 
-        @Test
+        Stream<Arguments> invalidStatusUpdatePayloads() {
+            return Stream.of(
+                    Arguments.of("{\"project_id\":\"%s\",\"status\":\"unknown\"}".formatted(UUID.randomUUID()),
+                            HttpStatus.SC_BAD_REQUEST),
+                    Arguments.of("{\"status\":\"resolved\"}", HttpStatus.SC_UNPROCESSABLE_ENTITY));
+        }
+
+        @ParameterizedTest
+        @MethodSource("invalidStatusUpdatePayloads")
         @DisplayName("Invalid status value returns 400, missing project_id returns 422")
-        void updateIssueStatusWhenPayloadIsInvalidThenClientError() {
-            var projectId = createProject();
-
-            report(projectId, DAY_1, List.of(reportedIssue("issue-a", 10, 100, 3, 40)));
-            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
-
-            try (var response = agentInsightsResourceClient.updateStatusWithResponse(issueId,
-                    "{\"project_id\":\"%s\",\"status\":\"unknown\"}".formatted(projectId), API_KEY,
-                    TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            }
-
-            try (var response = agentInsightsResourceClient.updateStatusWithResponse(issueId,
-                    "{\"status\":\"resolved\"}", API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        void updateIssueStatusWhenPayloadIsInvalidThenClientError(String body, int expectedStatus) {
+            try (var response = agentInsightsResourceClient.updateStatusWithResponse(UUID.randomUUID(), body,
+                    API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
             }
         }
     }
