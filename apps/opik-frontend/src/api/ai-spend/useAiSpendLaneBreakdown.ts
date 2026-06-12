@@ -1,5 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import { ModelTiers } from "./claudePricing";
 
 export interface AiSpendBreakdownItemApi {
   label: string;
@@ -9,11 +10,8 @@ export interface AiSpendBreakdownItemApi {
   // cost (muted) + on-demand usage cost (solid). Sum = total_tokens.
   definition_tokens?: number;
   usage_tokens?: number;
-  // Per-item tier sums; priced FE-side (claudePricing).
-  input_tokens?: number;
-  cache_read_tokens?: number;
-  cache_creation_tokens?: number;
-  output_tokens?: number;
+  // Per-model tier sums; priced FE-side (claudePricing).
+  by_model: ModelTiers[];
 }
 
 export interface AiSpendBreakdownSectionApi {
@@ -28,13 +26,8 @@ export interface AiSpendBreakdownResponse {
   title: string;
   subtitle?: string;
   total_tokens: number;
-  // Tier sums for the lane's window total; priced FE-side (claudePricing).
-  input_tokens?: number;
-  cache_read_tokens?: number;
-  cache_creation_tokens?: number;
-  output_tokens?: number;
-  // Representative cc.billing model, for FE pricing.
-  model?: string;
+  // Per-model tier sums for the lane's window total; priced FE-side.
+  by_model: ModelTiers[];
   item_count: number;
   // Singular noun for item_count / item.count ("prompt", "call", "load").
   // Absent when counts are structurally 0 for the lane - the UI then hides
