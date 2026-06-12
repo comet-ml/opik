@@ -40,6 +40,7 @@ export * from "./llmProviderKey/client/requests/index.js";
 export * as llmProviderKey from "./llmProviderKey/index.js";
 export * from "./llmProviderKey/types/index.js";
 export * as manualEvaluation from "./manualEvaluation/index.js";
+export * from "./mcpOAuth/client/requests/index.js";
 export * as mcpOAuth from "./mcpOAuth/index.js";
 export * as ollama from "./ollama/index.js";
 export * as ollieState from "./ollieState/index.js";
