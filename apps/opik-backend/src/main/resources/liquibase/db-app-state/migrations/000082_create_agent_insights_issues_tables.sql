@@ -50,3 +50,4 @@ CREATE TABLE agent_insights_issues_details
 
 --rollback DROP TABLE agent_insights_issues_details;
 --rollback DROP TABLE agent_insights_issues;
+
