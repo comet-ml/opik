@@ -43,16 +43,40 @@ def empty_pool_executor():
         executor.stop_event.set()
 
 
-@pytest.mark.parametrize("set_stop_event, expected_match", [
-    pytest.param(False, "pool exhausted", id="empty_pool"),
-    pytest.param(True,  "shutting down",  id="shutdown"),
+def test_tracer_is_initialized_before_pre_warm():
+    """Pre-warm reads ``self.tracer`` to open a span on ``create_container``;
+    if the tracer is initialized after pre-warm the pool silently starts
+    empty (CI regression caught in 12155a833). Lock the ordering directly
+    so the regression surfaces locally instead of only in real-Docker CI."""
+    tracer_visible_in_pre_warm = []
+
+    def capture(self):
+        tracer_visible_in_pre_warm.append(hasattr(self, "tracer"))
+
+    with (
+        patch("opik_backend.executor_docker.docker.from_env", return_value=MagicMock()),
+        patch.object(DockerExecutor, "_pre_warm_container_pool", capture),
+        patch.object(DockerExecutor, "_start_pool_monitor"),
+    ):
+        DockerExecutor()
+
+    assert tracer_visible_in_pre_warm == [True]
+
+
+@pytest.mark.parametrize("set_stop_event, expected_message", [
+    pytest.param(False, SATURATED_ERROR, id="empty_pool"),
+    pytest.param(True,  SHUTDOWN_ERROR,  id="shutdown"),
 ])
-def test_get_container_raises_timeout_error(empty_pool_executor, set_stop_event, expected_match):
+def test_get_container_raises_timeout_error(empty_pool_executor, set_stop_event, expected_message):
+    """The exception text is one of the two wire-facing constants; internal
+    config (pool_acquire_timeout) stays in the log only."""
     if set_stop_event:
         empty_pool_executor.stop_event.set()
 
-    with pytest.raises(TimeoutError, match=expected_match):
+    with pytest.raises(TimeoutError) as excinfo:
         empty_pool_executor.get_container()
+
+    assert str(excinfo.value) == expected_message
 
 
 def test_get_container_logs_warning_on_saturation(empty_pool_executor, caplog):

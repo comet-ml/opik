@@ -10,16 +10,21 @@ Covers the public contract:
 - the Flask route translates saturation to HTTP 503
 """
 import logging
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from opik_backend import create_app
-from opik_backend.executor import SATURATED_ERROR, SHUTDOWN_ERROR, CodeExecutorBase
+from opik_backend.executor import (
+    CodeExecutorBase,
+    POOL_ACQUIRE_TIMEOUT_ENV_VAR,
+    SATURATED_ERROR,
+    SHUTDOWN_ERROR,
+)
 from opik_backend.executor_process import ProcessExecutor
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
-ENV_VAR = "PYTHON_CODE_EXECUTOR_POOL_ACQUIRE_TIMEOUT_IN_SECS"
+ENV_VAR = POOL_ACQUIRE_TIMEOUT_ENV_VAR
 DATA = {"output": "x", "reference": "x"}
 
 
@@ -35,16 +40,20 @@ def empty_pool_executor():
     yield executor
 
 
-@pytest.mark.parametrize("set_stop_event, expected_match", [
-    pytest.param(False, "pool exhausted", id="empty_pool"),
-    pytest.param(True,  "shutting down",  id="shutdown"),
+@pytest.mark.parametrize("set_stop_event, expected_message", [
+    pytest.param(False, SATURATED_ERROR, id="empty_pool"),
+    pytest.param(True,  SHUTDOWN_ERROR,  id="shutdown"),
 ])
-def test_get_worker_raises_timeout_error(empty_pool_executor, set_stop_event, expected_match):
+def test_get_worker_raises_timeout_error(empty_pool_executor, set_stop_event, expected_message):
+    """The exception text is one of the two wire-facing constants; internal
+    config (pool_acquire_timeout, max_parallel) stays in the log only."""
     if set_stop_event:
         empty_pool_executor.stop_event.set()
 
-    with pytest.raises(TimeoutError, match=expected_match):
+    with pytest.raises(TimeoutError) as excinfo:
         empty_pool_executor.get_worker()
+
+    assert str(excinfo.value) == expected_message
 
 
 def test_get_worker_logs_warning_on_saturation(empty_pool_executor, caplog):
@@ -59,6 +68,86 @@ def test_get_worker_logs_warning_on_saturation(empty_pool_executor, caplog):
         for r in caplog.records
         if r.levelno == logging.WARNING
     )
+
+
+def test_get_worker_logs_warning_on_dead_worker(empty_pool_executor, caplog):
+    """The dead-worker WARNING is the operator-facing signal that
+    distinguishes 'workers dying' from 'all workers busy' — both surface
+    as 503 + SATURATED_ERROR, only the log tells the difference."""
+    dead_process = MagicMock()
+    dead_process.is_alive.return_value = False
+    dead_worker = {"id": "dead-x", "process": dead_process, "connection": MagicMock()}
+
+    with caplog.at_level(logging.WARNING):
+        with patch.object(empty_pool_executor.process_pool, "get", return_value=dead_worker):
+            with patch.object(empty_pool_executor, "_async_terminate"):
+                with pytest.raises(TimeoutError):
+                    empty_pool_executor.get_worker()
+
+    assert any(
+        "Dead worker" in r.message and "dead-x" in r.message
+        for r in caplog.records
+        if r.levelno == logging.WARNING
+    )
+
+
+def test_get_worker_treats_dead_worker_as_saturation(empty_pool_executor):
+    """A dead worker retrieved from the pool is async-terminated and
+    surfaces as TimeoutError with the wire-facing saturation constant —
+    internal worker state stays in the log, not in anything a downstream
+    ``str(exc)`` could observe."""
+    dead_process = MagicMock()
+    dead_process.is_alive.return_value = False
+    dead_worker = {"id": "dead", "process": dead_process, "connection": MagicMock()}
+
+    with patch.object(empty_pool_executor.process_pool, "get", return_value=dead_worker):
+        with patch.object(empty_pool_executor, "_async_terminate") as async_term:
+            with pytest.raises(TimeoutError) as excinfo:
+                empty_pool_executor.get_worker()
+
+    async_term.assert_called_once_with(dead_worker)
+    assert str(excinfo.value) == SATURATED_ERROR
+
+
+def test_run_scoring_returns_503_when_pool_yields_dead_worker(empty_pool_executor):
+    """End-to-end: a dead worker collapses to the same 503 + SATURATED_ERROR
+    body as real pool saturation. Body intentionally re-used — the wire
+    contract is the HTTP status, the dead-worker case is distinguishable
+    via logs (and outcome counter, once M1 lands on the process side)."""
+    dead_process = MagicMock()
+    dead_process.is_alive.return_value = False
+    dead_worker = {"id": "dead", "process": dead_process, "connection": MagicMock()}
+
+    with patch.object(empty_pool_executor.process_pool, "get", return_value=dead_worker):
+        with patch.object(empty_pool_executor, "_async_terminate"):
+            response = empty_pool_executor.run_scoring(code="<unused>", data=DATA)
+
+    assert response == {"code": 503, "error": SATURATED_ERROR}
+
+
+def test_async_terminate_dispatches_via_releaser_executor_when_available(empty_pool_executor):
+    """When start_services has wired up the releaser pool, termination must
+    happen off the request thread."""
+    worker = {"id": "any", "process": MagicMock(), "connection": MagicMock()}
+    fake_releaser = MagicMock()
+    empty_pool_executor.releaser_executor = fake_releaser
+
+    from opik_backend.executor_process import terminate_worker
+    empty_pool_executor._async_terminate(worker)
+
+    fake_releaser.submit.assert_called_once_with(terminate_worker, worker)
+
+
+def test_async_terminate_falls_back_to_inline_when_releaser_unavailable(empty_pool_executor):
+    """Without a releaser pool (pre-start_services / tests), termination
+    runs inline — acceptable since no request thread is on the line."""
+    worker = {"id": "any", "process": MagicMock(), "connection": MagicMock()}
+    assert empty_pool_executor.releaser_executor is None
+
+    with patch("opik_backend.executor_process.terminate_worker") as terminate:
+        empty_pool_executor._async_terminate(worker)
+
+    terminate.assert_called_once_with(worker)
 
 
 def test_get_worker_refreshes_gauge_on_saturation(empty_pool_executor):
