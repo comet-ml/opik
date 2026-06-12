@@ -54,6 +54,11 @@ test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, ()
     chatPrompt,
     page,
   }) => {
+    test.skip(
+      true,
+      'Chat-prompt rendering/editing relies on prompt-chat-messages and ' +
+        'playground-message-editor testids that did not exist in 2.0.61.',
+    );
     const prompts = new PromptsPage(page);
     const updatedMessage = 'Provide a concise expert answer to: {{question}}';
 
@@ -149,6 +154,11 @@ test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, ()
     registerPromptCleanup,
     testNamespace,
   }) => {
+    test.skip(
+      true,
+      'Chat-prompt rendering/editing relies on prompt-chat-messages and ' +
+        'playground-message-editor testids that did not exist in 2.0.61.',
+    );
     const promptName = `${testNamespace}-ui-chat`;
     const messageContent = 'Answer the following: {{question}}';
     const updatedMessage = 'Provide a concise expert answer to: {{question}}';

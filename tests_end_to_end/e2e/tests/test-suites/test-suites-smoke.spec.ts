@@ -163,12 +163,14 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
       // Reload the items page so the FE refetches the latest version.
       await items.goto();
       await items.waitForReady();
-      // Wait for the version label to be at v1 — only then has the FE picked
-      // up the committed version and `latestVersion.id` will be populated
-      // (UseDatasetDropdown needs this to call loadPlayground successfully).
+      // The 3-step UI create flow commits an initial version, so the suite is
+      // born at v1; this first SDK insert bumps it to v2. Wait for v2 — only
+      // then has the FE picked up the new committed version and
+      // `latestVersion.id` will be populated (UseDatasetDropdown needs this to
+      // call loadPlayground successfully).
       await expect
         .poll(async () => items.readVersionLabel(), { timeout: 15_000 })
-        .toBe('v1');
+        .toBe('v2');
       await expect
         .poll(async () => items.countItems(), { timeout: 15_000 })
         .toBeGreaterThanOrEqual(1);

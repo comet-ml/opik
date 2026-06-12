@@ -24,11 +24,17 @@ export class PromptDetailPage {
   }
 
   activeVersionLabel(): Locator {
-    return this.page.getByTestId('active-version-label');
+    // 2.0.61 has no `active-version-label` testid; the active version renders as
+    // a badge span inside the header version selector (the bordered container).
+    return this.page.locator('div.rounded-md.border span.comet-body-accented').first();
   }
 
   versionHistoryItem(label: string): Locator {
-    return this.page.getByTestId(`version-history-item-${label}`);
+    // 2.0.61 has no `version-history-item-*` testid; the history timeline is a
+    // plain list whose items carry the version label as text.
+    return this.page.locator('li').filter({
+      has: this.page.getByText(label, { exact: true }),
+    });
   }
 
   async editTextPrompt(newTemplate: string): Promise<void> {
