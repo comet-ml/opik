@@ -248,6 +248,7 @@ export const truncateMiddle = (text: string, maxLength: number): string => {
 
 export const formatNumberInK = (value: number, precision = 1): string => {
   const ranges = [
+    { threshold: 1000000000000, suffix: "T", divider: 1000000000000 },
     { threshold: 1000000000, suffix: "B", divider: 1000000000 },
     { threshold: 1000000, suffix: "M", divider: 1000000 },
     { threshold: 1000, suffix: "K", divider: 1000 },

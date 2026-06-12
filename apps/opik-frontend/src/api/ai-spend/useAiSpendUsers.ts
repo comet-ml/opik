@@ -2,7 +2,6 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import { ColumnSort } from "@tanstack/react-table";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { processSorting } from "@/lib/sorting";
-import { useAiSpend } from "@/contexts/AiSpendContext";
 
 export interface SpendUserRow {
   user_uuid: string;
@@ -34,7 +33,6 @@ type UseAiSpendUsersParams = {
   size: number;
   name?: string;
   sorting?: ColumnSort[];
-  workspaceName?: string;
 };
 
 const getAiSpendUsers = async (
@@ -47,7 +45,6 @@ const getAiSpendUsers = async (
     size,
     name,
     sorting,
-    workspaceName,
   }: UseAiSpendUsersParams,
 ) => {
   const { data } = await api.post<SpendUserPage>(
@@ -60,9 +57,6 @@ const getAiSpendUsers = async (
     {
       signal,
       params: { page, size, ...(name && { name }), ...processSorting(sorting) },
-      ...(workspaceName && {
-        headers: { "Comet-Workspace": workspaceName },
-      }),
     },
   );
 
@@ -70,15 +64,12 @@ const getAiSpendUsers = async (
 };
 
 export default function useAiSpendUsers(
-  params: Omit<UseAiSpendUsersParams, "workspaceName">,
+  params: UseAiSpendUsersParams,
   options?: QueryConfig<SpendUserPage>,
 ) {
-  const { spendWorkspaceName } = useAiSpend();
-  const queryParams = { ...params, workspaceName: spendWorkspaceName };
-
   return useQuery({
-    queryKey: ["ai-spend-users", queryParams],
-    queryFn: (context) => getAiSpendUsers(context, queryParams),
+    queryKey: ["ai-spend-users", params],
+    queryFn: (context) => getAiSpendUsers(context, params),
     ...options,
   });
 }
