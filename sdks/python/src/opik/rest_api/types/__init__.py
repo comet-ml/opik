@@ -387,6 +387,7 @@ from .feedback_update import (
 )
 from .function import Function
 from .function_call import FunctionCall
+from .generate_report_response import GenerateReportResponse
 from .group_content import GroupContent
 from .group_content_with_aggregations import GroupContentWithAggregations
 from .group_detail import GroupDetail
@@ -478,6 +479,9 @@ from .o_auth_error import OAuthError
 from .ollama_connection_test_response import OllamaConnectionTestResponse
 from .ollama_instance_base_url_request import OllamaInstanceBaseUrlRequest
 from .ollama_model import OllamaModel
+from .ollie_report import OllieReport
+from .ollie_report_page import OllieReportPage
+from .ollie_report_status import OllieReportStatus
 from .optimization import Optimization
 from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
@@ -553,6 +557,7 @@ from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
+from .report_preference import ReportPreference
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -1045,6 +1050,7 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
+    "GenerateReportResponse",
     "GroupContent",
     "GroupContentWithAggregations",
     "GroupDetail",
@@ -1136,6 +1142,9 @@ __all__ = [
     "OllamaConnectionTestResponse",
     "OllamaInstanceBaseUrlRequest",
     "OllamaModel",
+    "OllieReport",
+    "OllieReportPage",
+    "OllieReportStatus",
     "Optimization",
     "OptimizationPagePublic",
     "OptimizationPublic",
@@ -1209,6 +1218,7 @@ __all__ = [
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
+    "ReportPreference",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",

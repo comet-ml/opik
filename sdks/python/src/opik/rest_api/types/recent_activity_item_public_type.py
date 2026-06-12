@@ -4,7 +4,13 @@ import typing
 
 RecentActivityItemPublicType = typing.Union[
     typing.Literal[
-        "experiment", "dataset_version", "test_suite_version", "alert_event", "optimization", "agent_config_version"
+        "trace_daily",
+        "experiment",
+        "dataset_version",
+        "test_suite_version",
+        "alert_event",
+        "optimization",
+        "prompt_version",
     ],
     typing.Any,
 ]
