@@ -18,6 +18,7 @@ import isUndefined from "lodash/isUndefined";
 import { JSONPath } from "jsonpath-plus";
 
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
+import { normalizeTraceTreeFilter } from "@/api/traces/payloadFilter";
 import { Filter, FilterOperator, Filters } from "@/types/filters";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
@@ -402,30 +403,8 @@ const applyOperator = (
   }
 };
 
-const processFilter = (filterItem: Filter): Filter => {
-  if (filterItem.field === COLUMN_CUSTOM_ID && filterItem.key) {
-    const { field, key: originalKey, type: originalType } = filterItem;
-    let key = originalKey;
-    let type = originalType;
-    let processedField: string = field;
-    const prefixes = [
-      { fieldName: "input" as const, prefix: "input." },
-      { fieldName: "output" as const, prefix: "output." },
-    ];
-
-    for (const { fieldName, prefix } of prefixes) {
-      if (key.startsWith(prefix)) {
-        processedField = fieldName;
-        key = key.substring(prefix.length);
-        type = COLUMN_TYPE.dictionary;
-        break;
-      }
-    }
-    return { ...filterItem, field: processedField, key, type };
-  }
-
-  return filterItem;
-};
+const processFilter = (filterItem: Filter): Filter =>
+  normalizeTraceTreeFilter(filterItem);
 
 const filter = (filters: Filters, data: Trace | Span): boolean => {
   if (isEmpty(filters)) {

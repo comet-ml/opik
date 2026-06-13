@@ -201,8 +201,8 @@ export const useUnifiedMedia = (
       outputMedia,
       inputMaxIndex: inputResult.media.length,
       outputMaxIndex: outputResult.media.length,
-      transformedInput: inputResult.formattedData ?? data.input,
-      transformedOutput: outputResult.formattedData ?? data.output,
+      transformedInput: inputResult.formattedData ?? data.input ?? null,
+      transformedOutput: outputResult.formattedData ?? data.output ?? null,
     };
   }, [data.input, data.output]);
 

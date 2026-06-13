@@ -127,6 +127,35 @@ describe("useSelectedSpanData", () => {
     expect(result.current.isSelectedSpanPending).toBe(true);
   });
 
+  it("hydrates selected list span when excluded payload fields are omitted", () => {
+    const span = makeSpan();
+    delete span.input;
+    delete span.output;
+    mockSpanById({
+      data: span,
+      isFetching: true,
+      isPlaceholderData: true,
+    });
+
+    const { result } = renderHook(() =>
+      useSelectedSpanData({
+        spanId: span.id,
+        traceId: span.trace_id,
+        spans: [span],
+        trace: makeTrace(),
+      }),
+    );
+
+    expect(useSpanByIdMock).toHaveBeenCalledWith(
+      { spanId: span.id, stripAttachments: true },
+      expect.objectContaining({
+        enabled: true,
+        placeholderData: span,
+      }),
+    );
+    expect(result.current.isSelectedSpanPending).toBe(true);
+  });
+
   it("falls back to the trace when fetched span belongs to another trace", () => {
     const trace = makeTrace();
     const fetchedSpan = makeSpan({ trace_id: "trace-2" });

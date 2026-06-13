@@ -1,20 +1,4 @@
-import { COLUMN_CUSTOM_ID } from "@/types/shared";
-
-const PAYLOAD_FIELDS = new Set(["input", "output"]);
-
-const isPayloadFilter = (filter: unknown): boolean => {
-  if (!filter || typeof filter !== "object") return false;
-
-  const { field, key } = filter as { field?: unknown; key?: unknown };
-
-  if (typeof field === "string" && PAYLOAD_FIELDS.has(field)) return true;
-
-  return (
-    field === COLUMN_CUSTOM_ID &&
-    typeof key === "string" &&
-    (key.startsWith("input.") || key.startsWith("output."))
-  );
-};
+import { isPayloadFilter } from "@/api/traces/payloadFilter";
 
 export default function shouldLoadFullSpansData(
   search?: unknown,

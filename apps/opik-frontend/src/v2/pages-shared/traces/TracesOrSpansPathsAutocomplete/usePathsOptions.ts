@@ -69,20 +69,17 @@ export const usePathsOptions = (
     const all = [...truncated, ...nonTruncated];
     const baseSuggestions = all.reduce<string[]>((acc, d) => {
       return acc.concat(
-        rootKeys.reduce<string[]>(
-          (internalAcc, key) =>
-            internalAcc.concat(
-              isObject(d[key]) || isArray(d[key])
-                ? getJSONPaths(d[key], key, [], includeIntermediateNodes).map(
-                    (path) =>
-                      excludeRoot
-                        ? path.substring(path.indexOf(".") + 1)
-                        : path,
-                  )
-                : [],
-            ),
-          [],
-        ),
+        rootKeys.reduce<string[]>((internalAcc, key) => {
+          const value = d[key];
+          return internalAcc.concat(
+            isObject(value) || isArray(value)
+              ? getJSONPaths(value, key, [], includeIntermediateNodes).map(
+                  (path) =>
+                    excludeRoot ? path.substring(path.indexOf(".") + 1) : path,
+                )
+              : [],
+          );
+        }, []),
       );
     }, []);
 
