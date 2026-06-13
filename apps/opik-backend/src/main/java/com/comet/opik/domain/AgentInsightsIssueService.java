@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(AgentInsightsIssueServiceImpl.class)
@@ -75,21 +76,20 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         log.info("Storing '{}' agent insights issues for project '{}' on report day '{}' in workspace '{}'",
                 report.issues().size(), report.projectId(), report.reportDay(), workspaceId);
 
+        List<UUID> issueIds = report.issues().stream()
+                .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
+                .toList();
+        List<UUID> detailIds = report.issues().stream()
+                .map(issue -> idGenerator.generateId())
+                .toList();
+        List<String> metadata = report.issues().stream()
+                .map(issue -> serializeMetadata(issue.metadata()))
+                .toList();
+
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            List<UUID> issueIds = report.issues().stream()
-                    .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
-                    .toList();
             dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
-
-            List<UUID> detailIds = report.issues().stream()
-                    .map(issue -> idGenerator.generateId())
-                    .toList();
-            List<String> metadata = report.issues().stream()
-                    .map(issue -> serializeMetadata(issue.metadata()))
-                    .toList();
-
             dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
                     detailIds, issueIds, report.issues(), metadata);
 
@@ -103,21 +103,19 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
             int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        LocalDate effectiveFrom = Objects.requireNonNullElse(fromDate, DEFAULT_FROM_DATE);
-        LocalDate effectiveTo = Objects.requireNonNullElse(toDate, DEFAULT_TO_DATE);
-        validateDateRange(effectiveFrom, effectiveTo);
+        DateWindow window = resolveWindow(fromDate, toDate);
         String orderBy = toOrderByClause(Objects.requireNonNullElse(sortBy, AgentInsightsSortBy.LAST_SEEN));
 
         log.info("Retrieving agent insights issues for project '{}' in workspace '{}', window '{}'..'{}', page {}",
-                projectId, workspaceId, effectiveFrom, effectiveTo, page);
+                projectId, workspaceId, window.from(), window.to(), page);
 
-        return transactionTemplate.inTransaction(handle -> {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
             int offset = (page - 1) * size;
-            List<AgentInsightsIssue> issues = dao.findIssues(workspaceId, projectId, effectiveFrom, effectiveTo,
+            List<AgentInsightsIssue> issues = dao.findIssues(workspaceId, projectId, window.from(), window.to(),
                     status, orderBy, size, offset);
-            long total = dao.countIssues(workspaceId, projectId, effectiveFrom, effectiveTo, status);
+            long total = dao.countIssues(workspaceId, projectId, window.from(), window.to(), status);
 
             return AgentInsightsIssue.AgentInsightsIssuePage.builder()
                     .page(page)
@@ -133,14 +131,12 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
             LocalDate fromDate, LocalDate toDate) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        LocalDate effectiveFrom = Objects.requireNonNullElse(fromDate, DEFAULT_FROM_DATE);
-        LocalDate effectiveTo = Objects.requireNonNullElse(toDate, DEFAULT_TO_DATE);
-        validateDateRange(effectiveFrom, effectiveTo);
+        DateWindow window = resolveWindow(fromDate, toDate);
 
         log.info("Retrieving agent insights issue '{}' for project '{}' in workspace '{}', window '{}'..'{}'",
-                issueId, projectId, workspaceId, effectiveFrom, effectiveTo);
+                issueId, projectId, workspaceId, window.from(), window.to());
 
-        return transactionTemplate.inTransaction(handle -> {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
             AgentInsightsIssueWithDetails issue = dao.findIssueById(workspaceId, projectId, issueId);
@@ -148,8 +144,8 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 throw new NotFoundException("Agent insights issue '%s' not found".formatted(issueId));
             }
 
-            List<AgentInsightsIssueDetail> details = dao.findDetails(workspaceId, projectId, issueId, effectiveFrom,
-                    effectiveTo);
+            List<AgentInsightsIssueDetail> details = dao.findDetails(workspaceId, projectId, issueId, window.from(),
+                    window.to());
 
             return issue.toBuilder()
                     .details(details)
@@ -191,11 +187,17 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         return serialized;
     }
 
-    private void validateDateRange(LocalDate fromDate, LocalDate toDate) {
-        if (fromDate.isAfter(toDate)) {
+    private DateWindow resolveWindow(LocalDate fromDate, LocalDate toDate) {
+        LocalDate effectiveFrom = Objects.requireNonNullElse(fromDate, DEFAULT_FROM_DATE);
+        LocalDate effectiveTo = Objects.requireNonNullElse(toDate, DEFAULT_TO_DATE);
+        if (effectiveFrom.isAfter(effectiveTo)) {
             throw new BadRequestException("from_date '%s' must not be after to_date '%s'"
-                    .formatted(fromDate, toDate));
+                    .formatted(effectiveFrom, effectiveTo));
         }
+        return new DateWindow(effectiveFrom, effectiveTo);
+    }
+
+    private record DateWindow(LocalDate from, LocalDate to) {
     }
 
     // Hardcoded fragments keyed by enum: user input never reaches the SQL text

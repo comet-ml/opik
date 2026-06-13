@@ -47,6 +47,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -431,7 +432,10 @@ class AgentInsightsResourceTest {
                             .issues(List.of(validIssue.toBuilder().usersImpacted(null).build())).build(),
                     // missing total_users
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
-                            .issues(List.of(validIssue.toBuilder().totalUsers(null).build())).build());
+                            .issues(List.of(validIssue.toBuilder().totalUsers(null).build())).build(),
+                    // null issue element
+                    AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
+                            .issues(Collections.singletonList(null)).build());
         }
 
         @ParameterizedTest

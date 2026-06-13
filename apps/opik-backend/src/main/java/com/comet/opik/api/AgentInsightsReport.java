@@ -22,7 +22,7 @@ import java.util.UUID;
 public record AgentInsightsReport(
         @NotNull UUID projectId,
         @NotNull LocalDate reportDay,
-        @NotEmpty @Valid List<ReportedIssue> issues) {
+        @NotEmpty List<@NotNull @Valid ReportedIssue> issues) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
