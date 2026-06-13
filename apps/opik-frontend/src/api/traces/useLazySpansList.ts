@@ -4,22 +4,12 @@ import useSpansList, {
   UseSpansListResponse,
 } from "@/api/traces/useSpansList";
 
-type UseLazySpansListConfig = {
-  loadFullData?: boolean;
-  maxFullDataSpans?: number;
-};
-
-const DEFAULT_MAX_FULL_DATA_SPANS = 500;
+const MAX_FULL_DATA_SPANS = 500;
 
 export default function useLazySpansList(
   params: UseSpansListParams,
   options?: QueryConfig<UseSpansListResponse>,
-  config: UseLazySpansListConfig = {},
 ) {
-  const {
-    loadFullData = false,
-    maxFullDataSpans = DEFAULT_MAX_FULL_DATA_SPANS,
-  } = config;
   const lightQuery = useSpansList(
     { ...params, exclude: ["input", "output"] },
     options,
@@ -28,7 +18,7 @@ export default function useLazySpansList(
   const canLoadFullData =
     !lightQuery.isPlaceholderData &&
     lightQuery.data?.total !== undefined &&
-    (loadFullData || lightQuery.data.total <= maxFullDataSpans);
+    lightQuery.data.total <= MAX_FULL_DATA_SPANS;
 
   const fullQuery = useSpansList(params, {
     ...options,

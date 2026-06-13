@@ -170,9 +170,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const projectId = externalProjectId || trace?.project_id || "";
-  const loadFullSpansData =
-    (typeof search === "string" && search.trim().length > 0) ||
-    (Array.isArray(filters) && filters.length > 0);
 
   const {
     query: { data: spansData, isPending: isSpansPending },
@@ -189,9 +186,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       placeholderData: keepPreviousData,
       enabled: Boolean(traceId) && Boolean(projectId),
       refetchInterval,
-    },
-    {
-      loadFullData: loadFullSpansData,
     },
   );
 

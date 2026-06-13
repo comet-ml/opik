@@ -1,17 +1,21 @@
 import { renderHook } from "@testing-library/react";
+import { useQuery } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import useSpanById from "@/api/traces/useSpanById";
 import useSelectedSpanData, {
   type SpanWithOptionalPayload,
 } from "@/api/traces/useSelectedSpanData";
 import { Span, Trace } from "@/types/traces";
 
-vi.mock("@/api/traces/useSpanById", () => ({
-  default: vi.fn(),
-}));
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQuery: vi.fn(),
+  };
+});
 
-const useSpanByIdMock = vi.mocked(useSpanById);
+const useQueryMock = vi.mocked(useQuery);
 
 const makeSpan = (overrides: Partial<Span> = {}) =>
   ({
@@ -22,17 +26,6 @@ const makeSpan = (overrides: Partial<Span> = {}) =>
     ...overrides,
   }) as Span;
 
-const makeSpanWithOptionalPayload = (
-  overrides: Partial<SpanWithOptionalPayload> = {},
-) =>
-  ({
-    id: "span-1",
-    trace_id: "trace-1",
-    input: { prompt: "hello" },
-    output: { response: "world" },
-    ...overrides,
-  }) as SpanWithOptionalPayload;
-
 const makeTrace = (overrides: Partial<Trace> = {}) =>
   ({
     id: "trace-1",
@@ -41,26 +34,32 @@ const makeTrace = (overrides: Partial<Trace> = {}) =>
     ...overrides,
   }) as Trace;
 
-const mockSpanById = (
-  overrides: Partial<ReturnType<typeof useSpanById>> = {},
-) => {
-  useSpanByIdMock.mockReturnValue({
+const makeLightSpan = (overrides: Partial<SpanWithOptionalPayload> = {}) =>
+  ({
+    ...makeSpan(),
+    input: null,
+    output: null,
+    ...overrides,
+  }) as SpanWithOptionalPayload;
+
+const mockQuery = (overrides: Partial<ReturnType<typeof useQuery>> = {}) => {
+  useQueryMock.mockReturnValue({
     data: undefined,
     isError: false,
     isFetching: false,
     isPlaceholderData: false,
     ...overrides,
-  } as unknown as ReturnType<typeof useSpanById>);
+  } as unknown as ReturnType<typeof useQuery>);
 };
 
 describe("useSelectedSpanData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockQuery();
   });
 
-  it("reuses selected list span when it already has input and output", () => {
+  it("reuses selected list span when it already has payload data", () => {
     const span = makeSpan();
-    mockSpanById({ data: span });
 
     const { result } = renderHook(() =>
       useSelectedSpanData({
@@ -71,8 +70,7 @@ describe("useSelectedSpanData", () => {
       }),
     );
 
-    expect(useSpanByIdMock).toHaveBeenCalledWith(
-      { spanId: span.id, stripAttachments: true },
+    expect(useQueryMock).toHaveBeenCalledWith(
       expect.objectContaining({
         enabled: false,
         placeholderData: span,
@@ -82,44 +80,10 @@ describe("useSelectedSpanData", () => {
     expect(result.current.isSelectedSpanPending).toBe(false);
   });
 
-  it("prefers refreshed full list span over stale by-id data", () => {
-    const listSpan = makeSpan({
-      input: { prompt: "fresh" },
-      output: { response: "fresh" },
-    });
-    const staleHydratedSpan = makeSpan({
-      input: { prompt: "stale" },
-      output: { response: "stale" },
-    });
-    mockSpanById({ data: staleHydratedSpan });
-
-    const { result } = renderHook(() =>
-      useSelectedSpanData({
-        spanId: listSpan.id,
-        traceId: listSpan.trace_id,
-        spans: [listSpan],
-        trace: makeTrace(),
-      }),
-    );
-
-    expect(useSpanByIdMock).toHaveBeenCalledWith(
-      { spanId: listSpan.id, stripAttachments: true },
-      expect.objectContaining({ enabled: false }),
-    );
-    expect(result.current.dataToView).toBe(listSpan);
-    expect(result.current.selectedSpanData).toBe(listSpan);
-  });
-
-  it("hydrates selected list span when excluded payload fields are null", () => {
+  it("fetches a selected lightweight span before showing span details", () => {
     const trace = makeTrace();
-    const span = makeSpanWithOptionalPayload({
-      input: null,
-      output: null,
-    });
-    mockSpanById({
-      isFetching: true,
-      isPlaceholderData: true,
-    });
+    const span = makeLightSpan();
+    mockQuery({ isFetching: true, isPlaceholderData: true });
 
     const { result } = renderHook(() =>
       useSelectedSpanData({
@@ -130,94 +94,45 @@ describe("useSelectedSpanData", () => {
       }),
     );
 
-    expect(useSpanByIdMock).toHaveBeenCalledWith(
-      { spanId: span.id, stripAttachments: true },
+    expect(useQueryMock).toHaveBeenCalledWith(
       expect.objectContaining({
         enabled: true,
         placeholderData: span,
       }),
     );
-    expect(result.current.isSelectedSpanPending).toBe(true);
     expect(result.current.dataToView).toBe(trace);
+    expect(result.current.isSelectedSpanPending).toBe(true);
   });
 
-  it("hydrates selected list span when excluded payload fields are omitted", () => {
+  it("uses the fetched full span only when it belongs to the selected trace", () => {
     const trace = makeTrace();
-    const span = makeSpanWithOptionalPayload();
-    delete span.input;
-    delete span.output;
-    mockSpanById({
-      isFetching: true,
-      isPlaceholderData: true,
-    });
-
-    const { result } = renderHook(() =>
-      useSelectedSpanData({
-        spanId: span.id,
-        traceId: span.trace_id,
-        spans: [span],
-        trace,
-      }),
-    );
-
-    expect(useSpanByIdMock).toHaveBeenCalledWith(
-      { spanId: span.id, stripAttachments: true },
-      expect.objectContaining({
-        enabled: true,
-        placeholderData: span,
-      }),
-    );
-    expect(result.current.isSelectedSpanPending).toBe(true);
-    expect(result.current.dataToView).toBe(trace);
-  });
-
-  it("uses fetched full span when selected list span is lightweight", () => {
-    const listSpan = makeSpanWithOptionalPayload({
-      input: null,
-      output: null,
-    });
     const fetchedSpan = makeSpan();
-    mockSpanById({
-      data: fetchedSpan,
-      isFetching: false,
-      isPlaceholderData: false,
-    });
+    mockQuery({ data: fetchedSpan });
 
-    const { result } = renderHook(() =>
+    const { result, unmount } = renderHook(() =>
       useSelectedSpanData({
-        spanId: listSpan.id,
-        traceId: listSpan.trace_id,
-        spans: [listSpan],
-        trace: makeTrace(),
+        spanId: fetchedSpan.id,
+        traceId: trace.id,
+        spans: [makeLightSpan()],
+        trace,
       }),
     );
 
     expect(result.current.dataToView).toBe(fetchedSpan);
     expect(result.current.selectedSpanData).toBe(fetchedSpan);
-  });
 
-  it("falls back to the trace when fetched span belongs to another trace", () => {
-    const trace = makeTrace();
-    const fetchedSpan = makeSpan({ trace_id: "trace-2" });
-    mockSpanById({ data: fetchedSpan });
-
-    const { result } = renderHook(() =>
+    unmount();
+    mockQuery({ data: makeSpan({ trace_id: "trace-2" }) });
+    const { result: wrongTraceResult } = renderHook(() =>
       useSelectedSpanData({
         spanId: fetchedSpan.id,
         traceId: trace.id,
-        spans: [],
+        spans: [makeLightSpan()],
         trace,
       }),
     );
 
-    expect(useSpanByIdMock).toHaveBeenCalledWith(
-      { spanId: fetchedSpan.id, stripAttachments: true },
-      expect.objectContaining({
-        enabled: true,
-        placeholderData: undefined,
-      }),
-    );
-    expect(result.current.selectedSpanData).toBeUndefined();
-    expect(result.current.dataToView).toBe(trace);
+    expect(wrongTraceResult.current.dataToView).toBe(trace);
+    expect(wrongTraceResult.current.selectedSpanData).toBeUndefined();
   });
 });

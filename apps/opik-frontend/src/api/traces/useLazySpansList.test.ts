@@ -47,7 +47,7 @@ describe("useLazySpansList", () => {
     );
 
     const { result } = renderHook(() =>
-      useLazySpansList(params, { enabled: true }, { maxFullDataSpans: 500 }),
+      useLazySpansList(params, { enabled: true }),
     );
 
     expect(useSpansListMock).toHaveBeenNthCalledWith(
@@ -64,30 +64,6 @@ describe("useLazySpansList", () => {
     expect(result.current.isLazyLoading).toBe(false);
   });
 
-  it("loads full spans above the guard when explicitly requested", () => {
-    const lightQuery = makeQuery({ data: makeResponse(501) });
-    const fullQuery = makeQuery({ data: makeResponse(501) });
-    useSpansListMock.mockImplementation((queryParams) =>
-      queryParams.exclude ? lightQuery : fullQuery,
-    );
-
-    const { result } = renderHook(() =>
-      useLazySpansList(
-        params,
-        { enabled: true },
-        { maxFullDataSpans: 500, loadFullData: true },
-      ),
-    );
-
-    expect(useSpansListMock).toHaveBeenNthCalledWith(
-      2,
-      params,
-      expect.objectContaining({ enabled: true }),
-    );
-    expect(result.current.query).toBe(fullQuery);
-    expect(result.current.isLazyLoading).toBe(false);
-  });
-
   it("returns light spans while the requested full spans query is pending", () => {
     const lightQuery = makeQuery({ data: makeResponse(100) });
     const fullQuery = makeQuery({ isPending: true });
@@ -96,7 +72,7 @@ describe("useLazySpansList", () => {
     );
 
     const { result } = renderHook(() =>
-      useLazySpansList(params, { enabled: true }, { maxFullDataSpans: 500 }),
+      useLazySpansList(params, { enabled: true }),
     );
 
     expect(result.current.query).toBe(lightQuery);

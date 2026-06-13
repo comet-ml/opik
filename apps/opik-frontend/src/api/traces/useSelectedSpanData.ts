@@ -1,8 +1,8 @@
 import { useMemo } from "react";
+import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import find from "lodash/find";
 
-import { QueryConfig } from "@/api/api";
-import useSpanById from "@/api/traces/useSpanById";
+import api, { QueryConfig, SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span, Trace } from "@/types/traces";
 
 export type SpanWithOptionalPayload = Omit<Span, "input" | "output"> & {
@@ -26,6 +26,27 @@ const hasFullSpanData = (span?: SpanWithOptionalPayload): span is Span =>
       span.output !== null &&
       span.output !== undefined,
   );
+
+type UseSpanByIdParams = {
+  spanId: string;
+  stripAttachments?: boolean;
+};
+
+const getSpanById = async (
+  { signal }: QueryFunctionContext,
+  { spanId, stripAttachments }: UseSpanByIdParams,
+) => {
+  const { data } = await api.get<Span>(SPANS_REST_ENDPOINT + spanId, {
+    signal,
+    params: {
+      ...(stripAttachments !== undefined && {
+        strip_attachments: stripAttachments,
+      }),
+    },
+  });
+
+  return data;
+};
 
 export default function useSelectedSpanData(
   {
@@ -54,17 +75,13 @@ export default function useSelectedSpanData(
     isError: isSelectedSpanError,
     isFetching: isSelectedSpanFetching,
     isPlaceholderData: isSelectedSpanPlaceholderData,
-  } = useSpanById(
-    {
-      spanId,
-      stripAttachments,
-    },
-    {
-      ...options,
-      placeholderData: selectedSpanFromList as Span | undefined,
-      enabled: shouldFetchSelectedSpan && (options?.enabled ?? true),
-    },
-  );
+  } = useQuery({
+    queryKey: [SPANS_KEY, { spanId, stripAttachments }],
+    queryFn: (context) => getSpanById(context, { spanId, stripAttachments }),
+    ...options,
+    placeholderData: selectedSpanFromList as Span | undefined,
+    enabled: shouldFetchSelectedSpan && (options?.enabled ?? true),
+  });
 
   const validSelectedSpanData =
     !isSelectedSpanPlaceholderData && selectedSpanData?.trace_id === traceId
