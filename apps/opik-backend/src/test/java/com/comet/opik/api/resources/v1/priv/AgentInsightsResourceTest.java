@@ -320,6 +320,24 @@ class AgentInsightsResourceTest {
         }
 
         @Test
+        @DisplayName("Metadata exceeding the column byte limit returns 400")
+        void reportIssuesWhenMetadataTooLargeThenBadRequest() {
+            var projectId = createProject();
+            var oversizedMetadata = JsonUtils.getJsonNodeFromString(
+                    "{\"blob\":\"%s\"}".formatted("a".repeat(70_000)));
+
+            var reportRequest = AgentInsightsReport.builder()
+                    .projectId(projectId)
+                    .reportDay(DAY_1)
+                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount()).toBuilder().metadata(oversizedMetadata).build()))
+                    .build();
+
+            agentInsightsResourceClient.reportIssues(reportRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @Test
         @DisplayName("Unknown project returns 404")
         void reportIssuesWhenProjectDoesNotExistThenNotFound() {
             var reportRequest = AgentInsightsReport.builder()

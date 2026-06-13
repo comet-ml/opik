@@ -9,6 +9,7 @@ import com.comet.opik.api.AgentInsightsReport;
 import com.comet.opik.api.AgentInsightsSortBy;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -20,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
@@ -47,6 +49,8 @@ public interface AgentInsightsIssueService {
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
+
+    private static final int MAX_METADATA_BYTES = 65_535;
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
@@ -83,7 +87,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                     .map(issue -> idGenerator.generateId())
                     .toList();
             List<String> metadata = report.issues().stream()
-                    .map(issue -> issue.metadata() == null ? null : JsonUtils.writeValueAsString(issue.metadata()))
+                    .map(issue -> serializeMetadata(issue.metadata()))
                     .toList();
 
             dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
@@ -171,6 +175,20 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
             return null;
         });
+    }
+
+    // The metadata column is TEXT (65,535 bytes); reject oversized payloads at the boundary as 400 rather than
+    // letting MySQL fail the INSERT with a data-truncation error surfaced as 500.
+    private String serializeMetadata(JsonNode metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        String serialized = JsonUtils.writeValueAsString(metadata);
+        if (serialized.getBytes(StandardCharsets.UTF_8).length > MAX_METADATA_BYTES) {
+            throw new BadRequestException(
+                    "Issue metadata exceeds the %d byte limit".formatted(MAX_METADATA_BYTES));
+        }
+        return serialized;
     }
 
     private void validateDateRange(LocalDate fromDate, LocalDate toDate) {
