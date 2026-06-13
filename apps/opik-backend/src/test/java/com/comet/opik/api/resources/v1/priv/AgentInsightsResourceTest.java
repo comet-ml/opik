@@ -338,6 +338,61 @@ class AgentInsightsResourceTest {
         }
 
         @Test
+        @DisplayName("Cross-workspace: same explicit id in another workspace does not overwrite the original issue")
+        void reportIssuesWhenSameIdInAnotherWorkspaceThenRowsAreIsolated() {
+            var sharedId = UUID.randomUUID();
+            var originalName = rndName();
+            var otherName = rndName();
+
+            var projectInWorkspace = createProject();
+            report(projectInWorkspace, DAY_1, List.of(
+                    reportedIssue(sharedId, originalName, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+
+            var projectInOtherWorkspace = projectResourceClient.createProject(UUID.randomUUID().toString(),
+                    OTHER_API_KEY, OTHER_WORKSPACE);
+            var otherReport = AgentInsightsReport.builder()
+                    .projectId(projectInOtherWorkspace)
+                    .reportDay(DAY_1)
+                    .issues(List.of(reportedIssue(sharedId, otherName, rndOccurrences(), rndTotalCount(),
+                            rndUserCount(), rndUserCount())))
+                    .build();
+            agentInsightsResourceClient.reportIssues(otherReport, OTHER_API_KEY, OTHER_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var original = agentInsightsResourceClient.getIssue(sharedId, projectInWorkspace, null, null,
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(original.name()).isEqualTo(originalName);
+
+            var other = agentInsightsResourceClient.getIssue(sharedId, projectInOtherWorkspace, null, null,
+                    OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(other.name()).isEqualTo(otherName);
+        }
+
+        @Test
+        @DisplayName("Cross-project: same explicit id in another project of the same workspace stays isolated")
+        void reportIssuesWhenSameIdInAnotherProjectThenRowsAreIsolated() {
+            var sharedId = UUID.randomUUID();
+            var nameX = rndName();
+            var nameY = rndName();
+
+            var projectX = createProject();
+            var projectY = createProject();
+
+            report(projectX, DAY_1, List.of(
+                    reportedIssue(sharedId, nameX, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+            report(projectY, DAY_1, List.of(
+                    reportedIssue(sharedId, nameY, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+
+            assertThat(agentInsightsResourceClient.getIssue(sharedId, projectX, null, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).name()).isEqualTo(nameX);
+            assertThat(agentInsightsResourceClient.getIssue(sharedId, projectY, null, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).name()).isEqualTo(nameY);
+        }
+
+        @Test
         @DisplayName("Unknown project returns 404")
         void reportIssuesWhenProjectDoesNotExistThenNotFound() {
             var reportRequest = AgentInsightsReport.builder()
@@ -607,6 +662,32 @@ class AgentInsightsResourceTest {
                 String sortBy) {
             try (var response = agentInsightsResourceClient.findIssuesWithResponse(UUID.randomUUID(), fromDate,
                     toDate, status, sortBy, null, null, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        Stream<Arguments> outOfBoundsPagination() {
+            return Stream.of(
+                    Arguments.of(0, 10), // page below min
+                    Arguments.of(1, 0), // size below min
+                    Arguments.of(1, 101)); // size above max
+        }
+
+        @ParameterizedTest
+        @MethodSource("outOfBoundsPagination")
+        @DisplayName("Out-of-bounds page or size returns 400")
+        void findIssuesWhenPaginationOutOfBoundsThenBadRequest(int page, int size) {
+            try (var response = agentInsightsResourceClient.findIssuesWithResponse(UUID.randomUUID(), null, null,
+                    null, null, page, size, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("Missing required project_id returns 400")
+        void findIssuesWhenProjectIdMissingThenBadRequest() {
+            try (var response = agentInsightsResourceClient.findIssuesWithResponse(null, null, null, null, null,
+                    null, null, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
