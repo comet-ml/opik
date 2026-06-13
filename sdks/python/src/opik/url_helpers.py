@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "api/rest/v2/account-details"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "api/rest/v2/workspaces"
-HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
+HEALTH_CHECK_URL_POSTFIX: Final[str] = "is-alive/ping"
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 
 
