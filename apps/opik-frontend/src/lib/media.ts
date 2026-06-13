@@ -210,7 +210,7 @@ export const containsTruncatedMedia = (value: unknown): boolean => {
 };
 
 export const detectAdditionalMedia = async (
-  input: object | undefined,
+  input: object | null | undefined,
   existingMedia: ParsedMediaData[],
 ): Promise<ParsedMediaData[]> => {
   if (!input) {

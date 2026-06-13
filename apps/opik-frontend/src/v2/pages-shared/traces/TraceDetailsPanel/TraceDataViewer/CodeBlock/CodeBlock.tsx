@@ -15,7 +15,7 @@ import CodeBlockBody from "./CodeBlockBody";
 
 type CodeBlockProps = {
   title: React.ReactNode;
-  data: object;
+  data: object | null;
   prettifyConfig?: PrettifyConfig;
   preserveKey?: string;
   search?: string;

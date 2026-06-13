@@ -15,7 +15,7 @@ import MarkdownHighlighter from "@/shared/SyntaxHighlighter/MarkdownHighlighter"
 import { OnChangeFn } from "@/types/shared";
 
 export type SyntaxHighlighterProps = {
-  data: object;
+  data: object | null;
   prettifyConfig?: PrettifyConfig;
   preserveKey?: string;
   search?: string;

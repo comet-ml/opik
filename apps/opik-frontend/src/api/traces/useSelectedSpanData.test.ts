@@ -99,8 +99,8 @@ describe("useSelectedSpanData", () => {
 
   it("hydrates selected list span when excluded payload fields are null", () => {
     const span = makeSpan({
-      input: null as unknown as Span["input"],
-      output: null as unknown as Span["output"],
+      input: null,
+      output: null,
     });
     mockSpanById({
       data: span,

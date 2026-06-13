@@ -7,7 +7,7 @@ import {
 import { PrettifyConfig, CodeOutput } from "@/shared/SyntaxHighlighter/types";
 
 export const generateSyntaxHighlighterCode = (
-  data: object,
+  data: object | null,
   mode: MODE_TYPE,
   prettifyConfig?: PrettifyConfig,
 ): CodeOutput => {

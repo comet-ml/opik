@@ -5,7 +5,7 @@ import { processInputData } from "@/lib/images";
 
 export type UseProcessedInputDataReturn = {
   media: ParsedMediaData[];
-  formattedData: object | undefined;
+  formattedData: object | null | undefined;
   isDetecting: boolean;
 };
 
@@ -23,7 +23,7 @@ export type UseProcessedInputDataReturn = {
  * ```
  */
 export const useProcessedInputData = (
-  input: object | undefined,
+  input: object | null | undefined,
 ): UseProcessedInputDataReturn => {
   const { media: initialMedia, formattedData } = useMemo(
     () => processInputData(input),

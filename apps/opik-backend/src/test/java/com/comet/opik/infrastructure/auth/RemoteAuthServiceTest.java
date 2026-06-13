@@ -245,7 +245,7 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testAuthNoApiKeyForSpanByIdAllowsPublicVisibility() {
+    void authWithoutApiKeyAllowsPublicVisibilityForSpanById() {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var workspaceId = "workspace-id-" + UUID.randomUUID();
         var spanId = UUID.randomUUID();

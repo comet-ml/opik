@@ -15,7 +15,7 @@ import { prettifyMessage } from "@/lib/traces";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 const getPreviewText = (
-  obj: object | undefined,
+  obj: object | null | undefined,
   type: "input" | "output",
 ): string => {
   if (!obj) return "";

@@ -171,8 +171,8 @@ export const useUnifiedMedia = (
   data: Trace | Span,
 ): {
   media: UnifiedMediaItem[];
-  transformedInput: object;
-  transformedOutput: object;
+  transformedInput: object | null;
+  transformedOutput: object | null;
   isLoading: boolean;
 } => {
   // 1. Process input and output data in a single pass (synchronous)
