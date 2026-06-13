@@ -6,6 +6,10 @@ from opik import url_helpers
     ("base_url", "expected_ping_url"),
     [
         (
+            "http://localhost:5173/api",
+            "http://localhost:5173/api/is-alive/ping",
+        ),
+        (
             "http://localhost:5173/api/",
             "http://localhost:5173/api/is-alive/ping",
         ),
@@ -14,10 +18,16 @@ from opik import url_helpers
             "http://localhost:5173/api/is-alive/ping",
         ),
         (
+            "https://www.comet.com/opik/api",
+            "https://www.comet.com/opik/api/is-alive/ping",
+        ),
+        (
             "https://www.comet.com/opik/api/",
             "https://www.comet.com/opik/api/is-alive/ping",
         ),
     ],
 )
-def test_get_is_alive_ping_url(base_url: str, expected_ping_url: str) -> None:
+def test_get_is_alive_ping_url__base_url__returns_expected_ping_url(
+    base_url: str, expected_ping_url: str
+) -> None:
     assert url_helpers.get_is_alive_ping_url(base_url) == expected_ping_url
