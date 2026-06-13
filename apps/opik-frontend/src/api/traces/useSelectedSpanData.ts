@@ -5,15 +5,20 @@ import { QueryConfig } from "@/api/api";
 import useSpanById from "@/api/traces/useSpanById";
 import { Span, Trace } from "@/types/traces";
 
+export type SpanWithOptionalPayload = Omit<Span, "input" | "output"> & {
+  input?: Span["input"] | null;
+  output?: Span["output"] | null;
+};
+
 type UseSelectedSpanDataParams = {
   spanId: string;
   traceId: string;
-  spans?: Span[];
+  spans?: SpanWithOptionalPayload[];
   trace?: Trace;
   stripAttachments?: boolean;
 };
 
-const hasFullSpanData = (span?: Span) =>
+const hasFullSpanData = (span?: SpanWithOptionalPayload): span is Span =>
   Boolean(
     span &&
       span.input !== null &&
@@ -36,7 +41,8 @@ export default function useSelectedSpanData(
     () =>
       find(
         spans || [],
-        (span: Span) => span.id === spanId && span.trace_id === traceId,
+        (span: SpanWithOptionalPayload) =>
+          span.id === spanId && span.trace_id === traceId,
       ),
     [spanId, spans, traceId],
   );
@@ -55,17 +61,19 @@ export default function useSelectedSpanData(
     },
     {
       ...options,
-      placeholderData: selectedSpanFromList,
+      placeholderData: selectedSpanFromList as Span | undefined,
       enabled: shouldFetchSelectedSpan && (options?.enabled ?? true),
     },
   );
 
   const validSelectedSpanData =
-    selectedSpanData?.trace_id === traceId ? selectedSpanData : undefined;
+    !isSelectedSpanPlaceholderData && selectedSpanData?.trace_id === traceId
+      ? selectedSpanData
+      : undefined;
   const selectedSpanFromListHasFullData = hasFullSpanData(selectedSpanFromList);
   const selectedSpanDataToView = selectedSpanFromListHasFullData
     ? selectedSpanFromList
-    : validSelectedSpanData ?? selectedSpanFromList;
+    : validSelectedSpanData;
 
   const dataToView = useMemo(
     () => (spanId ? selectedSpanDataToView ?? trace : trace),

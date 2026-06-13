@@ -29,8 +29,8 @@ const VIRTUAL_OVERSCAN = 10; // extra items rendered outside viewport
 const TOGGLE_SUPPRESS_MS = 300; // ignore scroll adjustments after expand/collapse
 
 type MessagesTabProps = {
-  transformedInput: object | null;
-  transformedOutput: object | null;
+  transformedInput: object;
+  transformedOutput: object;
   media: UnifiedMediaItem[];
   isLoading: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement>;

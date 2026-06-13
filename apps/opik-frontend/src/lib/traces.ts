@@ -44,7 +44,7 @@ type PrettifyMessageConfig = {
 };
 
 type PrettifyMessageResponse = {
-  message: object | string | null | undefined;
+  message: object | string | undefined;
   prettified: boolean;
 };
 
@@ -608,7 +608,7 @@ const extractTextFieldFromTruncatedJson = (
 };
 
 export const prettifyMessage = (
-  message: object | string | null | undefined,
+  message: object | string | undefined,
   config: PrettifyMessageConfig = {
     type: "input",
   },
@@ -620,14 +620,6 @@ export const prettifyMessage = (
       prettified: true,
     } as PrettifyMessageResponse;
   }
-
-  if (message === null || message === undefined) {
-    return {
-      message,
-      prettified: false,
-    };
-  }
-
   try {
     let processedMessage = prettifyOpenAIMessageLogic(message, config);
 

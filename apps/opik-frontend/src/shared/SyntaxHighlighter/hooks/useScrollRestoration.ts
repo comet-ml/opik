@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback } from "react";
 import { OnChangeFn } from "@tanstack/react-table";
 
 interface UseScrollRestorationProps {
-  data: object | null;
+  data: object;
   scrollPosition?: number;
   onScrollPositionChange?: OnChangeFn<number>;
 }

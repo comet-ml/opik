@@ -60,8 +60,8 @@ export interface BaseTraceDataErrorInfo {
 export interface BaseTraceData {
   id: string;
   name: string;
-  input?: object | null;
-  output?: object | null;
+  input: object;
+  output: object;
   start_time: string;
   end_time: string;
   duration: number;

@@ -25,7 +25,8 @@ import AgentGraphTab from "./TraceDataViewer/AgentGraphTab";
 import NoData from "@/shared/NoData/NoData";
 import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
-import useTraceDetailsSpansLoader from "@/api/traces/useTraceDetailsSpansLoader";
+import useLazySpansList from "@/api/traces/useLazySpansList";
+import useSelectedSpanData from "@/api/traces/useSelectedSpanData";
 import {
   DetailsActionSection,
   useDetailsActionSectionState,
@@ -49,6 +50,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useVisibleSpans } from "@/v2/pages-shared/traces/hiddenSpans";
 
 const EMPTY_FILTERS: unknown[] = [];
+const MAX_SPANS_LOAD_SIZE = 15000;
 
 const TREE_ROW_INDENTS = [
   0, 20, 20, 40, 20, 40, 60, 20, 40, 20, 40, 60,
@@ -167,22 +169,42 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     },
   );
 
+  const projectId = externalProjectId || trace?.project_id || "";
+  const loadFullSpansData =
+    (typeof search === "string" && search.trim().length > 0) ||
+    (Array.isArray(filters) && filters.length > 0);
+
   const {
-    projectId,
-    spansData,
-    isSpansPending,
-    isSpansLazyLoading,
-    dataToView,
-    isSelectedSpanPending,
-  } = useTraceDetailsSpansLoader({
-    externalProjectId,
-    traceId,
-    spanId,
-    trace,
-    search,
-    filters,
-    refetchInterval,
-  });
+    query: { data: spansData, isPending: isSpansPending },
+    isLazyLoading: isSpansLazyLoading,
+  } = useLazySpansList(
+    {
+      traceId,
+      projectId,
+      page: 1,
+      size: MAX_SPANS_LOAD_SIZE,
+      stripAttachments: true,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: Boolean(traceId) && Boolean(projectId),
+      refetchInterval,
+    },
+    {
+      loadFullData: loadFullSpansData,
+    },
+  );
+
+  const { dataToView, isSelectedSpanPending } = useSelectedSpanData(
+    {
+      spanId,
+      traceId,
+      spans: spansData?.content,
+      trace,
+      stripAttachments: true,
+    },
+    refetchInterval !== undefined ? { refetchInterval } : undefined,
+  );
 
   const agentGraphData = get(
     trace,

@@ -281,7 +281,7 @@ export const AUDIO_URL_REGEX = new RegExp(
 
 export type ProcessedInput = {
   media: ParsedMediaData[];
-  formattedData: object | null | undefined;
+  formattedData: object | undefined;
 };
 
 export type ImageContent = {
@@ -949,9 +949,7 @@ const extractAudioURLs = (input: string, audios: ParsedAudioData[]) => {
  *
  * For most use cases, use processInputData instead which deduplicates by URL.
  */
-export const processInputDataInternal = (
-  input?: object | null,
-): ProcessedInput => {
+export const processInputDataInternal = (input?: object): ProcessedInput => {
   if (!input) {
     return {
       media: [],
@@ -1036,7 +1034,7 @@ export const processInputDataInternal = (
  * For LLM message components that need to preserve duplicate URLs with
  * different placeholders, use processInputDataInternal instead.
  */
-export const processInputData = (input?: object | null): ProcessedInput => {
+export const processInputData = (input?: object): ProcessedInput => {
   const result = processInputDataInternal(input);
 
   // Deduplicate media by URL for normal use cases

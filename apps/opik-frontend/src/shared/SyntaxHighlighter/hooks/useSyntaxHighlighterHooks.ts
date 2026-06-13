@@ -36,7 +36,7 @@ export const useSyntaxHighlighterMode = (
 };
 
 export const useSyntaxHighlighterCode = (
-  data: object | null,
+  data: object,
   mode: MODE_TYPE,
   prettifyConfig?: PrettifyConfig,
 ): CodeOutput => {

@@ -19,7 +19,8 @@ import TraceAnnotateViewer from "./TraceAnnotateViewer/TraceAnnotateViewer";
 import NoData from "@/shared/NoData/NoData";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import CommentsViewer from "./CommentsViewer/CommentsViewer";
-import useTraceDetailsSpansLoader from "@/api/traces/useTraceDetailsSpansLoader";
+import useLazySpansList from "@/api/traces/useLazySpansList";
+import useSelectedSpanData from "@/api/traces/useSelectedSpanData";
 import {
   DetailsActionSection,
   useDetailsActionSectionState,
@@ -28,6 +29,8 @@ import useTreeDetailsStore from "@/v1/pages-shared/traces/TraceDetailsPanel/Tree
 import TraceDetailsActionsPanel from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDetailsActionsPanel";
 import get from "lodash/get";
 import { METADATA_AGENT_GRAPH_KEY } from "@/constants/traces";
+
+const MAX_SPANS_LOAD_SIZE = 15000;
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -93,20 +96,37 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     },
   );
 
+  const projectId = externalProjectId || trace?.project_id || "";
+  const loadFullSpansData =
+    (typeof search === "string" && search.trim().length > 0) ||
+    (Array.isArray(filters) && filters.length > 0);
+
   const {
-    projectId,
-    spansData,
-    isSpansPending,
-    isSpansLazyLoading,
-    dataToView,
-    isSelectedSpanPending,
-  } = useTraceDetailsSpansLoader({
-    externalProjectId,
-    traceId,
+    query: { data: spansData, isPending: isSpansPending },
+    isLazyLoading: isSpansLazyLoading,
+  } = useLazySpansList(
+    {
+      traceId,
+      projectId,
+      page: 1,
+      size: MAX_SPANS_LOAD_SIZE,
+      stripAttachments: true, // Keep attachments stripped - frontend fetches them separately
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: Boolean(traceId) && Boolean(projectId),
+    },
+    {
+      loadFullData: loadFullSpansData,
+    },
+  );
+
+  const { dataToView, isSelectedSpanPending } = useSelectedSpanData({
     spanId,
+    traceId,
+    spans: spansData?.content,
     trace,
-    search,
-    filters,
+    stripAttachments: true,
   });
 
   const agentGraphData = get(

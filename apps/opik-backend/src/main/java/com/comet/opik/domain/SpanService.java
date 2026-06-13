@@ -107,12 +107,14 @@ public class SpanService {
 
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id, boolean stripAttachments) {
-        return spanDAO.getById(id)
+        return Mono.deferContextual(ctx -> spanDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
-                .flatMap(span -> projectService.getOrFail(span.projectId())
-                        .map(project -> span.toBuilder()
-                                .projectName(project.name())
-                                .build()))
+                .flatMap(span -> {
+                    Project project = projectService.get(span.projectId(), ctx.get(RequestContext.WORKSPACE_ID));
+                    return Mono.just(span.toBuilder()
+                            .projectName(project.name())
+                            .build());
+                }))
                 .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, !stripAttachments));
     }
 

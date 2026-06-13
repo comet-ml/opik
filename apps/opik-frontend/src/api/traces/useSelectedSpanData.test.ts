@@ -2,7 +2,9 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import useSpanById from "@/api/traces/useSpanById";
-import useSelectedSpanData from "@/api/traces/useSelectedSpanData";
+import useSelectedSpanData, {
+  type SpanWithOptionalPayload,
+} from "@/api/traces/useSelectedSpanData";
 import { Span, Trace } from "@/types/traces";
 
 vi.mock("@/api/traces/useSpanById", () => ({
@@ -19,6 +21,17 @@ const makeSpan = (overrides: Partial<Span> = {}) =>
     output: { response: "world" },
     ...overrides,
   }) as Span;
+
+const makeSpanWithOptionalPayload = (
+  overrides: Partial<SpanWithOptionalPayload> = {},
+) =>
+  ({
+    id: "span-1",
+    trace_id: "trace-1",
+    input: { prompt: "hello" },
+    output: { response: "world" },
+    ...overrides,
+  }) as SpanWithOptionalPayload;
 
 const makeTrace = (overrides: Partial<Trace> = {}) =>
   ({
@@ -98,12 +111,12 @@ describe("useSelectedSpanData", () => {
   });
 
   it("hydrates selected list span when excluded payload fields are null", () => {
-    const span = makeSpan({
+    const trace = makeTrace();
+    const span = makeSpanWithOptionalPayload({
       input: null,
       output: null,
     });
     mockSpanById({
-      data: span,
       isFetching: true,
       isPlaceholderData: true,
     });
@@ -113,7 +126,7 @@ describe("useSelectedSpanData", () => {
         spanId: span.id,
         traceId: span.trace_id,
         spans: [span],
-        trace: makeTrace(),
+        trace,
       }),
     );
 
@@ -125,14 +138,15 @@ describe("useSelectedSpanData", () => {
       }),
     );
     expect(result.current.isSelectedSpanPending).toBe(true);
+    expect(result.current.dataToView).toBe(trace);
   });
 
   it("hydrates selected list span when excluded payload fields are omitted", () => {
-    const span = makeSpan();
+    const trace = makeTrace();
+    const span = makeSpanWithOptionalPayload();
     delete span.input;
     delete span.output;
     mockSpanById({
-      data: span,
       isFetching: true,
       isPlaceholderData: true,
     });
@@ -142,7 +156,7 @@ describe("useSelectedSpanData", () => {
         spanId: span.id,
         traceId: span.trace_id,
         spans: [span],
-        trace: makeTrace(),
+        trace,
       }),
     );
 
@@ -154,6 +168,32 @@ describe("useSelectedSpanData", () => {
       }),
     );
     expect(result.current.isSelectedSpanPending).toBe(true);
+    expect(result.current.dataToView).toBe(trace);
+  });
+
+  it("uses fetched full span when selected list span is lightweight", () => {
+    const listSpan = makeSpanWithOptionalPayload({
+      input: null,
+      output: null,
+    });
+    const fetchedSpan = makeSpan();
+    mockSpanById({
+      data: fetchedSpan,
+      isFetching: false,
+      isPlaceholderData: false,
+    });
+
+    const { result } = renderHook(() =>
+      useSelectedSpanData({
+        spanId: listSpan.id,
+        traceId: listSpan.trace_id,
+        spans: [listSpan],
+        trace: makeTrace(),
+      }),
+    );
+
+    expect(result.current.dataToView).toBe(fetchedSpan);
+    expect(result.current.selectedSpanData).toBe(fetchedSpan);
   });
 
   it("falls back to the trace when fetched span belongs to another trace", () => {

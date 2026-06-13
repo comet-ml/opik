@@ -2,7 +2,6 @@ import { BASE_TRACE_DATA_TYPE, SPAN_TYPE } from "@/types/traces";
 import { TagProps } from "@/ui/tag";
 
 export const TRACE_TYPE_FOR_TREE = "trace";
-export const MAX_SPANS_FULL_DATA_LOAD_SIZE = 500;
 
 // Extends BASE_TRACE_DATA_TYPE with additional span subtypes used in the tree color map
 export type TRACE_COLOR_TYPE =
