@@ -7,6 +7,7 @@ import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
 import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.UUID;
 
@@ -24,6 +26,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class SpanServiceTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private SpanService spanService;
 
@@ -76,7 +80,7 @@ class SpanServiceTest {
     void getByIdWhenProjectMissingForPrivateVisibilityThrowsNotFound() {
         var spanId = UUID.randomUUID();
         var projectId = UUID.randomUUID();
-        var span = Span.builder()
+        var span = podamFactory.manufacturePojo(Span.class).toBuilder()
                 .id(spanId)
                 .projectId(projectId)
                 .build();
