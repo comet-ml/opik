@@ -1,0 +1,194 @@
+package com.comet.opik.domain;
+
+import com.comet.opik.api.AgentInsightsJob;
+import com.comet.opik.api.AgentInsightsJob.EnabledJob;
+import com.comet.opik.api.AgentInsightsJob.Status;
+import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
+import com.redis.testcontainers.RedisContainer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static org.assertj.core.api.Assertions.assertThat;
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
+class AgentInsightsJobDAOTest {
+
+    // Pure MySQL/JDBI DAO — only Redis + MySQL are needed (no ClickHouse/MinIO analytics stack).
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
+
+    {
+        Startables.deepStart(REDIS, MYSQL).join();
+        wireMock = WireMockUtils.startWireMock();
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                MYSQL.getJdbcUrl(), null, wireMock.runtimeInfo(), REDIS.getRedisURI());
+    }
+
+    private TransactionTemplate template;
+
+    @BeforeAll
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+        ClientSupportUtils.config(client);
+        this.template = mySqlTemplate;
+    }
+
+    @AfterAll
+    void tearDownAll() {
+        wireMock.server().stop();
+    }
+
+    private void enable(UUID id, String workspaceId, UUID projectId, String userName) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AgentInsightsJobDAO.class).enable(id, workspaceId, projectId, userName);
+            return null;
+        });
+    }
+
+    private Optional<AgentInsightsJob> find(String workspaceId, UUID projectId) {
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AgentInsightsJobDAO.class).findByProject(workspaceId, projectId));
+    }
+
+    @Test
+    @DisplayName("enable inserts a fully-populated row; status enabled")
+    void enable__insertsRow() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var id = UUID.randomUUID();
+        var userName = "user-" + UUID.randomUUID();
+
+        enable(id, workspaceId, projectId, userName);
+
+        var job = find(workspaceId, projectId).orElseThrow();
+        assertThat(job.id()).isEqualTo(id);
+        assertThat(job.projectId()).isEqualTo(projectId);
+        assertThat(job.status()).isEqualTo(Status.ENABLED);
+        assertThat(job.createdBy()).isEqualTo(userName);
+        assertThat(job.lastUpdatedBy()).isEqualTo(userName);
+        assertThat(job.lastTriggeredAt()).isNull();
+        assertThat(job.createdAt()).isNotNull();
+        assertThat(job.lastUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("enable is idempotent on (workspace, project): no duplicate, keeps original id + created_by")
+    void enable__isIdempotent() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var firstId = UUID.randomUUID();
+        var secondId = UUID.randomUUID();
+        var firstUser = "user-" + UUID.randomUUID();
+        var secondUser = "user-" + UUID.randomUUID();
+
+        enable(firstId, workspaceId, projectId, firstUser);
+        enable(secondId, workspaceId, projectId, secondUser);
+
+        var job = find(workspaceId, projectId).orElseThrow();
+        assertThat(job.id()).isEqualTo(firstId); // unique key keeps the original row
+        assertThat(job.status()).isEqualTo(Status.ENABLED);
+        assertThat(job.createdBy()).isEqualTo(firstUser); // unchanged on upsert
+        assertThat(job.lastUpdatedBy()).isEqualTo(secondUser); // updated on upsert
+    }
+
+    @Test
+    @DisplayName("disable flips status to disabled; returns 0 when no row matches")
+    void disable__flipsStatus_andZeroWhenAbsent() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+
+        int missing = template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
+                .disable(workspaceId, projectId, "user-" + UUID.randomUUID()));
+        assertThat(missing).isZero();
+
+        enable(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
+        template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
+                .disable(workspaceId, projectId, "user-" + UUID.randomUUID()));
+
+        assertThat(find(workspaceId, projectId).orElseThrow().status()).isEqualTo(Status.DISABLED);
+    }
+
+    @Test
+    @DisplayName("findByProject is scoped by workspace")
+    void findByProject__workspaceScoped() {
+        var workspaceId = UUID.randomUUID().toString();
+        var otherWorkspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+
+        enable(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
+
+        assertThat(find(workspaceId, projectId)).isPresent();
+        assertThat(find(otherWorkspaceId, projectId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("markTriggered sets last_triggered_at")
+    void markTriggered__setsTimestamp() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var id = UUID.randomUUID();
+
+        enable(id, workspaceId, projectId, "user-" + UUID.randomUUID());
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AgentInsightsJobDAO.class).markTriggered(id, Instant.now());
+            return null;
+        });
+
+        assertThat(find(workspaceId, projectId).orElseThrow().lastTriggeredAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("findAllEnabled returns enabled jobs (with workspace + project) across workspaces, excludes disabled")
+    void findAllEnabled__enabledOnly() {
+        var enabledId = UUID.randomUUID();
+        var enabledWorkspace = UUID.randomUUID().toString();
+        var enabledProject = UUID.randomUUID();
+        var disabledWorkspace = UUID.randomUUID().toString();
+        var disabledProject = UUID.randomUUID();
+
+        enable(enabledId, enabledWorkspace, enabledProject, "user-" + UUID.randomUUID());
+        enable(UUID.randomUUID(), disabledWorkspace, disabledProject, "user-" + UUID.randomUUID());
+        template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
+                .disable(disabledWorkspace, disabledProject, "user-" + UUID.randomUUID()));
+
+        List<EnabledJob> enabled = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AgentInsightsJobDAO.class).findAllEnabled());
+
+        // The projection carries workspace_id (the scheduler needs it) — assert it is populated correctly.
+        assertThat(enabled)
+                .anySatisfy(job -> {
+                    assertThat(job.id()).isEqualTo(enabledId);
+                    assertThat(job.workspaceId()).isEqualTo(enabledWorkspace);
+                    assertThat(job.projectId()).isEqualTo(enabledProject);
+                });
+        assertThat(enabled).noneMatch(job -> job.projectId().equals(disabledProject));
+    }
+}
