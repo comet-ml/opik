@@ -359,10 +359,19 @@ public class CostService {
                 inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
                 videoOutputPrice, audioInputCharacterPrice);
 
-        return new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                cacheReadInputTokenPrice, videoOutputPrice, audioInputCharacterPrice, calculator,
-                inputPriceAbove200kTokens, outputPriceAbove200kTokens,
-                cacheCreationInputTokenPriceAbove200kTokens, cacheReadInputTokenPriceAbove200kTokens);
+        return ModelPrice.builder()
+                .inputPrice(inputPrice)
+                .outputPrice(outputPrice)
+                .cacheCreationInputTokenPrice(cacheCreationInputTokenPrice)
+                .cacheReadInputTokenPrice(cacheReadInputTokenPrice)
+                .videoOutputPrice(videoOutputPrice)
+                .audioInputCharacterPrice(audioInputCharacterPrice)
+                .calculator(calculator)
+                .inputPriceAbove200kTokens(inputPriceAbove200kTokens)
+                .outputPriceAbove200kTokens(outputPriceAbove200kTokens)
+                .cacheCreationInputTokenPriceAbove200kTokens(cacheCreationInputTokenPriceAbove200kTokens)
+                .cacheReadInputTokenPriceAbove200kTokens(cacheReadInputTokenPriceAbove200kTokens)
+                .build();
     }
 
     private static String parseModelName(String modelName) {
