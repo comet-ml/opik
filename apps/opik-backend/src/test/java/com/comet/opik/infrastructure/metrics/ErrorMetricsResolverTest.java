@@ -8,6 +8,7 @@ import org.glassfish.jersey.uri.UriTemplate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.sql.SQLTimeoutException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,7 +21,7 @@ class ErrorMetricsResolverTest {
     @Test
     @DisplayName("errorType: unwraps to the root cause simple class name")
     void errorTypeUnwrapsToRootCause() {
-        var rootCause = new java.sql.SQLTimeoutException("read timed out");
+        var rootCause = new SQLTimeoutException("read timed out");
         var wrapped = new RuntimeException("query failed", new IllegalStateException("boom", rootCause));
 
         assertThat(ErrorMetricsResolver.errorType(wrapped)).isEqualTo("SQLTimeoutException");

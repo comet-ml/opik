@@ -9,6 +9,7 @@ import org.glassfish.jersey.server.ExtendedUriInfo;
 import org.glassfish.jersey.uri.UriTemplate;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Derives the {@code error_type} and {@code endpoint} metric labels.
@@ -63,7 +64,7 @@ public class ErrorMetricsResolver {
     }
 
     private static String readContext(Provider<RequestContext> requestContext,
-            java.util.function.Function<RequestContext, String> getter) {
+            Function<RequestContext, String> getter) {
         try {
             return getter.apply(requestContext.get());
         } catch (RuntimeException e) {
