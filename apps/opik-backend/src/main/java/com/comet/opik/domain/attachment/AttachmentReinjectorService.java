@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple2;
@@ -183,8 +184,16 @@ public class AttachmentReinjectorService {
                             .flatMap(this::readAllBytesAsync)
                             .map(data -> {
                                 String base64 = Base64.getEncoder().encodeToString(data);
+                                // Restore the data URI form so consumers (e.g. the UI inline
+                                // image renderer) can recognize and render the payload. Raw
+                                // base64 is neither folded nor rendered, leaving a giant blob
+                                // in the input (OPIK-6954).
+                                String mimeType = attachInfo.mimeType();
+                                String value = StringUtils.isNotBlank(mimeType)
+                                        ? "data:%s;base64,%s".formatted(mimeType, base64)
+                                        : base64;
                                 String wrappedRef = AttachmentUtils.wrapReference(filename);
-                                return Tuples.of(wrappedRef, base64);
+                                return Tuples.of(wrappedRef, value);
                             })
                             .onErrorResume(e -> {
                                 log.error("Failed to download attachment: {}", filename, e);

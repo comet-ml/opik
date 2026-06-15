@@ -483,16 +483,16 @@ def test_extraction__backend_reinjects_extracted_attachments(
     # Verify trace and span returned by backend has extracted attachments injected back into
     #
 
-    # The SDK consumes the `data:<mime>;base64,` prefix as part of the
-    # extraction match (OPIK-6608), so the placeholder replaces the whole data
-    # URI. On reinjection the backend only knows the raw base64 payload —
-    # round-trip strips the data URI prefix by design.
+    # On reinjection the backend restores the `data:<mime>;base64,` data URI
+    # using the stored attachment mime type, so the round-tripped value is a
+    # renderable data URI rather than a raw base64 blob the UI cannot render
+    # (OPIK-6954).
     expected_trace_input = {
-        "image1": constants.PNG_BASE64,
+        "image1": _create_base64_url("image/png", constants.PNG_BASE64),
         "text": "regular text field",
     }
     expected_span_input = {
-        "image": constants.PNG_BASE64,
+        "image": _create_base64_url("image/png", constants.PNG_BASE64),
     }
 
     # Verify trace
