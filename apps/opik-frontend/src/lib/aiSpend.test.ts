@@ -47,10 +47,12 @@ describe("spend formatters", () => {
   it("formats USD with two decimals and N/A for null", () => {
     expect(formatSpendUsd(1234.5)).toBe("$1,234.50");
     expect(formatSpendUsd(null)).toBe("N/A");
+    expect(formatSpendUsd(undefined)).toBe("N/A");
   });
 
   it("formats counts with grouping and N/A for null", () => {
     expect(formatSpendCount(1234)).toBe("1,234");
     expect(formatSpendCount(null)).toBe("N/A");
+    expect(formatSpendCount(undefined)).toBe("N/A");
   });
 });

@@ -35,13 +35,13 @@ export const getSpendTrendPercentage = (
     metric.previous ?? undefined,
   );
 
-export const formatSpendUsd = (value: number | null): string =>
-  value === null
+export const formatSpendUsd = (value?: number | null): string =>
+  value == null
     ? NO_DATA
     : `$${value.toLocaleString("en-US", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;
 
-export const formatSpendCount = (value: number | null): string =>
-  value === null ? NO_DATA : value.toLocaleString("en-US");
+export const formatSpendCount = (value?: number | null): string =>
+  value == null ? NO_DATA : value.toLocaleString("en-US");
