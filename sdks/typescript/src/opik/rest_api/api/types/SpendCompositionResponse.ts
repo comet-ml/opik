@@ -6,5 +6,4 @@ export interface SpendCompositionResponse {
     input?: OpikApi.Side;
     harness?: OpikApi.HarnessEntry[];
     output?: OpikApi.Side;
-    models?: string[];
 }

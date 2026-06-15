@@ -155,6 +155,7 @@ anthropic:
     structuredOutput: true
   - id: "claude-fable-5"
     label: "Claude Fable 5"
+    structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
     structuredOutput: true
@@ -833,6 +834,8 @@ openrouter:
     label: "moonshotai/kimi-k2.6"
   - id: "moonshotai/kimi-k2.6:free"
     label: "moonshotai/kimi-k2.6:free"
+  - id: "moonshotai/kimi-k2.7-code"
+    label: "moonshotai/kimi-k2.7-code"
   - id: "moonshotai/kimi-k2:free"
     label: "moonshotai/kimi-k2:free"
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"

@@ -4,7 +4,7 @@ import {
   ArrowRightToLine,
   CircleDollarSign,
   MessagesSquare,
-  PiggyBank,
+  Sigma,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,7 @@ import PercentageTrend, {
   PercentageTrendType,
 } from "@/shared/PercentageTrend/PercentageTrend";
 import useAiSpendSummary from "@/api/ai-spend/useAiSpendSummary";
-import { tiersCost } from "@/api/ai-spend/claudePricing";
+import { tiersCost, tiersTokens } from "@/api/ai-spend/claudePricing";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 import KpiCard from "./KpiCard";
 import {
@@ -76,6 +76,11 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
   const activeUsers = get("active_users");
   const totalUsers = get("total_users");
 
+  const totalTokens: SpendMetric = {
+    current: tiersTokens(data?.spend_current),
+    previous: tiersTokens(data?.spend_previous),
+  };
+
   const renderTrend = (
     metric: SpendMetric,
     trend: PercentageTrendType = "inverted",
@@ -110,9 +115,10 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
         loading={isPending}
       />
       <KpiCard
-        icon={PiggyBank}
-        label="Budget remaining"
-        value={NO_DATA}
+        icon={Sigma}
+        label="Total tokens"
+        value={showData ? formatSpendCount(totalTokens.current) : NO_DATA}
+        trend={renderTrend(totalTokens)}
         loading={isPending}
       />
       <KpiCard
