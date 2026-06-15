@@ -139,6 +139,7 @@ export * from "./ChunkedOutputJsonNode.js";
 export * from "./ChunkedOutputJsonNodePublic.js";
 export * from "./ChunkedOutputJsonNodePublicType.js";
 export * from "./ChunkedOutputJsonNodeType.js";
+export * from "./ClientRegistrationResponse.js";
 export * from "./Column.js";
 export * from "./ColumnCompare.js";
 export * from "./ColumnCompareTypesItem.js";

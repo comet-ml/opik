@@ -1,4 +1,5 @@
 export type { AuthorizeRequest } from "./AuthorizeRequest.js";
+export type { ClientRegistrationRequest } from "./ClientRegistrationRequest.js";
 export type { ConsentRequest } from "./ConsentRequest.js";
 export type { GetAuthorizeContextRequest } from "./GetAuthorizeContextRequest.js";
 export type { RevokeRequest } from "./RevokeRequest.js";

@@ -9,8 +9,10 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
+from ..errors.too_many_requests_error import TooManyRequestsError
 from ..types.authorization_server_metadata import AuthorizationServerMetadata
 from ..types.authorize_context import AuthorizeContext
+from ..types.client_registration_response import ClientRegistrationResponse
 from ..types.consent_response import ConsentResponse
 from ..types.token_response import TokenResponse
 
@@ -237,6 +239,73 @@ class RawMcpOAuthClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def register_o_auth_client(
+        self,
+        *,
+        client_name: str,
+        redirect_uris: typing.Sequence[str],
+        logo_uri: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ClientRegistrationResponse]:
+        """
+        OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public client for the MCP OAuth flow; throttled per source IP
+
+        Parameters
+        ----------
+        client_name : str
+
+        redirect_uris : typing.Sequence[str]
+
+        logo_uri : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ClientRegistrationResponse]
+            Registered client metadata
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "oauth/register",
+            method="POST",
+            json={
+                "client_name": client_name,
+                "redirect_uris": redirect_uris,
+                "logo_uri": logo_uri,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ClientRegistrationResponse,
+                    parse_obj_as(
+                        type_=ClientRegistrationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -585,6 +654,73 @@ class AsyncRawMcpOAuthClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def register_o_auth_client(
+        self,
+        *,
+        client_name: str,
+        redirect_uris: typing.Sequence[str],
+        logo_uri: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ClientRegistrationResponse]:
+        """
+        OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public client for the MCP OAuth flow; throttled per source IP
+
+        Parameters
+        ----------
+        client_name : str
+
+        redirect_uris : typing.Sequence[str]
+
+        logo_uri : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ClientRegistrationResponse]
+            Registered client metadata
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "oauth/register",
+            method="POST",
+            json={
+                "client_name": client_name,
+                "redirect_uris": redirect_uris,
+                "logo_uri": logo_uri,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ClientRegistrationResponse,
+                    parse_obj_as(
+                        type_=ClientRegistrationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

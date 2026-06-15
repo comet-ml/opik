@@ -152,28 +152,42 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     /**
-     * Dedup via {@code LIMIT 1 BY} reverse-order read instead of {@code FINAL} to avoid the
-     * ReplacingSorted merge cost that caused 30s timeouts and JVM OOMs (OPIK-6519). Same pattern
-     * as OPIK-4828. Pre-dedup filter {@code last_updated_at > X} is safe because
-     * {@code max(last_updated_at)} per key is monotone under a {@code >} filter on the version column.
+     * Dedup via {@code GROUP BY + argMax} instead of {@code FINAL} or {@code LIMIT 1 BY}.
+     * <p>
+     * {@code FINAL} triggers the ReplacingSorted merge cost that caused 30s timeouts and JVM OOMs
+     * (OPIK-6519, OPIK-4828) — still avoided here. {@code LIMIT 1 BY} (the previous shape) also
+     * worked but on realistic, update-heavy production data — where each thread accumulates
+     * many {@code last_updated_at} versions across unmerged parts — it must merge-sort all parts
+     * before deduping. Local benchmark with 5k threads × 1000 versions (5M rows, 16 parts):
+     * <pre>
+     *   LIMIT 1 BY : 253 ms / 292 MiB
+     *   argMax     :  43 ms /  41 MiB    (6× faster, 7× less memory)
+     * </pre>
+     * The aggregation form's memory scales with the number of unique threads (bounded), while
+     * {@code LIMIT 1 BY}'s sort/merge cost scales with total rows × parts.
+     * See {@code apps/opik-backend/scripts/load-trace-threads.sh} for the reproduction.
+     * <p>
+     * Pre-dedup filter {@code last_updated_at > X} is safe because {@code max(last_updated_at)}
+     * per key is monotone under a {@code >} filter on the version column.
      */
     private static final String FIND_PENDING_CLOSURE_THREADS_SQL = """
             SELECT
                 tt.workspace_id,
                 tt.project_id
             FROM (
-                SELECT workspace_id, project_id, thread_id, id, status, last_updated_at
+                SELECT workspace_id, project_id, thread_id, id,
+                       argMax(status, last_updated_at) AS latest_status,
+                       max(last_updated_at)            AS latest_updated_at
                 FROM trace_threads
                 WHERE last_updated_at > parseDateTime64BestEffort(:cached_max_inactive_period, 6)
-                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY (workspace_id, project_id, thread_id, id)
+                GROUP BY workspace_id, project_id, thread_id, id
             ) tt
             LEFT ANY JOIN workspace_configurations wc FINAL
                 ON tt.workspace_id = wc.workspace_id
-            WHERE tt.status = 'active'
-            AND tt.last_updated_at \\< parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
+            WHERE tt.latest_status = 'active'
+            AND tt.latest_updated_at \\< parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
             GROUP BY tt.workspace_id, tt.project_id
-            ORDER BY min(tt.last_updated_at)
+            ORDER BY min(tt.latest_updated_at)
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             """;

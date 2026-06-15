@@ -63,36 +63,33 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0015825");
     }
 
-    @Test
-    void calculateCostUsesAbove200kTierPricingForGemini_issue6982() {
-        // gemini-2.5-pro: base input 1.25e-6 / output 1e-5; above_200k input 2.5e-6 / output 1.5e-5.
-        // For a prompt of exactly 200_000 the base rate must still apply (threshold is strictly >).
-        Map<String, Integer> baseTier = Map.of(
-                "prompt_tokens", 200_000,
+    /**
+     * Whole-prompt tier semantics for {@code *_above_200k_tokens} rates (issue #6982):
+     * once the prompt strictly exceeds 200K every token bills at the tier rate; exactly at
+     * the threshold the base rate still applies.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGeminiAbove200kTierCases")
+    void calculateCostAppliesAbove200kTierPricingForGemini_issue6982(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
                 "completion_tokens", 1_000,
-                "original_usage.prompt_token_count", 200_000,
+                "original_usage.prompt_token_count", promptTokens,
                 "original_usage.candidates_token_count", 1_000);
 
-        BigDecimal baseCost = CostService.calculateCost("gemini-2.5-pro", "google_vertexai", baseTier, null);
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-pro", "google_vertexai", usage, null);
 
-        // 200_000 * 1.25e-6 + 1_000 * 1e-5 = 0.25 + 0.01 = 0.26
-        assertThat(baseCost).isEqualByComparingTo("0.26");
+        assertThat(cost).isEqualByComparingTo(expectedCost);
     }
 
-    @Test
-    void calculateCostUsesAbove200kTierPricingForGemini_issue6982_aboveThreshold() {
-        // Whole-prompt semantics: once prompt > 200_000 every token is billed at the above_200k rate.
-        // gemini-2.5-pro above_200k: input 2.5e-6, output 1.5e-5.
-        Map<String, Integer> aboveTier = Map.of(
-                "prompt_tokens", 300_000,
-                "completion_tokens", 1_000,
-                "original_usage.prompt_token_count", 300_000,
-                "original_usage.candidates_token_count", 1_000);
-
-        BigDecimal aboveCost = CostService.calculateCost("gemini-2.5-pro", "google_vertexai", aboveTier, null);
-
-        // 300_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.75 + 0.015 = 0.765
-        assertThat(aboveCost).isEqualByComparingTo("0.765");
+    private static Stream<Arguments> provideGeminiAbove200kTierCases() {
+        // gemini-2.5-pro base: input 1.25e-6 / output 1e-5; above_200k: input 2.5e-6 / output 1.5e-5.
+        return Stream.of(
+                // 200_000 * 1.25e-6 + 1_000 * 1e-5 = 0.25 + 0.01 = 0.26
+                Arguments.of("at threshold uses base rate", 200_000, "0.26"),
+                // 300_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.75 + 0.015 = 0.765
+                Arguments.of("above threshold uses tier rate", 300_000, "0.765"));
     }
 
     @Test

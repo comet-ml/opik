@@ -17,8 +17,7 @@ class SpanCostCalculatorTest {
 
     @Test
     void videoGenerationCostReturnsZeroWhenPriceIsZero() {
-        ModelPrice modelPrice = new ModelPrice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, SpanCostCalculator::defaultCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder().build();
 
         BigDecimal cost = SpanCostCalculator.videoGenerationCost(modelPrice, Map.of("video_duration_seconds", 10));
 
@@ -29,16 +28,23 @@ class SpanCostCalculatorTest {
     void videoGenerationCostValidatesArguments() {
         assertThatThrownBy(() -> SpanCostCalculator.videoGenerationCost(null, Map.of()))
                 .isInstanceOf(NullPointerException.class);
-        ModelPrice modelPrice = new ModelPrice(BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
-                BigDecimal.ONE, BigDecimal.ZERO, SpanCostCalculator::textGenerationCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .inputPrice(BigDecimal.ONE)
+                .outputPrice(BigDecimal.ONE)
+                .cacheCreationInputTokenPrice(BigDecimal.ONE)
+                .cacheReadInputTokenPrice(BigDecimal.ONE)
+                .videoOutputPrice(BigDecimal.ONE)
+                .calculator(SpanCostCalculator::textGenerationCost)
+                .build();
         assertThatThrownBy(() -> SpanCostCalculator.videoGenerationCost(modelPrice, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void videoGenerationCostMultipliesDurationAndPrice() {
-        ModelPrice modelPrice = new ModelPrice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("0.5"), BigDecimal.ZERO, SpanCostCalculator::defaultCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .videoOutputPrice(new BigDecimal("0.5"))
+                .build();
 
         BigDecimal cost = SpanCostCalculator.videoGenerationCost(modelPrice, Map.of("video_duration_seconds", 2));
 
@@ -51,8 +57,9 @@ class SpanCostCalculatorTest {
     @ParameterizedTest
     @MethodSource("provideAudioSpeechZeroCostCases")
     void audioSpeechCostReturnsZero(String pricePerChar, Map<String, Integer> usage) {
-        ModelPrice modelPrice = new ModelPrice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, new BigDecimal(pricePerChar), SpanCostCalculator::defaultCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .audioInputCharacterPrice(new BigDecimal(pricePerChar))
+                .build();
 
         BigDecimal cost = SpanCostCalculator.audioSpeechCost(modelPrice, usage);
 
@@ -71,8 +78,9 @@ class SpanCostCalculatorTest {
     void audioSpeechCostValidatesArguments() {
         assertThatThrownBy(() -> SpanCostCalculator.audioSpeechCost(null, Map.of()))
                 .isInstanceOf(NullPointerException.class);
-        ModelPrice modelPrice = new ModelPrice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, new BigDecimal("0.000015"), SpanCostCalculator::defaultCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .audioInputCharacterPrice(new BigDecimal("0.000015"))
+                .build();
         assertThatThrownBy(() -> SpanCostCalculator.audioSpeechCost(modelPrice, null))
                 .isInstanceOf(NullPointerException.class);
     }
@@ -80,8 +88,9 @@ class SpanCostCalculatorTest {
     @ParameterizedTest
     @MethodSource("provideAudioSpeechCostCases")
     void audioSpeechCostMultipliesCharactersAndPrice(String pricePerChar, int inputCharacters, String expectedCost) {
-        ModelPrice modelPrice = new ModelPrice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, new BigDecimal(pricePerChar), SpanCostCalculator::defaultCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .audioInputCharacterPrice(new BigDecimal(pricePerChar))
+                .build();
 
         BigDecimal cost = SpanCostCalculator.audioSpeechCost(modelPrice, Map.of("input_characters", inputCharacters));
 
@@ -98,8 +107,9 @@ class SpanCostCalculatorTest {
 
     @Test
     void audioSpeechCostUsesOriginalUsagePrefix() {
-        ModelPrice modelPrice = new ModelPrice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, new BigDecimal("0.000015"), SpanCostCalculator::defaultCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .audioInputCharacterPrice(new BigDecimal("0.000015"))
+                .build();
 
         // SDK 1.6.0+ sends usage with original_usage. prefix
         BigDecimal cost = SpanCostCalculator.audioSpeechCost(modelPrice,
@@ -114,9 +124,12 @@ class SpanCostCalculatorTest {
     @ParameterizedTest(name = "{1}")
     @MethodSource("provideOpenAICacheCostCases")
     void textGenerationWithCacheCostOpenAI(Map<String, Integer> usage, String description, String expectedCost) {
-        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
-                BigDecimal.ZERO, new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
-                SpanCostCalculator::textGenerationWithCacheCostOpenAI);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .calculator(SpanCostCalculator::textGenerationWithCacheCostOpenAI)
+                .build();
 
         BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice, usage);
 
@@ -151,9 +164,12 @@ class SpanCostCalculatorTest {
     @ParameterizedTest(name = "{1}")
     @MethodSource("provideGoogleCacheCostCases")
     void textGenerationWithCacheCostGoogle(Map<String, Integer> usage, String description, String expectedCost) {
-        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
-                BigDecimal.ZERO, new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
-                SpanCostCalculator::textGenerationWithCacheCostGoogle);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .calculator(SpanCostCalculator::textGenerationWithCacheCostGoogle)
+                .build();
 
         BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostGoogle(modelPrice, usage);
 
@@ -181,9 +197,12 @@ class SpanCostCalculatorTest {
     @MethodSource("provideAnthropicBedrockCacheCostCases")
     void textGenerationWithCacheCostUsesOtelCacheKeyFallback(
             BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator, String description) {
-        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
-                new BigDecimal("0.015"), new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
-                SpanCostCalculator::defaultCost);
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .cacheCreationInputTokenPrice(new BigDecimal("0.015"))
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .build();
 
         BigDecimal cost = calculator.apply(modelPrice,
                 Map.of("prompt_tokens", 1000, "completion_tokens", 100,
