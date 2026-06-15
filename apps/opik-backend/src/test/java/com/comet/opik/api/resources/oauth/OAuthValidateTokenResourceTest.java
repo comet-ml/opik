@@ -25,8 +25,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("OAuthValidateResource")
-class OAuthValidateResourceTest {
+@DisplayName("OAuthValidateTokenResource")
+class OAuthValidateTokenResourceTest {
 
     private static final String ACCESS_TOKEN = McpOAuthTokenUtils.ACCESS_PREFIX
             + RandomStringUtils.secure().nextAlphanumeric(24);
@@ -34,8 +34,8 @@ class OAuthValidateResourceTest {
     @Mock
     private McpOAuthService mcpOAuthService;
 
-    private OAuthValidateResource resource() {
-        return new OAuthValidateResource(mcpOAuthService);
+    private OAuthValidateTokenResource resource() {
+        return new OAuthValidateTokenResource(mcpOAuthService);
     }
 
     @ParameterizedTest

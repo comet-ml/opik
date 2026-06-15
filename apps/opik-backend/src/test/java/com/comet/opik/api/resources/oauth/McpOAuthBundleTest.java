@@ -39,7 +39,7 @@ class McpOAuthBundleTest {
                         OAuthAuthorizeResource.class,
                         OAuthTokenResource.class,
                         OAuthRegisterResource.class,
-                        OAuthValidateResource.class,
+                        OAuthValidateTokenResource.class,
                         McpOAuthScrubJob.class);
     }
 }

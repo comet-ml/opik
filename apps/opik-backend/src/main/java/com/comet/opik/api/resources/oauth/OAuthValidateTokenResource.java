@@ -23,15 +23,15 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_VALIDATE_RESOURCE_BASE_PATH;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_VALIDATE_TOKEN_RESOURCE_BASE_PATH;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_TYPE_BEARER;
 
-@Path(OAUTH_VALIDATE_RESOURCE_BASE_PATH)
+@Path(OAUTH_VALIDATE_TOKEN_RESOURCE_BASE_PATH)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "MCP OAuth", description = "MCP OAuth 2.1 Authorization Server resources")
-public class OAuthValidateResource {
+public class OAuthValidateTokenResource {
 
     private final @NonNull McpOAuthService mcpOAuthService;
 
