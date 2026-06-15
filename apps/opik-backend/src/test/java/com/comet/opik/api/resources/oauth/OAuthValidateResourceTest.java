@@ -5,6 +5,7 @@ import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import jakarta.ws.rs.NotAuthorizedException;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,7 +28,8 @@ import static org.mockito.Mockito.when;
 @DisplayName("OAuthValidateResource")
 class OAuthValidateResourceTest {
 
-    private static final String ACCESS_TOKEN = McpOAuthTokenUtils.ACCESS_PREFIX + "live-token";
+    private static final String ACCESS_TOKEN = McpOAuthTokenUtils.ACCESS_PREFIX
+            + RandomStringUtils.secure().nextAlphanumeric(24);
 
     @Mock
     private McpOAuthService mcpOAuthService;
@@ -74,10 +77,10 @@ class OAuthValidateResourceTest {
     @DisplayName("accepts a valid token and returns the validated identity, case-insensitively on the scheme")
     void acceptsValidToken(String schemePrefix) {
         var validated = ValidatedToken.builder()
-                .userName("alice")
-                .workspaceId("ws-1")
-                .workspaceName("default")
-                .resource("http://localhost/api/v1/mcp")
+                .userName(RandomStringUtils.secure().nextAlphanumeric(10))
+                .workspaceId(UUID.randomUUID().toString())
+                .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
+                .resource("http://localhost/api/v1/mcp/%s".formatted(RandomStringUtils.secure().nextAlphanumeric(8)))
                 .build();
         when(mcpOAuthService.validateAccessToken(ACCESS_TOKEN)).thenReturn(Optional.of(validated));
 
