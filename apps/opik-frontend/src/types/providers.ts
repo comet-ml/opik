@@ -96,6 +96,7 @@ export enum PROVIDER_MODEL_TYPE {
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
+  CLAUDE_FABLE_5 = "claude-fable-5",
   CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
@@ -107,7 +108,6 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
-  CLAUDE_FABLE_5 = "claude-fable-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -366,6 +366,7 @@ export enum PROVIDER_MODEL_TYPE {
   MOONSHOTAI_KIMI_K2_5 = "moonshotai/kimi-k2.5",
   MOONSHOTAI_KIMI_K2_6 = "moonshotai/kimi-k2.6",
   MOONSHOTAI_KIMI_K2_6_FREE = "moonshotai/kimi-k2.6:free",
+  MOONSHOTAI_KIMI_K2_7_CODE = "moonshotai/kimi-k2.7-code",
   MOONSHOTAI_KIMI_K2_FREE = "moonshotai/kimi-k2:free",
   MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT = "moonshotai/kimi-linear-48b-a3b-instruct",
   MORPH_MORPH_V3_FAST = "morph/morph-v3-fast",
