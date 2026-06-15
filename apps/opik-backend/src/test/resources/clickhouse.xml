@@ -13,7 +13,11 @@
 
     <zookeeper_path>/clickhouse</zookeeper_path>
     <zookeeper_session_timeout_ms>30000</zookeeper_session_timeout_ms>
-    
+
+    <!-- Allow the Agent Insights free-form SQL profile/row policies to define SQL_-prefixed custom settings
+         (SQL_workspace_id / SQL_project_id). Mirrors the prod/dev ClickHouse server config from OPIK-6846. -->
+    <custom_settings_prefixes>SQL_</custom_settings_prefixes>
+
     <remote_servers>
         <cluster>
         <shard>

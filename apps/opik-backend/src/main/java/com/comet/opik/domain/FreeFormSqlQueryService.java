@@ -1,0 +1,196 @@
+package com.comet.opik.domain;
+
+import com.clickhouse.client.api.ServerException;
+import com.clickhouse.client.api.metadata.NoSuchColumnException;
+import com.comet.opik.api.AnalyticsQueryResponse;
+import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.domain.FreeFormSqlQueryDAO.FreeFormSqlResult;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
+
+/**
+ * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First consumer is the
+ * Agent Insights subagent, but the service is intentionally feature-agnostic.
+ *
+ * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}); if any node is a
+ * {@code Set*} node (top-level, subquery, CTE, UNION arm or {@code FORMAT ... SETTINGS}) the query is rejected before
+ * execution, and an unparseable query is rejected too — execution never runs on a validation failure. The
+ * workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row policies, never
+ * concatenated into the SQL.
+ */
+@Slf4j
+@Singleton
+public class FreeFormSqlQueryService {
+
+    public static final String METRIC_NAMESPACE = "opik.free_form_sql.queries";
+
+    private static final AttributeKey<String> RESULT_KEY = stringKey("result");
+    private static final AttributeKey<String> REASON_KEY = stringKey("reason");
+
+    private static final Attributes RESULT_SUCCESS = Attributes.of(RESULT_KEY, "success");
+    private static final Attributes RESULT_REJECTED = Attributes.of(RESULT_KEY, "rejected");
+    private static final Attributes RESULT_ERROR = Attributes.of(RESULT_KEY, "error");
+
+    private static final Attributes REASON_AST_SET_NODE = Attributes.of(REASON_KEY, "ast_set_node");
+    private static final Attributes REASON_PARSE_ERROR = Attributes.of(REASON_KEY, "parse_error");
+    private static final Attributes REASON_PERMISSION_DENIED = Attributes.of(REASON_KEY, "permission_denied");
+    private static final Attributes REASON_CH_LIMIT = Attributes.of(REASON_KEY, "ch_limit");
+    private static final Attributes REASON_OTHER = Attributes.of(REASON_KEY, "other");
+
+    // ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500.
+    private static final int CH_TOO_MANY_ROWS = 158;
+    private static final int CH_TIMEOUT_EXCEEDED = 159;
+    private static final int CH_MEMORY_LIMIT_EXCEEDED = 241;
+    private static final int CH_TOO_MANY_ROWS_OR_BYTES = 396;
+    private static final int CH_ACCESS_DENIED = 497;
+    private static final Set<Integer> CH_LIMIT_CODES = Set.of(
+            CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES);
+
+    private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
+
+    private final LongCounter executed;
+    private final LongCounter rejected;
+    private final LongHistogram duration;
+    private final LongHistogram resultRows;
+    private final LongHistogram bytesRead;
+
+    @Inject
+    public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO) {
+        this.freeFormSqlQueryDAO = freeFormSqlQueryDAO;
+
+        var meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
+        this.executed = meter
+                .counterBuilder("%s.executed".formatted(METRIC_NAMESPACE))
+                .setDescription("Number of free-form SQL queries handled, tagged by result")
+                .build();
+        this.rejected = meter
+                .counterBuilder("%s.rejected".formatted(METRIC_NAMESPACE))
+                .setDescription("Number of free-form SQL queries that did not succeed, tagged by reason")
+                .build();
+        this.duration = meter
+                .histogramBuilder("%s.duration".formatted(METRIC_NAMESPACE))
+                .setDescription("Duration of a single free-form SQL query, tagged by result")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+        this.resultRows = meter
+                .histogramBuilder("%s.result_rows".formatted(METRIC_NAMESPACE))
+                .setDescription("Number of rows returned by a successful free-form SQL query")
+                .ofLongs()
+                .build();
+        this.bytesRead = meter
+                .histogramBuilder("%s.bytes_read".formatted(METRIC_NAMESPACE))
+                .setDescription("Number of bytes read by a successful free-form SQL query")
+                .ofLongs()
+                .build();
+    }
+
+    public Mono<AnalyticsQueryResponse> executeQuery(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull String query) {
+        long startMillis = System.currentTimeMillis();
+
+        return freeFormSqlQueryDAO.explainAst(query)
+                // A failed EXPLAIN AST (unparseable input, statement-stacking, ...) is a hard reject: never fall through.
+                .onErrorMap(
+                        error -> reject(REASON_PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error))
+                .flatMap(nodeLabels -> containsSetNode(nodeLabels)
+                        ? Mono.error(reject(REASON_AST_SET_NODE, startMillis,
+                                "Query rejected: SETTINGS/SET clauses are not allowed", null))
+                        : runQuery(workspaceId, projectId, query, startMillis));
+    }
+
+    private Mono<AnalyticsQueryResponse> runQuery(String workspaceId, UUID projectId, String query, long startMillis) {
+        return freeFormSqlQueryDAO.execute(workspaceId, projectId, query)
+                .map(result -> {
+                    recordSuccess(result, startMillis);
+                    return new AnalyticsQueryResponse(result.rows());
+                })
+                .onErrorMap(error -> mapExecutionError(error, startMillis));
+    }
+
+    // The parser models every SETTINGS/SET clause as a Set* node, so any node label starting with "Set" is a reject.
+    private static boolean containsSetNode(List<String> nodeLabels) {
+        return nodeLabels.stream().anyMatch(label -> label.stripLeading().startsWith("Set"));
+    }
+
+    private void recordSuccess(FreeFormSqlResult result, long startMillis) {
+        executed.add(1, RESULT_SUCCESS);
+        duration.record(elapsed(startMillis), RESULT_SUCCESS);
+        resultRows.record(result.resultRows());
+        bytesRead.record(result.readBytes());
+    }
+
+    private WebApplicationException mapExecutionError(Throwable error, long startMillis) {
+        if (findCause(error, NoSuchColumnException.class) != null) {
+            return error(REASON_OTHER, startMillis, Response.Status.BAD_REQUEST,
+                    "Query must return exactly one column named 'result'", error);
+        }
+
+        ServerException serverException = findCause(error, ServerException.class);
+        if (serverException != null) {
+            int code = serverException.getCode();
+            if (CH_LIMIT_CODES.contains(code)) {
+                return error(REASON_CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
+                        "Query exceeded ClickHouse limits: %s".formatted(serverException.getMessage()), error);
+            }
+            if (code == CH_ACCESS_DENIED) {
+                return error(REASON_PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
+                        "Query rejected: access denied", error);
+            }
+        }
+        return error(REASON_OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);
+    }
+
+    private WebApplicationException reject(Attributes reason, long startMillis, String message, Throwable cause) {
+        executed.add(1, RESULT_REJECTED);
+        rejected.add(1, reason);
+        duration.record(elapsed(startMillis), RESULT_REJECTED);
+        log.info("Free-form SQL query rejected: {}", message, cause);
+        return clientError(Response.Status.BAD_REQUEST, message);
+    }
+
+    private WebApplicationException error(Attributes reason, long startMillis, Response.Status status, String message,
+            Throwable cause) {
+        executed.add(1, RESULT_ERROR);
+        rejected.add(1, reason);
+        duration.record(elapsed(startMillis), RESULT_ERROR);
+        log.warn("Free-form SQL query failed: {}", message, cause);
+        return clientError(status, message);
+    }
+
+    private static WebApplicationException clientError(Response.Status status, String message) {
+        return new ClientErrorException(Response.status(status)
+                .entity(new ErrorMessage(List.of(message)))
+                .build());
+    }
+
+    private static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+        }
+        return null;
+    }
+
+    private static long elapsed(long startMillis) {
+        return System.currentTimeMillis() - startMillis;
+    }
+}

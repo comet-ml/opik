@@ -32,7 +32,10 @@ public class AuthFilter implements ContainerRequestFilter {
 
         UriInfo uriInfo = context.getUriInfo();
 
-        if (Pattern.matches("/v1/private/.*", uriInfo.getRequestUri().getPath())) {
+        // Unlike other /v1/internal/* endpoints, the Agent Insights query executor must be authenticated: it derives
+        // the bounding workspace_id from auth (see OPIK-6814 / Agent Insights technical design).
+        if (Pattern.matches("/v1/private/.*", uriInfo.getRequestUri().getPath())
+                || Pattern.matches("/v1/internal/analytics-queries-executor.*", uriInfo.getRequestUri().getPath())) {
             authService.authenticate(headers, sessionToken, ContextInfoHolder.builder()
                     .uriInfo(uriInfo)
                     .method(context.getMethod())
