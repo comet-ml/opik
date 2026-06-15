@@ -154,16 +154,20 @@ describe("Track decorator", () => {
     }
   });
 
-  it("should still log when client.trace() is called directly with tracking disabled", async () => {
+  it("should not send data for client.trace()/span() when tracking is disabled", async () => {
     setTracingActive(false);
 
     try {
       const trace = trackOpikClient.trace({ name: "direct" });
+      const span = trace.span({ name: "direct-span" });
+      span.end();
       trace.end();
       await trackOpikClient.flush();
 
-      // The low-level client API is intentionally not gated (matches Python).
-      expect(createTracesSpy).toHaveBeenCalled();
+      // The gate lives in the core primitives, so every tracing path (the
+      // decorator, integrations, and direct client calls) stops sending.
+      expect(createTracesSpy).not.toHaveBeenCalled();
+      expect(createSpansSpy).not.toHaveBeenCalled();
     } finally {
       resetTracingToConfigDefault();
     }

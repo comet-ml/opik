@@ -1,4 +1,3 @@
-import { isTracingActive } from "opik";
 import { withTracing } from "./decorators";
 import { OpikSingleton } from "./singleton";
 import { OpikExtension, TrackOpikConfig } from "./types";
@@ -23,10 +22,6 @@ export const trackOpenAI = <SDKType extends object>(
 
       if (propKey === "flush") {
         return config.client.flush.bind(config.client);
-      }
-
-      if (!isTracingActive()) {
-        return Reflect.get(wrappedSdk, propKey, proxy);
       }
 
       if (typeof originalProperty === "function") {

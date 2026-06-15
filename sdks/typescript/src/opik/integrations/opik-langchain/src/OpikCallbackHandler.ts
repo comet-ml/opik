@@ -12,7 +12,6 @@ import {
   SpanType,
   OpikSpanType,
   OpikConfig,
-  isTracingActive,
 } from "opik";
 import {
   extractCallArgs,
@@ -100,10 +99,6 @@ export class OpikCallbackHandler
     metadata,
     type,
   }: StartTracingArgs) {
-    if (!isTracingActive()) {
-      return;
-    }
-
     const provider = metadata?.ls_provider;
     const model = metadata?.ls_model_name;
 
@@ -179,10 +174,6 @@ export class OpikCallbackHandler
     usage,
     metadata,
   }: EndTracingArgs) {
-    if (!isTracingActive()) {
-      return;
-    }
-
     let errorInfo;
     if (error) {
       logger.debug(`End tracing because of error ${error.message}`);

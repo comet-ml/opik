@@ -3,7 +3,7 @@ import { SpanStatusCode } from "@opentelemetry/api";
 import type { ExportResultCode } from "@opentelemetry/core";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import type { Span, Trace } from "opik";
-import { Opik, logger, isTracingActive } from "opik";
+import { Opik, logger } from "opik";
 
 /** Shape used for error_info when creating traces/spans; matches Opik API ErrorInfo. */
 type ErrorInfo = {
@@ -248,12 +248,6 @@ export class OpikExporter implements SpanExporter {
   };
 
   export: ExportFunction = async (allOtelSpans, resultCallback) => {
-    if (!isTracingActive()) {
-      const code: ExportResultCode.SUCCESS = 0;
-      resultCallback({ code });
-      return;
-    }
-
     const aiSDKOtelSpans = allOtelSpans.filter(
       (span) => getInstrumentationScopeName(span) === "ai"
     );
