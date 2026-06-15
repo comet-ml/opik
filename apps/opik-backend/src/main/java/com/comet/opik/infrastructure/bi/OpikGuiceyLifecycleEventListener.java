@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
 import com.comet.opik.api.resources.v1.jobs.AlertProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.AutomationRuleProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetProjectMigrationJob;
@@ -25,6 +26,7 @@ import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
@@ -58,6 +60,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setupDailyJob();
                 setTraceThreadsClosingJob();
                 setMetricsAlertJob();
+                setAgentInsightsReportJob();
                 setExperimentDenormalizationJob();
                 setLocalRunnerReaperJob();
                 setRetentionJobs();
@@ -165,6 +168,39 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                     retentionConfig.getCatchUp().getCatchUpInterval(), null);
         } else {
             log.info("Retention catch-up jobs are disabled, skipping estimation and catch-up job setup");
+        }
+    }
+
+    private void setAgentInsightsReportJob() {
+        var serviceToggles = injector.get().getInstance(OpikConfiguration.class).getServiceToggles();
+
+        if (!serviceToggles.isAgentInsightsEnabled()) {
+            log.info("Agent Insights is disabled, skipping report job setup");
+            return;
+        }
+
+        var reportConfig = injector.get().getInstance(OpikConfiguration.class).getAgentInsightsReport();
+        scheduleCronJob(AgentInsightsReportJob.class, reportConfig.getSchedule());
+    }
+
+    private void scheduleCronJob(Class<? extends org.quartz.Job> jobClass, String cronExpression) {
+        var jobDetail = JobBuilder.newJob(jobClass)
+                .storeDurably()
+                .build();
+
+        var trigger = TriggerBuilder.newTrigger()
+                .forJob(jobDetail)
+                .withSchedule(CronScheduleBuilder.cronSchedule(cronExpression)
+                        .inTimeZone(java.util.TimeZone.getTimeZone(java.time.ZoneOffset.UTC)))
+                .build();
+
+        try {
+            var scheduler = getScheduler();
+            scheduler.addJob(jobDetail, false);
+            scheduler.scheduleJob(trigger);
+            log.info("'{}' scheduled successfully with cron '{}'", jobClass.getSimpleName(), cronExpression);
+        } catch (SchedulerException e) {
+            log.error("Failed to schedule '{}'", jobClass.getSimpleName(), e);
         }
     }
 
