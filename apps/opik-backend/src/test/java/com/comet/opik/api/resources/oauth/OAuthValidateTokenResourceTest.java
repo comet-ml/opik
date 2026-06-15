@@ -3,39 +3,57 @@ package com.comet.opik.api.resources.oauth;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
 import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
-import jakarta.ws.rs.NotAuthorizedException;
+import com.comet.opik.utils.JsonUtils;
+import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
+import io.dropwizard.testing.junit5.ResourceExtension;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_VALIDATE_TOKEN_RESOURCE_BASE_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("OAuthValidateTokenResource")
+@ExtendWith(DropwizardExtensionsSupport.class)
+@DisplayName("OAuth Validate Token Resource Test")
 class OAuthValidateTokenResourceTest {
 
     private static final String ACCESS_TOKEN = McpOAuthTokenUtils.ACCESS_PREFIX
             + RandomStringUtils.secure().nextAlphanumeric(24);
 
-    @Mock
-    private McpOAuthService mcpOAuthService;
+    private static final McpOAuthService mcpOAuthService = mock(McpOAuthService.class);
 
-    private OAuthValidateTokenResource resource() {
-        return new OAuthValidateTokenResource(mcpOAuthService);
+    private static final ResourceExtension EXT = ResourceExtension.builder()
+            .setMapper(JsonUtils.getMapper())
+            .addResource(new OAuthValidateTokenResource(mcpOAuthService))
+            .build();
+
+    @BeforeEach
+    void setUp() {
+        reset(mcpOAuthService);
+    }
+
+    private Response validate(String authHeader) {
+        var request = EXT.target(OAUTH_VALIDATE_TOKEN_RESOURCE_BASE_PATH).request();
+        if (authHeader != null) {
+            request = request.header(HttpHeaders.AUTHORIZATION, authHeader);
+        }
+        return request.post(Entity.json(""));
     }
 
     @ParameterizedTest
@@ -48,17 +66,19 @@ class OAuthValidateTokenResourceTest {
     })
     @DisplayName("rejects anything that is not a Bearer access token without touching the service")
     void rejectsNonBearerAccessToken(String authHeader) {
-        assertThatThrownBy(() -> resource().validate(authHeader))
-                .isInstanceOf(NotAuthorizedException.class);
+        try (Response response = validate(authHeader)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
+        }
 
         verify(mcpOAuthService, never()).validateAccessToken(any());
     }
 
     @Test
-    @DisplayName("rejects a null Authorization header")
-    void rejectsNullHeader() {
-        assertThatThrownBy(() -> resource().validate(null))
-                .isInstanceOf(NotAuthorizedException.class);
+    @DisplayName("rejects a missing Authorization header")
+    void rejectsMissingHeader() {
+        try (Response response = validate(null)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
+        }
 
         verify(mcpOAuthService, never()).validateAccessToken(any());
     }
@@ -68,8 +88,9 @@ class OAuthValidateTokenResourceTest {
     void rejectsUnvalidatedAccessToken() {
         when(mcpOAuthService.validateAccessToken(ACCESS_TOKEN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> resource().validate("Bearer " + ACCESS_TOKEN))
-                .isInstanceOf(NotAuthorizedException.class);
+        try (Response response = validate("Bearer " + ACCESS_TOKEN)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
+        }
     }
 
     @ParameterizedTest
@@ -84,9 +105,9 @@ class OAuthValidateTokenResourceTest {
                 .build();
         when(mcpOAuthService.validateAccessToken(ACCESS_TOKEN)).thenReturn(Optional.of(validated));
 
-        try (Response response = resource().validate(schemePrefix + ACCESS_TOKEN)) {
+        try (Response response = validate(schemePrefix + ACCESS_TOKEN)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-            assertThat(response.getEntity()).isEqualTo(validated);
+            assertThat(response.readEntity(ValidatedToken.class)).isEqualTo(validated);
         }
     }
 }
