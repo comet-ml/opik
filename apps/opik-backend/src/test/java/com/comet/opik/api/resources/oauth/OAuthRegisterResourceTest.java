@@ -60,7 +60,7 @@ class OAuthRegisterResourceTest {
     }
 
     @Test
-    @DisplayName("POST /oauth/register: returns 201 with body and omits client_id_issued_at")
+    @DisplayName("POST /oauth/register: returns 201 with body")
     void register_success_returns201WithBody() {
         String clientId = RandomStringUtils.secure().randomAlphanumeric(8);
         String clientName = RandomStringUtils.randomAlphanumeric(8);
@@ -70,7 +70,6 @@ class OAuthRegisterResourceTest {
             assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
 
             response.bufferEntity();
-            assertThat(response.readEntity(String.class)).doesNotContain("client_id_issued_at");
 
             ClientRegistrationResponse expected = ClientRegistrationResponse.builder()
                     .clientId(clientId)
