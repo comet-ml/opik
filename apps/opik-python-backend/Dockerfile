@@ -2,7 +2,7 @@
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM docker:29.5.1 AS builder
+FROM docker:29.5.3 AS builder
 
 # Toolchain only for compiling native wheels (rust/cargo for pydantic-core).
 RUN apk add --no-cache python3 py3-pip build-base python3-dev musl-dev gcc libffi-dev rust cargo
@@ -35,7 +35,7 @@ RUN set -eux; \
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM docker:29.5.1
+FROM docker:29.5.3
 
 # Upgrade libexpat to the latest available version to mitigate CVEs.
 RUN apk add --no-cache --upgrade libexpat
