@@ -74,7 +74,8 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
 
     @Override
     protected MessageContext messageContext(ExperimentAggregationMessage message) {
-        return new MessageContext(message.workspaceId(), message.userName());
+        // workspace_name is not carried into the denormalization bucket that produces this message
+        return new MessageContext(message.workspaceId(), null, message.userName());
     }
 
     @Override

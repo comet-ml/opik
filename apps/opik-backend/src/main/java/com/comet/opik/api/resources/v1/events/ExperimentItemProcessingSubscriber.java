@@ -73,7 +73,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     @Override
     protected MessageContext messageContext(ExperimentItemToProcess message) {
-        return new MessageContext(message.workspaceId(), message.userName());
+        return new MessageContext(message.workspaceId(), message.workspaceName(), message.userName());
     }
 
     @Override

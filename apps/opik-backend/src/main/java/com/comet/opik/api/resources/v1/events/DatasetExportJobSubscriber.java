@@ -91,7 +91,7 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
 
     @Override
     protected MessageContext messageContext(DatasetExportMessage message) {
-        return new MessageContext(message.workspaceId(), RequestContext.SYSTEM_USER);
+        return new MessageContext(message.workspaceId(), message.workspaceName(), RequestContext.SYSTEM_USER);
     }
 
     private boolean isDisabled() {

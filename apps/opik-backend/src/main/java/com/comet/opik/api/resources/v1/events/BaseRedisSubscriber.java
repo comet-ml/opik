@@ -510,12 +510,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
         failures.forEach(failure -> {
             var failureContext = failure.context() != null ? failure.context() : MessageContext.UNKNOWN;
-            messageProcessingErrors.add(1, Attributes.of(
-                    stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(failure.error()),
-                    stringKey(ErrorMetrics.WORKSPACE_ID_KEY),
-                    StringUtils.defaultIfBlank(failureContext.workspaceId(), ErrorMetrics.UNKNOWN),
-                    stringKey(ErrorMetrics.USER_NAME_KEY),
-                    StringUtils.defaultIfBlank(failureContext.userName(), ErrorMetrics.UNKNOWN)));
+            messageProcessingErrors.add(1, Attributes.builder()
+                    .put(ErrorMetrics.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(failure.error()))
+                    .put(ErrorMetrics.WORKSPACE_ID_KEY,
+                            StringUtils.defaultIfBlank(failureContext.workspaceId(), ErrorMetrics.UNKNOWN))
+                    .put(ErrorMetrics.WORKSPACE_NAME_KEY,
+                            StringUtils.defaultIfBlank(failureContext.workspaceName(), ErrorMetrics.UNKNOWN))
+                    .put(ErrorMetrics.USER_NAME_KEY,
+                            StringUtils.defaultIfBlank(failureContext.userName(), ErrorMetrics.UNKNOWN))
+                    .build());
         });
 
         // Separate non-retryable failures first as no need to query delivery count, ack and remove all
@@ -675,8 +678,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Workspace/user a message belongs to, used to attribute error metrics. Mirrors the context
      * subclasses set into the Reactor context inside {@link #processEvent(Object)}.
      */
-    protected record MessageContext(String workspaceId, String userName) {
-        static final MessageContext UNKNOWN = new MessageContext(ErrorMetrics.UNKNOWN, ErrorMetrics.UNKNOWN);
+    protected record MessageContext(String workspaceId, String workspaceName, String userName) {
+        static final MessageContext UNKNOWN = new MessageContext(ErrorMetrics.UNKNOWN, ErrorMetrics.UNKNOWN,
+                ErrorMetrics.UNKNOWN);
     }
 
     /**

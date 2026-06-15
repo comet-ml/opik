@@ -52,7 +52,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     @Override
     protected MessageContext messageContext(WebhookEvent<?> event) {
-        return new MessageContext(event.getWorkspaceId(), event.getUserName());
+        return new MessageContext(event.getWorkspaceId(), event.getWorkspaceName(), event.getUserName());
     }
 
     @Override
