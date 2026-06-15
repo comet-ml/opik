@@ -22,10 +22,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.net.URI;
-
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.CLIENT_CONFIG_PATH_PREFIX;
-
 @Path("/oauth/register")
 @Timed
 @Slf4j
@@ -39,8 +35,7 @@ public class OAuthRegisterResource {
 
     /**
      * DCR is open (no auth) by design — throttled per source IP via {@link RateLimited} to bound spam registrations.
-     * RFC 7591 §3.2.1: the response SHOULD include a Location header pointing at a client-configuration
-     * endpoint. The URI is informational and not part of the OAuth dance.
+     * RFC 7591 §3.2.1: respond 201 with the client metadata body.
      */
     @POST
     @RateLimited(value = "mcpOAuthRegister:{clientIp}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
@@ -54,8 +49,6 @@ public class OAuthRegisterResource {
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
         log.info("MCP OAuth client registered '{}'", client.id());
-        return Response.created(URI.create(CLIENT_CONFIG_PATH_PREFIX + client.id()))
-                .entity(body)
-                .build();
+        return Response.status(Response.Status.CREATED).entity(body).build();
     }
 }

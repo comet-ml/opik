@@ -68,7 +68,4 @@ public class OAuthConstants {
     public static final String ERROR_INVALID_TARGET = "invalid_target";
     public static final String ERROR_UNSUPPORTED_GRANT_TYPE = "unsupported_grant_type";
     public static final String ERROR_UNSUPPORTED_RESPONSE_TYPE = "unsupported_response_type";
-
-    // RFC 7591 §3.2.1 client-configuration endpoint path; the registration response Location points here.
-    public static final String CLIENT_CONFIG_PATH_PREFIX = "/admin/mcp-oauth-clients/";
 }

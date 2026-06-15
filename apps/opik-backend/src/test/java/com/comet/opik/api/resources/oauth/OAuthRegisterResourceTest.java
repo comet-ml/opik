@@ -60,16 +60,14 @@ class OAuthRegisterResourceTest {
     }
 
     @Test
-    @DisplayName("POST /oauth/register: returns 201 with Location per RFC 7591 §3.2.1 and omits client_id_issued_at")
-    void register_success_returns201WithLocationAndBody() {
+    @DisplayName("POST /oauth/register: returns 201 with body")
+    void register_success_returns201WithBody() {
         String clientId = RandomStringUtils.secure().randomAlphanumeric(8);
         String clientName = RandomStringUtils.randomAlphanumeric(8);
         when(clientService.register(any(ClientRegistrationRequest.class))).thenReturn(minted(clientId, clientName));
 
         try (Response response = register(clientName)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
-            assertThat(response.getLocation().getPath())
-                    .isEqualTo(OAuthConstants.CLIENT_CONFIG_PATH_PREFIX + clientId);
 
             response.bufferEntity();
             assertThat(response.readEntity(String.class)).doesNotContain("client_id_issued_at");
