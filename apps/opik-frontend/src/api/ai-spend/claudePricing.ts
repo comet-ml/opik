@@ -194,6 +194,13 @@ const tierTotal = (tiers: ModelTiers): number =>
   (tiers.cache_creation_tokens ?? 0) +
   (tiers.output_tokens ?? 0);
 
+// Total tokens across a per-model tier breakdown, summed via tierTotal. Null
+// when there's no per-model data so the UI shows N/A instead of 0.
+export const tiersTokens = (byModel?: ModelTiers[] | null): number | null =>
+  byModel && byModel.length > 0
+    ? byModel.reduce((sum, tiers) => sum + tierTotal(tiers), 0)
+    : null;
+
 // The model carrying the most tokens, for a single-chip label. Null when the
 // breakdown is empty.
 export const dominantModel = (byModel?: ModelTiers[] | null): string | null => {
