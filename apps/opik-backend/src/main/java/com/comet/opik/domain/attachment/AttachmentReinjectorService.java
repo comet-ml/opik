@@ -188,8 +188,13 @@ public class AttachmentReinjectorService {
                                 // image renderer) can recognize and render the payload. Raw
                                 // base64 is neither folded nor rendered, leaving a giant blob
                                 // in the input (OPIK-6954).
-                                String mimeType = attachInfo.mimeType();
-                                String value = StringUtils.isNotBlank(mimeType)
+                                // Canonicalize the stored mime type before interpolating it:
+                                // drop any parameters (e.g. "; charset=utf-8") and accept only a
+                                // strict type/subtype, otherwise an invalid data URI would itself
+                                // break inline rendering. Fall back to raw base64 when unusable.
+                                String mimeType = StringUtils
+                                        .trimToEmpty(StringUtils.substringBefore(attachInfo.mimeType(), ";"));
+                                String value = mimeType.matches("[\\w.+-]+/[\\w.+-]+")
                                         ? "data:%s;base64,%s".formatted(mimeType, base64)
                                         : base64;
                                 String wrappedRef = AttachmentUtils.wrapReference(filename);
