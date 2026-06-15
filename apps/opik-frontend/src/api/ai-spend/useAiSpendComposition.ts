@@ -1,15 +1,13 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { AI_SPEND_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import { ModelTiers } from "./claudePricing";
 
 export interface AiSpendLaneApi {
   key: string;
   label: string;
   total_tokens: number;
-  // Raw cache-tier sums from cc.billing; priced FE-side (claudePricing).
-  input_tokens?: number;
-  cache_read_tokens?: number;
-  cache_creation_tokens?: number;
-  output_tokens?: number;
+  // Per-model cache-tier sums from cc.billing; priced FE-side (claudePricing).
+  by_model: ModelTiers[];
   has_breakdown: boolean;
 }
 
@@ -27,8 +25,6 @@ export interface AiSpendCompositionResponse {
   input: AiSpendSideApi;
   harness: AiSpendHarnessApi[];
   output: AiSpendSideApi;
-  // Distinct cc.billing.model values in the window, for FE pricing.
-  models?: string[];
 }
 
 type UseAiSpendCompositionParams = {

@@ -1,11 +1,11 @@
 package com.comet.opik.api.resources.utils.resources;
 
-import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
 import com.comet.opik.api.spend.SpendRecommendationsResponse;
+import com.comet.opik.api.spend.SpendSummaryResponse;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -31,7 +31,7 @@ public class AiSpendResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public WorkspaceMetricsSummaryResponse getSummary(SpendMetricRequest request, String apiKey, String workspaceName) {
+    public SpendSummaryResponse getSummary(SpendMetricRequest request, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("/summary")
                 .request()
@@ -40,7 +40,7 @@ public class AiSpendResourceClient {
                 .post(Entity.json(request))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(WorkspaceMetricsSummaryResponse.class);
+            return response.readEntity(SpendSummaryResponse.class);
         }
     }
 

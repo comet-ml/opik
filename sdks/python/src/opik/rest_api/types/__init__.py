@@ -387,6 +387,7 @@ from .feedback_update import (
 )
 from .function import Function
 from .function_call import FunctionCall
+from .generate_report_response import GenerateReportResponse
 from .group_content import GroupContent
 from .group_content_with_aggregations import GroupContentWithAggregations
 from .group_detail import GroupDetail
@@ -465,6 +466,7 @@ from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
 from .message import Message
+from .model_tiers import ModelTiers
 from .multipart_upload_part import MultipartUploadPart
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
@@ -478,6 +480,9 @@ from .o_auth_error import OAuthError
 from .ollama_connection_test_response import OllamaConnectionTestResponse
 from .ollama_instance_base_url_request import OllamaInstanceBaseUrlRequest
 from .ollama_model import OllamaModel
+from .ollie_report import OllieReport
+from .ollie_report_page import OllieReportPage
+from .ollie_report_status import OllieReportStatus
 from .optimization import Optimization
 from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
@@ -553,6 +558,7 @@ from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
+from .report_preference import ReportPreference
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -600,6 +606,7 @@ from .spend_breakdown_response import SpendBreakdownResponse
 from .spend_composition_response import SpendCompositionResponse
 from .spend_metric_request import SpendMetricRequest
 from .spend_recommendations_response import SpendRecommendationsResponse
+from .spend_summary_response import SpendSummaryResponse
 from .spend_user_page import SpendUserPage
 from .spend_user_row import SpendUserRow
 from .start_multipart_upload_response import StartMultipartUploadResponse
@@ -1045,6 +1052,7 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
+    "GenerateReportResponse",
     "GroupContent",
     "GroupContentWithAggregations",
     "GroupDetail",
@@ -1123,6 +1131,7 @@ __all__ = [
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
     "Message",
+    "ModelTiers",
     "MultipartUploadPart",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
@@ -1136,6 +1145,9 @@ __all__ = [
     "OllamaConnectionTestResponse",
     "OllamaInstanceBaseUrlRequest",
     "OllamaModel",
+    "OllieReport",
+    "OllieReportPage",
+    "OllieReportStatus",
     "Optimization",
     "OptimizationPagePublic",
     "OptimizationPublic",
@@ -1209,6 +1221,7 @@ __all__ = [
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
+    "ReportPreference",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",
@@ -1256,6 +1269,7 @@ __all__ = [
     "SpendCompositionResponse",
     "SpendMetricRequest",
     "SpendRecommendationsResponse",
+    "SpendSummaryResponse",
     "SpendUserPage",
     "SpendUserRow",
     "StartMultipartUploadResponse",
