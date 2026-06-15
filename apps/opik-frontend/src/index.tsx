@@ -29,9 +29,9 @@ if (IS_SENTRY_ENABLED) {
 }
 
 async function bootstrap() {
-  await usePluginsStore.getState().setupPlugins(import.meta.env.MODE);
+  await usePluginsStore.getState().setupPlugins();
   runLocalStorageMigrations();
   root.render(<WorkspaceVersionGate />);
 }
 
-bootstrap();
+void bootstrap();

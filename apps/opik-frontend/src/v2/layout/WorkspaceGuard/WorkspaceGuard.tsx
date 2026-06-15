@@ -25,9 +25,7 @@ const WorkspaceGuard = ({
   const AssistantPrewarmer = usePluginStore(
     (state) => state.AssistantPrewarmer,
   );
-  const AiSpendProviderPlugin = usePluginStore(
-    (state) => state.AiSpendProvider,
-  );
+  const LayoutProvider = usePluginStore((state) => state.LayoutProvider);
 
   if (!WorkspacePreloader) {
     return <Loader />;
@@ -41,8 +39,8 @@ const WorkspaceGuard = ({
     </FeatureTogglesProvider>
   );
 
-  const layout = AiSpendProviderPlugin ? (
-    <AiSpendProviderPlugin>{baseLayout}</AiSpendProviderPlugin>
+  const layout = LayoutProvider ? (
+    <LayoutProvider>{baseLayout}</LayoutProvider>
   ) : (
     baseLayout
   );

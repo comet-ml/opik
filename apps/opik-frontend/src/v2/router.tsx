@@ -29,6 +29,7 @@ import LogsPage from "@/v2/pages/LogsPage/LogsPage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
+import usePluginsStore from "@/store/PluginsStore";
 const PlaygroundPage = lazy(
   () => import("@/v2/pages/PlaygroundPage/PlaygroundPage"),
 );
@@ -65,10 +66,6 @@ import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
-import AiSpend from "@/v2/pages/AiSpend/AiSpend";
-import AiSpendHomePage from "@/v2/pages/AiSpendHomePage/AiSpendHomePage";
-import AiSpendLeaderboardPage from "@/v2/pages/AiSpendLeaderboardPage/AiSpendLeaderboardPage";
-import AiSpendSessionsPage from "@/v2/pages/LogsPage/AiSpendSessionsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -607,55 +604,6 @@ const homeSMERoute = createRoute({
   component: lazy(() => import("@/v2/pages/SMEFlowPage/SMEFlowPage")),
 });
 
-// ----------- Cost Intelligence (reuses PageLayout via workspaceGuardRoute)
-const aiSpendRoute = createRoute({
-  path: "/$workspaceName/ai-spend",
-  getParentRoute: () => workspaceGuardRoute,
-  component: AiSpend,
-  staticData: {
-    title: "Cost Intelligence",
-    hideRoot: true,
-  },
-});
-
-const aiSpendIndexRoute = createRoute({
-  path: "/",
-  getParentRoute: () => aiSpendRoute,
-  component: () => (
-    <Navigate
-      to="/$workspaceName/ai-spend/home"
-      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
-    />
-  ),
-});
-
-const aiSpendHomeRoute = createRoute({
-  path: "/home",
-  getParentRoute: () => aiSpendRoute,
-  component: AiSpendHomePage,
-  staticData: {
-    title: "Home",
-  },
-});
-
-const aiSpendLeaderboardRoute = createRoute({
-  path: "/leaderboard",
-  getParentRoute: () => aiSpendRoute,
-  component: AiSpendLeaderboardPage,
-  staticData: {
-    title: "User leaderboard",
-  },
-});
-
-const aiSpendSessionsRoute = createRoute({
-  path: "/sessions",
-  getParentRoute: () => aiSpendRoute,
-  component: AiSpendSessionsPage,
-  staticData: {
-    title: "Sessions",
-  },
-});
-
 // ----------- Automation logs
 const automationLogsRoute = createRoute({
   path: "/$workspaceName/automation-logs",
@@ -668,6 +616,10 @@ const automationLogsRoute = createRoute({
 // ═══════════════════════════════════════════════════════════════
 
 const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
+
+const pluginWorkspaceGuardRoutes = usePluginsStore
+  .getState()
+  .collectRoutes({ workspaceGuard: workspaceGuardRoute });
 
 // ═══════════════════════════════════════════════════════════════
 // ROUTE TREE
@@ -685,12 +637,6 @@ const routeTree = rootRoute.addChildren([
   workspaceGuardRoute.addChildren([
     baseRoute,
     homeRoute,
-    aiSpendRoute.addChildren([
-      aiSpendIndexRoute,
-      aiSpendHomeRoute,
-      aiSpendLeaderboardRoute,
-      aiSpendSessionsRoute,
-    ]),
     workspaceRoute.addChildren([
       workspaceIndexRoute,
       // Projects: workspace-level list + project-scoped routes
@@ -745,6 +691,7 @@ const routeTree = rootRoute.addChildren([
 
       // V1 compat redirects (workspace-level → project-scoped)
       ...v1RedirectRoutes,
+      ...pluginWorkspaceGuardRoutes,
     ]),
   ]),
 ]);

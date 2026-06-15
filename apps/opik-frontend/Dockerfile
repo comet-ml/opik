@@ -19,6 +19,8 @@ ENV VITE_SENTRY_DSN=${SENTRY_DSN}
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ARG BUILD_MODE=production
+ARG BUILD_PLUGINS
+ENV VITE_FE_PLUGINS=${BUILD_PLUGINS}
 RUN npm run build -- --mode $BUILD_MODE
 
 # Create version.json for checking version

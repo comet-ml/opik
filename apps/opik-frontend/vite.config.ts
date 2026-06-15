@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => {
       include: ["**/*.test.{ts,tsx}"],
     },
     resolve: {
+      preserveSymlinks: true,
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
