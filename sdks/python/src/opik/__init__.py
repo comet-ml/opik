@@ -5,6 +5,8 @@ from .api_objects.annotation_queue import (
 )
 from .api_objects.attachment import Attachment
 from .rest_api.types.environment_public import EnvironmentPublic as Environment
+from .api_objects import dashboard
+from .api_objects.dashboard import Dashboard
 from .api_objects.dataset import Dataset
 from .api_objects.dataset.test_suite import TestSuite
 from .api_objects.dataset.test_suite.types import TestSuiteResult
@@ -72,6 +74,8 @@ __all__ = [
     "opik_context",
     "Trace",
     "Span",
+    "dashboard",
+    "Dashboard",
     "Dataset",
     "TestSuite",
     "TestSuiteResult",

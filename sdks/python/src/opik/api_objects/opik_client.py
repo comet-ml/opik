@@ -1,5 +1,6 @@
 import atexit
 import contextvars
+import copy
 import datetime
 import functools
 import json
@@ -20,6 +21,7 @@ import httpx
 
 from . import (
     constants,
+    dashboard,
     dataset,
     experiment,
     optimization,
@@ -30,6 +32,9 @@ from . import (
     span as span_module,
     trace as trace_module,
 )
+from .dashboard import rest_operations as dashboard_rest_operations
+from .dashboard import types as dashboard_types
+from .dashboard import validation as dashboard_validation
 from .annotation_queue import (
     TracesAnnotationQueue,
     ThreadsAnnotationQueue,
@@ -1343,6 +1348,124 @@ class Opik:
                     name, description=description, project_name=project_name
                 )
             raise
+
+    def create_dashboard(
+        self,
+        name: str,
+        type: Optional[Union[dashboard_types.DashboardType, str]] = None,
+        description: Optional[str] = None,
+        project_name: Optional[str] = None,
+        project_id: Optional[str] = None,
+        sections: Optional[
+            List[Union[dashboard_types.DashboardSection, Dict[str, Any]]]
+        ] = None,
+    ) -> dashboard.Dashboard:
+        """
+        Create a new dashboard.
+
+        Args:
+            name: The name of the dashboard.
+            type: The dashboard type, either ``"multi_project"`` or ``"experiments"``.
+                Determines which widget types are allowed.
+            description: An optional description of the dashboard.
+            project_name: For a project-scoped dashboard, the project name. If it does
+                not exist it will be created. Ignored when ``project_id`` is provided.
+            project_id: For a project-scoped dashboard, the project id. Takes precedence
+                over ``project_name``. If neither is provided, a workspace-level
+                dashboard is created.
+            sections: Optional initial sections (``DashboardSection`` objects or dicts).
+                If omitted, the dashboard starts with a single empty "Overview" section.
+
+        Returns:
+            dashboard.Dashboard: The created dashboard object.
+        """
+        if sections is None:
+            section_dicts: List[Dict[str, Any]] = [
+                dashboard_types.DashboardSection(title="Overview").to_jsonable()
+            ]
+        else:
+            section_dicts = copy.deepcopy(
+                dashboard_validation.as_section_dicts(sections)
+            )
+
+        config = {
+            "version": dashboard_types.DASHBOARD_VERSION,
+            "sections": section_dicts,
+            "lastModified": dashboard_types.now_ms(),
+        }
+        dashboard_validation.validate_structure(config)
+
+        response = self._rest_client.dashboards.create_dashboard(
+            name=name,
+            config=config,
+            type=getattr(type, "value", type),
+            description=description,
+            project_id=project_id,
+            project_name=project_name,
+        )
+
+        return dashboard.Dashboard.from_public(
+            dashboard_public=response,
+            rest_client=self._rest_client,
+            client=self,
+        )
+
+    def get_dashboard(self, dashboard_id: str) -> dashboard.Dashboard:
+        """
+        Get a dashboard by id.
+
+        Args:
+            dashboard_id: The id of the dashboard.
+
+        Returns:
+            dashboard.Dashboard: The dashboard object.
+        """
+        response = self._rest_client.dashboards.get_dashboard_by_id(dashboard_id)
+        return dashboard.Dashboard.from_public(
+            dashboard_public=response,
+            rest_client=self._rest_client,
+            client=self,
+        )
+
+    def find_dashboards(
+        self,
+        name: Optional[str] = None,
+        project_id: Optional[str] = None,
+        max_results: int = 100,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
+    ) -> List[dashboard.Dashboard]:
+        """
+        Find dashboards in the workspace.
+
+        Args:
+            name: Optional name to filter dashboards by.
+            project_id: Optional project id to filter dashboards by.
+            max_results: The maximum number of dashboards to return.
+            sorting: Optional serialized sorting specification.
+            filters: Optional serialized filter specification.
+
+        Returns:
+            List[dashboard.Dashboard]: The matching dashboards.
+        """
+        return dashboard_rest_operations.find_dashboards(
+            rest_client=self._rest_client,
+            client=self,
+            name=name,
+            project_id=project_id,
+            max_results=max_results,
+            sorting=sorting,
+            filters=filters,
+        )
+
+    def delete_dashboard(self, dashboard_id: str) -> None:
+        """
+        Delete a dashboard by id.
+
+        Args:
+            dashboard_id: The id of the dashboard.
+        """
+        self._rest_client.dashboards.delete_dashboard(dashboard_id)
 
     def create_test_suite(
         self,
