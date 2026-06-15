@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -21,10 +22,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import java.net.URI;
-
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.CLIENT_CONFIG_PATH_PREFIX;
 
 @Path("/oauth/register")
 @Timed
@@ -39,23 +36,20 @@ public class OAuthRegisterResource {
 
     /**
      * DCR is open (no auth) by design — throttled per source IP via {@link RateLimited} to bound spam registrations.
-     * RFC 7591 §3.2.1: the response SHOULD include a Location header pointing at a client-configuration
-     * endpoint. The URI is informational and not part of the OAuth dance.
+     * RFC 7591 §3.2.1: respond 201 with the client metadata body.
      */
     @POST
     @RateLimited(value = "mcpOAuthRegister:{clientIp}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     @Operation(operationId = "registerOAuthClient", summary = "OAuth Dynamic Client Registration Endpoint", description = "OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public client for the MCP OAuth flow; throttled per source IP", responses = {
             @ApiResponse(responseCode = "201", description = "Registered client metadata", content = @Content(schema = @Schema(implementation = ClientRegistrationResponse.class))),
             @ApiResponse(responseCode = "429", description = "Registration rate limit exceeded")})
-    public Response register(@NonNull @Valid ClientRegistrationRequest request) {
+    public Response register(@NotNull @Valid ClientRegistrationRequest request) {
 
         log.info("MCP OAuth client registration request '{}'", request.clientName());
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
-        log.info("MCP OAuth client registered '{}'", client.id());
-        return Response.created(URI.create(CLIENT_CONFIG_PATH_PREFIX + client.id()))
-                .entity(body)
-                .build();
+        log.info("MCP OAuth client registered '{}' '{}'", client.id(), client.name());
+        return Response.status(Response.Status.CREATED).entity(body).build();
     }
 }
