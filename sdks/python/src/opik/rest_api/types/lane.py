@@ -4,16 +4,14 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .model_tiers import ModelTiers
 
 
 class Lane(UniversalBaseModel):
     key: typing.Optional[str] = None
     label: typing.Optional[str] = None
     total_tokens: typing.Optional[int] = None
-    input_tokens: typing.Optional[int] = None
-    cache_read_tokens: typing.Optional[int] = None
-    cache_creation_tokens: typing.Optional[int] = None
-    output_tokens: typing.Optional[int] = None
+    by_model: typing.Optional[typing.List[ModelTiers]] = None
     has_breakdown: typing.Optional[bool] = None
 
     if IS_PYDANTIC_V2:

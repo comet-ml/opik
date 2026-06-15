@@ -4,14 +4,14 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .harness_entry import HarnessEntry
-from .side import Side
 
 
-class SpendCompositionResponse(UniversalBaseModel):
-    input: typing.Optional[Side] = None
-    harness: typing.Optional[typing.List[HarnessEntry]] = None
-    output: typing.Optional[Side] = None
+class ModelTiers(UniversalBaseModel):
+    model: typing.Optional[str] = None
+    input_tokens: typing.Optional[int] = None
+    cache_read_tokens: typing.Optional[int] = None
+    cache_creation_tokens: typing.Optional[int] = None
+    output_tokens: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
