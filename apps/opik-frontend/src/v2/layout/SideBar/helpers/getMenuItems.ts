@@ -217,7 +217,7 @@ const getMenuItems = ({
         },
       ],
     },
-  ];
+  ].filter((group) => group.items.length > 0);
 };
 
 export const getWorkspaceMenuItems = (): MenuItemGroup[] => {
