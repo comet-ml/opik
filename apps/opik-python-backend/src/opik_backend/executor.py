@@ -1,6 +1,7 @@
 """Base class for code execution strategies."""
 import json
 import logging
+import math
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -19,6 +20,18 @@ DEFAULT_MEM_LIMIT = "256m"
 # None means no hard limit (only cpu_shares soft priority applies)
 DEFAULT_CPU_LIMIT = None
 
+# Human-readable bodies returned with HTTP 503. Callers should branch on
+# the HTTP status code, not on these strings.
+SATURATED_ERROR = "Code executor is saturated, please retry"
+SHUTDOWN_ERROR = "Service is shutting down"
+
+# Body returned with HTTP 504 when a single execution exceeds exec_timeout.
+EXEC_TIMEOUT_ERROR = "Server processing exceeded timeout limit."
+
+# Tunable acquire wait for the in-memory pool before responding HTTP 503.
+POOL_ACQUIRE_TIMEOUT_ENV_VAR = "PYTHON_CODE_EXECUTOR_POOL_ACQUIRE_TIMEOUT_IN_SECS"
+POOL_ACQUIRE_TIMEOUT_DEFAULT = 0.0
+
 @dataclass
 class ExecutionResult:
     """Result of code execution."""
@@ -32,6 +45,39 @@ class CodeExecutorBase(ABC):
         # Shared configuration
         self.max_parallel = int(os.getenv("PYTHON_CODE_EXECUTOR_PARALLEL_NUM", 5))
         self.exec_timeout = int(os.getenv("PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS", 3))
+        # Maximum wait for a free executor before responding with HTTP 503.
+        # Defaults to 0 (fail fast): once the pool is empty, the next slot
+        # only opens after a fresh container/worker is created — too long to
+        # absorb on the server side without re-pinning request threads, which
+        # is the failure mode this knob exists to prevent. The HTTP layer's
+        # retry-with-backoff is the right place to soak up bursts. Operators
+        # can raise this if their traffic shape benefits from a short wait.
+        self.pool_acquire_timeout = self._parse_pool_acquire_timeout()
+
+    @staticmethod
+    def _parse_pool_acquire_timeout():
+        """Parse the pool-acquire timeout env var as a non-negative float."""
+        raw = os.getenv(POOL_ACQUIRE_TIMEOUT_ENV_VAR)
+        if raw is None:
+            return POOL_ACQUIRE_TIMEOUT_DEFAULT
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            logger.warning(
+                f"{POOL_ACQUIRE_TIMEOUT_ENV_VAR} must be a number, "
+                f"got '{raw}'; falling back to {POOL_ACQUIRE_TIMEOUT_DEFAULT}"
+            )
+            return POOL_ACQUIRE_TIMEOUT_DEFAULT
+        if not math.isfinite(value) or value < 0:
+            # Reject nan/inf alongside negatives: an infinite timeout would
+            # re-introduce the unbounded blocking acquire this knob exists
+            # to bound.
+            logger.warning(
+                f"{POOL_ACQUIRE_TIMEOUT_ENV_VAR} must be a finite non-negative "
+                f"number, got '{raw}'; falling back to {POOL_ACQUIRE_TIMEOUT_DEFAULT}"
+            )
+            return POOL_ACQUIRE_TIMEOUT_DEFAULT
+        return value
 
     def parse_execution_result(self, result: ExecutionResult) -> dict:
         """Parse execution result into API response format."""
@@ -46,7 +92,7 @@ class CodeExecutorBase(ABC):
             except Exception as e:
                 logger.info(f"Exception parsing execution logs: {e}")
                 return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
-    
+
     @abstractmethod
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         """Execute code with data and return results."""
