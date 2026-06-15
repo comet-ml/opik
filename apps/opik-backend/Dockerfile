@@ -29,8 +29,11 @@ LABEL org.opencontainers.image.vendor="Comet ML"
 ARG RDS_CERT_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
 ARG STORE_PASSWORD=changeit
 COPY install_rds_cert.sh /tmp/install_rds_cert.sh
+# perl is intentionally not installed: it pulls in perl-Archive-Tar, which is
+# affected by CVE-2026-9538 (ALAS2023-2026-1805) and has no patched AL2023 RPM.
+# install_rds_cert.sh uses sed/openssl instead of perl to extract the cert CN.
 RUN yum update -y && \
-    yum install -y --allowerasing shadow ca-certificates openssl perl dos2unix curl && \
+    yum install -y --allowerasing shadow ca-certificates openssl dos2unix curl && \
     yum clean all && \
     rm -rf /var/cache/yum && \
     mkdir -p /tmp/certs && \
