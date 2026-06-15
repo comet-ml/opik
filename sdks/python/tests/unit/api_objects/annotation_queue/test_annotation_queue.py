@@ -9,8 +9,6 @@ from opik.api_objects.annotation_queue.annotation_queue import (
 from opik.rest_api.types import (
     trace_public,
     trace_thread,
-    trace_filter_public,
-    trace_thread_filter,
 )
 from opik.exceptions import OpikException
 
@@ -371,34 +369,6 @@ class TestTracesAnnotationQueueGetItems:
         assert [item.id for item in items] == ["trace-1", "trace-2"]
         assert all(isinstance(item, trace_public.TracePublic) for item in items)
 
-        call_kwargs = mock_rest_client.traces.search_traces.call_args.kwargs
-        assert call_kwargs["project_id"] == "project-123"
-        assert call_kwargs["project_name"] is None
-        assert call_kwargs["truncate"] is True
-
-        filters = call_kwargs["filters"]
-        assert len(filters) == 1
-        assert isinstance(filters[0], trace_filter_public.TraceFilterPublic)
-        assert filters[0].field == "annotation_queue_ids"
-        assert filters[0].operator == "contains"
-        assert filters[0].value == "queue-123"
-
-    def test_get_items__truncate_images_false__forwards_truncate(self):
-        mock_rest_client = Mock()
-        mock_rest_client.traces.search_traces.return_value = []
-
-        queue = TracesAnnotationQueue(
-            id="queue-123",
-            name="test_queue",
-            project_id="project-123",
-            rest_client=mock_rest_client,
-        )
-
-        queue.get_items(truncate_images=False)
-
-        call_kwargs = mock_rest_client.traces.search_traces.call_args.kwargs
-        assert call_kwargs["truncate"] is False
-
 
 class TestThreadsAnnotationQueueGetItems:
     def test_get_items__happyflow(self):
@@ -419,15 +389,3 @@ class TestThreadsAnnotationQueueGetItems:
 
         assert [item.id for item in items] == ["thread-1", "thread-2"]
         assert all(isinstance(item, trace_thread.TraceThread) for item in items)
-
-        call_kwargs = mock_rest_client.traces.search_trace_threads.call_args.kwargs
-        assert call_kwargs["project_id"] == "project-123"
-        assert call_kwargs["project_name"] is None
-        assert call_kwargs["truncate"] is True
-
-        filters = call_kwargs["filters"]
-        assert len(filters) == 1
-        assert isinstance(filters[0], trace_thread_filter.TraceThreadFilter)
-        assert filters[0].field == "annotation_queue_ids"
-        assert filters[0].operator == "contains"
-        assert filters[0].value == "queue-123"

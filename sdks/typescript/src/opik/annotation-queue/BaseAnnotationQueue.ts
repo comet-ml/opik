@@ -110,10 +110,13 @@ export abstract class BaseAnnotationQueue {
         break;
       }
 
-      lastRetrievedId = getCursor(page[page.length - 1]);
-      if (!lastRetrievedId) {
+      const nextCursor = getCursor(page[page.length - 1]);
+      // Stop when the backend gives us no cursor to advance past, or repeats the
+      // previous one, so we never loop forever or re-request the same page.
+      if (!nextCursor || nextCursor === lastRetrievedId) {
         break;
       }
+      lastRetrievedId = nextCursor;
     }
 
     return items;
