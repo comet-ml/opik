@@ -89,8 +89,10 @@ def calculate_layout_for_adding_widget(
     size: Optional[Dict[str, int]] = None,
 ) -> List[LayoutItem]:
     size_config = get_widget_size_config(widget_type)
-    w = size["w"] if size else size_config["w"]
-    h = size["h"] if size else size_config["h"]
+    raw_w = size["w"] if size else size_config["w"]
+    raw_h = size["h"] if size else size_config["h"]
+    w = max(size_config["minW"], min(raw_w, GRID_COLUMNS))
+    h = max(size_config["minH"], min(raw_h, MAX_WIDGET_HEIGHT))
 
     new_item: LayoutItem = {
         "i": widget_id,

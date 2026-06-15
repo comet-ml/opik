@@ -1388,6 +1388,13 @@ class Opik:
                 dashboard_validation.as_section_dicts(sections)
             )
 
+        dashboard_type = getattr(type, "value", type)
+        for section in section_dicts:
+            for widget in section.get("widgets", []):
+                dashboard_validation.validate_widget_for_dashboard(
+                    widget, dashboard_type
+                )
+
         config = {
             "version": dashboard_types.DASHBOARD_VERSION,
             "sections": section_dicts,
@@ -1398,7 +1405,7 @@ class Opik:
         response = self._rest_client.dashboards.create_dashboard(
             name=name,
             config=config,
-            type=getattr(type, "value", type),
+            type=dashboard_type,
             description=description,
             project_id=project_id,
             project_name=project_name,

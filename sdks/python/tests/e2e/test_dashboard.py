@@ -10,6 +10,7 @@ import opik
 from opik import dashboard
 from opik.rest_api.core.api_error import ApiError
 from ..testlib import generate_project_name
+from . import verifiers
 import pytest
 
 PROJECT_NAME = generate_project_name("e2e", __name__)
@@ -80,21 +81,21 @@ def test_dashboard_lifecycle__happyflow(
     )
 
     # Re-fetch from the backend and assert the persisted config contract.
-    fetched = opik_client.get_dashboard(dash.id)
-    config = fetched.config
-    assert config["version"] == dashboard.DashboardState().version
-    assert len(config["sections"]) == 1
-
-    widgets = config["sections"][0]["widgets"]
-    configs_by_type = {w["type"]: w["config"] for w in widgets}
-    assert configs_by_type["project_stats_card"]["metric"] == "trace_count"
-    assert configs_by_type["project_metrics"]["metricType"] == "DURATION"
-    assert configs_by_type["project_metrics"]["breakdown"] == {"field": "model"}
-
-    # Every widget has a matching layout item and vice versa.
-    widget_ids = {w["id"] for w in widgets}
-    layout_ids = {item["i"] for item in config["sections"][0]["layout"]}
-    assert widget_ids == layout_ids
+    verifiers.verify_dashboard(
+        opik_client,
+        dashboard_id=dash.id,
+        name=f"e2e-dashboard-{PROJECT_NAME}",
+        type="multi_project",
+        version=dashboard.DashboardState().version,
+        section_count=1,
+        expected_widget_configs={
+            "project_stats_card": {"metric": "trace_count"},
+            "project_metrics": {
+                "metricType": "DURATION",
+                "breakdown": {"field": "model"},
+            },
+        },
+    )
 
     # The dashboard is discoverable via find.
     found = opik_client.find_dashboards(
@@ -131,11 +132,20 @@ def test_update_and_remove_widget__persisted(
     dash.update_widget(widget_id, config={"content": "updated"})
     dash.rename(f"e2e-dashboard-renamed-{PROJECT_NAME}")
 
-    fetched = opik_client.get_dashboard(dash.id)
-    assert fetched.name == f"e2e-dashboard-renamed-{PROJECT_NAME}"
-    widget = fetched.config["sections"][0]["widgets"][0]
-    assert widget["config"]["content"] == "updated"
+    verifiers.verify_dashboard(
+        opik_client,
+        dashboard_id=dash.id,
+        name=f"e2e-dashboard-renamed-{PROJECT_NAME}",
+        type="multi_project",
+        expected_widget_configs={"text_markdown": {"content": "updated"}},
+    )
 
-    fetched.remove_widget(widget_id)
+    dash.remove_widget(widget_id)
+    verifiers.verify_dashboard(
+        opik_client,
+        dashboard_id=dash.id,
+        section_count=1,
+        expected_widget_configs={},
+    )
     refetched = opik_client.get_dashboard(dash.id)
     assert refetched.config["sections"][0]["widgets"] == []

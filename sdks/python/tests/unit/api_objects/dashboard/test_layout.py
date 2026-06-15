@@ -100,6 +100,29 @@ def test_calculate_layout_for_adding_widget__custom_size():
     assert result[0]["h"] == 5
 
 
+def test_calculate_layout_for_adding_widget__clamps_oversized_custom_size():
+    result = layout.calculate_layout_for_adding_widget(
+        [],
+        WidgetType.TEXT_MARKDOWN.value,
+        "widget-1",
+        size={"w": 100, "h": 100},
+    )
+    assert result[0]["w"] == layout.GRID_COLUMNS
+    assert result[0]["h"] == layout.MAX_WIDGET_HEIGHT
+
+
+def test_calculate_layout_for_adding_widget__clamps_undersized_custom_size():
+    result = layout.calculate_layout_for_adding_widget(
+        [],
+        WidgetType.PROJECT_METRICS.value,
+        "widget-1",
+        size={"w": 1, "h": 1},
+    )
+    size_config = layout.get_widget_size_config(WidgetType.PROJECT_METRICS.value)
+    assert result[0]["w"] == size_config["minW"]
+    assert result[0]["h"] == size_config["minH"]
+
+
 def test_calculate_layout_for_adding_widget__second_widget_placed_next_to_first():
     existing = [{"i": "widget-1", "x": 0, "y": 0, "w": 2, "h": 4}]
     result = layout.calculate_layout_for_adding_widget(

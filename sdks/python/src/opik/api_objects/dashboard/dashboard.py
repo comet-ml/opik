@@ -197,7 +197,11 @@ class Dashboard:
     ) -> None:
         """Replace all sections wholesale."""
         self._assert_config_writable()
-        self._config["sections"] = copy.deepcopy(validation.as_section_dicts(sections))
+        section_dicts = copy.deepcopy(validation.as_section_dicts(sections))
+        for section in section_dicts:
+            for widget in section.get("widgets", []):
+                validation.validate_widget_for_dashboard(widget, self._type)
+        self._config["sections"] = section_dicts
         self._commit_config()
 
     def rename(self, name: str) -> None:

@@ -2,6 +2,7 @@ import pytest
 
 from opik import exceptions
 from opik.api_objects.dashboard import types
+from ....testlib import assert_equal
 
 
 def test_widget_serialization__uses_camelcase_and_enum_values():
@@ -17,11 +18,14 @@ def test_widget_serialization__uses_camelcase_and_enum_values():
     assert result["type"] == "project_stats_card"
     assert result["title"] == "Traces"
     assert "id" in result
-    assert result["config"] == {
-        "projectId": "p1",
-        "source": "traces",
-        "metric": "trace_count",
-    }
+    assert_equal(
+        {
+            "projectId": "p1",
+            "source": "traces",
+            "metric": "trace_count",
+        },
+        result["config"],
+    )
 
 
 def test_project_metrics_config__defaults_and_breakdown_camelcase():
@@ -35,7 +39,7 @@ def test_project_metrics_config__defaults_and_breakdown_camelcase():
 
     assert result["metricType"] == "DURATION"
     assert result["chartType"] == "line"
-    assert result["breakdown"] == {"field": "metadata", "metadataKey": "provider"}
+    assert_equal({"field": "metadata", "metadataKey": "provider"}, result["breakdown"])
 
 
 def test_breakdown_config__metadata_field_requires_metadata_key():

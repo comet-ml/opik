@@ -313,6 +313,52 @@ def test_create_dashboard__with_provided_sections():
     assert captured["config"]["sections"][0]["widgets"][0]["id"] == "w1"
 
 
+def test_create_dashboard__incompatible_widget_raises_before_create():
+    client = opik_client.Opik()
+
+    section = types.DashboardSection(
+        title="Custom",
+        widgets=[
+            types.DashboardWidget(id="w1", type=types.WidgetType.EXPERIMENT_LEADERBOARD)
+        ],
+        layout=[types.DashboardLayoutItem(i="w1", x=0, y=0, w=6, h=6)],
+    )
+
+    with patch.object(
+        client._rest_client.dashboards, "create_dashboard"
+    ) as mock_create:
+        with pytest.raises(exceptions.DashboardValidationError, match="not supported"):
+            client.create_dashboard(
+                name="Prod",
+                type=types.DashboardType.MULTI_PROJECT,
+                sections=[section],
+            )
+
+    mock_create.assert_not_called()
+
+
+def test_replace_sections__incompatible_widget_raises_before_write():
+    config = {
+        "version": 4,
+        "sections": [{"id": "s1", "title": "t", "widgets": [], "layout": []}],
+        "lastModified": 1,
+    }
+    dashboard, rest, _ = _make_dashboard(config, dashboard_type="multi_project")
+
+    section = types.DashboardSection(
+        title="Custom",
+        widgets=[
+            types.DashboardWidget(id="w1", type=types.WidgetType.EXPERIMENT_LEADERBOARD)
+        ],
+        layout=[types.DashboardLayoutItem(i="w1", x=0, y=0, w=6, h=6)],
+    )
+
+    with pytest.raises(exceptions.DashboardValidationError, match="not supported"):
+        dashboard.replace_sections([section])
+
+    assert rest.dashboards.update_calls == []
+
+
 def test_get_dashboard__returns_wrapper():
     client = opik_client.Opik()
     public = dp.DashboardPublic(
