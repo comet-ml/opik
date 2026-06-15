@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -56,7 +57,7 @@ public class AnalyticsQueriesExecutorResource {
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Agent Insights queries are not enabled")})
     public Response executeQuery(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AnalyticsQueryRequest.class))) @Valid AnalyticsQueryRequest request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = AnalyticsQueryRequest.class))) @NotNull @Valid AnalyticsQueryRequest request) {
 
         if (!serviceToggles.isAgentInsightsEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();

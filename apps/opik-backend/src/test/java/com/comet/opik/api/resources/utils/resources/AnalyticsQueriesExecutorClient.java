@@ -35,6 +35,7 @@ public class AnalyticsQueriesExecutorClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.entity(new AnalyticsQueryRequest(projectId, query), MediaType.APPLICATION_JSON_TYPE));
+                .post(Entity.entity(AnalyticsQueryRequest.builder().projectId(projectId).query(query).build(),
+                        MediaType.APPLICATION_JSON_TYPE));
     }
 }

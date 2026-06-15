@@ -60,6 +60,7 @@ public class FreeFormSqlQueryService {
     private static final int CH_MEMORY_LIMIT_EXCEEDED = 241;
     private static final int CH_TOO_MANY_ROWS_OR_BYTES = 396;
     private static final int CH_ACCESS_DENIED = 497;
+    private static final int CH_SYNTAX_ERROR = 62;
     private static final Set<Integer> CH_LIMIT_CODES = Set.of(
             CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES);
 
@@ -107,9 +108,12 @@ public class FreeFormSqlQueryService {
         long startMillis = System.currentTimeMillis();
 
         return freeFormSqlQueryDAO.explainAst(query)
-                // A failed EXPLAIN AST (unparseable input, statement-stacking, ...) is a hard reject: never fall through.
-                .onErrorMap(
-                        error -> reject(REASON_PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error))
+                // A failed EXPLAIN AST is a hard reject: never fall through to execution. A genuine syntax error
+                // (unparseable input, statement-stacking) is reported as parse_error; any other failure (transport,
+                // permissions, ...) is routed through the standard execution-error mapping so it isn't mislabelled.
+                .onErrorMap(error -> isSyntaxError(error)
+                        ? reject(REASON_PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
+                        : mapExecutionError(error, startMillis))
                 .flatMap(nodeLabels -> containsSetNode(nodeLabels)
                         ? Mono.error(reject(REASON_AST_SET_NODE, startMillis,
                                 "Query rejected: SETTINGS/SET clauses are not allowed", null))
@@ -120,7 +124,7 @@ public class FreeFormSqlQueryService {
         return freeFormSqlQueryDAO.execute(workspaceId, projectId, query)
                 .map(result -> {
                     recordSuccess(result, startMillis);
-                    return new AnalyticsQueryResponse(result.rows());
+                    return AnalyticsQueryResponse.builder().results(result.rows()).build();
                 })
                 .onErrorMap(error -> mapExecutionError(error, startMillis));
     }
@@ -147,8 +151,9 @@ public class FreeFormSqlQueryService {
         if (serverException != null) {
             int code = serverException.getCode();
             if (CH_LIMIT_CODES.contains(code)) {
+                // Constant message: the raw ClickHouse text (which can carry schema/tenant details) stays in logs only.
                 return error(REASON_CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
-                        "Query exceeded ClickHouse limits: %s".formatted(serverException.getMessage()), error);
+                        "Query exceeded ClickHouse limits", error);
             }
             if (code == CH_ACCESS_DENIED) {
                 return error(REASON_PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
@@ -188,6 +193,11 @@ public class FreeFormSqlQueryService {
             }
         }
         return null;
+    }
+
+    private static boolean isSyntaxError(Throwable error) {
+        ServerException serverException = findCause(error, ServerException.class);
+        return serverException != null && serverException.getCode() == CH_SYNTAX_ERROR;
     }
 
     private static long elapsed(long startMillis) {
