@@ -1079,11 +1079,8 @@ debugging why traces and spans are not being logged to Opik.
         resetTracingToConfigDefault();
         ```
 
-        When tracing is disabled, the `track` decorator and the integrations stop sending data, and
-        direct `client.trace()` / `span` calls become no-ops as well. Non-tracing APIs (datasets,
-        experiments, prompts) continue to work. With tracing disabled, the client no longer requires an
-        API key or workspace, so an instrumented app can run without sending anything to Opik and
-        without a local deployment.
+        When tracing is disabled, all tracing is turned off — the `track` decorator, the integrations,
+        and manual `client.trace()` calls stop sending data to Opik.
     </Tab>
     <Tab title="Python" value="python" language="python">
         You can disable the logging process globally using the `OPIK_TRACK_DISABLE` environment variable.
