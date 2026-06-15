@@ -24,6 +24,7 @@ import googleAdkLogoUrl from "/images/integrations/google-adk.png";
 import guardrailsaiLogoUrl from "/images/integrations/guardrailsai.png";
 import ollamaLogoUrl from "/images/integrations/ollama.png";
 import ollamaWhiteLogoUrl from "/images/integrations/ollama-white.png";
+import openclawLogoUrl from "/images/integrations/openclaw.svg";
 import openrouterLogoUrl from "/images/integrations/openrouter.png";
 import openrouterWhiteLogoUrl from "/images/integrations/openrouter-white.png";
 import predibaseLogoUrl from "/images/integrations/predibase.png";
@@ -63,10 +64,18 @@ import predibaseCode from "@/integrations/integration-scripts/Predibase.py?raw";
 // import pydanticaiCode from "@/integration-scripts/PydanticAI.py?raw";
 // import smolagentsCode from "@/integration-scripts/Smolagents.py?raw";
 import { buildDocsUrl } from "@/lib/utils";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 // import strandsAgentsCode from "@/integration-scripts/StrandsAgents.py?raw";
 // import vercelAiCode from "@/integration-scripts/VercelAI.py?raw";
 // import watsonxCode from "@/integration-scripts/WatsonX.py?raw";
 // import openAIAgentsCode from "@/integration-scripts/OpenAIAgents.py?raw";
+
+export type IntegrationStepConfig = {
+  title: string;
+  description?: string;
+  code: string;
+  language?: SUPPORTED_LANGUAGE;
+};
 
 export type Integration = {
   id: string;
@@ -78,6 +87,15 @@ export type Integration = {
   code: string;
   tag?: string;
   installCommand: string;
+  installTitle?: string;
+  installDescription?: string;
+  codeLanguage?: SUPPORTED_LANGUAGE;
+  // When set, the dialog renders these instead of the single
+  // "Run the following code" block. Each entry becomes its own
+  // IntegrationStep row. Useful for integrations with a multi-step
+  // CLI/config flow (e.g. OpenClaw) where one big code block doesn't
+  // map cleanly to the underlying README structure.
+  additionalSteps?: IntegrationStepConfig[];
   docsLink: string;
   executionUrl?: string;
   executionLogs?: string[];
@@ -137,6 +155,41 @@ export const INTEGRATIONS: Integration[] = [
     executionLogs: integrationLogsMap.Anthropic,
   },
 
+  {
+    id: "openclaw",
+    title: "OpenClaw",
+    description: "Frameworks & tools",
+    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+    icon: openclawLogoUrl,
+    code: "",
+    installCommand: "openclaw plugins install clawhub:@opik/opik-openclaw",
+    installTitle: "1. Install the OpenClaw plugin",
+    installDescription:
+      "Run this in your OpenClaw Gateway environment to install the Opik plugin.",
+    additionalSteps: [
+      {
+        title: "2. Configure the plugin",
+        description:
+          "The setup wizard validates your endpoint and credentials, then writes config under plugins.entries.opik-openclaw.",
+        code: "openclaw opik configure",
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+      {
+        title: "3. Check effective settings",
+        description: "Print the active Opik configuration to verify the setup.",
+        code: "openclaw opik status",
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+      {
+        title: "4. Start the gateway and send a test message",
+        description:
+          'Traces will stream into your "PROJECT_NAME_PLACEHOLDER" Opik project.',
+        code: 'openclaw gateway run\nopenclaw message send "hello from openclaw"',
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+    ],
+    docsLink: buildDocsUrl("/integrations/openclaw"),
+  },
   {
     id: "bedrock",
     title: "Bedrock",
