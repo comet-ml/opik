@@ -1,8 +1,11 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.infrastructure.StreamConfiguration;
+import com.comet.opik.infrastructure.metrics.ErrorMetrics;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleGauge;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
@@ -38,6 +41,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
+
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
  * This is the Base Redis Subscriber, for all particular implementations to extend. It listens to a Redis stream.
@@ -358,7 +363,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .flatMap(this::postProcessFailureMessages)
                 // Unexpected errors handling: interval is dropped, but processing continues
                 .onErrorContinue((throwable, object) -> {
-                    unexpectedErrors.add(1);
+                    unexpectedErrors.add(1, Attributes.of(
+                            stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(throwable)));
                     log.error("Unexpected error processing message from Redis stream '{}'", object, throwable);
                 })
                 .name("redis-subscriber")
@@ -497,7 +503,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             return Mono.just(processingResults);
         }
 
-        messageProcessingErrors.add(failures.size());
+        failures.forEach(failure -> messageProcessingErrors.add(1, Attributes.of(
+                stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(failure.error()))));
 
         // Separate non-retryable failures first as no need to query delivery count, ack and remove all
         var nonRetryable = failures.stream()

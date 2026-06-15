@@ -1,7 +1,10 @@
 package com.comet.opik.infrastructure.events;
 
+import com.comet.opik.infrastructure.metrics.ErrorMetrics;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
@@ -13,14 +16,18 @@ import org.aopalliance.intercept.MethodInvocation;
 import java.util.Arrays;
 
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.TRACER_NAME;
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 @Slf4j
 class EventInterceptor implements MethodInterceptor {
 
+    private static final String LISTENER_KEY = "listener";
+
+    private volatile LongCounter errorCounter;
+
     @Override
     public Object invoke(MethodInvocation methodInvocation) {
         Tracer tracer = GlobalOpenTelemetry.get().getTracer(TRACER_NAME);
-        Meter meter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME);
 
         var event = Arrays.stream(methodInvocation.getArguments())
                 .findFirst()
@@ -45,15 +52,9 @@ class EventInterceptor implements MethodInterceptor {
             log.info("Event intercepted: {}", event);
             return result;
         } catch (Throwable e) {
-            meter.counterBuilder("opik.event.error")
-                    .setDescription("Event processing error in OpiK")
-                    .build()
-                    .add(1);
-
-            meter.counterBuilder("opik.event.error.%s".formatted(listenerName.toLowerCase()))
-                    .setDescription("Event Listener processing error in OpiK")
-                    .build()
-                    .add(1);
+            errorCounter().add(1, Attributes.of(
+                    stringKey(LISTENER_KEY), listenerName,
+                    stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(e)));
 
             span.recordException(e);
             span.setStatus(StatusCode.ERROR, "Failed to process event");
@@ -62,5 +63,15 @@ class EventInterceptor implements MethodInterceptor {
         } finally {
             span.end();
         }
+    }
+
+    private LongCounter errorCounter() {
+        if (errorCounter == null) {
+            errorCounter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME)
+                    .counterBuilder("opik.event.error")
+                    .setDescription("Event processing errors, by listener and error type")
+                    .build();
+        }
+        return errorCounter;
     }
 }
