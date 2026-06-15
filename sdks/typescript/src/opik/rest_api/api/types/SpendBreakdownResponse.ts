@@ -7,11 +7,7 @@ export interface SpendBreakdownResponse {
     title?: string;
     subtitle?: string;
     totalTokens?: number;
-    inputTokens?: number;
-    cacheReadTokens?: number;
-    cacheCreationTokens?: number;
-    outputTokens?: number;
-    model?: string;
+    byModel?: OpikApi.ModelTiers[];
     itemCount?: number;
     itemUnit?: string;
     items?: OpikApi.Item[];
