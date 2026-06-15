@@ -460,6 +460,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   return (
     <iframe
       ref={setIframeRef}
+      data-testid="ollie-assistant-iframe"
       src={meta.shellUrl}
       className="size-full border-none"
       // Radix's DismissableLayer sets pointer-events:none on the body when a
