@@ -1052,7 +1052,38 @@ debugging why traces and spans are not being logged to Opik.
 
 <Tabs>
     <Tab title="Typescript" value="typescript" language="typescript">
-        This is currently not supported in the Typescript SDK. To disable the logging process, 
+        You can disable the logging process globally using the `OPIK_TRACK_DISABLE` environment variable
+        (you can also set `track_disable` in the configuration file, or pass `trackDisable: true` to the
+        `Opik` client constructor).
+
+        If you are looking for more control, you can also use the `setTracingActive` function to
+        dynamically disable the logging process.
+
+        ```typescript
+        import {
+          isTracingActive,
+          setTracingActive,
+          resetTracingToConfigDefault,
+        } from "opik";
+
+        // Check the current state of the tracing flag
+        console.log(isTracingActive());
+
+        // Disable the logging process
+        setTracingActive(false);
+
+        // Re-enable the logging process
+        setTracingActive(true);
+
+        // Reset to the value resolved from configuration (OPIK_TRACK_DISABLE / trackDisable)
+        resetTracingToConfigDefault();
+        ```
+
+        When tracing is disabled, the `track` decorator and the integrations stop sending data, and
+        direct `client.trace()` / `span` calls become no-ops as well. Non-tracing APIs (datasets,
+        experiments, prompts) continue to work. With tracing disabled, the client no longer requires an
+        API key or workspace, so an instrumented app can run without sending anything to Opik and
+        without a local deployment.
     </Tab>
     <Tab title="Python" value="python" language="python">
         You can disable the logging process globally using the `OPIK_TRACK_DISABLE` environment variable.
