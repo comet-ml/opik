@@ -8,8 +8,8 @@ from ..core.request_options import RequestOptions
 from ..types.spend_breakdown_response import SpendBreakdownResponse
 from ..types.spend_composition_response import SpendCompositionResponse
 from ..types.spend_recommendations_response import SpendRecommendationsResponse
+from ..types.spend_summary_response import SpendSummaryResponse
 from ..types.spend_user_page import SpendUserPage
-from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .raw_client import AsyncRawAiSpendClient, RawAiSpendClient
 
 # this is used as the default value for optional parameters
@@ -220,7 +220,7 @@ class AiSpendClient:
         start_before_end: typing.Optional[bool] = OMIT,
         project_provided: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> WorkspaceMetricsSummaryResponse:
+    ) -> SpendSummaryResponse:
         """
         Get coding-agent spend KPI summary
 
@@ -245,7 +245,7 @@ class AiSpendClient:
 
         Returns
         -------
-        WorkspaceMetricsSummaryResponse
+        SpendSummaryResponse
             Spend summary
 
         Examples
@@ -555,7 +555,7 @@ class AsyncAiSpendClient:
         start_before_end: typing.Optional[bool] = OMIT,
         project_provided: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> WorkspaceMetricsSummaryResponse:
+    ) -> SpendSummaryResponse:
         """
         Get coding-agent spend KPI summary
 
@@ -580,7 +580,7 @@ class AsyncAiSpendClient:
 
         Returns
         -------
-        WorkspaceMetricsSummaryResponse
+        SpendSummaryResponse
             Spend summary
 
         Examples

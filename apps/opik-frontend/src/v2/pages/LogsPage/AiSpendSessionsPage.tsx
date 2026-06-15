@@ -1,5 +1,5 @@
 import useProjectByName from "@/api/projects/useProjectByName";
-import { AI_SPEND_PROJECT_NAME } from "@/lib/aiSpend";
+import { useAiSpend } from "@/contexts/AiSpendContext";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/v2/pages/LogsPage/LogsTab";
@@ -8,17 +8,17 @@ import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 
 const AiSpendSessionsPage = () => {
+  const { projectName } = useAiSpend();
   const {
     data: project,
     isPending,
     isError,
   } = useProjectByName(
-    { projectName: AI_SPEND_PROJECT_NAME },
+    { projectName },
     { refetchOnMount: false, retry: false },
   );
 
   const projectId = project?.id ?? "";
-  const projectName = project?.name || AI_SPEND_PROJECT_NAME;
 
   const { logsType, needsDefaultResolution, setLogsType } = useLogsType({
     projectId,

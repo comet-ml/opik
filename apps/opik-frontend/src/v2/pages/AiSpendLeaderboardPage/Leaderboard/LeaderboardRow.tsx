@@ -1,5 +1,5 @@
 import React from "react";
-import { tierCost } from "@/api/ai-spend/claudePricing";
+import { dominantModel, tiersCost } from "@/api/ai-spend/claudePricing";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatSpendCount, formatSpendUsd } from "@/lib/aiSpend";
@@ -40,6 +40,14 @@ const LeaderboardRow: React.FC<LeaderboardRowProps> = ({
   onViewLaneDetails,
 }) => {
   const hasHighSpend = row.flags?.includes(HIGH_SPEND_FLAG);
+  // A user can span several models; show the dominant one with a "+N" hint.
+  const primaryModel = dominantModel(row.by_model);
+  const extraModels = (row.by_model?.length ?? 0) - 1;
+  const modelLabel = primaryModel
+    ? extraModels > 0
+      ? `${primaryModel} +${extraModels}`
+      : primaryModel
+    : "—";
 
   return (
     <div
@@ -79,13 +87,13 @@ const LeaderboardRow: React.FC<LeaderboardRowProps> = ({
         <div className="flex h-11 min-w-0 flex-1 items-center justify-between gap-3">
           <div className="flex min-w-[120px] max-w-[180px] shrink-0 items-center justify-center rounded-md border bg-primary-foreground py-1 pl-1 pr-1.5">
             <span className="comet-body-xs min-w-0 truncate text-foreground">
-              {row.model}
+              {modelLabel}
             </span>
           </div>
 
           <UserMetric
             className="w-[72px]"
-            value={formatSpendUsd(tierCost(row, row.model))}
+            value={formatSpendUsd(tiersCost(row.by_model))}
             label="spend"
           />
           <UserMetric

@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpendUserSortingFactory;
 import com.comet.opik.api.spend.Impact;
@@ -10,6 +9,7 @@ import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
 import com.comet.opik.api.spend.SpendRecommendationsResponse;
+import com.comet.opik.api.spend.SpendSummaryResponse;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -27,7 +27,7 @@ import java.util.Optional;
 @ImplementedBy(AiSpendServiceImpl.class)
 public interface AiSpendService {
 
-    Mono<WorkspaceMetricsSummaryResponse> getSummary(SpendMetricRequest request);
+    Mono<SpendSummaryResponse> getSummary(SpendMetricRequest request);
 
     Mono<SpendCompositionResponse> getComposition(SpendMetricRequest request);
 
@@ -51,10 +51,8 @@ class AiSpendServiceImpl implements AiSpendService {
     private final @NonNull SpendUserSortingFactory spendUserSortingFactory;
 
     @Override
-    public Mono<WorkspaceMetricsSummaryResponse> getSummary(@NonNull SpendMetricRequest request) {
-        return resolveProject(request)
-                .flatMap(aiSpendDAO::getSummary)
-                .map(results -> WorkspaceMetricsSummaryResponse.builder().results(results).build());
+    public Mono<SpendSummaryResponse> getSummary(@NonNull SpendMetricRequest request) {
+        return resolveProject(request).flatMap(aiSpendDAO::getSummary);
     }
 
     @Override

@@ -14,8 +14,8 @@ from ..errors.bad_request_error import BadRequestError
 from ..types.spend_breakdown_response import SpendBreakdownResponse
 from ..types.spend_composition_response import SpendCompositionResponse
 from ..types.spend_recommendations_response import SpendRecommendationsResponse
+from ..types.spend_summary_response import SpendSummaryResponse
 from ..types.spend_user_page import SpendUserPage
-from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -288,7 +288,7 @@ class RawAiSpendClient:
         start_before_end: typing.Optional[bool] = OMIT,
         project_provided: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[WorkspaceMetricsSummaryResponse]:
+    ) -> HttpResponse[SpendSummaryResponse]:
         """
         Get coding-agent spend KPI summary
 
@@ -313,7 +313,7 @@ class RawAiSpendClient:
 
         Returns
         -------
-        HttpResponse[WorkspaceMetricsSummaryResponse]
+        HttpResponse[SpendSummaryResponse]
             Spend summary
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -337,9 +337,9 @@ class RawAiSpendClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    WorkspaceMetricsSummaryResponse,
+                    SpendSummaryResponse,
                     parse_obj_as(
-                        type_=WorkspaceMetricsSummaryResponse,  # type: ignore
+                        type_=SpendSummaryResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -729,7 +729,7 @@ class AsyncRawAiSpendClient:
         start_before_end: typing.Optional[bool] = OMIT,
         project_provided: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[WorkspaceMetricsSummaryResponse]:
+    ) -> AsyncHttpResponse[SpendSummaryResponse]:
         """
         Get coding-agent spend KPI summary
 
@@ -754,7 +754,7 @@ class AsyncRawAiSpendClient:
 
         Returns
         -------
-        AsyncHttpResponse[WorkspaceMetricsSummaryResponse]
+        AsyncHttpResponse[SpendSummaryResponse]
             Spend summary
         """
         _response = await self._client_wrapper.httpx_client.request(
@@ -778,9 +778,9 @@ class AsyncRawAiSpendClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    WorkspaceMetricsSummaryResponse,
+                    SpendSummaryResponse,
                     parse_obj_as(
-                        type_=WorkspaceMetricsSummaryResponse,  # type: ignore
+                        type_=SpendSummaryResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

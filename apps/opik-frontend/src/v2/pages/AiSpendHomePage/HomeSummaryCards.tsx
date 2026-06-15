@@ -4,7 +4,7 @@ import {
   ArrowRightToLine,
   CircleDollarSign,
   MessagesSquare,
-  PiggyBank,
+  Sigma,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,8 +12,7 @@ import PercentageTrend, {
   PercentageTrendType,
 } from "@/shared/PercentageTrend/PercentageTrend";
 import useAiSpendSummary from "@/api/ai-spend/useAiSpendSummary";
-import useAiSpendComposition from "@/api/ai-spend/useAiSpendComposition";
-import { tierCost } from "@/api/ai-spend/claudePricing";
+import { tiersCost, tiersTokens } from "@/api/ai-spend/claudePricing";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 import KpiCard from "./KpiCard";
 import {
@@ -45,12 +44,6 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
     },
     { placeholderData: keepPreviousData },
   );
-  const { data: composition } = useAiSpendComposition({
-    projectName,
-    intervalStart,
-    intervalEnd,
-  });
-  const model = composition?.models?.[0] ?? null;
 
   const metrics = useMemo(() => {
     const map: Record<string, SpendMetric> = {};
@@ -67,22 +60,11 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
   const showData = !isPending && hasData;
 
   const get = (name: string): SpendMetric => metrics[name] ?? EMPTY_METRIC;
-  // The BE ships raw cache-tier token sums; dollars are FE-priced with the
-  // window's model (composition is fetched by the breakdown on this page,
-  // so this hook call is a react-query cache hit).
-  const priceTiers = (which: "current" | "previous"): number | null =>
-    tierCost(
-      {
-        input_tokens: get("spend_input_tokens")[which],
-        cache_read_tokens: get("spend_cache_read_tokens")[which],
-        cache_creation_tokens: get("spend_cache_creation_tokens")[which],
-        output_tokens: get("spend_output_tokens")[which],
-      },
-      model,
-    );
+  // The BE ships per-model cache-tier sums; dollars are FE-priced, each model
+  // at its own rate, then summed.
   const totalSpend: SpendMetric = {
-    current: priceTiers("current"),
-    previous: priceTiers("previous"),
+    current: tiersCost(data?.spend_current),
+    previous: tiersCost(data?.spend_previous),
   };
   const perUser = (spend: number | null, users: number | null) =>
     spend != null && users ? spend / users : null;
@@ -93,6 +75,11 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
   const totalMessages = get("total_messages");
   const activeUsers = get("active_users");
   const totalUsers = get("total_users");
+
+  const totalTokens: SpendMetric = {
+    current: tiersTokens(data?.spend_current),
+    previous: tiersTokens(data?.spend_previous),
+  };
 
   const renderTrend = (
     metric: SpendMetric,
@@ -128,9 +115,10 @@ const HomeSummaryCards: React.FC<HomeSummaryCardsProps> = ({
         loading={isPending}
       />
       <KpiCard
-        icon={PiggyBank}
-        label="Budget remaining"
-        value={NO_DATA}
+        icon={Sigma}
+        label="Total tokens"
+        value={showData ? formatSpendCount(totalTokens.current) : NO_DATA}
+        trend={renderTrend(totalTokens)}
         loading={isPending}
       />
       <KpiCard
