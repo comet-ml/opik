@@ -4,6 +4,7 @@ import com.comet.opik.domain.mcpoauth.OAuthException;
 import com.comet.opik.domain.mcpoauth.OAuthTokenService;
 import com.comet.opik.domain.mcpoauth.TokenResponse;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.ws.rs.client.Entity;
@@ -18,8 +19,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import static com.comet.opik.domain.mcpoauth.McpOAuthTokens.ACCESS_PREFIX;
-import static com.comet.opik.domain.mcpoauth.McpOAuthTokens.REFRESH_PREFIX;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.ACCESS_PREFIX;
+import static com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils.REFRESH_PREFIX;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_REQUEST;
@@ -102,10 +103,10 @@ class OAuthTokenResourceTest {
             assertNoStore(response);
 
             response.bufferEntity();
-            assertThat(response.readEntity(String.class))
-                    .contains("\"access_token\"", "\"refresh_token\"", "\"token_type\"", "\"expires_in\"",
-                            "\"workspace_id\"", "\"workspace_name\"");
             assertThat(response.readEntity(TokenResponse.class)).isEqualTo(minted());
+            assertThat(response.readEntity(JsonNode.class).fieldNames()).toIterable()
+                    .contains("access_token", "refresh_token", "token_type", "expires_in", "workspace_id",
+                            "workspace_name");
         }
     }
 

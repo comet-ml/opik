@@ -218,12 +218,6 @@ mcpOAuth:
   # Default: PT30S
   # Description: Grace window during which a just-rotated refresh token is still accepted
   refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT30S}
-  # Default: 20
-  # Description: Max dynamic client registrations (RFC 7591) accepted per source IP per window
-  registrationRateLimit: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT:-20}
-  # Default: PT1H
-  # Description: Window for the dynamic client registration rate limit
-  registrationRateLimitDuration: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT_DURATION:-PT1H}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -498,6 +492,19 @@ rateLimit:
       userFacingBucketName: get_trace_stats
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    mcpOAuthRegister:
+      # Default: 20
+      # Description: Max dynamic client registrations (RFC 7591) accepted per source IP in the specified time bucket
+      limit: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT:-20}
+      # Default: 3600
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT_DURATION_IN_SEC:-3600}
+      # Description: Header name to use for rate limiting
+      headerName: Mcp-OAuth-Register
+      # Description: User facing bucket name
+      userFacingBucketName: mcp_oauth_register
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for MCP OAuth client registration. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication

@@ -12,7 +12,7 @@ import java.util.Base64;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
 
 @UtilityClass
-public class McpOAuthTokens {
+public class McpOAuthTokenUtils {
 
     public static final String ACCESS_PREFIX = "opik_mcp_at_";
     public static final String REFRESH_PREFIX = "opik_mcp_rt_";
