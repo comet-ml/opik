@@ -21,6 +21,23 @@ export class OlliePage {
   }
 
   /**
+   * Open a project page that hosts the Ollie *sidebar* surface, rather than the
+   * dedicated `/ollie` page route. The sidebar is rendered by the Opik host on
+   * every project page EXCEPT `/ollie` (see `PageLayout` / `isOlliePage`), so any
+   * other project sub-route works; the default is `logs`. The same iframe and
+   * Ollie deploy back both surfaces — only the surrounding chrome and the input
+   * placeholder differ.
+   */
+  async gotoSidebarSurface(subRoute = 'logs'): Promise<void> {
+    return test.step(`open the ${subRoute} page (Ollie sidebar surface)`, async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/${subRoute}`,
+      );
+    });
+  }
+
+  /**
    * Wait until Ollie is fully loaded and ready to take a prompt.
    *
    * On a cold project the assistant pod is provisioned on demand: the host polls
@@ -66,6 +83,94 @@ export class OlliePage {
 
       return ((await reply.textContent()) ?? '').trim();
     });
+  }
+
+  /**
+   * Wait until the Ollie sidebar surface has mounted and is ready to take a
+   * prompt. The sidebar provisions on demand exactly like the page route, so
+   * this keys on the same surface-agnostic signal: the iframe is visible and the
+   * input is present. Greeting copy is intentionally not asserted here — see
+   * `waitForReady`.
+   */
+  async waitForSidebarReady(timeoutMs = 150_000): Promise<void> {
+    return test.step('wait for the Ollie sidebar to be ready', async () => {
+      await this.iframeElement().waitFor({ state: 'visible', timeout: timeoutMs });
+      await expect(this.inputTextbox()).toBeVisible({ timeout: timeoutMs });
+    });
+  }
+
+  /** True if the Ollie iframe is mounted on the current host page. */
+  async isMounted(): Promise<boolean> {
+    return test.step('check the Ollie iframe is mounted', async () => {
+      return (await this.iframeElement().count()) > 0;
+    });
+  }
+
+  /**
+   * The number Ollie reports for the active project's trace context, read from
+   * the "Traces: N" badge in the greeting block. Ollie derives this from the
+   * project it's scoped to, so it should track the seeded trace count. Returns
+   * null if the badge isn't present (e.g. the conversation has moved past the
+   * greeting).
+   */
+  async contextTraceCount(timeoutMs = 60_000): Promise<number | null> {
+    return test.step('read the Ollie "Traces: N" context badge', async () => {
+      const badge = this.traceCountBadge();
+      await expect(badge).toBeVisible({ timeout: timeoutMs });
+      const text = (await badge.textContent()) ?? '';
+      const match = text.match(/Traces:\s*(\d+)/);
+      return match ? Number(match[1]) : null;
+    });
+  }
+
+  /**
+   * Run the `/analyze` flow from the greeting action button and wait for a
+   * non-empty assistant response to render. Ollie is a non-deterministic agent,
+   * so callers should assert structurally (a reply landed, no error state), not
+   * on exact wording.
+   */
+  async runAnalyze(timeoutMs = 120_000): Promise<string> {
+    return test.step('run /analyze and await a response', async () => {
+      const before = await this.messages().count();
+      await this.analyzeButton().click();
+      await expect
+        .poll(async () => this.messages().count(), {
+          timeout: timeoutMs,
+          intervals: [1000, 2000, 5000],
+        })
+        .toBeGreaterThan(before);
+
+      const reply = this.messages().last();
+      await expect
+        .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
+          timeout: timeoutMs,
+          intervals: [1000, 2000, 5000],
+        })
+        .toBeGreaterThan(0);
+      return ((await reply.textContent()) ?? '').trim();
+    });
+  }
+
+  /** The greeting-block action button that kicks off the `/analyze` flow. */
+  analyzeButton(): Locator {
+    return this.frame().getByRole('button', { name: /Run \/analyze/ });
+  }
+
+  /** The greeting-block action button that kicks off the `/improve` flow. */
+  improveButton(): Locator {
+    return this.frame().getByRole('button', { name: /Run \/improve/ });
+  }
+
+  /** The "Connect Ollie locally" entry point for the Local Runner (`opik connect`) flow. */
+  connectButton(): Locator {
+    return this.frame().getByRole('button', { name: 'Connect Ollie locally' });
+  }
+
+  /** The "Traces: N" context badge in the greeting block. */
+  traceCountBadge(): Locator {
+    // Bare <span> with no testid/class inside the ollie-assist iframe; text is
+    // the only stable hook. Scope to the badge text rather than a structural path.
+    return this.frame().getByText(/Traces:\s*\d+/);
   }
 
   /** Reset to a fresh conversation (clears history back to the greeting). */
