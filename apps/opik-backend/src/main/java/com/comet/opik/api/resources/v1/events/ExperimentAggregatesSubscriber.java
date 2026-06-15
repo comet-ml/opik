@@ -73,6 +73,11 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
     }
 
     @Override
+    protected MessageContext messageContext(ExperimentAggregationMessage message) {
+        return new MessageContext(message.workspaceId(), message.userName());
+    }
+
+    @Override
     protected Mono<Void> processEvent(ExperimentAggregationMessage message) {
         var lockKey = new Lock(
                 EXPERIMENT_AGGREGATE_LOCK_KEY.formatted(message.workspaceId(), message.experimentId()));

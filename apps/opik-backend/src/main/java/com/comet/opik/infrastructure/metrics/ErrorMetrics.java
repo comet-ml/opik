@@ -24,6 +24,7 @@ public class ErrorMetrics {
     public static final String ENDPOINT_KEY = "endpoint";
     public static final String WORKSPACE_ID_KEY = "workspace_id";
     public static final String WORKSPACE_NAME_KEY = "workspace_name";
+    public static final String USER_NAME_KEY = "user_name";
     public static final String UNKNOWN = "unknown";
 
     private final LongCounter errorCounter;

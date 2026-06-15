@@ -15,6 +15,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.PlainOptions;
@@ -461,8 +462,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
                     .error(classCastException)
+                    .context(MessageContext.UNKNOWN)
                     .build());
         }
+        var messageContext = message != null ? messageContext(message) : MessageContext.UNKNOWN;
         var startMillis = System.currentTimeMillis();
         // Deferring as processEvent is out of our control, it might not return a cold Mono
         return Mono.defer(() -> processEvent(message))
@@ -470,12 +473,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .thenReturn(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.SUCCESS)
+                        .context(messageContext)
                         .build())
                 .doOnSuccess(r -> log.info("Successfully processed message messageId '{}'", entry.getKey()))
                 .onErrorResume(throwable -> Mono.just(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.FAILURE)
                         .error(throwable)
+                        .context(messageContext)
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis);
@@ -503,8 +508,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             return Mono.just(processingResults);
         }
 
-        failures.forEach(failure -> messageProcessingErrors.add(1, Attributes.of(
-                stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(failure.error()))));
+        failures.forEach(failure -> {
+            var failureContext = failure.context() != null ? failure.context() : MessageContext.UNKNOWN;
+            messageProcessingErrors.add(1, Attributes.of(
+                    stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(failure.error()),
+                    stringKey(ErrorMetrics.WORKSPACE_ID_KEY),
+                    StringUtils.defaultIfBlank(failureContext.workspaceId(), ErrorMetrics.UNKNOWN),
+                    stringKey(ErrorMetrics.USER_NAME_KEY),
+                    StringUtils.defaultIfBlank(failureContext.userName(), ErrorMetrics.UNKNOWN)));
+        });
 
         // Separate non-retryable failures first as no need to query delivery count, ack and remove all
         var nonRetryable = failures.stream()
@@ -655,7 +667,25 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     @Builder(toBuilder = true)
     private record ProcessingResult(
-            StreamMessageId messageId, MessageStatus status, Throwable error, long deliveryCount) {
+            StreamMessageId messageId, MessageStatus status, Throwable error, long deliveryCount,
+            MessageContext context) {
+    }
+
+    /**
+     * Workspace/user a message belongs to, used to attribute error metrics. Mirrors the context
+     * subclasses set into the Reactor context inside {@link #processEvent(Object)}.
+     */
+    protected record MessageContext(String workspaceId, String userName) {
+        static final MessageContext UNKNOWN = new MessageContext(ErrorMetrics.UNKNOWN, ErrorMetrics.UNKNOWN);
+    }
+
+    /**
+     * Hook for subclasses to expose the workspace/user a message belongs to, so processing-error
+     * metrics can be attributed. Defaults to {@link MessageContext#UNKNOWN}; override to return the
+     * same values fed to {@code contextWrite} in {@link #processEvent(Object)}.
+     */
+    protected MessageContext messageContext(M message) {
+        return MessageContext.UNKNOWN;
     }
 
     private enum MessageStatus {
