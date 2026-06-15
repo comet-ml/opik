@@ -1,5 +1,10 @@
 import { getTrackOpikClient } from "@/decorators/track";
-import { getTrackContext, track } from "opik";
+import {
+  getTrackContext,
+  resetTracingToConfigDefault,
+  setTracingActive,
+  track,
+} from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
 import { mockAPIFunction } from "./mockUtils";
@@ -98,6 +103,70 @@ describe("Track decorator", () => {
       name: "innerf111",
       parentSpanId: spans[1]?.id,
     });
+  });
+
+  it("should run the bare function without tracing when tracking is disabled", async () => {
+    setTracingActive(false);
+
+    try {
+      let contextInsideTrack: ReturnType<typeof getTrackContext>;
+      const inner = track({ name: "inner" }, () => {
+        contextInsideTrack = getTrackContext();
+        return "inner-result";
+      });
+      const outer = track(async function outer() {
+        return inner();
+      });
+
+      const result = await outer();
+      await trackOpikClient.flush();
+
+      // The wrapped function still runs, but the decorator does not create any
+      // trace/span context and sends nothing to the backend (matches Python).
+      expect(result).toBe("inner-result");
+      expect(contextInsideTrack).toBeUndefined();
+      expect(createTracesSpy).not.toHaveBeenCalled();
+      expect(createSpansSpy).not.toHaveBeenCalled();
+      expect(updateTracesSpy).not.toHaveBeenCalled();
+      expect(updateSpansSpy).not.toHaveBeenCalled();
+    } finally {
+      resetTracingToConfigDefault();
+    }
+  });
+
+  it("should resume tracing after setTracingActive(true)", async () => {
+    setTracingActive(false);
+
+    try {
+      const disabled = track(() => "x");
+      await disabled();
+
+      setTracingActive(true);
+
+      const enabled = track({ name: "enabled" }, () => "y");
+      await enabled();
+      await trackOpikClient.flush();
+
+      expect(createTracesSpy).toHaveBeenCalledTimes(1);
+      expect(createSpansSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      resetTracingToConfigDefault();
+    }
+  });
+
+  it("should still log when client.trace() is called directly with tracking disabled", async () => {
+    setTracingActive(false);
+
+    try {
+      const trace = trackOpikClient.trace({ name: "direct" });
+      trace.end();
+      await trackOpikClient.flush();
+
+      // The low-level client API is intentionally not gated (matches Python).
+      expect(createTracesSpy).toHaveBeenCalled();
+    } finally {
+      resetTracingToConfigDefault();
+    }
   });
 
   it("track decorator (class methods)", async () => {

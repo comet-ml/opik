@@ -1,3 +1,4 @@
+import { isTracingActive } from "opik";
 import { OpikSingleton } from "./singleton";
 import type { OpikExtension, TrackOpikConfig, TracingConfig } from "./types";
 import { withTracing } from "./decorators";
@@ -55,6 +56,10 @@ export const trackGemini = <SDKType extends object>(
       // 3. Handle flush method
       if (propKey === "flush") {
         return config.client.flush.bind(config.client);
+      }
+
+      if (!isTracingActive()) {
+        return Reflect.get(wrappedSdk, propKey, proxy);
       }
 
       // 4. Wrap functions with tracing
