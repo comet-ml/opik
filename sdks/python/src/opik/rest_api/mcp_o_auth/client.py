@@ -6,6 +6,7 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.authorization_server_metadata import AuthorizationServerMetadata
 from ..types.authorize_context import AuthorizeContext
+from ..types.client_registration_response import ClientRegistrationResponse
 from ..types.consent_response import ConsentResponse
 from ..types.token_response import TokenResponse
 from .raw_client import AsyncRawMcpOAuthClient, RawMcpOAuthClient
@@ -204,6 +205,44 @@ class McpOAuthClient:
         client.mcp_o_auth.get_o_auth_authorization_server_metadata()
         """
         _response = self._raw_client.get_o_auth_authorization_server_metadata(request_options=request_options)
+        return _response.data
+
+    def register_o_auth_client(
+        self,
+        *,
+        client_name: str,
+        redirect_uris: typing.Sequence[str],
+        logo_uri: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ClientRegistrationResponse:
+        """
+        OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public client for the MCP OAuth flow; throttled per source IP
+
+        Parameters
+        ----------
+        client_name : str
+
+        redirect_uris : typing.Sequence[str]
+
+        logo_uri : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ClientRegistrationResponse
+            Registered client metadata
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.mcp_o_auth.register_o_auth_client(client_name='client_name', redirect_uris=['redirect_uris'], )
+        """
+        _response = self._raw_client.register_o_auth_client(
+            client_name=client_name, redirect_uris=redirect_uris, logo_uri=logo_uri, request_options=request_options
+        )
         return _response.data
 
     def revoke(
@@ -494,6 +533,47 @@ class AsyncMcpOAuthClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_o_auth_authorization_server_metadata(request_options=request_options)
+        return _response.data
+
+    async def register_o_auth_client(
+        self,
+        *,
+        client_name: str,
+        redirect_uris: typing.Sequence[str],
+        logo_uri: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ClientRegistrationResponse:
+        """
+        OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public client for the MCP OAuth flow; throttled per source IP
+
+        Parameters
+        ----------
+        client_name : str
+
+        redirect_uris : typing.Sequence[str]
+
+        logo_uri : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ClientRegistrationResponse
+            Registered client metadata
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.mcp_o_auth.register_o_auth_client(client_name='client_name', redirect_uris=['redirect_uris'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.register_o_auth_client(
+            client_name=client_name, redirect_uris=redirect_uris, logo_uri=logo_uri, request_options=request_options
+        )
         return _response.data
 
     async def revoke(

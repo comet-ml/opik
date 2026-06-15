@@ -103,16 +103,7 @@ export class PairingClient {
                 case 422:
                     throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 case 429:
-                    throw new OpikApi.TooManyRequestsError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.TooManyRequestsError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -211,16 +202,7 @@ export class PairingClient {
                 case 422:
                     throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 case 429:
-                    throw new OpikApi.TooManyRequestsError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.TooManyRequestsError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
