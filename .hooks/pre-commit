@@ -96,8 +96,6 @@ fi
 # Composite actions (`.github/actions/*/action.yml`) cannot be linted directly —
 # they're validated transitively when a workflow that uses them is linted. For
 # each staged composite action, find workflows that reference it and lint those.
-# CI lints the full tree at default severity on every PR; this hook just
-# fast-checks the files the developer is touching.
 staged_workflows=$(staged_files | grep -E '^\.github/workflows/.+\.(yml|yaml)$' || true)
 staged_actions=$(staged_files | grep -E '^\.github/actions/.+\.(yml|yaml)$' || true)
 
