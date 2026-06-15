@@ -50,9 +50,13 @@ export class OlliePage {
       await this.iframeElement().waitFor({ state: 'visible', timeout: timeoutMs });
       // The usable input is the surface-agnostic readiness signal: it's present
       // once Ollie has fully loaded, regardless of whether the project is empty
-      // (onboarding greeting) or already has traces (chat greeting).
+      // (onboarding greeting) or already has traces (chat greeting). Key
+      // readiness on it, not on a specific greeting line — the greeting copy
+      // varies (onboarding vs chat vs "Ollie connected") and can render split
+      // across nodes, which makes an exact-text wait flake when the pod is slow
+      // to provision.
       await expect(this.inputTextbox()).toBeVisible({ timeout: timeoutMs });
-      await expect(this.greeting()).toBeVisible({ timeout: timeoutMs });
+      await expect(this.inputTextbox()).toBeEnabled({ timeout: timeoutMs });
     });
   }
 
@@ -96,6 +100,7 @@ export class OlliePage {
     return test.step('wait for the Ollie sidebar to be ready', async () => {
       await this.iframeElement().waitFor({ state: 'visible', timeout: timeoutMs });
       await expect(this.inputTextbox()).toBeVisible({ timeout: timeoutMs });
+      await expect(this.inputTextbox()).toBeEnabled({ timeout: timeoutMs });
     });
   }
 
@@ -151,9 +156,104 @@ export class OlliePage {
     });
   }
 
+  /**
+   * Open the pairing URL emitted by a running `opik connect` daemon and wait
+   * for the pairing page to confirm the connection. The page lands on one of
+   * three states: connected ("…connected to your codebase"), an invalid-link
+   * error, or an unreachable error — this asserts the success heading and fails
+   * fast on the error ones.
+   *
+   * `pairUrl` is the `…/opik/pair/v1?…#<fragment>` URL scraped from the connect
+   * daemon's stdout. The fragment carries the activation key, so it must be the
+   * full, un-truncated URL (Rich wraps it in an OSC-8 hyperlink — see the
+   * connect helper that scrapes it).
+   */
+  async pairConnectRunner(pairUrl: string, timeoutMs = 30_000): Promise<void> {
+    return test.step('open the pairing link and confirm the runner connects', async () => {
+      await this.page.goto(pairUrl);
+      await expect(
+        this.page.getByRole('heading', { name: /invalid|couldn't reach/i }),
+      ).toHaveCount(0, { timeout: timeoutMs });
+      await expect(
+        this.page.getByRole('heading', { name: /connected to your codebase/i }),
+      ).toBeVisible({ timeout: timeoutMs });
+    });
+  }
+
+  /** Click `/instrument` to kick off the instrumentation flow on a connected runner. */
+  async startInstrument(): Promise<void> {
+    return test.step('run /instrument', async () => {
+      await this.instrumentButton().click();
+    });
+  }
+
+  /** Click `/improve` to kick off the improvement flow on a connected runner. */
+  async startImprove(): Promise<void> {
+    return test.step('run /improve', async () => {
+      await this.improveButton().click();
+    });
+  }
+
+  /**
+   * Drive Ollie's agentic loop to completion by approving each tool action as it
+   * comes up. Ollie gates tool calls (`connect_bash`, edits, runs) behind an
+   * approval row — it re-prompts for new distinct actions even after "Always
+   * allow", so this polls and clicks until no approval has appeared for
+   * `quietMs`, or the overall budget expires.
+   */
+  async approveUntilSettled(opts: { budgetMs?: number; quietMs?: number } = {}): Promise<void> {
+    const budgetMs = opts.budgetMs ?? 300_000;
+    const quietMs = opts.quietMs ?? 30_000;
+    return test.step('approve tool actions until the agent settles', async () => {
+      const deadline = Date.now() + budgetMs;
+      let lastApproval = Date.now();
+      while (Date.now() < deadline) {
+        const approve = this.approveButton();
+        if (await approve.count()) {
+          await approve.first().click();
+          lastApproval = Date.now();
+        } else if (Date.now() - lastApproval > quietMs) {
+          return; // no approval prompt for a while — the agent has settled
+        }
+        await this.page.waitForTimeout(2000);
+      }
+    });
+  }
+
+  /**
+   * The `/improve` flow ends its proposal with a chat prompt — "Reply `apply` to
+   * apply this fix" — rather than an accept button. This waits for that prompt
+   * (the agent has finished analysing and proposed an edit), then sends "apply"
+   * to authorise it. Returns once the apply message is in the log; the caller
+   * should then `approveUntilSettled()` again to drive the edit/run tools.
+   */
+  async applyProposal(timeoutMs = 240_000): Promise<void> {
+    return test.step('approve the proposed fix by replying "apply"', async () => {
+      await expect(this.frame().getByText(/reply\s+.?apply/i).first()).toBeVisible({
+        timeout: timeoutMs,
+      });
+      await this.inputTextbox().fill('apply');
+      await this.sendButton().click();
+    });
+  }
+
   /** The greeting-block action button that kicks off the `/analyze` flow. */
   analyzeButton(): Locator {
     return this.frame().getByRole('button', { name: /Run \/analyze/ });
+  }
+
+  /**
+   * The `/instrument` action button. On a connected runner its name is the bare
+   * `/instrument`; before connecting it reads "…— run /connect first", so match
+   * on the `/instrument` token either way.
+   */
+  instrumentButton(): Locator {
+    return this.frame().getByRole('button', { name: /\/instrument/ });
+  }
+
+  /** A pending tool-approval action ("Always allow" / "Allow once"). */
+  approveButton(): Locator {
+    return this.frame().getByRole('button', { name: /Always allow|Allow once/ });
   }
 
   /** The greeting-block action button that kicks off the `/improve` flow. */
