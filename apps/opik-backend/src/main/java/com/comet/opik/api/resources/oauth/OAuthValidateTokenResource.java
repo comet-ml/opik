@@ -48,14 +48,14 @@ public class OAuthValidateTokenResource {
         }
 
         String token = McpOAuthTokenUtils.extractBearerToken(authHeader);
+        String maskedToken = McpOAuthTokenUtils.maskToken(token);
         ValidatedToken validated = mcpOAuthService.validateAccessToken(token)
                 .orElseThrow(() -> {
-                    log.info("MCP OAuth validate rejected: token '{}' is not active",
-                            McpOAuthTokenUtils.maskToken(token));
+                    log.info("MCP OAuth validate rejected: token '{}' is not active", maskedToken);
                     return new NotAuthorizedException(TOKEN_TYPE_BEARER);
                 });
 
-        log.info("MCP OAuth validate succeeded for token '{}'", McpOAuthTokenUtils.maskToken(token));
+        log.info("MCP OAuth validate succeeded for token '{}'", maskedToken);
         return Response.ok(validated).build();
     }
 }
