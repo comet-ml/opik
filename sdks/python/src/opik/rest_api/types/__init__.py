@@ -209,6 +209,7 @@ from .chunked_output_json_node import ChunkedOutputJsonNode
 from .chunked_output_json_node_public import ChunkedOutputJsonNodePublic
 from .chunked_output_json_node_public_type import ChunkedOutputJsonNodePublicType
 from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
+from .client_registration_response import ClientRegistrationResponse
 from .column import Column
 from .column_compare import ColumnCompare
 from .column_compare_types_item import ColumnCompareTypesItem
@@ -881,6 +882,7 @@ __all__ = [
     "ChunkedOutputJsonNodePublic",
     "ChunkedOutputJsonNodePublicType",
     "ChunkedOutputJsonNodeType",
+    "ClientRegistrationResponse",
     "Column",
     "ColumnCompare",
     "ColumnCompareTypesItem",
