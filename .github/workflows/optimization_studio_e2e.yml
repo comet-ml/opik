@@ -1,0 +1,106 @@
+name: Optimization Studio E2E Tests
+run-name: "Optimization Studio E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/opik-python-backend/src/opik_backend/studio/**'
+      - 'apps/opik-python-backend/src/opik_backend/jobs/optimizer_runner.py'
+      - 'apps/opik-python-backend/e2e_tests/**'
+      - '.github/workflows/optimization_studio_e2e.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'apps/opik-python-backend/src/opik_backend/studio/**'
+      - 'apps/opik-python-backend/src/opik_backend/jobs/optimizer_runner.py'
+      - 'apps/opik-python-backend/e2e_tests/**'
+      - '.github/workflows/optimization_studio_e2e.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_WORKSPACE: default
+  # Stored in the workspace by the test (model-storage principle); the optimizer
+  # reaches the provider only through the backend gateway, never via this key.
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  # Keep the optimization short — we only need it to start, iterate, and finish.
+  OPTIMIZER_MAX_TRIALS: "1"
+  OPTSTUDIO_DATASET_SAMPLES: "4"
+
+jobs:
+  run-studio-e2e:
+    name: Optimization Studio E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Opik server
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+          COMPOSE_BAKE: false
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --backend --port-mapping --build
+
+      - name: Check Opik server availability
+        shell: bash
+        run: |
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+          cd ${{ github.workspace }}/deployment/docker-compose
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Install opik-python-backend
+        run: |
+          cd ${{ github.workspace }}/apps/opik-python-backend
+          pip install -r requirements.txt -r tests/test_requirements.txt
+          pip install .
+
+      - name: Run Optimization Studio E2E tests
+        run: |
+          cd ${{ github.workspace }}/apps/opik-python-backend
+          pytest e2e_tests -m e2e -vv \
+            --junitxml=${{ github.workspace }}/studio_e2e_results.xml
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          comment_mode: failures
+          check_name: Optimization Studio E2E Tests Results
+          files: ${{ github.workspace }}/studio_e2e_results.xml
+
+      - name: Keep BE logs on failure
+        if: failure()
+        run: |
+          cd ${{ github.workspace }}/deployment/docker-compose
+          docker compose logs backend > ${{ github.workspace }}/backend.log 2>&1 || true
+          docker compose logs python-backend > ${{ github.workspace }}/python-backend.log 2>&1 || true
+
+      - name: Upload BE logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-e2e-be-logs
+          path: |
+            ${{ github.workspace }}/backend.log
+            ${{ github.workspace }}/python-backend.log
+          if-no-files-found: ignore
