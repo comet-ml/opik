@@ -12,7 +12,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -45,7 +44,6 @@ public interface FreeFormSqlQueryDAO {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
 
@@ -57,7 +55,13 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     private static final String SETTING_WORKSPACE_ID = "SQL_workspace_id";
     private static final String SETTING_PROJECT_ID = "SQL_project_id";
 
-    private final @NonNull @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) Client readOnlyClient;
+    private final Client readOnlyClient;
+
+    @Inject
+    FreeFormSqlQueryDAOImpl(
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client readOnlyClient) {
+        this.readOnlyClient = readOnlyClient;
+    }
 
     @Override
     @WithSpan
