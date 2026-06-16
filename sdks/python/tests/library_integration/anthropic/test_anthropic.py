@@ -46,7 +46,7 @@ EXPECTED_ANTHROPIC_USAGE_DICT = {
     "original_usage.cache_creation.ephemeral_1h_input_tokens": ANY_BUT_NONE,
 }
 
-MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
+MODEL_FOR_TESTS_FULL = "claude-sonnet-4-6"
 MODEL_FOR_TESTS_SHORT = "claude-sonnet-4"
 
 pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")

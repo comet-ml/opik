@@ -30,7 +30,7 @@ EXPECTED_USAGE_ANTHROPIC = ANY_DICT.containing(
 )
 
 
-MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
+MODEL_FOR_TESTS_FULL = "claude-sonnet-4-6"
 MODEL_FOR_TESTS_SHORT = "claude-sonnet-4"
 
 
