@@ -23,7 +23,9 @@ export interface ExplainEntry {
 // Max concurrent in-flight explains; cached (done) results don't count.
 const MAX_IN_FLIGHT = 4;
 
-const keyOf = (t: ExplainTarget) => `${t.kind}:${t.entityId}`;
+// Scoped by projectId so cached answers / streaming routes can't collide
+// across projects.
+const keyOf = (t: ExplainTarget) => `${t.projectId}:${t.kind}:${t.entityId}`;
 
 type ExplainState = {
   // Results cached per cell, so reopening a popover shows the answer (or its
@@ -109,25 +111,39 @@ const useExplainStore = create<ExplainState>((set, get) => ({
       };
     }),
 
+  // A terminal event drops the explainId route (it can't receive more chunks);
+  // the cell entry stays for the cache. A retry mints a fresh explainId+route.
   onDone: ({ explainId }) =>
     set((s) => {
       const key = s.routes[explainId];
+      if (!key) return s; // unknown / already dropped
+      const routes = { ...s.routes };
+      delete routes[explainId];
       const entry = s.entries[key];
-      if (!entry) return s;
-      return { entries: { ...s.entries, [key]: { ...entry, phase: "done" } } };
+      return entry
+        ? {
+            routes,
+            entries: { ...s.entries, [key]: { ...entry, phase: "done" } },
+          }
+        : { routes };
     }),
 
   onError: ({ explainId, message }) =>
     set((s) => {
       const key = s.routes[explainId];
+      if (!key) return s;
+      const routes = { ...s.routes };
+      delete routes[explainId];
       const entry = s.entries[key];
-      if (!entry) return s;
-      return {
-        entries: {
-          ...s.entries,
-          [key]: { ...entry, phase: "error", error: message },
-        },
-      };
+      return entry
+        ? {
+            routes,
+            entries: {
+              ...s.entries,
+              [key]: { ...entry, phase: "error", error: message },
+            },
+          }
+        : { routes };
     }),
 }));
 

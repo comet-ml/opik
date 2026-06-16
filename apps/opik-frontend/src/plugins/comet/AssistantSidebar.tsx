@@ -241,6 +241,22 @@ function emitHostEvent<E extends keyof HostEventMap>(
   }
 }
 
+/**
+ * Registers this sidebar as the explain bridge's host→shell emitter for its
+ * lifetime, tearing it down (ownership-guarded) on unmount so the
+ * sidebar↔OlliePage instance switch can't drop a freshly mounted instance.
+ */
+function useRegisterExplainEmitter(
+  listenersRef: React.MutableRefObject<HostListeners>,
+) {
+  useEffect(() => {
+    const emit: ConsoleEmit = (event, data) =>
+      emitHostEvent(listenersRef, event, data);
+    useExplainStore.getState().setEmit(emit);
+    return () => useExplainStore.getState().clearEmit(emit);
+  }, [listenersRef]);
+}
+
 function useBridgeContext(
   assistantBackendUrl: string,
   surface: BridgeSurface,
@@ -425,15 +441,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     };
   }, [meta]);
 
-  // Register this sidebar as the explain bridge's host→shell emitter.
-  // Ownership-guarded (like window.opikBridge) so the sidebar↔OlliePage
-  // instance switch can't tear down a freshly mounted instance.
-  useEffect(() => {
-    const emit: ConsoleEmit = (event, data) =>
-      emitHostEvent(listenersRef, event, data);
-    useExplainStore.getState().setEmit(emit);
-    return () => useExplainStore.getState().clearEmit(emit);
-  }, []);
+  useRegisterExplainEmitter(listenersRef);
 
   // Emit context changes to sidebar listeners
   useEffect(() => {
