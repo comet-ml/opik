@@ -13,12 +13,12 @@ import { PortalContainerProvider } from "@/lib/portal-container";
 import SilentErrorBoundary from "@/shared/SilentErrorBoundary/SilentErrorBoundary";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useIsPhone } from "@/hooks/useIsPhone";
+import { ASSISTANT_SIDEBAR_COLLAPSED_WIDTH } from "@/constants/assistantSidebar";
 import {
-  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
-  getStoredAssistantSidebarWidth,
-  isAssistantSidebarOpen,
-  setAssistantSidebarOpen,
-} from "@/constants/assistantSidebar";
+  useAssistantSidebarWidth,
+  useOpenAssistantSidebar,
+  useSetAssistantSidebarWidth,
+} from "@/store/AssistantStore";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
 
 const PageLayout = () => {
@@ -32,11 +32,12 @@ const PageLayout = () => {
   const [demoBannerHeight, setDemoBannerHeight] = useState(0);
   const bannerHeight = retentionBannerHeight + demoBannerHeight;
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
-  const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
-    isAssistantSidebarOpen()
-      ? getStoredAssistantSidebarWidth()
-      : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
-  );
+  // Sidebar open/width now lives in AssistantStore (seeded from the same
+  // localStorage keys the iframe console writes), so a remount/refresh keeps
+  // the width and the store stays the single source of truth.
+  const assistantSidebarWidth = useAssistantSidebarWidth();
+  const setAssistantSidebarWidth = useSetAssistantSidebarWidth();
+  const handleOpenAssistant = useOpenAssistantSidebar();
 
   const welcomeWizardEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
@@ -69,11 +70,6 @@ const PageLayout = () => {
   // `.comet-content-inset`'s calc resolves correctly.
   const layoutAssistantWidth =
     showAssistantSidebar && !isPhone ? `${assistantSidebarWidth}px` : "0px";
-
-  const handleOpenAssistant = useCallback(() => {
-    setAssistantSidebarOpen(true);
-    setAssistantSidebarWidth(getStoredAssistantSidebarWidth());
-  }, []);
 
   const expanded = isPhone
     ? false

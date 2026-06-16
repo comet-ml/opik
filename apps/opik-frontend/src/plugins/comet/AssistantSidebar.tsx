@@ -34,8 +34,15 @@ import {
   isAssistantSidebarOpen,
   setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
+import useAssistantStore, {
+  AssistantConsoleStatus,
+  ConsoleEmit,
+} from "@/store/AssistantStore";
 
-const BRIDGE_PROTOCOL_VERSION = 1;
+// 2 = explain/chat events added (`explain:run`/`explain:cancel`/`chat:continue`
+// + `console:ready`/`explain:chunk`/`explain:done`/`explain:error`). MUST move
+// in lockstep with `ollie-console/src/bridge.ts`; VER-4 asserts the contract.
+const BRIDGE_PROTOCOL_VERSION = 2;
 
 interface AssistantSidebarLoaderProps {
   error: string | null;
@@ -112,12 +119,16 @@ type HostListeners = {
   [K in keyof HostEventMap]: Set<(data: HostEventMap[K]) => void>;
 };
 
-function createHostListeners(): HostListeners {
+// Exported for the VER-4 runtime smoke-test (bridge dispatch), not for app use.
+export function createHostListeners(): HostListeners {
   return {
     "context:changed": new Set(),
     "visibility:changed": new Set(),
     "runner:state-changed": new Set(),
     "conversation:start": new Set(),
+    "explain:run": new Set(),
+    "explain:cancel": new Set(),
+    "chat:continue": new Set(),
   };
 }
 
@@ -185,6 +196,28 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
           data as SidebarEventMap["runner:request-pair"],
         );
         break;
+      // Explain relay (shell → host). Routed straight into AssistantStore — the
+      // global singleton owns capabilities + per-explainId stream state.
+      case "console:ready":
+        useAssistantStore
+          .getState()
+          .applyConsoleReady(data as SidebarEventMap["console:ready"]);
+        break;
+      case "explain:chunk":
+        useAssistantStore
+          .getState()
+          .applyExplainChunk(data as SidebarEventMap["explain:chunk"]);
+        break;
+      case "explain:done":
+        useAssistantStore
+          .getState()
+          .applyExplainDone(data as SidebarEventMap["explain:done"]);
+        break;
+      case "explain:error":
+        useAssistantStore
+          .getState()
+          .applyExplainError(data as SidebarEventMap["explain:error"]);
+        break;
       default:
         if (IS_ASSISTANT_DEV) {
           console.warn(
@@ -200,7 +233,7 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
 });
 
 /** Emit a host event to all subscribed sidebar listeners. */
-function emitHostEvent<E extends keyof HostEventMap>(
+export function emitHostEvent<E extends keyof HostEventMap>(
   listenersRef: React.MutableRefObject<HostListeners>,
   event: E,
   data: HostEventMap[E],
@@ -393,6 +426,34 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       }
     };
   }, [meta]);
+
+  // Claim the AssistantStore's host→shell emit channel. Ownership-guarded the
+  // same way as window.opikBridge: a stale unmount whose emitter no longer
+  // matches the current owner is a no-op (the sidebar↔OlliePage instance
+  // switch), so it can't tear down a freshly mounted instance.
+  useEffect(() => {
+    const emit: ConsoleEmit = (event, data) =>
+      emitHostEvent(listenersRef, event, data);
+    useAssistantStore.getState().registerConsoleEmit(emit);
+    return () => {
+      useAssistantStore.getState().unregisterConsoleEmit(emit);
+    };
+  }, []);
+
+  // Mirror the backend pod phase into the store's console lifecycle status.
+  // Backend-ready is still "waking" — only the iframe console's `console:ready`
+  // handshake promotes it to "ready" (which gates Explain buttons).
+  useEffect(() => {
+    let status: AssistantConsoleStatus;
+    if (phase === "disabled") {
+      status = "unavailable";
+    } else if (phase === "error") {
+      status = "error";
+    } else {
+      status = "waking";
+    }
+    useAssistantStore.getState().setStatus(status);
+  }, [phase]);
 
   // Emit context changes to sidebar listeners
   useEffect(() => {
