@@ -90,7 +90,7 @@ def test_studio_optimization_runs_on_dataset_and_prompt(
     prompt = ChatPrompt(
         messages=config.prompt_messages,
         model=config.model,
-        model_parameters=config.model_params,
+        model_parameters=optimizer.model_parameters,
     )
 
     # optimization_id=None → optimize_prompt creates its own run record, so we

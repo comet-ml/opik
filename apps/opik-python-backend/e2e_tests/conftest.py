@@ -91,10 +91,13 @@ def opik_client() -> opik.Opik:
 
 
 @pytest.fixture()
-def studio_gateway(opik_client) -> dict:
+def studio_gateway(opik_client, monkeypatch) -> dict:
     """Route the optimizer's LLM calls through the backend gateway using the
     workspace-stored key — exactly how the Studio runs in production, with no
-    provider key reaching LiteLLM. Yields the gateway model + expected span model.
+    provider key reaching LiteLLM. Returns the gateway model + expected span model.
+
+    Uses ``monkeypatch`` so the env vars and module attribute are restored after
+    the test and the suite stays order-independent.
     """
     base = _backend_base()
     headers = _workspace_headers()
@@ -116,9 +119,9 @@ def studio_gateway(opik_client) -> dict:
     gateway_base = f"{base}/v1/private"
     # LiteLLM reads OPENAI_API_BASE from the env to pick the endpoint; the module
     # attribute only gates the Comet-Workspace header wrapper. Set both.
-    os.environ["OPENAI_API_BASE"] = gateway_base
-    os.environ["OPENAI_API_KEY"] = "opik-local"
-    optimizer_runner.OPENAI_API_BASE = gateway_base
+    monkeypatch.setenv("OPENAI_API_BASE", gateway_base)
+    monkeypatch.setenv("OPENAI_API_KEY", "opik-local")
+    monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", gateway_base)
     optimizer_runner.route_litellm_calls_through_gateway(workspace)
 
     return {"workspace": workspace, "model": model, "expected_substring": expected_substring}

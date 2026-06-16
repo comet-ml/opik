@@ -288,10 +288,13 @@ def main():
             # calls, while the baseline and per-trial task evaluations run through
             # the prompt's model. Without this, ChatPrompt falls back to the SDK
             # default (openai/gpt-5-nano) and ignores the model picked in the UI.
+            # Reuse the optimizer's effective model_parameters so the prompt
+            # inherits the defaults the factory injects (e.g. max_tokens),
+            # otherwise baseline/per-trial calls truncate at the SDK default.
             prompt = ChatPrompt(
                 messages=config.prompt_messages,
                 model=config.model,
-                model_parameters=config.model_params,
+                model_parameters=optimizer.model_parameters,
             )
 
             # Run optimization
