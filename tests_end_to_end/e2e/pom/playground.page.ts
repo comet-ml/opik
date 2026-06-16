@@ -344,6 +344,48 @@ export class PlaygroundPage {
     });
   }
 
+  /** Edit the content of the first message in variant 0 directly in the Playground editor. */
+  async editFirstMessage(newContent: string): Promise<void> {
+    return test.step('edit first message in Playground', async () => {
+      const editor = this.variantMessages(0).first().locator('.cm-content').first();
+      await editor.click();
+      await editor.fill(newContent);
+    });
+  }
+
+  /**
+   * Click the Save button (disk icon) in the first message row of variant 0 and submit the
+   * "Save to prompt library" dialog in "Update existing" mode (text prompts).
+   * Assumes a text prompt is already loaded so the dialog defaults to update mode.
+   */
+  async saveTextPromptToLibrary(): Promise<void> {
+    return test.step('save text prompt to library from Playground', async () => {
+      const messageRow = this.variantMessages(0).first();
+      await messageRow.hover();
+      await messageRow.getByTestId('save-text-prompt-button').click();
+      const dialog = this.page.getByRole('dialog', { name: 'Save to prompt library' });
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByRole('button', { name: 'Save to library' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * Click the Save button (disk icon) in variant 0 and submit the
+   * "Save to prompt library" dialog in "Update existing" mode.
+   * Assumes a chat prompt is already loaded so the dialog defaults to update mode.
+   */
+  async savePromptToLibrary(): Promise<void> {
+    return test.step('save prompt to library from Playground', async () => {
+      await this.variantCard(0).hover();
+      await this.page.getByTestId('playground-save-prompt-button').click();
+      const dialog = this.page.getByRole('dialog', { name: 'Save to prompt library' });
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByRole('button', { name: 'Save to library' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
   /** Click the "Go to logs" icon button to open the Playground logs sidebar. */
   async openLogsPanel(): Promise<void> {
     return test.step('open Playground logs panel', async () => {

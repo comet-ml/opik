@@ -429,6 +429,7 @@ const PlaygroundPrompt = ({
                   size="icon-sm"
                   onClick={handleSaveChatPrompt}
                   disabled={!canCreatePrompts && !selectedChatPromptId}
+                  data-testid="playground-save-prompt-button"
                 >
                   <Save />
                 </Button>
