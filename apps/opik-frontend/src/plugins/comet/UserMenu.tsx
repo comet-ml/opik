@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
 import copy from "clipboard-copy";
 import {
-  ArrowUpRight,
   Check,
   Copy,
   KeyRound,
@@ -54,10 +52,7 @@ import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
-import { useAiSpend } from "@/contexts/AiSpendContext";
-import usePluginsStore from "@/store/PluginsStore";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import UserMenuAppLinks from "@/plugins/comet/UserMenuAppLinks";
 
 const UserMenu = () => {
   const { toast } = useToast();
@@ -91,23 +86,6 @@ const UserMenu = () => {
   );
 
   const { canInviteMembers } = useUserPermission();
-  const {
-    hasAccess: hasAiSpendAccess,
-    isSpendWorkspaceActive,
-    goToCostIntelligence,
-  } = useAiSpend();
-  const hasAiSpendPlugin = usePluginsStore((state) =>
-    state.hasPlugin("ai-spend"),
-  );
-  const costIntelligenceFeatureEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.COST_INTELLIGENCE_ENABLED,
-  );
-  const showCostIntelligence =
-    hasAiSpendPlugin &&
-    hasAiSpendAccess &&
-    costIntelligenceFeatureEnabled &&
-    !isSpendWorkspaceActive;
-  const showOpikReturn = hasAiSpendPlugin && Boolean(isSpendWorkspaceActive);
   const opikWorkspaceName = useOpikWorkspaceName();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
@@ -127,14 +105,6 @@ const UserMenu = () => {
   ) {
     return null;
   }
-
-  const handleSwitchToEM = () => {
-    window.location.href = buildUrl(
-      opikWorkspaceName,
-      opikWorkspaceName,
-      "&changeApplication=em",
-    );
-  };
 
   const organization = organizations.find((org) => {
     return org.id === workspace?.organizationId;
@@ -310,51 +280,7 @@ const UserMenu = () => {
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
-          {(showCostIntelligence ||
-            showOpikReturn ||
-            !isLLMOnlyOrganization) && (
-            <>
-              <DropdownMenuSeparator />
-              {showOpikReturn && (
-                <Link
-                  to="/$workspaceName/home"
-                  params={{ workspaceName: opikWorkspaceName }}
-                >
-                  <DropdownMenuItem className="cursor-pointer">
-                    <span className="mr-2 flex size-5 shrink-0 items-center justify-center rounded bg-chart-green text-[10px] font-medium text-white">
-                      O
-                    </span>
-                    <span className="truncate">Opik</span>
-                    <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
-                  </DropdownMenuItem>
-                </Link>
-              )}
-              {showCostIntelligence && (
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={goToCostIntelligence}
-                >
-                  <span className="mr-2 flex size-5 shrink-0 items-center justify-center rounded bg-chart-green text-[10px] font-medium text-white">
-                    CI
-                  </span>
-                  <span className="truncate">Cost Intelligence</span>
-                  <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
-                </DropdownMenuItem>
-              )}
-              {!isLLMOnlyOrganization && (
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={handleSwitchToEM}
-                >
-                  <span className="mr-2 flex size-5 shrink-0 items-center justify-center rounded bg-[var(--feature-experiment-management)] text-[10px] font-medium text-white">
-                    EM
-                  </span>
-                  <span className="truncate">Experiment Management</span>
-                  <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
-                </DropdownMenuItem>
-              )}
-            </>
-          )}
+          <UserMenuAppLinks isLLMOnlyOrganization={isLLMOnlyOrganization} />
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {
