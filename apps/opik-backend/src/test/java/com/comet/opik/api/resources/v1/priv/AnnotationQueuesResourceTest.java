@@ -696,11 +696,11 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // Create feedback scores - some for traces in the queue, some for traces not in the queue
-            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name());
-            createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name());
-            createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name());
-            createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name());
+            // Create feedback scores for traces in the queue, tagged with this queue's source_queue_id
+            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), annotationQueue.id());
+            createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name(), annotationQueue.id());
+            createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), annotationQueue.id());
+            createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name(), annotationQueue.id());
 
             // Feedback scores for trace3 (NOT in the queue) - should not be aggregated
             createFeedbackScoreForTrace(trace3, "quality", 0.5, project.name());
@@ -738,6 +738,77 @@ class AnnotationQueuesResourceTest {
 
             // Verify reviewers match the original annotation queue
             verifyReviewers(retrievedQueue, 2L);
+        }
+
+        @Test
+        @DisplayName("should scope feedback scores and comments by source_queue_id when two queues share the same items")
+        void getAnnotationQueueScopedBySourceQueueId() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var queueA = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .feedbackDefinitionNames(List.of("quality", "relevance"))
+                    .commentsEnabled(true)
+                    .build();
+
+            var queueB = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .feedbackDefinitionNames(List.of("quality", "relevance"))
+                    .commentsEnabled(true)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queueA, queueB)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var trace1 = createTrace(project.name());
+            var trace2 = createTrace(project.name());
+            var itemIds = Set.of(trace1, trace2);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueA.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueB.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Scores: queue A gets 3 scores across 2 traces, queue B gets 1 score on trace1
+            createFeedbackScoreForTrace(trace1, "quality", 0.9, project.name(), queueA.id());
+            createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), queueA.id());
+            createFeedbackScoreForTrace(trace1, "relevance", 0.8, project.name(), queueA.id());
+            createFeedbackScoreForTrace(trace1, "quality", 0.3, project.name(), queueB.id());
+
+            // Comments: queue A gets comments on both traces, queue B gets none
+            traceResourceClient.generateAndCreateComment(trace1, queueA.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace2, queueA.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            // Queue A: avg quality = (0.9+0.7)/2 = 0.8, avg relevance = 0.8, reviewer scored 2 items + commented 2
+            var retrievedA = annotationQueuesResourceClient.getAnnotationQueueById(
+                    queueA.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrievedA.feedbackScores()).hasSize(2);
+            var scoresA = retrievedA.feedbackScores().stream()
+                    .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value));
+            assertThat(scoresA.get("quality")).isEqualByComparingTo(new BigDecimal("0.8"));
+            assertThat(scoresA.get("relevance")).isEqualByComparingTo(new BigDecimal("0.8"));
+            verifyReviewers(retrievedA, 2L);
+
+            // Queue B: avg quality = 0.3, no relevance, no comments — reviewer scored 1 item only
+            var retrievedB = annotationQueuesResourceClient.getAnnotationQueueById(
+                    queueB.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrievedB.feedbackScores()).hasSize(1);
+            var scoresB = retrievedB.feedbackScores().stream()
+                    .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value));
+            assertThat(scoresB.get("quality")).isEqualByComparingTo(new BigDecimal("0.3"));
+            assertThat(scoresB).doesNotContainKey("relevance");
+            verifyReviewers(retrievedB, 1L);
         }
 
         @Test
@@ -787,11 +858,11 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // Create thread feedback scores - some for threads in the queue, some for threads not in the queue
-            createFeedbackScoreForThread(threadId1, "coherence", 0.9, project.name());
-            createFeedbackScoreForThread(threadId1, "completeness", 0.8, project.name());
-            createFeedbackScoreForThread(threadId2, "coherence", 0.85, project.name());
-            createFeedbackScoreForThread(threadId2, "completeness", 0.75, project.name());
+            // Create thread feedback scores for threads in the queue, tagged with this queue's source_queue_id
+            createFeedbackScoreForThread(threadId1, "coherence", 0.9, project.name(), annotationQueue.id());
+            createFeedbackScoreForThread(threadId1, "completeness", 0.8, project.name(), annotationQueue.id());
+            createFeedbackScoreForThread(threadId2, "coherence", 0.85, project.name(), annotationQueue.id());
+            createFeedbackScoreForThread(threadId2, "completeness", 0.75, project.name(), annotationQueue.id());
 
             // Feedback scores for threadId3 (NOT in the queue) - should not be aggregated
             createFeedbackScoreForThread(threadId3, "coherence", 0.4, project.name());
@@ -912,8 +983,10 @@ class AnnotationQueuesResourceTest {
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Add comments to traces (without any feedback scores)
-            traceResourceClient.generateAndCreateComment(trace1, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
-            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace1, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace2, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
 
             // When
             var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
@@ -962,14 +1035,16 @@ class AnnotationQueuesResourceTest {
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Add feedback score to trace1
-            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name());
+            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), annotationQueue.id());
 
             // Add comment to trace2 (no feedback)
-            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace2, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
 
             // Add both feedback and comment to trace3
-            createFeedbackScoreForTrace(trace3, "quality", 0.9, project.name());
-            traceResourceClient.generateAndCreateComment(trace3, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createFeedbackScoreForTrace(trace3, "quality", 0.9, project.name(), annotationQueue.id());
+            traceResourceClient.generateAndCreateComment(trace3, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
 
             // When
             var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
@@ -1473,11 +1548,15 @@ class AnnotationQueuesResourceTest {
                         annotationQueuesResourceClient.addItemsToAnnotationQueue(
                                 annotationQueue.id(), itemIds, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
-                        // Create feedback scores - some for traces in the queue, some for traces not in the queue
-                        createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), apiKey, workspaceName);
-                        createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name(), apiKey, workspaceName);
-                        createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), apiKey, workspaceName);
-                        createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name(), apiKey, workspaceName);
+                        // Create feedback scores for traces in the queue, tagged with this queue's source_queue_id
+                        createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
 
                         // Feedback scores for trace3 (NOT in the queue) - should not be aggregated
                         createFeedbackScoreForTrace(trace3, "quality", 0.5, project.name(), apiKey, workspaceName);
@@ -1895,27 +1974,45 @@ class AnnotationQueuesResourceTest {
 
     private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
             String projectName) {
-        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, API_KEY, TEST_WORKSPACE);
+        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, null, API_KEY, TEST_WORKSPACE);
+    }
+
+    private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
+            String projectName, UUID sourceQueueId) {
+        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, sourceQueueId, API_KEY,
+                TEST_WORKSPACE);
     }
 
     private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
             String projectName, String apiKey, String workspaceName) {
+        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, null, apiKey, workspaceName);
+    }
+
+    private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
+            String projectName, UUID sourceQueueId, String apiKey, String workspaceName) {
         var feedbackScore = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                 .id(traceId)
                 .name(scoreName)
                 .value(BigDecimal.valueOf(scoreValue))
                 .projectName(projectName)
+                .sourceQueueId(sourceQueueId)
                 .build();
         traceResourceClient.feedbackScores(List.of(feedbackScore), apiKey, workspaceName);
     }
 
     private void createFeedbackScoreForThread(UUID threadId, String scoreName, double scoreValue,
             String projectName) {
+        createFeedbackScoreForThread(threadId, scoreName, scoreValue, projectName, null);
+    }
+
+    private void createFeedbackScoreForThread(UUID threadId, String scoreName, double scoreValue,
+            String projectName, UUID sourceQueueId) {
         var feedbackScore = factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
                 .threadId(threadId.toString())
                 .name(scoreName)
                 .value(BigDecimal.valueOf(scoreValue))
                 .projectName(projectName)
+                .sourceQueueId(sourceQueueId)
                 .build();
         traceResourceClient.threadFeedbackScores(List.of(feedbackScore), API_KEY, TEST_WORKSPACE);
     }

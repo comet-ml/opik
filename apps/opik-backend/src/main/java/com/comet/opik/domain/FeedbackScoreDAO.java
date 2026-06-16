@@ -88,6 +88,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 reason,
                 source,
                 <if(author)>author,<endif>
+                <if(author)>source_queue_id,<endif>
                 created_by,
                 last_updated_by
             )
@@ -105,6 +106,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :reason<item.index>,
                          :source<item.index>,
                          <if(author)>:author<item.index>,<endif>
+                         <if(author)>:source_queue_id<item.index>,<endif>
                          :user_name,
                          :user_name
                      )
@@ -369,6 +371,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             if (author != null) {
                 statement.bind("author" + i, getValueOrDefault(author));
+                if (feedbackScoreBatchItem.sourceQueueId() != null) {
+                    statement.bind("source_queue_id" + i, feedbackScoreBatchItem.sourceQueueId().toString());
+                } else {
+                    statement.bindNull("source_queue_id" + i, String.class);
+                }
             }
         }
     }
@@ -379,46 +386,36 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            // Delete from feedback_scores table
+            // Delete from feedback_scores table — scope by current user via last_updated_by
             var deleteFeedbackScore = getSTWithLogComment(DELETE_FEEDBACK_SCORE, "delete_feedback_score", workspaceId,
                     userName, "")
-                    .add("table_name", "feedback_scores");
-
-            if (StringUtils.isNotBlank(score.author())) {
-                deleteFeedbackScore.add("author", "last_updated_by");
-            }
+                    .add("table_name", "feedback_scores")
+                    .add("author", "last_updated_by");
 
             var statement1 = connection.createStatement(deleteFeedbackScore.render());
             statement1
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
                     .bind("name", score.name())
-                    .bind("workspace_id", workspaceId);
-
-            if (StringUtils.isNotBlank(score.author())) {
-                statement1.bind("author", score.author());
-            }
+                    .bind("workspace_id", workspaceId)
+                    .bind("author", userName);
 
             var deleteNonAuthoredOperation = Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
-            // Delete from authored_feedback_scores table
+            // Delete from authored_feedback_scores table — always scope by current user
             var deleteAuthoredFeedbackScore = getSTWithLogComment(DELETE_FEEDBACK_SCORE,
                     "delete_authored_feedback_score", workspaceId, userName, "")
-                    .add("table_name", "authored_feedback_scores");
-            Optional.ofNullable(score.author())
-                    .filter(StringUtils::isNotBlank)
-                    .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", "author"));
+                    .add("table_name", "authored_feedback_scores")
+                    .add("author", "author");
 
             var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
             statement2
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
                     .bind("name", score.name())
-                    .bind("workspace_id", workspaceId);
-            Optional.ofNullable(score.author())
-                    .filter(StringUtils::isNotBlank)
-                    .ifPresent(author -> statement2.bind("author", author));
+                    .bind("workspace_id", workspaceId)
+                    .bind("author", userName);
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))
@@ -449,46 +446,36 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            // Delete from feedback_scores table
+            // Delete from feedback_scores table — scope by current user via last_updated_by
             var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
                     "delete_feedback_scores_by_entity_ids", workspaceId, userName, names.size());
             template1.add("names", names);
             template1.add("table_name", "feedback_scores");
-
-            if (StringUtils.isNotBlank(author)) {
-                template1.add("author", "last_updated_by");
-            }
+            template1.add("author", "last_updated_by");
 
             var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", Set.of(entityId))
                     .bind("entity_type", entityType.getType())
                     .bind("names", names)
-                    .bind("workspace_id", workspaceId);
-
-            if (StringUtils.isNotBlank(author)) {
-                statement1.bind("author", author);
-            }
+                    .bind("workspace_id", workspaceId)
+                    .bind("author", userName);
 
             var deleteNonAuthoredOperation = Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
-            // Delete from authored_feedback_scores table
+            // Delete from authored_feedback_scores table — always scope by current user
             var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
                     "delete_authored_feedback_scores_by_entity_ids", workspaceId, userName, names.size());
             template2.add("names", names);
             template2.add("table_name", "authored_feedback_scores");
-            Optional.ofNullable(author)
-                    .filter(StringUtils::isNotBlank)
-                    .ifPresent(a -> template2.add("author", "author"));
+            template2.add("author", "author");
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))
                     .bind("entity_type", entityType.getType())
                     .bind("names", names)
-                    .bind("workspace_id", workspaceId);
-            Optional.ofNullable(author)
-                    .filter(StringUtils::isNotBlank)
-                    .ifPresent(a -> statement2.bind("author", a));
+                    .bind("workspace_id", workspaceId)
+                    .bind("author", userName);
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))

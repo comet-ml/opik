@@ -18,7 +18,7 @@ public class ExperimentTestAssertions {
 
     public static final String[] EXPERIMENT_ITEMS_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt",
             "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt", "comments.createdAt", "comments.lastUpdatedAt",
-            "feedbackScores.valueByAuthor", "projectName"
+            "feedbackScores.valueByAuthor", "feedbackScores.sourceQueueId", "comments.sourceQueueId", "projectName"
     };
 
     // Experiment items returned by the bulk endpoint get server-generated ids/traceId/experimentId, so those
