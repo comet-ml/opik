@@ -1,13 +1,16 @@
 import copy
 import logging
 from contextlib import contextmanager
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Union
 
 from opik import exceptions, id_helpers
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dashboard_public as rest_dashboard_public
 
 from . import layout, types, validation
+
+if TYPE_CHECKING:
+    from opik.api_objects import opik_client
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +33,7 @@ class Dashboard:
         self,
         dashboard_public: rest_dashboard_public.DashboardPublic,
         rest_client: rest_api_client.OpikApi,
-        client: Optional[Any] = None,
+        client: "opik_client.Opik",
     ) -> None:
         self._rest_client = rest_client
         self.client = client
@@ -41,7 +44,7 @@ class Dashboard:
         cls,
         dashboard_public: rest_dashboard_public.DashboardPublic,
         rest_client: rest_api_client.OpikApi,
-        client: Optional[Any] = None,
+        client: "opik_client.Opik",
     ) -> "Dashboard":
         return cls(
             dashboard_public=dashboard_public, rest_client=rest_client, client=client

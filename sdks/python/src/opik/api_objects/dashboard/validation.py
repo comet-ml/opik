@@ -7,7 +7,7 @@ the SDK must always be able to load dashboards created by a newer frontend.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from opik import exceptions
 
@@ -147,7 +147,9 @@ def validate_writable_version(version: Optional[int]) -> None:
         )
 
 
-def as_widget_dict(widget: Any) -> Dict[str, Any]:
+def as_widget_dict(
+    widget: Union[types.DashboardWidget, Dict[str, Any]],
+) -> Dict[str, Any]:
     """Coerce a DashboardWidget model or a raw dict into a plain config dict."""
     if isinstance(widget, types.DashboardWidget):
         return widget.to_jsonable()
@@ -158,7 +160,9 @@ def as_widget_dict(widget: Any) -> Dict[str, Any]:
     )
 
 
-def as_section_dicts(sections: Any) -> List[Dict[str, Any]]:
+def as_section_dicts(
+    sections: List[Union[types.DashboardSection, Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
     """Coerce a list of DashboardSection models or raw dicts into plain dicts."""
     result: List[Dict[str, Any]] = []
     for section in sections:

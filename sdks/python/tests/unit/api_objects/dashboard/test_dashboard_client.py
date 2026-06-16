@@ -1,7 +1,7 @@
 import copy
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from opik import exceptions
 from opik.api_objects import opik_client
@@ -61,7 +61,12 @@ def _make_dashboard(config, dashboard_type="multi_project", project_id=None):
         config=copy.deepcopy(config),
         project_id=project_id,
     )
-    return Dashboard(dashboard_public=public, rest_client=rest), rest, store
+    client = Mock(spec=opik_client.Opik)
+    return (
+        Dashboard(dashboard_public=public, rest_client=rest, client=client),
+        rest,
+        store,
+    )
 
 
 def _config_with_legacy_widget():
@@ -654,7 +659,9 @@ def test_find_dashboards__paginates_and_respects_max_results():
             self.dashboards = PaginatedApi()
 
     rest = Rest()
-    result = rest_operations.find_dashboards(rest_client=rest, max_results=100)
+    result = rest_operations.find_dashboards(
+        rest_client=rest, client=Mock(spec=opik_client.Opik), max_results=100
+    )
     assert len(result) == 100
     # only the first page is needed to satisfy max_results
     assert rest.dashboards.calls == [1]
