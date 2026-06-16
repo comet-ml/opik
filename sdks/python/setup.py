@@ -14,6 +14,13 @@ if version is None:
     else:
         version = "0.0.1"
 
+readme_file = os.path.join(HERE, "..", "..", "README.md")
+if os.path.exists(readme_file):
+    with open(readme_file, encoding="utf-8") as fp:
+        long_description = fp.read()
+else:
+    long_description = "Comet tool for logging and evaluating LLM traces"
+
 setup(
     author="Comet ML Inc.",
     author_email="mail@comet.com",
@@ -32,9 +39,7 @@ setup(
         "Programming Language :: Python :: 3.14",
     ],
     description="Comet tool for logging and evaluating LLM traces",
-    long_description=open(
-        os.path.join(HERE, "..", "..", "README.md"), encoding="utf-8"
-    ).read(),
+    long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=[
         "boto3-stubs[bedrock-runtime]>=1.34.110",
