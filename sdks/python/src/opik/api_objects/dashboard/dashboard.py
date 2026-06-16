@@ -62,42 +62,58 @@ class Dashboard:
 
     @property
     def id(self) -> str:
-        """The id of the dashboard."""
+        """Unique identifier of the dashboard."""
         return self._id
 
     @property
     def name(self) -> str:
-        """The name of the dashboard."""
+        """Display name shown in the Opik UI."""
         return self._name
 
     @property
     def description(self) -> Optional[str]:
-        """The description of the dashboard."""
+        """Optional free-text description of the dashboard's purpose."""
         return self._description
 
     @property
     def type(self) -> Optional[str]:
-        """The dashboard type (``multi_project`` or ``experiments``)."""
+        """Dashboard type: ``"multi_project"`` for project-metric charts,
+        or ``"experiments"`` for experiment evaluation charts.
+
+        The type constrains which widget types are allowed (see
+        :class:`~opik.api_objects.dashboard.types.WidgetType`).
+        """
         return self._type
 
     @property
     def scope(self) -> Optional[str]:
-        """The dashboard scope (read-only; set by the backend)."""
+        """Visibility scope set by the backend: ``"workspace"`` (shared with all
+        workspace members) or ``"insights"`` (platform-managed insight dashboard).
+        """
         return self._scope
 
     @property
     def config(self) -> Dict[str, Any]:
-        """A copy of the raw ``config`` blob."""
+        """A deep copy of the raw JSON config blob persisted by the backend.
+
+        The schema is owned by the frontend; use :attr:`sections` for a typed view.
+        Direct mutation of this copy has no effect — use the mutator methods instead.
+        """
         return copy.deepcopy(self._config)
 
     @property
     def state(self) -> types.DashboardState:
-        """A typed, read-only projection of the ``config`` blob."""
+        """The config parsed into a typed :class:`~opik.api_objects.dashboard.types.DashboardState`
+        (version, sections, lastModified). Returns a new object on every access.
+        """
         return types.DashboardState.model_validate(self._config)
 
     @property
     def sections(self) -> List[types.DashboardSection]:
-        """The typed sections of the dashboard (read-only projection)."""
+        """Typed sections of the dashboard, each containing widgets and their grid layout.
+        Returns a new list on every access; mutations do not affect the dashboard — call
+        :meth:`replace_sections` to persist changes.
+        """
         return self.state.sections
 
     def add_widget(
@@ -109,14 +125,18 @@ class Dashboard:
     ) -> str:
         """Add a widget to a section and auto-place it on the grid.
 
+        The widget is positioned using the same algorithm as the Opik UI, appending
+        it to the first available slot that fits its default (or overridden) size.
+
         Args:
-            section_id: The id of the section to add the widget to.
+            section_id: ID of the section to add the widget to.
             widget: A :class:`~opik.api_objects.dashboard.types.DashboardWidget`
-                or a raw config dict.
-            size: Optional ``{"w": int, "h": int}`` override for the widget size.
+                instance or a raw config dict.
+            size: Optional ``{"w": int, "h": int}`` to override the widget's
+                default grid dimensions (columns × rows).
 
         Returns:
-            The id of the added widget.
+            The ID of the newly added widget.
         """
         self._assert_config_writable()
         widget_dict = copy.deepcopy(validation.as_widget_dict(widget))
@@ -143,7 +163,11 @@ class Dashboard:
         return str(widget_dict["id"])
 
     def remove_widget(self, widget_id: str) -> None:
-        """Remove a widget (and its layout item) from whichever section holds it."""
+        """Remove a widget and its grid layout entry from whichever section holds it.
+
+        Raises :class:`~opik.exceptions.DashboardValidationError` if the widget ID
+        is not found.
+        """
         self._assert_config_writable()
         removed = False
         for section in self._config.get("sections", []):
@@ -178,7 +202,12 @@ class Dashboard:
         subtitle: Optional[str] = None,
         config: Optional[Union[types._DashboardModel, Dict[str, Any]]] = None,
     ) -> None:
-        """Update a widget's title, subtitle, and/or merge into its config."""
+        """Update a widget's display properties or configuration.
+
+        Only the supplied keyword arguments are changed; omitted ones are left
+        as-is. ``config`` is *merged* into the widget's existing config dict
+        (not replaced), so partial updates are safe.
+        """
         self._assert_config_writable()
         widget = self._find_widget(widget_id)
 
@@ -198,7 +227,11 @@ class Dashboard:
         self._commit_config()
 
     def add_section(self, title: str) -> str:
-        """Append a new empty section and return its id."""
+        """Append a new empty section to the dashboard and return its ID.
+
+        Sections group related widgets visually; each dashboard starts with one
+        default section created by the backend.
+        """
         self._assert_config_writable()
         section = types.DashboardSection(title=title).to_jsonable()
         self._config.setdefault("sections", []).append(section)
@@ -209,7 +242,12 @@ class Dashboard:
         self,
         sections: List[Union[types.DashboardSection, Dict[str, Any]]],
     ) -> None:
-        """Replace all sections wholesale."""
+        """Replace all sections of the dashboard at once.
+
+        This is the primary way to reorder sections, move widgets between sections,
+        or adjust widget grid positions (x, y, w, h) — mutate the list returned by
+        :attr:`sections` and pass it back here.
+        """
         self._assert_config_writable()
         section_dicts = copy.deepcopy(validation.as_section_dicts(sections))
         for section in section_dicts:
@@ -219,24 +257,28 @@ class Dashboard:
         self._commit_config()
 
     def rename(self, name: str) -> None:
-        """Rename the dashboard."""
+        """Change the dashboard's display name."""
         response = self._rest_client.dashboards.update_dashboard(self._id, name=name)
         self._absorb(response)
 
     def set_description(self, description: str) -> None:
-        """Set the dashboard description."""
+        """Set the dashboard's free-text description."""
         response = self._rest_client.dashboards.update_dashboard(
             self._id, description=description
         )
         self._absorb(response)
 
     def reload(self) -> None:
-        """Re-fetch the dashboard from the backend, discarding unsaved local edits."""
+        """Re-fetch the dashboard from the backend, replacing all local state.
+
+        Useful before a mutating operation when another client may have modified
+        the dashboard since it was last loaded (last-writer-wins semantics).
+        """
         response = self._rest_client.dashboards.get_dashboard_by_id(self._id)
         self._absorb(response)
 
     def delete(self) -> None:
-        """Delete the dashboard."""
+        """Permanently delete the dashboard from the workspace."""
         self._rest_client.dashboards.delete_dashboard(self._id)
 
     def _assert_config_writable(self) -> None:
