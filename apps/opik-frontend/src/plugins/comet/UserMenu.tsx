@@ -54,10 +54,7 @@ import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import { useAiSpend } from "@/contexts/AiSpendContext";
-
-// Hidden per product for now. Direct URL access to the spend workspace
-// (/$__ai_spend_<orgId>__/ai-spend/home) keeps working regardless.
-const SHOW_COST_INTELLIGENCE: boolean = false;
+import usePluginsStore from "@/store/PluginsStore";
 
 const UserMenu = () => {
   const { toast } = useToast();
@@ -92,6 +89,8 @@ const UserMenu = () => {
 
   const { canInviteMembers } = useUserPermission();
   const { hasAccess: hasAiSpendAccess, goToCostIntelligence } = useAiSpend();
+  const showCostIntelligence =
+    usePluginsStore((state) => state.hasPlugin("ai-spend")) && hasAiSpendAccess;
   const opikWorkspaceName = useOpikWorkspaceName();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
@@ -294,11 +293,10 @@ const UserMenu = () => {
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
-          {((SHOW_COST_INTELLIGENCE && hasAiSpendAccess) ||
-            !isLLMOnlyOrganization) && (
+          {(showCostIntelligence || !isLLMOnlyOrganization) && (
             <>
               <DropdownMenuSeparator />
-              {SHOW_COST_INTELLIGENCE && hasAiSpendAccess && (
+              {showCostIntelligence && (
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={goToCostIntelligence}

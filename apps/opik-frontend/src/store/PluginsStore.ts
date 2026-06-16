@@ -44,6 +44,7 @@ type PluginStore = {
   init: unknown;
   collectRoutes: (parents: PluginRouteParents) => AnyRoute[];
   sidebarSections: PluginSidebarSection[];
+  hasPlugin: (name: string) => boolean;
   setupPlugins: () => Promise<void>;
 };
 
@@ -118,6 +119,8 @@ const usePluginsStore = create<PluginStore>((set) => ({
   sidebarSections: ACTIVE_MANIFESTS.map((manifest) => manifest.sidebar).filter(
     (sidebar): sidebar is PluginSidebarSection => Boolean(sidebar),
   ),
+  hasPlugin: (name) =>
+    ACTIVE_MANIFESTS.some((manifest) => manifest.name === name),
   setupPlugins: async () => {
     if (ACTIVE_PLUGINS.length === 0) {
       return set({ WorkspacePreloader });
