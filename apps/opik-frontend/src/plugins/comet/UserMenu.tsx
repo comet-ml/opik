@@ -55,6 +55,8 @@ import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 import usePluginsStore from "@/store/PluginsStore";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const UserMenu = () => {
   const { toast } = useToast();
@@ -89,8 +91,14 @@ const UserMenu = () => {
 
   const { canInviteMembers } = useUserPermission();
   const { hasAccess: hasAiSpendAccess, goToCostIntelligence } = useAiSpend();
+  const hasAiSpendPlugin = usePluginsStore((state) =>
+    state.hasPlugin("ai-spend"),
+  );
+  const costIntelligenceFeatureEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.COST_INTELLIGENCE_ENABLED,
+  );
   const showCostIntelligence =
-    usePluginsStore((state) => state.hasPlugin("ai-spend")) && hasAiSpendAccess;
+    hasAiSpendPlugin && hasAiSpendAccess && costIntelligenceFeatureEnabled;
   const opikWorkspaceName = useOpikWorkspaceName();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
