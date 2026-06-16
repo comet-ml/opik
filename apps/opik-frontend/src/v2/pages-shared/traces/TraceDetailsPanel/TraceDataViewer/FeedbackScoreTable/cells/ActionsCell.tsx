@@ -4,7 +4,6 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
 import { X } from "lucide-react";
 import { getIsParentFeedbackScoreRow } from "../utils";
-import { FEEDBACK_SCORE_TYPE } from "@/types/traces";
 import { useLoggedInUserName } from "@/store/AppStore";
 
 type CustomMeta = {
@@ -23,10 +22,8 @@ const ActionsCell: React.FunctionComponent<
   );
 
   const isUserOwner = context.row.original.created_by === currentUserName;
-  const isOnlineEvaluationScore =
-    context.row.original.source === FEEDBACK_SCORE_TYPE.online_scoring;
 
-  if (isParentFeedbackScoreRow || (isOnlineEvaluationScore && !isUserOwner)) {
+  if (isParentFeedbackScoreRow || !isUserOwner) {
     return null;
   }
 

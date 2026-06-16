@@ -384,6 +384,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       search: search as string,
       truncate: truncationEnabled,
       stripAttachments: true,
+      annotationQueueId: annotationQueue.id,
     },
     {
       placeholderData: keepPreviousData,

@@ -37,7 +37,7 @@ class ScoreDestinationTest {
     void feedbackScoreBatchItemDefaultsToFeedbackScores() {
         var item = new FeedbackScoreItem.FeedbackScoreBatchItem(
                 "project", UUID.randomUUID(), "score-name", null,
-                BigDecimal.ONE, null, ScoreSource.ONLINE_SCORING, null, UUID.randomUUID());
+                BigDecimal.ONE, null, ScoreSource.ONLINE_SCORING, null, null, UUID.randomUUID());
 
         assertThat(item.scoreDestination()).isEqualTo(ScoreDestination.FEEDBACK_SCORES);
     }
