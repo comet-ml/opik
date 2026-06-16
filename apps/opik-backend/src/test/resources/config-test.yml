@@ -623,9 +623,6 @@ serviceToggles:
   # Default: true
   # Description: Whether the deployment is expected to produce demo project data on signup
   demoDataEnabled: "true"
-  # Default: false
-  # Description: Whether or not Optimization Studio feature is enabled
-  optimizationStudioEnabled: "false"
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: "true"

@@ -14,7 +14,6 @@ export enum FeatureToggleKeys {
   PROJECT_HOMEPAGE_ENABLED = "project_homepage_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
-  OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
   // Gates the spans-in-LLM-judge feature: agentic-tools loop AND the {{spans}}
   // template substitution in trace-scope rules. When off, FE editors stop
   // auto-filling `spans → "spans"` and keep the row visible/editable so the user
