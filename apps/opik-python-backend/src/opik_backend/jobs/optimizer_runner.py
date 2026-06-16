@@ -218,7 +218,10 @@ def main():
             run_optimization,
         )
         from opik_backend.studio.metrics import MetricFactory
-        from opik_backend.studio.optimizers import OptimizerFactory
+        from opik_backend.studio.optimizers import (
+            OptimizerFactory,
+            ensure_default_model_params,
+        )
         from opik_backend.studio.status_manager import (
             OptimizationStatusManager,
             optimization_lifecycle,
@@ -239,13 +242,28 @@ def main():
         # request, so the gateway still receives the original provider-
         # qualified model string (e.g. "vertex_ai/gemini-2.5-flash") and
         # dispatches to the correct provider on the Java backend side.
-        if not config.model.startswith("openai/"):
-            config.model = f"openai/{config.model}"
+        def _gateway_model(model: str) -> str:
+            return model if model.startswith("openai/") else f"openai/{model}"
 
         # The gateway requires an explicit stream field; LiteLLM omits it by
         # default which causes an NPE in the Java backend's Anthropic mapper.
-        config.model_params = config.model_params or {}
-        config.model_params.setdefault("stream", False)
+        def _with_stream(params):
+            params = dict(params or {})
+            params.setdefault("stream", False)
+            return params
+
+        config.model = _gateway_model(config.model)
+        config.model_params = _with_stream(config.model_params)
+
+        # The optimizer/algorithm can run on a different model than the prompt
+        # (GEPA's reflection LM, hierarchical's reasoning model). Default it to
+        # the prompt model when the UI didn't pick a separate one.
+        if config.optimizer_model:
+            optimizer_model = _gateway_model(config.optimizer_model)
+            optimizer_model_params = _with_stream(config.optimizer_model_params)
+        else:
+            optimizer_model = config.model
+            optimizer_model_params = config.model_params
 
         # Ensure optimizer_params is a dict before mutating
         config.optimizer_params = config.optimizer_params or {}
@@ -275,26 +293,26 @@ def main():
                 dataset_items_provider=lambda: list(dataset.get_items()),
             )
 
-            # Build optimizer
+            # Build optimizer on the algorithm model (may differ from the prompt
+            # model). The factory injects defaults like max_tokens into its params.
             optimizer = OptimizerFactory.build(
                 config.optimizer_type,
-                config.model,
-                config.model_params,
+                optimizer_model,
+                optimizer_model_params,
                 config.optimizer_params,
             )
 
             # Create prompt from config. The model must be set on the prompt
-            # itself: the optimizer only uses config.model for its own reasoning
-            # calls, while the baseline and per-trial task evaluations run through
-            # the prompt's model. Without this, ChatPrompt falls back to the SDK
-            # default (openai/gpt-5-nano) and ignores the model picked in the UI.
-            # Reuse the optimizer's effective model_parameters so the prompt
-            # inherits the defaults the factory injects (e.g. max_tokens),
-            # otherwise baseline/per-trial calls truncate at the SDK default.
+            # itself: the optimizer uses its own model for reasoning calls, while
+            # the baseline and per-trial task evaluations run through the prompt's
+            # model. Without this, ChatPrompt falls back to the SDK default
+            # (openai/gpt-5-nano) and ignores the model picked in the UI. Apply
+            # the same max_tokens default to the prompt params so task calls don't
+            # truncate at the SDK default.
             prompt = ChatPrompt(
                 messages=config.prompt_messages,
                 model=config.model,
-                model_parameters=optimizer.model_parameters,
+                model_parameters=ensure_default_model_params(config.model_params),
             )
 
             # Run optimization

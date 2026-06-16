@@ -22,6 +22,14 @@ DEFAULT_MAX_TOKENS = 8192
 LLM_MAX_TOKENS = get_env_int("OPTSTUDIO_LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS)
 
 
+def ensure_default_model_params(model_params: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Return model params with a reasonable max_tokens default so structured
+    outputs (and baseline/per-trial task completions) don't truncate."""
+    params = dict(model_params or {})
+    params.setdefault("max_tokens", LLM_MAX_TOKENS)
+    return params
+
+
 class OptimizerFactory:
     """Factory for creating optimizer instances.
 
@@ -67,9 +75,7 @@ class OptimizerFactory:
 
         # Ensure model_params has a reasonable max_tokens to prevent truncation
         # of structured outputs (JSON responses for improved prompts, analysis, etc.)
-        model_params = model_params or {}
-        if "max_tokens" not in model_params:
-            model_params = {**model_params, "max_tokens": LLM_MAX_TOKENS}
+        model_params = ensure_default_model_params(model_params)
 
         logger.debug(
             f"Initializing {optimizer_type} optimizer with params: {optimizer_params}"

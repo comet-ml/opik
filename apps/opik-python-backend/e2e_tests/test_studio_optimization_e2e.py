@@ -1,44 +1,39 @@
 """End-to-end regression test for Optimization Studio.
 
-Drives the studio the same way the job runner does — parse the job-context
-`studio_config`, build the metric/optimizer/prompt via the studio factories,
-and run it through ``studio.helpers.run_optimization`` — but without the Java
-job-creation REST call or the RQ queue. LLM calls go through the backend gateway
-using the workspace-stored provider key (no provider key is passed to LiteLLM),
-matching how the Studio runs in production.
+Drives the **real entrypoint** — ``process_optimizer_job`` (the function the RQ
+worker calls), which sets up the gateway env and runs ``optimizer_runner.py`` as
+an isolated subprocess — so the production wiring (gateway routing, the
+``openai/`` model prefix, the ``ChatPrompt(model=...)`` construction, role
+derivation) is actually exercised. It skips only the Java REST enqueue and the
+RQ queue itself by calling the job handler directly.
 
-It verifies that, given a dataset and the prompt from the job context, the
-optimization actually runs, and uses the produced traces to confirm the
-configured model is the one that ran.
-
-Guards the regressions fixed alongside it:
-- the selected model is used for evaluation (not the SDK default gpt-5-nano) —
-  under the gateway, the default would resolve to a provider the workspace has
-  no key for and the run would fail outright,
-- a user-only prompt (no system message) doesn't crash GEPA / no-op hierarchical.
+The Anthropic key lives in the backend workspace (stored by the
+``anthropic_workspace_key`` fixture from a CI secret); the optimizer reaches it
+only through the gateway. Given a dataset and the prompt from the job context,
+the test asserts the run is healthy (baseline + optimized prompt + no
+regression) and uses the produced traces to confirm the configured model(s)
+actually ran (not the gpt-5-nano default).
 
 Bound the run via ``OPTIMIZER_MAX_TRIALS`` (set in CI) so it stays short.
 """
 
+import os
+
 import pytest
 
 from opik import synchronization
-from opik_optimizer import ChatPrompt
 
-from opik_backend.studio.types import OptimizationConfig
-from opik_backend.studio.metrics import MetricFactory
-from opik_backend.studio.optimizers import OptimizerFactory
-from opik_backend.studio.helpers import run_optimization
+from opik_backend.jobs.optimizer import process_optimizer_job
 
 pytestmark = pytest.mark.e2e
 
+# Bare model id (the runner adds the "openai/" gateway prefix); resolves to the
+# workspace Anthropic key server-side.
+_TASK_MODEL = "claude-haiku-4-5-20251001"
+
 
 def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict:
-    """A job-context config with a single USER message (the regression case).
-
-    The gateway needs an explicit ``stream`` field (LiteLLM omits it by default,
-    which trips the backend's Anthropic mapper), mirroring optimizer_runner.
-    """
+    """A job-context config with a single USER message (the regression case)."""
     return {
         "dataset_name": dataset_name,
         "prompt": {
@@ -50,7 +45,7 @@ def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict:
                 }
             ]
         },
-        "llm_model": {"model": model, "parameters": {"stream": False}},
+        "llm_model": {"model": model, "parameters": {}},
         "evaluation": {
             "metrics": [
                 {
@@ -63,71 +58,82 @@ def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict:
     }
 
 
-def _models_in_project(opik_client, project_name: str) -> set[str]:
-    spans = opik_client.search_spans(project_name=project_name, max_results=1000)
-    return {(span.model or "") for span in spans}
+def _run_studio_job(opik_client, project_name: str, dataset_name: str, studio_config: dict) -> dict:
+    """Pre-create the optimization record (as the Java backend would), then run
+    the real job handler. Returns the result dict from the subprocess."""
+    workspace = os.getenv("OPIK_WORKSPACE", "default")
+    optimization = opik_client.create_optimization(
+        dataset_name=dataset_name,
+        objective_name=studio_config["evaluation"]["metrics"][0]["type"],
+        project_name=project_name,
+    )
+    job_message = {
+        "optimization_id": optimization.id,
+        "workspace_id": workspace,
+        "workspace_name": workspace,
+        "config": studio_config,
+        "project_name": project_name,
+    }
+    return process_optimizer_job(job_message)
+
+
+def _assert_healthy(result: dict) -> None:
+    """Signals that the optimization actually ran end-to-end."""
+    assert result is not None, "no result returned"
+    assert "error" not in result, f"optimization errored: {result.get('error')}"
+    assert result.get("status") != "cancelled", "optimization was cancelled"
+    # Baseline established + a score produced, both in range.
+    assert result.get("initial_score") is not None, "no baseline score (it didn't establish a baseline)"
+    assert 0.0 <= result["initial_score"] <= 1.0, f"baseline {result['initial_score']} out of range"
+    assert result.get("score") is not None, "no final score"
+    assert 0.0 <= result["score"] <= 1.0, f"score {result['score']} out of range"
+    # Optimization shouldn't make the prompt worse than the baseline.
+    assert result["score"] >= result["initial_score"], (
+        f"optimized score {result['score']} regressed below baseline {result['initial_score']}"
+    )
+    # An optimized prompt was produced.
+    assert result.get("optimized_prompt"), "no optimized prompt produced"
+
+
+def _models_in_project(opik_client, project_name: str) -> list[str]:
+    return [
+        (span.model or "")
+        for span in opik_client.search_spans(project_name=project_name, max_results=1000)
+    ]
+
+
+def _wait_for_model(opik_client, project_name: str, substring: str) -> None:
+    assert synchronization.until(
+        lambda: any(
+            substring in model.lower()
+            for model in _models_in_project(opik_client, project_name)
+        ),
+        sleep=1.0,
+        max_try_seconds=30,
+    ), (
+        f"No span used a model matching '{substring}'; "
+        f"saw {set(_models_in_project(opik_client, project_name))}"
+    )
 
 
 @pytest.mark.parametrize("optimizer_type", ["gepa", "hierarchical_reflective"])
 def test_studio_optimization_runs_on_dataset_and_prompt(
-    opik_client, project_name, seeded_dataset, studio_gateway, optimizer_type
+    opik_client, anthropic_workspace_key, project_name, seeded_dataset, optimizer_type
 ):
-    model = studio_gateway["model"]
-    expected_substring = studio_gateway["expected_substring"]
+    studio_config = _studio_config(_TASK_MODEL, optimizer_type, seeded_dataset.name)
 
-    config = OptimizationConfig.from_dict(
-        _studio_config(model, optimizer_type, seeded_dataset.name)
-    )
-    metric_fn = MetricFactory.build(
-        config.metric_type, config.metric_params, config.model
-    )
-    optimizer = OptimizerFactory.build(
-        config.optimizer_type,
-        config.model,
-        config.model_params,
-        config.optimizer_params,
-    )
-    prompt = ChatPrompt(
-        messages=config.prompt_messages,
-        model=config.model,
-        model_parameters=optimizer.model_parameters,
-    )
+    result = _run_studio_job(opik_client, project_name, seeded_dataset.name, studio_config)
 
-    # optimization_id=None → optimize_prompt creates its own run record, so we
-    # exercise the real studio helper without a Java-created optimization.
-    result = run_optimization(
-        optimizer=optimizer,
-        optimization_id=None,
-        prompt=prompt,
-        dataset=seeded_dataset,
-        metric_fn=metric_fn,
-        project_name=project_name,
+    _assert_healthy(result)
+
+    # The configured model actually ran (the model-passing regression fell back
+    # to openai/gpt-5-nano). Spans land in ClickHouse with eventual consistency.
+    _wait_for_model(opik_client, project_name, "claude-haiku")
+    models = _models_in_project(opik_client, project_name)
+    # Healthy volume: it evaluated the dataset, not just a single call.
+    assert sum("claude-haiku" in m.lower() for m in models) >= 2, (
+        f"expected multiple model calls, saw {models}"
     )
-
-    assert result is not None, "optimization returned no result"
-    assert result.score is not None, "optimization produced no score"
-    assert 0.0 <= result.score <= 1.0, f"score {result.score} out of range"
-
-    # Verify via traces that the configured model actually ran. Spans land in
-    # ClickHouse with eventual consistency, so poll briefly.
-    def _has_expected_model() -> bool:
-        return any(
-            expected_substring in model_name.lower()
-            for model_name in _models_in_project(opik_client, project_name)
-        )
-
-    assert synchronization.until(
-        _has_expected_model, sleep=1.0, max_try_seconds=30
-    ), (
-        f"No span used the configured model '{model}'; "
-        f"saw {_models_in_project(opik_client, project_name)}"
+    assert not any("gpt-5-nano" in m for m in models), (
+        f"SDK default model leaked into traces: {models}"
     )
-
-    # The model-passing regression silently fell back to openai/gpt-5-nano —
-    # make sure that default never appears.
-    leaked = {
-        model_name
-        for model_name in _models_in_project(opik_client, project_name)
-        if "gpt-5-nano" in model_name
-    }
-    assert not leaked, f"SDK default model leaked into traces: {leaked}"

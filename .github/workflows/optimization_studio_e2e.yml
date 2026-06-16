@@ -76,7 +76,10 @@ jobs:
       - name: Run Optimization Studio E2E tests
         run: |
           cd ${{ github.workspace }}/apps/opik-python-backend
+          # Retry transient LLM/network failures so a flaky provider call
+          # doesn't fail the run; the assertions themselves are deterministic.
           pytest e2e_tests -m e2e -vv \
+            --reruns 2 --reruns-delay 5 \
             --junitxml=${{ github.workspace }}/studio_e2e_results.xml
 
       - name: Publish Test Report

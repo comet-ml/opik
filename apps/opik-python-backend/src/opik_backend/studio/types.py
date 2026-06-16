@@ -83,7 +83,13 @@ class OptimizationConfig:
     # Optimizer
     optimizer_type: str
     optimizer_params: Dict[str, Any]
-    
+
+    # Optional separate model for the optimizer/algorithm itself (GEPA's
+    # reflection LM, hierarchical's reasoning model). Defaults to the prompt
+    # model when not set.
+    optimizer_model: Optional[str] = None
+    optimizer_model_params: Optional[Dict[str, Any]] = None
+
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "OptimizationConfig":
         """Parse config dict into typed object.
@@ -114,6 +120,13 @@ class OptimizationConfig:
             }
             prompt_messages.append(converted_msg)
         
+        # The optimizer's own model (optional) is carried inside the optimizer
+        # parameters. Pull it out so the remaining params can be passed as
+        # kwargs to the optimizer constructor without colliding with `model`.
+        optimizer_params = dict(config["optimizer"].get("parameters", {}))
+        optimizer_model = optimizer_params.pop("model", None)
+        optimizer_model_params = optimizer_params.pop("model_parameters", None)
+
         return cls(
             dataset_name=config["dataset_name"],
             prompt_messages=prompt_messages,
@@ -122,7 +135,9 @@ class OptimizationConfig:
             metric_type=metric_config["type"],
             metric_params=metric_config.get("parameters", {}),
             optimizer_type=config["optimizer"]["type"],
-            optimizer_params=config["optimizer"].get("parameters", {}),
+            optimizer_params=optimizer_params,
+            optimizer_model=optimizer_model,
+            optimizer_model_params=optimizer_model_params,
         )
 
 

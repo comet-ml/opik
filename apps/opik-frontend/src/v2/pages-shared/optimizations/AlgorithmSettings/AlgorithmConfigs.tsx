@@ -14,6 +14,9 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Button, ButtonProps } from "@/ui/button";
+import { Label } from "@/ui/label";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import OptimizationModelSelect from "@/v2/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
 import GepaOptimizerConfigs from "@/v2/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/GepaOptimizerConfigs";
 import EvolutionaryOptimizerConfigs from "@/v2/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/EvolutionaryOptimizerConfigs";
 import HierarchicalReflectiveOptimizerConfigs from "@/v2/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/HierarchicalReflectiveOptimizerConfigs";
@@ -92,6 +95,33 @@ const AlgorithmConfigs = ({
           </div>
           <p className="comet-body-xs text-muted-slate">
             Configure parameters for the selected optimization algorithm
+          </p>
+        </div>
+        <div className="mb-6 flex w-72 flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm">Algorithm model</Label>
+            {configs.model && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                onClick={() => {
+                  const next = { ...configs };
+                  delete next.model;
+                  onChange(next);
+                }}
+              >
+                Use prompt model
+              </Button>
+            )}
+          </div>
+          <OptimizationModelSelect
+            value={(configs.model ?? "") as PROVIDER_MODEL_TYPE | ""}
+            onChange={(value) => onChange({ ...configs, model: value })}
+          />
+          <p className="comet-body-xs text-muted-slate">
+            The model the optimizer uses for its own reasoning. Defaults to the
+            prompt model.
           </p>
         </div>
         {getOptimizerForm()}

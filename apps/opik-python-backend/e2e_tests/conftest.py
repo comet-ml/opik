@@ -5,9 +5,9 @@ storage) and run a real optimization, so they live in a separate directory from
 the unit suite (`tests/`) and are gated behind the `e2e` marker.
 
 Following the same principle as the rest of Opik (and the whole point of the
-Optimization Studio gateway work): **no provider API key is ever passed to the
-optimizer/LiteLLM directly**. The Anthropic key comes from a CI secret, is
-stored in the backend workspace, and LLM calls are routed through the backend's
+Optimization Studio gateway work): **no provider API key is passed to the
+optimizer.** The Anthropic key comes from a CI secret, is stored in the backend
+workspace, and the studio job processor routes LLM calls through the backend's
 `/v1/private` gateway, which resolves the key server-side.
 """
 
@@ -19,12 +19,7 @@ import pytest
 
 import opik
 
-# Anthropic is the provider these tests use. The "openai/" prefix routes the
-# call through LiteLLM's OpenAI-compatible handler to the gateway, which strips
-# it and dispatches to Anthropic by the remaining model name.
 _PROVIDER = "anthropic"
-_GATEWAY_MODEL = "openai/claude-haiku-4-5-20251001"
-_EXPECTED_SPAN_MODEL = "claude-haiku"
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -58,25 +53,6 @@ def _anthropic_configured(base: str, headers: dict[str, str]) -> bool:
     )
 
 
-def _ensure_anthropic_key(base: str, headers: dict[str, str]) -> bool:
-    """Store the Anthropic key (from the ANTHROPIC_API_KEY secret) in the backend
-    workspace so the optimization resolves it server-side via the gateway. The key
-    is never handed to the optimizer. Returns False if no key is available (skip).
-    """
-    if _anthropic_configured(base, headers):
-        return True
-    secret = os.getenv("ANTHROPIC_API_KEY")
-    if not secret:
-        return False
-    httpx.post(
-        f"{base}/v1/private/llm-provider-key",
-        headers=headers,
-        json={"provider": _PROVIDER, "api_key": secret},
-        timeout=30,
-    ).raise_for_status()
-    return True
-
-
 @pytest.fixture(scope="session")
 def opik_client() -> opik.Opik:
     if not _backend_base():
@@ -87,43 +63,26 @@ def opik_client() -> opik.Opik:
 
 
 @pytest.fixture()
-def studio_gateway(opik_client, monkeypatch) -> dict:
-    """Store the Anthropic key in the backend and route the optimizer's LLM calls
-    through the `/v1/private` gateway using that workspace-stored key — exactly how
-    the Studio runs in production, with no provider key reaching LiteLLM. Returns
-    the gateway model + expected span model.
-
-    Uses ``monkeypatch`` so the env vars and module attribute are restored after
-    the test and the suite stays order-independent.
-    """
+def anthropic_workspace_key() -> None:
+    """Take the Anthropic key from the ANTHROPIC_API_KEY secret and store it in
+    the backend workspace, so the optimization resolves it server-side via the
+    gateway. The key is never handed to the optimizer. Skips if no key is
+    available (and none is already configured)."""
     base = _backend_base()
     headers = _workspace_headers()
-    workspace = os.getenv("OPIK_WORKSPACE", "default")
-
-    if not _ensure_anthropic_key(base, headers):
+    if _anthropic_configured(base, headers):
+        return
+    secret = os.getenv("ANTHROPIC_API_KEY")
+    if not secret:
         pytest.skip(
             "ANTHROPIC_API_KEY not set and no Anthropic provider configured in the workspace"
         )
-
-    # Point LiteLLM at the gateway and inject the Comet-Workspace header, the
-    # same wiring optimizer.py/optimizer_runner.py set up for the subprocess.
-    # OPENAI_API_KEY is only a non-empty placeholder — the gateway authenticates
-    # by workspace, not by this value.
-    import opik_backend.jobs.optimizer_runner as optimizer_runner
-
-    gateway_base = f"{base}/v1/private"
-    # LiteLLM reads OPENAI_API_BASE from the env to pick the endpoint; the module
-    # attribute only gates the Comet-Workspace header wrapper. Set both.
-    monkeypatch.setenv("OPENAI_API_BASE", gateway_base)
-    monkeypatch.setenv("OPENAI_API_KEY", "opik-local")
-    monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", gateway_base)
-    optimizer_runner.route_litellm_calls_through_gateway(workspace)
-
-    return {
-        "workspace": workspace,
-        "model": _GATEWAY_MODEL,
-        "expected_substring": _EXPECTED_SPAN_MODEL,
-    }
+    httpx.post(
+        f"{base}/v1/private/llm-provider-key",
+        headers=headers,
+        json={"provider": _PROVIDER, "api_key": secret},
+        timeout=30,
+    ).raise_for_status()
 
 
 @pytest.fixture()
