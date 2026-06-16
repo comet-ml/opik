@@ -1,6 +1,6 @@
 --liquibase formatted sql
 --changeset petrot:000082_create_agent_insights_issues_tables
---comment: Agent Insights report results. One row per detected issue plus one row per issue x report_day with the daily metrics. Issues are upserted on the natural key (workspace_id, project_id, id) so daily re-runs stay idempotent; status is owned by the user and never touched by the reporting agent.
+--comment: Agent Insights report results. One row per detected issue plus one row per issue x report_day with the daily metrics. Issues are upserted on their id so daily re-runs stay idempotent; status is owned by the user and never touched by the reporting agent.
 
 CREATE TABLE agent_insights_issues
 (
@@ -18,9 +18,8 @@ CREATE TABLE agent_insights_issues
     last_updated_by VARCHAR(255)                       NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6)                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
-    -- Workspace-scoped identity: id is unique per (workspace_id, project_id), not globally. This composite key is
-    -- the upsert target, so a client-supplied id can only ever match a row within its own workspace and project.
-    PRIMARY KEY (workspace_id, project_id, id)
+    PRIMARY KEY (id),
+    INDEX agent_insights_issues_workspace_project_idx (workspace_id, project_id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 
