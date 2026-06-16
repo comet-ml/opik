@@ -352,41 +352,31 @@ class AgentInsightsResourceTest {
         }
 
         @Test
-        @DisplayName("Cross-workspace: same explicit id in another workspace does not overwrite the original issue")
-        void reportIssuesWhenSameIdInAnotherWorkspaceThenRowsAreIsolated() {
-            var sharedId = UUID.randomUUID();
-            var originalName = rndName();
-            var otherName = rndName();
+        @DisplayName("Cross-workspace: an issue is not accessible from another workspace")
+        void getIssueWhenInAnotherWorkspaceThenNotFound() {
+            var issueId = UUID.randomUUID();
+            var name = rndName();
 
             var projectInWorkspace = createProject();
             report(projectInWorkspace, DAY_1, List.of(
-                    reportedIssue(sharedId, originalName, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                    reportedIssue(issueId, name, rndOccurrences(), rndTotalCount(), rndUserCount(),
                             rndUserCount())));
+
+            var original = agentInsightsResourceClient.getIssue(issueId, projectInWorkspace, null, null,
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(original.name()).isEqualTo(name);
 
             var projectInOtherWorkspace = projectResourceClient.createProject(UUID.randomUUID().toString(),
                     OTHER_API_KEY, OTHER_WORKSPACE);
-            var otherReport = AgentInsightsReport.builder()
-                    .projectId(projectInOtherWorkspace)
-                    .reportDay(DAY_1)
-                    .issues(List.of(reportedIssue(sharedId, otherName, rndOccurrences(), rndTotalCount(),
-                            rndUserCount(), rndUserCount())))
-                    .build();
-            agentInsightsResourceClient.reportIssues(otherReport, OTHER_API_KEY, OTHER_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
-
-            var original = agentInsightsResourceClient.getIssue(sharedId, projectInWorkspace, null, null,
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
-            assertThat(original.name()).isEqualTo(originalName);
-
-            var other = agentInsightsResourceClient.getIssue(sharedId, projectInOtherWorkspace, null, null,
-                    OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_OK);
-            assertThat(other.name()).isEqualTo(otherName);
+            agentInsightsResourceClient.getIssue(issueId, projectInOtherWorkspace, null, null,
+                    OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
-        @DisplayName("Cross-project: same explicit id in another project of the same workspace stays isolated")
-        void reportIssuesWhenSameIdInAnotherProjectThenRowsAreIsolated() {
-            var sharedId = UUID.randomUUID();
+        @DisplayName("Cross-project: an issue is not accessible from another project of the same workspace")
+        void getIssueWhenInAnotherProjectThenNotFound() {
+            var issueIdX = UUID.randomUUID();
+            var issueIdY = UUID.randomUUID();
             var nameX = rndName();
             var nameY = rndName();
 
@@ -394,16 +384,21 @@ class AgentInsightsResourceTest {
             var projectY = createProject();
 
             report(projectX, DAY_1, List.of(
-                    reportedIssue(sharedId, nameX, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                    reportedIssue(issueIdX, nameX, rndOccurrences(), rndTotalCount(), rndUserCount(),
                             rndUserCount())));
             report(projectY, DAY_1, List.of(
-                    reportedIssue(sharedId, nameY, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                    reportedIssue(issueIdY, nameY, rndOccurrences(), rndTotalCount(), rndUserCount(),
                             rndUserCount())));
 
-            assertThat(agentInsightsResourceClient.getIssue(sharedId, projectX, null, null, API_KEY,
+            assertThat(agentInsightsResourceClient.getIssue(issueIdX, projectX, null, null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK).name()).isEqualTo(nameX);
-            assertThat(agentInsightsResourceClient.getIssue(sharedId, projectY, null, null, API_KEY,
+            assertThat(agentInsightsResourceClient.getIssue(issueIdY, projectY, null, null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK).name()).isEqualTo(nameY);
+
+            agentInsightsResourceClient.getIssue(issueIdX, projectY, null, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+            agentInsightsResourceClient.getIssue(issueIdY, projectX, null, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
