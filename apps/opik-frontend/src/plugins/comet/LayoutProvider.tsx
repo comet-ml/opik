@@ -6,7 +6,6 @@ import useAppStore, {
   useSetPreviousWorkspaceName,
   usePreviousWorkspaceName,
 } from "@/store/AppStore";
-import { AI_SPEND_PROJECT_NAME } from "@/lib/aiSpend";
 import useAiSpendManager from "./useAiSpendManager";
 import useUser from "./useUser";
 
@@ -62,7 +61,6 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       spendWorkspaceName,
       isSpendWorkspaceActive,
       organizationName: organization?.name,
-      projectName: AI_SPEND_PROJECT_NAME,
       goToCostIntelligence,
     }),
     [

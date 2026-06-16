@@ -1,7 +1,6 @@
 import React, { ReactNode, useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AiSpendProvider as BaseAiSpendProvider } from "@/contexts/AiSpendContext";
-import { AI_SPEND_PROJECT_NAME } from "@/lib/aiSpend";
 
 // Local-dev stand-in for the comet AiSpendProvider plugin: grants access
 // unconditionally so the AI Spend pages are reachable against the local
@@ -23,7 +22,6 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       spendWorkspaceName: "default",
       organizationName: "local",
       isSpendWorkspaceActive: true,
-      projectName: AI_SPEND_PROJECT_NAME,
       goToCostIntelligence,
     }),
     [goToCostIntelligence],

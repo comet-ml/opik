@@ -10,5 +10,11 @@ repos:
           - --chart-search-root=deployment/helm_chart/opik
         files: (README\.md\.gotmpl|values\.yaml|Chart\.yaml)$
         pass_filenames: false
+      - id: no-private-fe-plugins
+        name: block non-public FE plugins
+        language: system
+        entry: scripts/check-public-fe-plugins.sh
+        files: ^apps/opik-frontend/src/plugins/
+        pass_filenames: false
 
 ...
