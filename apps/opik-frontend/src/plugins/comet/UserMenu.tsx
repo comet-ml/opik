@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import copy from "clipboard-copy";
 import {
   ArrowUpRight,
@@ -90,7 +91,11 @@ const UserMenu = () => {
   );
 
   const { canInviteMembers } = useUserPermission();
-  const { hasAccess: hasAiSpendAccess, goToCostIntelligence } = useAiSpend();
+  const {
+    hasAccess: hasAiSpendAccess,
+    isSpendWorkspaceActive,
+    goToCostIntelligence,
+  } = useAiSpend();
   const hasAiSpendPlugin = usePluginsStore((state) =>
     state.hasPlugin("ai-spend"),
   );
@@ -98,7 +103,11 @@ const UserMenu = () => {
     FeatureToggleKeys.COST_INTELLIGENCE_ENABLED,
   );
   const showCostIntelligence =
-    hasAiSpendPlugin && hasAiSpendAccess && costIntelligenceFeatureEnabled;
+    hasAiSpendPlugin &&
+    hasAiSpendAccess &&
+    costIntelligenceFeatureEnabled &&
+    !isSpendWorkspaceActive;
+  const showOpikReturn = hasAiSpendPlugin && Boolean(isSpendWorkspaceActive);
   const opikWorkspaceName = useOpikWorkspaceName();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
@@ -301,9 +310,25 @@ const UserMenu = () => {
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
-          {(showCostIntelligence || !isLLMOnlyOrganization) && (
+          {(showCostIntelligence ||
+            showOpikReturn ||
+            !isLLMOnlyOrganization) && (
             <>
               <DropdownMenuSeparator />
+              {showOpikReturn && (
+                <Link
+                  to="/$workspaceName/home"
+                  params={{ workspaceName: opikWorkspaceName }}
+                >
+                  <DropdownMenuItem className="cursor-pointer">
+                    <span className="mr-2 flex size-5 shrink-0 items-center justify-center rounded bg-chart-green text-[10px] font-medium text-white">
+                      O
+                    </span>
+                    <span className="truncate">Opik</span>
+                    <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
+                  </DropdownMenuItem>
+                </Link>
+              )}
               {showCostIntelligence && (
                 <DropdownMenuItem
                   className="cursor-pointer"
