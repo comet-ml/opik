@@ -31,7 +31,6 @@ public record TraceThreadModel(
         Instant lastUpdatedAt,
         Set<String> tags,
         Map<UUID, Boolean> sampling,
-        Instant scoredAt,
         Instant startTime,
         Instant endTime,
         Double duration,

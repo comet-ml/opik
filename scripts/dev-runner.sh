@@ -43,6 +43,12 @@ OLLIE_LOG_FILE="/tmp/${RESOURCE_PREFIX}-ollie.log"
 # Sidecar so --stop can find the ollie repo even without OLLIE_REPO_PATH in scope.
 OLLIE_REPO_PATH_FILE="/tmp/${RESOURCE_PREFIX}-ollie.repo"
 
+# Private ai-spend FE plugin (Opik team only). Auto-detected at
+# $PROJECT_ROOT/../opik-plugin-ai-spend if not set; its src/ is symlinked into
+# the FE plugins folder so it compiles as part of opik. Opt out with
+# AI_SPEND_PLUGIN_PATH= (empty string).
+AI_SPEND_PLUGIN_LINK="$FRONTEND_DIR/src/plugins/ai-spend"
+
 # Ollie local dev integration (Opik team only).
 # Auto-detected at $PROJECT_ROOT/../ollie-assist if not explicitly set; see the
 # detect block below. Override with OLLIE_REPO_PATH=/some/other/path; opt out
@@ -100,6 +106,18 @@ if [ -z "${OLLIE_REPO_PATH+set}" ]; then
         log_info "Auto-detected ollie-assist checkout at $OLLIE_REPO_PATH (export OLLIE_REPO_PATH= to opt out)"
     fi
     unset _ollie_candidate
+fi
+
+# Auto-detect a sibling opik-plugin-ai-spend checkout when AI_SPEND_PLUGIN_PATH
+# is unset entirely (mirrors the ollie-assist convention above). Setting
+# AI_SPEND_PLUGIN_PATH="" opts out.
+if [ -z "${AI_SPEND_PLUGIN_PATH+set}" ]; then
+    _ai_spend_candidate="$(cd "$PROJECT_ROOT/.." 2>/dev/null && pwd)/opik-plugin-ai-spend"
+    if [ -d "$_ai_spend_candidate/src" ]; then
+        AI_SPEND_PLUGIN_PATH="$_ai_spend_candidate"
+        log_info "Auto-detected ai-spend plugin checkout at $AI_SPEND_PLUGIN_PATH (export AI_SPEND_PLUGIN_PATH= to opt out)"
+    fi
+    unset _ai_spend_candidate
 fi
 
 # Function to find JAR files in target directory
@@ -716,6 +734,19 @@ start_backend() {
     fi
 }
 
+# Symlink the sibling private ai-spend plugin's source into the FE plugins
+# folder (gitignored) so it compiles as part of opik. Removes the link when no
+# sibling is present, so toggling the checkout is clean.
+sync_ai_spend_plugin_link() {
+    if [ -n "${AI_SPEND_PLUGIN_PATH:-}" ] && [ -d "${AI_SPEND_PLUGIN_PATH}/src" ]; then
+        ln -sfn "${AI_SPEND_PLUGIN_PATH}/src" "$AI_SPEND_PLUGIN_LINK"
+        log_info "Linked ai-spend plugin: $AI_SPEND_PLUGIN_LINK -> ${AI_SPEND_PLUGIN_PATH}/src"
+    elif [ -L "$AI_SPEND_PLUGIN_LINK" ]; then
+        rm -f "$AI_SPEND_PLUGIN_LINK"
+        log_info "Removed ai-spend plugin link (no sibling checkout)"
+    fi
+}
+
 # Function to start frontend
 start_frontend() {
     require_command npm
@@ -769,6 +800,14 @@ start_frontend() {
         log_debug "  VITE_ASSISTANT_SIDEBAR_BASE_URL=$VITE_ASSISTANT_SIDEBAR_BASE_URL"
     elif ollie_enabled; then
         log_warning "OLLIE_REPO_PATH is set but ollie healthz is not responding; sidebar disabled"
+    fi
+
+    # Link the private ai-spend plugin (if checked out) and activate it
+    # alongside the local development plugin.
+    sync_ai_spend_plugin_link
+    if [ -L "$AI_SPEND_PLUGIN_LINK" ]; then
+        export VITE_FE_PLUGINS="development,ai-spend"
+        log_info "  VITE_FE_PLUGINS=$VITE_FE_PLUGINS"
     fi
 
     log_debug "Starting frontend with: npm run start"
