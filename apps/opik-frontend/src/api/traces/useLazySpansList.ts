@@ -3,7 +3,6 @@ import useSpansList, {
   UseSpansListParams,
   UseSpansListResponse,
 } from "@/api/traces/useSpansList";
-import { Filters } from "@/types/filters";
 import { COLUMN_CUSTOM_ID } from "@/types/shared";
 
 const MAX_FULL_DATA_SPANS = 500;
@@ -13,26 +12,35 @@ type UseLazySpansListOptions = {
   loadFullData?: boolean;
 };
 
-const isPayloadField = (field?: string) =>
-  field !== undefined && PAYLOAD_FIELDS.has(field);
+const isPayloadField = (field: unknown) =>
+  typeof field === "string" && PAYLOAD_FIELDS.has(field);
 
-const isPayloadKey = (key?: string) =>
-  key !== undefined &&
+const isPayloadKey = (key: unknown) =>
+  typeof key === "string" &&
   (PAYLOAD_FIELDS.has(key) ||
     key.startsWith("input.") ||
     key.startsWith("input[") ||
     key.startsWith("output.") ||
     key.startsWith("output["));
 
-export const shouldLoadFullSpansData = (search?: unknown, filters?: Filters) =>
+const isFilterObject = (
+  filter: unknown,
+): filter is { field?: unknown; key?: unknown } =>
+  typeof filter === "object" && filter !== null;
+
+export const shouldLoadFullSpansData = (search?: unknown, filters?: unknown) =>
   (typeof search === "string" && search.trim().length > 0) ||
-  Boolean(
-    filters?.some(
-      (filter) =>
+  (Array.isArray(filters) &&
+    filters.some((filter) => {
+      if (!isFilterObject(filter)) {
+        return false;
+      }
+
+      return (
         isPayloadField(filter.field) ||
-        (filter.field === COLUMN_CUSTOM_ID && isPayloadKey(filter.key)),
-    ),
-  );
+        (filter.field === COLUMN_CUSTOM_ID && isPayloadKey(filter.key))
+      );
+    }));
 
 export default function useLazySpansList(
   params: UseSpansListParams,

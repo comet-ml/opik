@@ -127,5 +127,9 @@ describe("useLazySpansList", () => {
     expect(shouldLoadFullSpansData(undefined, [makeFilter("name")])).toBe(
       false,
     );
+    expect(
+      shouldLoadFullSpansData(undefined, [{ field: COLUMN_CUSTOM_ID, key: 1 }]),
+    ).toBe(false);
+    expect(shouldLoadFullSpansData(undefined, { field: "input" })).toBe(false);
   });
 });
