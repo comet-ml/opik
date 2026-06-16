@@ -1394,7 +1394,11 @@ class Opik:
                 dashboard_validation.validate_widget_for_dashboard(
                     widget, dashboard_type
                 )
-                dashboard_validation.inject_project_id(widget, project_id)
+                if project_id is not None:
+                    dashboard_validation.inject_project_id(widget, project_id)
+                elif project_name is None:
+                    # No project at all — delegate the error to inject_project_id
+                    dashboard_validation.inject_project_id(widget, None)
 
         config = {
             "version": dashboard_types.DASHBOARD_VERSION,

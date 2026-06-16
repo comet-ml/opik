@@ -355,6 +355,98 @@ def test_create_dashboard__with_provided_sections():
     assert captured["config"]["sections"][0]["widgets"][0]["id"] == "w1"
 
 
+def test_create_dashboard__project_scoped_widget_with_project_id_injects():
+    client = opik_client.Opik()
+    captured = {}
+
+    def fake_create(*, name, config, type, description, project_id, project_name):
+        captured["config"] = config
+        return dp.DashboardPublic(id="d1", name=name, type=type, config=config)
+
+    section = types.DashboardSection(
+        title="S",
+        widgets=[
+            types.DashboardWidget(
+                id="w1",
+                type=types.WidgetType.PROJECT_STATS_CARD,
+                config=types.ProjectStatsCardConfig(
+                    metric=types.StatsCardMetric.TRACE_COUNT
+                ),
+            )
+        ],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=1, h=2)],
+    )
+
+    with patch.object(
+        client._rest_client.dashboards, "create_dashboard", side_effect=fake_create
+    ):
+        client.create_dashboard(
+            name="Prod",
+            type=types.DashboardType.MULTI_PROJECT,
+            project_id="proj-123",
+            sections=[section],
+        )
+
+    widget = captured["config"]["sections"][0]["widgets"][0]
+    assert widget["config"]["projectId"] == "proj-123"
+
+
+def test_create_dashboard__project_scoped_widget_with_project_name_only_does_not_raise():
+    client = opik_client.Opik()
+
+    def fake_create(*, name, config, type, description, project_id, project_name):
+        return dp.DashboardPublic(id="d1", name=name, type=type, config=config)
+
+    section = types.DashboardSection(
+        title="S",
+        widgets=[
+            types.DashboardWidget(
+                id="w1",
+                type=types.WidgetType.PROJECT_STATS_CARD,
+                config=types.ProjectStatsCardConfig(
+                    metric=types.StatsCardMetric.TRACE_COUNT
+                ),
+            )
+        ],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=1, h=2)],
+    )
+
+    # project_name provided but not project_id — should not raise
+    with patch.object(
+        client._rest_client.dashboards, "create_dashboard", side_effect=fake_create
+    ):
+        client.create_dashboard(
+            name="Prod",
+            type=types.DashboardType.MULTI_PROJECT,
+            project_name="Default Project",
+            sections=[section],
+        )
+
+
+def test_create_dashboard__project_scoped_widget_without_any_project_raises():
+    client = opik_client.Opik()
+
+    section = types.DashboardSection(
+        title="S",
+        widgets=[
+            types.DashboardWidget(id="w1", type=types.WidgetType.PROJECT_STATS_CARD)
+        ],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=1, h=2)],
+    )
+
+    with patch.object(
+        client._rest_client.dashboards, "create_dashboard"
+    ) as mock_create:
+        with pytest.raises(exceptions.DashboardValidationError, match="project-scoped"):
+            client.create_dashboard(
+                name="Prod",
+                type=types.DashboardType.MULTI_PROJECT,
+                sections=[section],
+            )
+
+    mock_create.assert_not_called()
+
+
 def test_create_dashboard__incompatible_widget_raises_before_create():
     client = opik_client.Opik()
 
@@ -377,6 +469,57 @@ def test_create_dashboard__incompatible_widget_raises_before_create():
             )
 
     mock_create.assert_not_called()
+
+
+def test_replace_sections__injects_project_id_for_project_scoped_widgets():
+    config = {
+        "version": 4,
+        "sections": [{"id": "s1", "title": "t", "widgets": [], "layout": []}],
+        "lastModified": 1,
+    }
+    dashboard, _, _ = _make_dashboard(config, project_id="proj-abc")
+
+    new_section = types.DashboardSection(
+        title="t",
+        id="s1",
+        widgets=[
+            types.DashboardWidget(
+                id="w1",
+                type=types.WidgetType.PROJECT_STATS_CARD,
+                config=types.ProjectStatsCardConfig(
+                    metric=types.StatsCardMetric.TRACE_COUNT
+                ),
+            )
+        ],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=1, h=2)],
+    )
+    dashboard.replace_sections([new_section])
+
+    widget = dashboard.config["sections"][0]["widgets"][0]
+    assert widget["config"]["projectId"] == "proj-abc"
+
+
+def test_replace_sections__project_scoped_widget_without_dashboard_project_raises():
+    config = {
+        "version": 4,
+        "sections": [{"id": "s1", "title": "t", "widgets": [], "layout": []}],
+        "lastModified": 1,
+    }
+    dashboard, rest, _ = _make_dashboard(config, project_id=None)
+
+    new_section = types.DashboardSection(
+        title="t",
+        id="s1",
+        widgets=[
+            types.DashboardWidget(id="w1", type=types.WidgetType.PROJECT_STATS_CARD)
+        ],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=1, h=2)],
+    )
+
+    with pytest.raises(exceptions.DashboardValidationError, match="project-scoped"):
+        dashboard.replace_sections([new_section])
+
+    assert rest.dashboards.update_calls == []
 
 
 def test_replace_sections__incompatible_widget_raises_before_write():

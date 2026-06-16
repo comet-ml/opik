@@ -282,6 +282,7 @@ class Dashboard:
         for section in section_dicts:
             for widget in section.get("widgets", []):
                 validation.validate_widget_for_dashboard(widget, self._type)
+                validation.inject_project_id(widget, self._project_id)
         with self._atomic_config():
             self._config["sections"] = section_dicts
             self._commit_config()
