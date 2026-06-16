@@ -28,6 +28,7 @@ class RedissonLockService implements LockService {
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull DistributedLockConfig distributedLockConfig;
+    private final LockMetrics lockMetrics = new LockMetrics();
 
     private record LockInstance(RPermitExpirableSemaphoreReactive semaphore, String permitId) {
 
@@ -65,17 +66,42 @@ class RedissonLockService implements LockService {
     public <T> Mono<T> executeWithLockCustomExpire(
             @NonNull Lock lock, @NonNull Mono<T> action, @NonNull Duration duration) {
         var semaphore = getSemaphore(lock);
+        var metricLock = LockMetrics.label(lock.key());
         log.debug(TRYING_TO_LOCK_WITH, lock);
-        return acquireLock(semaphore, duration)
-                .flatMap(lockInstance -> runAction(lock, action, lockInstance));
+        return instrumentedAcquire(metricLock, acquireLock(semaphore, duration))
+                .flatMap(lockInstance -> runAction(lock, action, lockInstance)
+                        .doFinally(signalType -> lockMetrics.heldEnd(metricLock)));
     }
 
     @Override
     public <T> Flux<T> executeWithLock(@NonNull Lock lock, @NonNull Flux<T> stream) {
         var semaphore = getSemaphore(lock);
+        var metricLock = LockMetrics.label(lock.key());
         log.debug(TRYING_TO_LOCK_WITH, lock);
-        return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
-                .flatMapMany(lockInstance -> runStream(lock, stream, lockInstance));
+        return instrumentedAcquire(metricLock,
+                acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS())))
+                .flatMapMany(lockInstance -> runStream(lock, stream, lockInstance)
+                        .doFinally(signalType -> lockMetrics.heldEnd(metricLock)));
+    }
+
+    /**
+     * Wrap a permit-acquire with waiting/held gauges + acquire-time/outcome metrics. {@code lock_waiting}
+     * is incremented on subscribe and decremented on any terminal signal (success, error, cancel), so a
+     * waiter that times out, errors, or is cancelled never leaks the gauge. {@code lock_held} is bumped
+     * once the permit is obtained; the caller decrements it when the held action terminates.
+     */
+    private Mono<LockInstance> instrumentedAcquire(String metricLock, Mono<LockInstance> acquire) {
+        return Mono.defer(() -> {
+            long start = System.currentTimeMillis();
+            lockMetrics.waitStart(metricLock);
+            return acquire
+                    .doOnNext(lockInstance -> {
+                        lockMetrics.acquired(metricLock, System.currentTimeMillis() - start);
+                        lockMetrics.heldStart(metricLock);
+                    })
+                    .doOnError(throwable -> lockMetrics.acquireFailed(metricLock))
+                    .doFinally(signalType -> lockMetrics.waitEnd(metricLock));
+        });
     }
 
     private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock) {
@@ -154,26 +180,44 @@ class RedissonLockService implements LockService {
     public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
             Duration actionTimeout, Duration lockWaitTime, boolean holdUntilExpiry) {
         var semaphore = getSemaphore(lock);
+        var metricLock = LockMetrics.label(lock.key());
         log.debug(TRYING_TO_LOCK_WITH, lock);
-        return Mono.defer(() -> semaphore.trySetPermits(1)
-                //Try to acquire the lock until the lockWaitTime expires if the lock is not available it will return Mono.empty()
-                .then(Mono.defer(() -> semaphore.tryAcquire(
-                        lockWaitTime.toMillis(), actionTimeout.toMillis(), TimeUnit.MILLISECONDS))
-                        // If the lock is not acquired, run the fallback and return empty so the main action does not execute.
-                        .switchIfEmpty(failToAcquireLockAction.then(Mono.empty()))
-                        .flatMap(permitId -> {
-                            var lockInstance = new LockInstance(semaphore, permitId);
-                            // If the lock is acquired, it sets the expiration time using the actionTimeout
-                            return expire(lockInstance, actionTimeout)
-                                    .then(Mono.defer(() -> runAction(lock, action)))
-                                    .doFinally(signal -> {
-                                        if (!holdUntilExpiry) {
-                                            lockInstance.release();
-                                        }
-                                    });
-                        })))
+        return Mono.defer(() -> {
+            long start = System.currentTimeMillis();
+            lockMetrics.waitStart(metricLock);
+            return semaphore.trySetPermits(1)
+                    //Try to acquire the lock until the lockWaitTime expires if the lock is not available it will return Mono.empty()
+                    .then(Mono.defer(() -> semaphore.tryAcquire(
+                            lockWaitTime.toMillis(), actionTimeout.toMillis(), TimeUnit.MILLISECONDS))
+                            // An empty completion means the wait elapsed without obtaining a permit.
+                            .doOnSuccess(permitId -> {
+                                if (permitId == null) {
+                                    lockMetrics.acquireFailed(metricLock);
+                                }
+                            })
+                            // If the lock is not acquired, run the fallback and return empty so the main action does not execute.
+                            .switchIfEmpty(failToAcquireLockAction.then(Mono.empty()))
+                            .flatMap(permitId -> {
+                                lockMetrics.acquired(metricLock, System.currentTimeMillis() - start);
+                                lockMetrics.heldStart(metricLock);
+                                var lockInstance = new LockInstance(semaphore, permitId);
+                                // If the lock is acquired, it sets the expiration time using the actionTimeout
+                                return expire(lockInstance, actionTimeout)
+                                        .then(Mono.defer(() -> runAction(lock, action)))
+                                        .doFinally(signal -> {
+                                            lockMetrics.heldEnd(metricLock);
+                                            if (!holdUntilExpiry) {
+                                                lockInstance.release();
+                                            }
+                                        });
+                            }))
+                    .doFinally(signal -> lockMetrics.waitEnd(metricLock));
+        })
                 .onErrorResume(RedisException.class,
-                        redisException -> handleError(failToAcquireLockAction, redisException).then(Mono.empty()));
+                        redisException -> {
+                            lockMetrics.acquireFailed(metricLock);
+                            return handleError(failToAcquireLockAction, redisException).then(Mono.empty());
+                        });
     }
 
     @Override
