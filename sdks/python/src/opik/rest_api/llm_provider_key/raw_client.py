@@ -12,7 +12,6 @@ from ..core.request_options import RequestOptions
 from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unauthorized_error import UnauthorizedError
-from ..types.error_message import ErrorMessage
 from ..types.provider_api_key_page_public import ProviderApiKeyPagePublic
 from ..types.provider_api_key_public import ProviderApiKeyPublic
 from .types.provider_api_key_write_provider import ProviderApiKeyWriteProvider
@@ -173,9 +172,9 @@ class RawLlmProviderKeyClient:
                 raise ForbiddenError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -308,9 +307,9 @@ class RawLlmProviderKeyClient:
                 raise ForbiddenError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -484,9 +483,9 @@ class AsyncRawLlmProviderKeyClient:
                 raise ForbiddenError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -619,9 +618,9 @@ class AsyncRawLlmProviderKeyClient:
                 raise ForbiddenError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),

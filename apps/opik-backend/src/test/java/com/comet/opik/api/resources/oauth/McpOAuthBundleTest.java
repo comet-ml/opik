@@ -36,6 +36,7 @@ class McpOAuthBundleTest {
                 .disableExtensions(
                         OAuthMetadataResource.class,
                         OAuthAuthorizeResource.class,
-                        OAuthTokenResource.class);
+                        OAuthTokenResource.class,
+                        OAuthRegisterResource.class);
     }
 }

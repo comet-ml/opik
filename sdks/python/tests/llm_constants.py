@@ -55,6 +55,10 @@ OPENAI_REASONING_EFFORT = "minimal"
 ANTHROPIC_CLAUDE_SONNET = "claude-sonnet-4-6"
 ANTHROPIC_CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
 
+# Short prefixes for version checking in tests (e.g. ANY_STRING.starting_with(...))
+ANTHROPIC_CLAUDE_SONNET_SHORT = "claude-sonnet-4"
+ANTHROPIC_CLAUDE_HAIKU_SHORT = "claude-haiku-4"
+
 LITELLM_ANTHROPIC_CLAUDE_SONNET = f"anthropic/{ANTHROPIC_CLAUDE_SONNET}"
 LITELLM_ANTHROPIC_CLAUDE_HAIKU = f"anthropic/{ANTHROPIC_CLAUDE_HAIKU}"
 

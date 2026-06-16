@@ -3,20 +3,14 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { ModelTiers } from "./ModelTiers.js";
 
 export const SpendUserRow: core.serialization.ObjectSchema<serializers.SpendUserRow.Raw, OpikApi.SpendUserRow> =
     core.serialization.object({
         userUuid: core.serialization.property("user_uuid", core.serialization.string().optional()),
         userEmail: core.serialization.property("user_email", core.serialization.string().optional()),
         userDisplayName: core.serialization.property("user_display_name", core.serialization.string().optional()),
-        model: core.serialization.string().optional(),
-        inputTokens: core.serialization.property("input_tokens", core.serialization.number().optional()),
-        cacheReadTokens: core.serialization.property("cache_read_tokens", core.serialization.number().optional()),
-        cacheCreationTokens: core.serialization.property(
-            "cache_creation_tokens",
-            core.serialization.number().optional(),
-        ),
-        outputTokens: core.serialization.property("output_tokens", core.serialization.number().optional()),
+        byModel: core.serialization.property("by_model", core.serialization.list(ModelTiers).optional()),
         totalTokens: core.serialization.property("total_tokens", core.serialization.number().optional()),
         requests: core.serialization.number().optional(),
         skills: core.serialization.number().optional(),
@@ -31,11 +25,7 @@ export declare namespace SpendUserRow {
         user_uuid?: string | null;
         user_email?: string | null;
         user_display_name?: string | null;
-        model?: string | null;
-        input_tokens?: number | null;
-        cache_read_tokens?: number | null;
-        cache_creation_tokens?: number | null;
-        output_tokens?: number | null;
+        by_model?: ModelTiers.Raw[] | null;
         total_tokens?: number | null;
         requests?: number | null;
         skills?: number | null;

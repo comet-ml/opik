@@ -93,6 +93,8 @@ tags:
   description: Project related resources
 - name: Prompts
   description: Prompt resources
+- name: Reports
+  description: Ollie daily report management
 - name: Retention Rules
   description: Data retention rule management
 - name: Service Toggles
@@ -217,6 +219,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorizationServerMetadata"
+  /oauth/register:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Dynamic Client Registration Endpoint
+      description: OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public
+        client for the MCP OAuth flow; throttled per source IP
+      operationId: registerOAuthClient
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientRegistrationRequest"
+      responses:
+        "201":
+          description: Registered client metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientRegistrationResponse"
+        "429":
+          description: Registration rate limit exceeded
   /oauth/revoke:
     post:
       tags:
@@ -943,7 +967,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WorkspaceMetricsSummaryResponse"
+                $ref: "#/components/schemas/SpendSummaryResponse"
         "400":
           description: Bad Request
           content:
@@ -6909,6 +6933,145 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/projects/{projectId}/reports/{reportId}/complete:
+    post:
+      tags:
+      - Reports
+      summary: Complete report generation
+      description: Callback from Ollie to update report status and content after generation.
+      operationId: completeReport
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: reportId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportCompleteRequest"
+      responses:
+        "204":
+          description: Report updated
+        "404":
+          description: Report not found
+  /v1/private/projects/{projectId}/reports/generate:
+    post:
+      tags:
+      - Reports
+      summary: Trigger report generation
+      description: Creates a pending report and triggers asynchronous generation via
+        the orchestrator.
+      operationId: generateReport
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "202":
+          description: Report generation triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateReportResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+  /v1/private/projects/{projectId}/reports/preferences:
+    get:
+      tags:
+      - Reports
+      summary: Get report preferences
+      description: "Returns report preferences for a project, or null if none have\
+        \ been set."
+      operationId: getReportPreference
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Report preferences or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPreference"
+    put:
+      tags:
+      - Reports
+      summary: Update report preferences
+      description: Enable or disable daily report generation for a project.
+      operationId: updateReportPreference
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportPreference"
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPreference"
+  /v1/private/projects/{projectId}/reports:
+    get:
+      tags:
+      - Reports
+      summary: Get reports for a project
+      description: "Returns a paginated list of reports, newest first."
+      operationId: getReports
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Reports page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OllieReportPage"
   /v1/private/retention/rules:
     get:
       tags:
@@ -8965,6 +9128,56 @@ components:
           type: array
           items:
             type: string
+    ClientRegistrationResponse:
+      type: object
+      properties:
+        client_id:
+          type: string
+        client_id_issued_at:
+          type: integer
+          format: int64
+        client_name:
+          type: string
+        logo_uri:
+          type: string
+        redirect_uris:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        token_endpoint_auth_method:
+          type: string
+        grant_types:
+          type: array
+          items:
+            type: string
+        response_types:
+          type: array
+          items:
+            type: string
+    ClientRegistrationRequest:
+      required:
+      - client_name
+      - redirect_uris
+      type: object
+      properties:
+        client_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        redirect_uris:
+          maxItems: 10
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 2048
+            minLength: 0
+            type: string
+        logo_uri:
+          maxLength: 2048
+          minLength: 0
+          type: string
     TokenResponse:
       type: object
       properties:
@@ -9383,6 +9596,17 @@ components:
         total_tokens:
           type: integer
           format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        has_breakdown:
+          type: boolean
+    ModelTiers:
+      type: object
+      properties:
+        model:
+          type: string
         input_tokens:
           type: integer
           format: int64
@@ -9395,8 +9619,6 @@ components:
         output_tokens:
           type: integer
           format: int64
-        has_breakdown:
-          type: boolean
     Side:
       type: object
       properties:
@@ -9418,10 +9640,6 @@ components:
             $ref: "#/components/schemas/HarnessEntry"
         output:
           $ref: "#/components/schemas/Side"
-        models:
-          type: array
-          items:
-            type: string
     SpendMetricRequest:
       required:
       - interval_end
@@ -9480,20 +9698,10 @@ components:
         total_tokens:
           type: integer
           format: int64
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-        model:
-          type: string
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
         item_count:
           type: integer
           format: int32
@@ -9524,13 +9732,21 @@ components:
         previous:
           type: number
           format: double
-    WorkspaceMetricsSummaryResponse:
+    SpendSummaryResponse:
       type: object
       properties:
         results:
           type: array
           items:
             $ref: "#/components/schemas/Result"
+        spend_current:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        spend_previous:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
     SpendUserPage:
       type: object
       properties:
@@ -9560,20 +9776,10 @@ components:
           type: string
         user_display_name:
           type: string
-        model:
-          type: string
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
         total_tokens:
           type: integer
           format: int64
@@ -19715,12 +19921,13 @@ components:
         type:
           type: string
           enum:
+          - trace_daily
           - experiment
           - dataset_version
           - test_suite_version
           - alert_event
           - optimization
-          - agent_config_version
+          - prompt_version
         id:
           type: string
           format: uuid
@@ -19750,6 +19957,98 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentActivityItem_Public"
+    ReportCompleteRequest:
+      required:
+      - status
+      type: object
+      properties:
+        content:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - completed
+          - failed
+        session_id:
+          type: string
+        recommended_actions:
+          $ref: "#/components/schemas/JsonNode"
+    GenerateReportResponse:
+      type: object
+      properties:
+        reportId:
+          type: string
+          format: uuid
+      description: Response for report generation trigger
+    ReportPreference:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+        schedule_time:
+          pattern: "\\d{2}:\\d{2}:\\d{2}"
+          type: string
+        custom_prompt:
+          maxLength: 5000
+          minLength: 0
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    OllieReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        content:
+          type: string
+        recommended_actions:
+          $ref: "#/components/schemas/JsonNode"
+        status:
+          type: string
+          enum:
+          - pending
+          - completed
+          - failed
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    OllieReportPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/OllieReport"
     RetentionRule_Public:
       required:
       - retention
@@ -19866,6 +20165,7 @@ components:
       - openrouterProviderEnabled
       - opikAIEnabled
       - optimizationStudioEnabled
+      - projectHomepageEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
@@ -19919,6 +20219,8 @@ components:
         ollamaProviderEnabled:
           type: boolean
         ollieEnabled:
+          type: boolean
+        projectHomepageEnabled:
           type: boolean
         agenticToolsEnabled:
           type: boolean
@@ -21451,3 +21753,10 @@ components:
         Workspace version response.
         The opik_version field indicates which navigation mode the frontend should render:
         'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
+    WorkspaceMetricsSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"

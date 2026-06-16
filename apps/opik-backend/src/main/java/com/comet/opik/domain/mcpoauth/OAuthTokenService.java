@@ -54,7 +54,7 @@ public class OAuthTokenService {
         try {
             mcpOAuthService.revoke(token);
         } catch (Exception e) {
-            log.warn("MCP OAuth revoke failed '{}'", McpOAuthTokens.maskToken(token), e);
+            log.warn("MCP OAuth revoke failed '{}'", McpOAuthTokenUtils.maskToken(token), e);
         }
     }
 

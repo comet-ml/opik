@@ -6,6 +6,8 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 import { Button } from "@/ui/button";
@@ -16,6 +18,9 @@ const ProjectPage = () => {
   const workspaceName = useActiveWorkspaceName();
 
   const activeProjectId = useActiveProjectId();
+  const projectHomepageEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED,
+  );
 
   const { data, isPending, isError } = useProjectById({
     projectId,
@@ -87,7 +92,9 @@ const ProjectPage = () => {
   }
 
   if (last(pathname.split("/")) === projectId) {
-    return <Navigate to={pathname + "/home"} />;
+    return (
+      <Navigate to={pathname + (projectHomepageEnabled ? "/home" : "/logs")} />
+    );
   }
 
   return <Outlet />;

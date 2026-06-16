@@ -4,7 +4,7 @@ from opik import synchronization
 from opik.api_objects import rest_helpers, rest_stream_parser
 from opik.api_objects.helpers import OptionalFilterParsedItemList
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import span_public, trace_public
+from opik.rest_api.types import span_public, trace_public, trace_thread
 
 
 def search_spans_with_filters(
@@ -48,10 +48,11 @@ def search_spans_with_filters(
 
 def search_traces_with_filters(
     rest_client: rest_api_client.OpikApi,
-    project_name: Optional[str],
-    filters: Optional[OptionalFilterParsedItemList],
-    max_results: int,
-    truncate: bool,
+    project_name: Optional[str] = None,
+    project_id: Optional[str] = None,
+    filters: Optional[OptionalFilterParsedItemList] = None,
+    max_results: Optional[int] = None,
+    truncate: bool = True,
     exclude: Optional[List[str]] = None,
 ) -> List[trace_public.TracePublic]:
     def fetch_page(
@@ -62,6 +63,7 @@ def search_traces_with_filters(
             rest_callable=lambda: list(
                 rest_client.traces.search_traces(
                     project_name=project_name,
+                    project_id=project_id,
                     filters=filters,
                     limit=current_batch_size,
                     truncate=truncate,
@@ -77,6 +79,39 @@ def search_traces_with_filters(
         parsed_item_class=trace_public.TracePublic,
     )
     return traces
+
+
+def search_threads_with_filters(
+    rest_client: rest_api_client.OpikApi,
+    project_name: Optional[str] = None,
+    project_id: Optional[str] = None,
+    filters: Optional[OptionalFilterParsedItemList] = None,
+    max_results: Optional[int] = None,
+    truncate: bool = True,
+) -> List[trace_thread.TraceThread]:
+    def fetch_page(
+        current_batch_size: int, last_retrieved_id: Optional[str]
+    ) -> List[bytes]:
+        return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            operation_name="search_trace_threads",
+            rest_callable=lambda: list(
+                rest_client.traces.search_trace_threads(
+                    project_name=project_name,
+                    project_id=project_id,
+                    filters=filters,
+                    limit=current_batch_size,
+                    truncate=truncate,
+                    last_retrieved_thread_model_id=last_retrieved_id,
+                )
+            ),
+        )
+
+    threads = rest_stream_parser.read_and_parse_full_stream(
+        read_source=fetch_page,
+        max_results=max_results,
+        parsed_item_class=trace_thread.TraceThread,
+    )
+    return threads
 
 
 def search_and_wait_for_done(

@@ -87,15 +87,8 @@ const AiUsageBreakdown: React.FC<AiUsageBreakdownProps> = ({
     [recommendationsData],
   );
 
-  const model = data?.models?.[0] ?? null;
-  const inputLanes = useMemo(
-    () => toLaneViews(data?.input, model),
-    [data, model],
-  );
-  const outputLanes = useMemo(
-    () => toLaneViews(data?.output, model),
-    [data, model],
-  );
+  const inputLanes = useMemo(() => toLaneViews(data?.input), [data]);
+  const outputLanes = useMemo(() => toLaneViews(data?.output), [data]);
   const harness = data?.harness ?? [];
   // FE-priced from the lanes' tier columns; the harness card shows the
   // window's whole bill (input side + output side).

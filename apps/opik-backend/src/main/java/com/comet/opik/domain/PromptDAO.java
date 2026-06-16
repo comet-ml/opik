@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersionLink;
+import com.comet.opik.api.RecentActivity;
 import com.comet.opik.infrastructure.db.PromptVersionColumnMapper;
 import com.comet.opik.infrastructure.db.PromptVersionLinkRowMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
@@ -337,6 +338,23 @@ public interface PromptDAO {
             LEFT JOIN ver_envs ve ON ve.version_id = pvc.id
             """)
     List<Prompt> findByCommit(@Bind("commit") String commit, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT p.id AS prompt_id, p.name AS prompt_name,
+                   pv.version_number, pv.created_at, pv.created_by
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id AND p.workspace_id = pv.workspace_id
+            WHERE pv.workspace_id = :workspace_id
+              AND p.project_id = :project_id
+              AND pv.version_type = 'prompt_version'
+            ORDER BY pv.id DESC
+            LIMIT :limit
+            """)
+    @RegisterConstructorMapper(value = RecentActivity.RecentPromptVersion.class)
+    List<RecentActivity.RecentPromptVersion> findRecentPromptVersionsByProjectId(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @Bind("limit") int limit);
 
     @SqlQuery("""
             SELECT

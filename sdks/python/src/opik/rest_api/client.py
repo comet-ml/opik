@@ -35,6 +35,7 @@ from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
 from .raw_client import AsyncRawOpikApi, RawOpikApi
 from .redirect.client import AsyncRedirectClient, RedirectClient
+from .reports.client import AsyncReportsClient, ReportsClient
 from .retention_rules.client import AsyncRetentionRulesClient, RetentionRulesClient
 from .runners.client import AsyncRunnersClient, RunnersClient
 from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesClient
@@ -134,6 +135,7 @@ class OpikApi:
         self.pairing = PairingClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
+        self.reports = ReportsClient(client_wrapper=self._client_wrapper)
         self.retention_rules = RetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
@@ -285,6 +287,7 @@ class AsyncOpikApi:
         self.pairing = AsyncPairingClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
+        self.reports = AsyncReportsClient(client_wrapper=self._client_wrapper)
         self.retention_rules = AsyncRetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)

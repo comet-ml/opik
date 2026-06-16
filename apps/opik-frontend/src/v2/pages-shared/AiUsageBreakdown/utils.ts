@@ -2,7 +2,7 @@ import {
   AiSpendLaneApi,
   AiSpendSideApi,
 } from "@/api/ai-spend/useAiSpendComposition";
-import { laneCost } from "@/api/ai-spend/claudePricing";
+import { tiersCost } from "@/api/ai-spend/claudePricing";
 import { LaneView } from "./types";
 
 const MAX_RIBBON_WIDTH = 14;
@@ -10,22 +10,17 @@ const MAX_RIBBON_WIDTH = 14;
 export const laneWeight = (lane: { total_tokens: number }): number =>
   lane.total_tokens ?? 0;
 
-export const toLaneView = (
-  lane: AiSpendLaneApi,
-  model?: string | null,
-): LaneView => ({
+export const toLaneView = (lane: AiSpendLaneApi): LaneView => ({
   key: lane.key,
   label: lane.label,
   tokens: lane.total_tokens ?? 0,
-  cost: laneCost(lane, model),
+  cost: tiersCost(lane.by_model),
   hasBreakdown: lane.has_breakdown,
   weight: laneWeight(lane),
 });
 
-export const toLaneViews = (
-  side?: AiSpendSideApi,
-  model?: string | null,
-): LaneView[] => (side?.lanes ?? []).map((lane) => toLaneView(lane, model));
+export const toLaneViews = (side?: AiSpendSideApi): LaneView[] =>
+  (side?.lanes ?? []).map((lane) => toLaneView(lane));
 
 export const sideWeightTotal = (lanes: LaneView[]): number =>
   lanes.reduce((acc, lane) => acc + lane.weight, 0);

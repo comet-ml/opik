@@ -3,7 +3,6 @@ package com.comet.opik.infrastructure;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -41,12 +40,6 @@ public class McpOAuthConfig {
 
     @Valid @JsonProperty
     @NotNull private Duration refreshRotationGrace;
-
-    @Valid @JsonProperty
-    @Min(1) private long registrationRateLimit;
-
-    @Valid @JsonProperty
-    @NotNull private Duration registrationRateLimitDuration;
 
     public String getIssuer() {
         return StringUtils.stripEnd(baseUrl, "/");
