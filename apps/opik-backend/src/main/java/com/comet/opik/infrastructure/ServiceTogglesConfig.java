@@ -37,6 +37,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean exportEnabled;
     @JsonProperty
+    @NotNull boolean costIntelligenceEnabled;
+    @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
     @NotNull boolean datasetExportEnabled;

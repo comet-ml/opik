@@ -623,6 +623,9 @@ serviceToggles:
   # Default: true
   # Description: Whether the deployment is expected to produce demo project data on signup
   demoDataEnabled: "true"
+  # Default: false
+  # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
+  costIntelligenceEnabled: "false"
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: "true"

@@ -1,4 +1,5 @@
 import { OpikClient } from "@/client/Client";
+import { isTracingActive } from "@/config/TracingRuntimeConfig";
 import type { Span as ISpan, Trace as ITrace } from "@/rest_api/api";
 import { generateId } from "@/utils/generateId";
 import { logger } from "@/utils/logger";
@@ -32,6 +33,10 @@ export class Trace {
     value: number;
     reason?: string;
   }) => {
+    if (!isTracingActive()) {
+      return;
+    }
+
     this.opik.traceFeedbackScoresBatchQueue.create({
       ...score,
       projectName: this.data.projectName ?? this.opik.config.projectName,
@@ -67,7 +72,9 @@ export class Trace {
         : {}),
     };
 
-    this.opik.spanBatchQueue.create(spanWithId);
+    if (isTracingActive()) {
+      this.opik.spanBatchQueue.create(spanWithId);
+    }
 
     const span = new Span(spanWithId, this.opik);
     this.spans.push(span);
@@ -85,7 +92,9 @@ export class Trace {
       ...processedUpdates,
     };
 
-    this.opik.traceBatchQueue.update(this.data.id, traceUpdates);
+    if (isTracingActive()) {
+      this.opik.traceBatchQueue.update(this.data.id, traceUpdates);
+    }
     this.data = { ...this.data, ...traceUpdates };
 
     return this;

@@ -82,6 +82,35 @@ When discovery is done, report a short summary — the selectors you'll use per 
 - Write the spec in `tests/<feature>/<name>.spec.ts`: tier + feature tag on the describe block, coarse `test.step()` phases, UI-first assertions.
 - If discovery flagged a missing/brittle selector, add a descriptive `data-testid` to the FE component in the **same change**.
 
+#### Rebuilding the FE after adding a `data-testid`
+
+The local OSS deployment serves the frontend from a **Docker image** — file changes to `apps/opik-frontend/` are not picked up automatically. After adding a `data-testid`, you must rebuild and restart the container before the test can find it.
+
+From `deployment/docker-compose/`:
+
+```bash
+# 1. Build a new image from the updated source
+docker compose --profile opik build frontend
+
+# 2. Recreate the container using the locally built image
+#    (pull_policy defaults to "always" — override it so Docker uses the local build)
+docker stop opik-frontend-1 && docker rm opik-frontend-1
+OPIK_FRONTEND_PULL_POLICY=never docker compose --profile opik up -d --no-deps frontend
+```
+
+Verify the new `data-testid` is live before running the test:
+
+```bash
+docker exec opik-frontend-1 sh -c 'grep -r "your-testid" /usr/share/nginx/html/ | wc -l'
+# should print a non-zero number
+```
+
+> **Network note:** if the rebuilt container loses connectivity to the backend (502 errors), the container may have ended up on the wrong Docker network. Fix it:
+> ```bash
+> docker network disconnect opik-opik_default opik-frontend-1
+> docker network connect opik-opik_default opik-frontend-1
+> ```
+
 ### Step 5 — Run until green
 
 From `tests_end_to_end/e2e/`:

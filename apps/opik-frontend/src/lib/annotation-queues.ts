@@ -11,11 +11,12 @@ import { formatDate } from "@/lib/date";
 export const DEFAULT_LOCK_TIMEOUT_SECONDS = 300;
 
 export const hashCode = (str: string): number => {
-  let hash = 0;
+  let h = 0;
   for (let i = 0; i < str.length; i++) {
-    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    h = Math.imul(h ^ str.charCodeAt(i), 0x5bd1e995);
+    h = h ^ (h >>> 15);
   }
-  return hash;
+  return h | 0;
 };
 
 export const generateSMEURL = (workspace: string, id: string): string => {

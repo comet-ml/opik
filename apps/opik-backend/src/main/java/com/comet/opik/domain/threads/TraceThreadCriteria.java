@@ -13,7 +13,6 @@ public record TraceThreadCriteria(
         UUID projectId,
         Set<String> threadIds,
         TraceThreadStatus status,
-        boolean scoredAtEmpty,
         UUID uuidFromTime,
         UUID uuidToTime) {
 }
