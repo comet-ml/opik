@@ -14,16 +14,16 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentInsightsIssueWithDetails(
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+        UUID id,
         String name,
         String description,
         String cause,
         String suggestedFix,
         AgentInsightsIssueStatus status,
         String tracesQuery,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
+        String createdBy,
+        Instant createdAt,
+        String lastUpdatedBy,
+        Instant lastUpdatedAt,
         @Schema(description = "Per-day breakdown within the requested window, ordered by report_day ascending") List<AgentInsightsIssueDetail> details) {
 }

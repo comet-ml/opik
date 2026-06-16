@@ -15,7 +15,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentInsightsIssue(
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+        UUID id,
         String name,
         String description,
         String cause,
@@ -29,10 +29,10 @@ public record AgentInsightsIssue(
         @Schema(description = "MIN(report_day) in the requested window") LocalDate firstSeen,
         @Schema(description = "MAX(report_day) in the requested window") LocalDate lastSeen,
         @Schema(description = "COUNT(DISTINCT report_day) in the requested window") long daysReported,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt) {
+        String createdBy,
+        Instant createdAt,
+        String lastUpdatedBy,
+        Instant lastUpdatedAt) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

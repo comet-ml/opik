@@ -225,29 +225,36 @@ class AgentInsightsResourceTest {
 
             var page = findIssues(projectId, DAY_1, DAY_1);
 
+            var expectedIssueA = AgentInsightsIssue.builder()
+                    .name(nameA)
+                    .description("Description of " + nameA)
+                    .cause("Cause of " + nameA)
+                    .suggestedFix("Fix for " + nameA)
+                    .status(AgentInsightsIssueStatus.OPEN)
+                    .tracesQuery("SELECT 1")
+                    .totalOccurrences(occurrences)
+                    .total(totalCount)
+                    .usersImpacted(impacted)
+                    .totalUsers(totalUsers)
+                    .firstSeen(DAY_1)
+                    .lastSeen(DAY_1)
+                    .daysReported(1)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+
             assertThat(page.total()).isEqualTo(2);
             assertThat(page.content())
                     .extracting(AgentInsightsIssue::name)
                     .containsExactlyInAnyOrder(nameA, nameB);
+            assertThat(page.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "lastUpdatedAt")
+                    .contains(expectedIssueA);
 
             var issueA = page.content().stream()
                     .filter(issue -> issue.name().equals(nameA))
                     .findFirst()
                     .orElseThrow();
-            assertThat(issueA.description()).isEqualTo("Description of " + nameA);
-            assertThat(issueA.cause()).isEqualTo("Cause of " + nameA);
-            assertThat(issueA.suggestedFix()).isEqualTo("Fix for " + nameA);
-            assertThat(issueA.tracesQuery()).isEqualTo("SELECT 1");
-            assertThat(issueA.status()).isEqualTo(AgentInsightsIssueStatus.OPEN);
-            assertThat(issueA.totalOccurrences()).isEqualTo(occurrences);
-            assertThat(issueA.total()).isEqualTo(totalCount);
-            assertThat(issueA.usersImpacted()).isEqualTo(impacted);
-            assertThat(issueA.totalUsers()).isEqualTo(totalUsers);
-            assertThat(issueA.firstSeen()).isEqualTo(DAY_1);
-            assertThat(issueA.lastSeen()).isEqualTo(DAY_1);
-            assertThat(issueA.daysReported()).isEqualTo(1);
-            assertThat(issueA.createdBy()).isEqualTo(USER);
-            assertThat(issueA.lastUpdatedBy()).isEqualTo(USER);
             assertThat(issueA.createdAt()).isNotNull();
             assertThat(issueA.lastUpdatedAt()).isNotNull();
         }
