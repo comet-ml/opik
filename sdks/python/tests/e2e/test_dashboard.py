@@ -148,4 +148,96 @@ def test_update_and_remove_widget__persisted(
         expected_widget_configs={},
     )
     refetched = opik_client.get_dashboard(dash.id)
-    assert refetched.config["sections"][0]["widgets"] == []
+    assert refetched.sections[0].widgets == []
+
+
+def test_experiments_dashboard_widgets__all_types(
+    opik_client: opik.Opik, created_dashboards: list
+):
+    dash = opik_client.create_dashboard(
+        name=f"e2e-dashboard-experiments-{PROJECT_NAME}",
+        type=dashboard.DashboardType.EXPERIMENTS,
+    )
+    created_dashboards.append(dash.id)
+    section_id = dash.sections[0].id
+
+    dash.add_widget(
+        section_id,
+        dashboard.DashboardWidget(
+            type=dashboard.WidgetType.EXPERIMENTS_FEEDBACK_SCORES,
+            title="Feedback scores",
+            config=dashboard.ExperimentsFeedbackScoresConfig(
+                chart_type=dashboard.ChartType.BAR,
+                max_experiments_count=5,
+            ),
+        ),
+    )
+    dash.add_widget(
+        section_id,
+        dashboard.DashboardWidget(
+            type=dashboard.WidgetType.EXPERIMENT_LEADERBOARD,
+            title="Leaderboard",
+            config=dashboard.ExperimentLeaderboardConfig(enable_ranking=False),
+        ),
+    )
+
+    verifiers.verify_dashboard(
+        opik_client,
+        dashboard_id=dash.id,
+        type="experiments",
+        section_count=1,
+        expected_widget_configs={
+            "experiments_feedback_scores": {"chartType": "bar"},
+            "experiment_leaderboard": {"enableRanking": False},
+        },
+    )
+
+
+def test_move_widget_position__persisted(
+    opik_client: opik.Opik, project_id: str, created_dashboards: list
+):
+    dash = opik_client.create_dashboard(
+        name=f"e2e-dashboard-move-{PROJECT_NAME}",
+        type=dashboard.DashboardType.MULTI_PROJECT,
+    )
+    created_dashboards.append(dash.id)
+    section_id = dash.sections[0].id
+
+    # Two stats-card widgets; auto-layout places them at x=0 and x=1 (w=1 each).
+    w1_id = dash.add_widget(
+        section_id,
+        dashboard.DashboardWidget(
+            type=dashboard.WidgetType.PROJECT_STATS_CARD,
+            title="Widget A",
+            config=dashboard.ProjectStatsCardConfig(
+                project_id=project_id,
+                metric=dashboard.StatsCardMetric.TRACE_COUNT,
+            ),
+        ),
+    )
+    dash.add_widget(
+        section_id,
+        dashboard.DashboardWidget(
+            type=dashboard.WidgetType.PROJECT_STATS_CARD,
+            title="Widget B",
+            config=dashboard.ProjectStatsCardConfig(
+                project_id=project_id,
+                metric=dashboard.StatsCardMetric.ERROR_COUNT,
+            ),
+        ),
+    )
+
+    # Move w1 to the far right (x=5) via replace_sections.
+    sections = dash.sections
+    for item in sections[0].layout:
+        if item.i == w1_id:
+            item.x = 5
+            item.y = 0
+    dash.replace_sections(sections)
+
+    verifiers.verify_dashboard(
+        opik_client,
+        dashboard_id=dash.id,
+        section_count=1,
+        expected_widget_positions={w1_id: {"x": 5, "y": 0}},
+    )

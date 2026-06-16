@@ -305,6 +305,7 @@ def verify_dashboard(
     version: int = mock.ANY,
     section_count: int = mock.ANY,
     expected_widget_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+    expected_widget_positions: Optional[Dict[str, Dict[str, int]]] = None,
 ):
     assert synchronization.until(
         lambda: opik_client.get_dashboard(dashboard_id) is not None,
@@ -339,6 +340,15 @@ def verify_dashboard(
         assert section_widget_ids == layout_ids, (
             f"Widget/layout id mismatch in section {section.get('id')!r}"
         )
+
+    if expected_widget_positions is not None:
+        layout_by_id = {
+            item.i: item for section in fetched.sections for item in section.layout
+        }
+        for widget_id, expected_pos in expected_widget_positions.items():
+            actual_item = layout_by_id[widget_id]
+            actual_subset = {key: getattr(actual_item, key) for key in expected_pos}
+            testlib.assert_equal(expected_pos, actual_subset)
 
 
 def verify_experiment(
