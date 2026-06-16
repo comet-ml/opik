@@ -201,6 +201,7 @@ const PromptRow: React.FC<PromptRowProps> = ({
         sideOffset={8}
         className="w-[220px] p-1"
         data-prompt-versions-submenu=""
+        data-testid="prompt-versions-submenu"
       >
         <PromptVersionsList
           promptId={prompt.id}

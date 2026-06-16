@@ -273,29 +273,33 @@ export class PlaygroundPage {
    * Open the prompt library menu in the first variant card, hover the named prompt
    * to reveal the version submenu, and click the specified version label (e.g. "v1").
    */
+  private async navigateLibraryMenuToVersion(promptName: string, versionLabel: string): Promise<void> {
+    const menu = this.page.getByTestId('prompt-library-menu');
+    await menu.waitFor({ state: 'visible' });
+
+    await menu.getByPlaceholder('Search').fill(promptName);
+
+    const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
+    await promptRow.waitFor({ state: 'visible' });
+    await promptRow.hover();
+
+    const versionSubmenu = this.page.getByTestId('prompt-versions-submenu');
+    await versionSubmenu.waitFor({ state: 'visible' });
+
+    await versionSubmenu
+      .getByRole('button')
+      .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
+      .first()
+      .click();
+  }
+
   async loadPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
     return test.step(`load prompt "${promptName}" version "${versionLabel}" from library`, async () => {
       // The button is in a div that only expands on group-hover; hover the card first.
       await this.variantCard(0).hover();
       await this.variantCard(0).getByTestId('load-prompt-button').click();
 
-      const menu = this.page.getByTestId('prompt-library-menu');
-      await menu.waitFor({ state: 'visible' });
-
-      await menu.getByPlaceholder('Search').fill(promptName);
-
-      const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
-      await promptRow.waitFor({ state: 'visible' });
-      await promptRow.hover();
-
-      const versionSubmenu = this.page.locator('[data-prompt-versions-submenu]');
-      await versionSubmenu.waitFor({ state: 'visible' });
-
-      await versionSubmenu
-        .getByRole('button')
-        .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
-        .first()
-        .click();
+      await this.navigateLibraryMenuToVersion(promptName, versionLabel);
     });
   }
 
@@ -311,23 +315,7 @@ export class PlaygroundPage {
       await messageRow.hover();
       await messageRow.getByTestId('load-text-prompt-button').click();
 
-      const menu = this.page.getByTestId('prompt-library-menu');
-      await menu.waitFor({ state: 'visible' });
-
-      await menu.getByPlaceholder('Search').fill(promptName);
-
-      const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
-      await promptRow.waitFor({ state: 'visible' });
-      await promptRow.hover();
-
-      const versionSubmenu = this.page.locator('[data-prompt-versions-submenu]');
-      await versionSubmenu.waitFor({ state: 'visible' });
-
-      await versionSubmenu
-        .getByRole('button')
-        .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
-        .first()
-        .click();
+      await this.navigateLibraryMenuToVersion(promptName, versionLabel);
     });
   }
 
@@ -353,6 +341,16 @@ export class PlaygroundPage {
     });
   }
 
+  private async submitSaveDialog(promptName?: string): Promise<void> {
+    const dialog = this.page.getByRole('dialog', { name: 'Save to prompt library' });
+    await dialog.waitFor({ state: 'visible' });
+    if (promptName) {
+      await dialog.getByLabel('Name').fill(promptName);
+    }
+    await dialog.getByRole('button', { name: 'Save to library' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+  }
+
   /**
    * Click the Save button (disk icon) in the first message row of variant 0 and submit the
    * "Save to prompt library" dialog in "Update existing" mode (text prompts).
@@ -363,10 +361,7 @@ export class PlaygroundPage {
       const messageRow = this.variantMessages(0).first();
       await messageRow.hover();
       await messageRow.getByTestId('save-text-prompt-button').click();
-      const dialog = this.page.getByRole('dialog', { name: 'Save to prompt library' });
-      await dialog.waitFor({ state: 'visible' });
-      await dialog.getByRole('button', { name: 'Save to library' }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      await this.submitSaveDialog();
     });
   }
 
@@ -380,11 +375,7 @@ export class PlaygroundPage {
       const messageRow = this.variantMessages(0).first();
       await messageRow.hover();
       await messageRow.getByTestId('save-text-prompt-button').click();
-      const dialog = this.page.getByRole('dialog', { name: 'Save to prompt library' });
-      await dialog.waitFor({ state: 'visible' });
-      await dialog.getByLabel('Name').fill(promptName);
-      await dialog.getByRole('button', { name: 'Save to library' }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      await this.submitSaveDialog(promptName);
     });
   }
 
@@ -397,11 +388,7 @@ export class PlaygroundPage {
     return test.step(`save new chat prompt "${promptName}" to library from Playground`, async () => {
       await this.variantCard(0).hover();
       await this.page.getByTestId('playground-save-prompt-button').click();
-      const dialog = this.page.getByRole('dialog', { name: 'Save to prompt library' });
-      await dialog.waitFor({ state: 'visible' });
-      await dialog.getByLabel('Name').fill(promptName);
-      await dialog.getByRole('button', { name: 'Save to library' }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      await this.submitSaveDialog(promptName);
     });
   }
 
@@ -414,10 +401,7 @@ export class PlaygroundPage {
     return test.step('save prompt to library from Playground', async () => {
       await this.variantCard(0).hover();
       await this.page.getByTestId('playground-save-prompt-button').click();
-      const dialog = this.page.getByRole('dialog', { name: 'Save to prompt library' });
-      await dialog.waitFor({ state: 'visible' });
-      await dialog.getByRole('button', { name: 'Save to library' }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      await this.submitSaveDialog();
     });
   }
 
