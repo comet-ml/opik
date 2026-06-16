@@ -180,6 +180,7 @@ public interface TraceDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+// TODO: after v1 drop, remove annotation_queue_filters conditions and keep only annotation_queue_id
 class TraceDAOImpl implements TraceDAO {
 
     private static final String TRACE_SEARCH_CLAUSE = """
@@ -894,6 +895,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                       <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
@@ -1153,6 +1155,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM comments
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                     <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
@@ -1251,7 +1254,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = t.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = t.id
                 <endif>
                 WHERE workspace_id = :workspace_id
@@ -1262,6 +1265,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
                     SELECT entity_id
@@ -1440,6 +1444,7 @@ class TraceDAOImpl implements TraceDAO {
                      WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id = :project_id
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -1647,7 +1652,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(span_feedback_scores_empty_filters)>
                     LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                     <endif>
-                    <if(annotation_queue_filters)>
+                    <if(annotation_queue_filters || annotation_queue_id)>
                     LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                     <endif>
                     WHERE project_id = :project_id
@@ -1657,6 +1662,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                    <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
                         SELECT entity_id
@@ -2053,6 +2059,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_ids
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -2299,7 +2306,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
@@ -2309,6 +2316,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -2480,6 +2488,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_ids
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -2640,7 +2649,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
@@ -2650,6 +2659,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -3939,6 +3949,7 @@ class TraceDAOImpl implements TraceDAO {
         return template.getAttribute("filters") != null
                 || template.getAttribute("search_text") != null
                 || template.getAttribute("annotation_queue_filters") != null
+                || template.getAttribute("annotation_queue_id") != null
                 || template.getAttribute("feedback_scores_filters") != null
                 || template.getAttribute("span_feedback_scores_filters") != null
                 || template.getAttribute("trace_aggregation_filters") != null

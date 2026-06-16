@@ -13,6 +13,7 @@ import lombok.Builder;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
@@ -26,6 +27,7 @@ public record FeedbackScore(
         @NotNull @DecimalMax(MAX_FEEDBACK_SCORE_VALUE) @DecimalMin(MIN_FEEDBACK_SCORE_VALUE) BigDecimal value,
         String reason,
         @NotNull ScoreSource source,
+        UUID sourceQueueId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,

@@ -64,6 +64,7 @@ public interface AnnotationQueueDAO {
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
     Mono<Integer> getDistinctAnnotatorCount(UUID itemId, UUID projectId, String entityType,
+            UUID queueId,
             List<String> feedbackDefinitionNames);
 }
 
@@ -198,19 +199,12 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND entity_id = :item_id
+                AND source_queue_id = :queue_id
             """;
 
     private static final String COUNT_DISTINCT_ANNOTATORS = """
             SELECT uniqExact(author) AS cnt
             FROM (
-                SELECT last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND entity_type = :entity_type
-                    AND entity_id = :item_id
-                    AND name IN :feedback_names
-                UNION ALL
                 SELECT author
                 FROM authored_feedback_scores
                 WHERE workspace_id = :workspace_id
@@ -218,12 +212,14 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     AND entity_type = :entity_type
                     AND entity_id = :item_id
                     AND name IN :feedback_names
+                    AND source_queue_id = :queue_id
                 UNION ALL
                 SELECT created_by AS author
                 FROM comments
                 WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND entity_id = :item_id
+                    AND source_queue_id = :queue_id
             )
             """;
 
@@ -285,7 +281,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                        value,
                        created_by,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -294,7 +291,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                            value,
                            created_by,
                            last_updated_at,
-                           last_updated_by AS author
+                           last_updated_by AS author,
+                           CAST(NULL AS Nullable(FixedString(36))) AS source_queue_id
                     FROM feedback_scores
                     WHERE workspace_id = :workspace_id
                         AND project_id IN (SELECT project_id FROM queues_final)
@@ -308,7 +306,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         value,
                         created_by,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE workspace_id = :workspace_id
                        AND project_id IN (SELECT project_id FROM queues_final)
@@ -320,21 +319,17 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 SELECT entity_id,
                        name,
                        value,
-                       created_by
+                       created_by,
+                       source_queue_id
                 FROM feedback_scores_deduped
-            ), feedback_scores_grouped AS (
+            ), feedback_scores_per_item AS (
                 SELECT
                     entity_id,
                     name,
-                    groupArray(value) AS values
+                    source_queue_id,
+                    toDecimal64(avg(value), 9) AS value
                 FROM feedback_scores_combined
-                GROUP BY entity_id, name
-            ), feedback_scores_final AS (
-                SELECT
-                    entity_id,
-                    name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
-                FROM feedback_scores_grouped
+                GROUP BY entity_id, name, source_queue_id
             ), feedback_scores_agg AS (
                 SELECT
                     fs_avg.queue_id,
@@ -348,17 +343,19 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         fs.name,
                         avg(fs.value) AS avg_value
                     FROM queue_items_final AS qi
-                    INNER JOIN feedback_scores_final AS fs
+                    INNER JOIN feedback_scores_per_item AS fs
                       ON fs.entity_id = qi.item_id
                     WHERE length(fs.name) > 0
                       AND has(qi.feedback_definitions, fs.name)  -- only names defined for this queue
+                      AND fs.source_queue_id = qi.queue_id
                     GROUP BY qi.queue_id, fs.name
                 ) as fs_avg
                 GROUP BY queue_id
             ), comments_combined AS (
                 SELECT DISTINCT
                     entity_id,
-                    created_by
+                    created_by,
+                    source_queue_id
                 FROM comments FINAL
                 WHERE workspace_id = :workspace_id
                     AND project_id IN (SELECT project_id FROM queues_final)
@@ -372,7 +369,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 INNER JOIN feedback_scores_combined AS fsc
                  ON fsc.entity_id = qi.item_id
                 WHERE length(qi.feedback_definitions) > 0
-                  AND has(qi.feedback_definitions, fsc.name)  -- only names defined for this queue
+                  AND has(qi.feedback_definitions, fsc.name) -- only names defined for this queue
+                  AND fsc.source_queue_id = qi.queue_id
             ), queue_items_with_comment_reviewers AS (
                 SELECT DISTINCT
                     qi.queue_id,
@@ -382,6 +380,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 INNER JOIN comments_combined AS c
                  ON c.entity_id = qi.item_id
                 WHERE length(c.created_by) > 0
+                  AND c.source_queue_id = qi.queue_id
             ), queue_items_with_reviewers AS (
                 SELECT queue_id, item_id, username
                 FROM queue_items_with_feedback_reviewers
@@ -784,7 +783,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     @Override
     public Mono<Integer> getDistinctAnnotatorCount(@NonNull UUID itemId, @NonNull UUID projectId,
-            @NonNull String entityType, List<String> feedbackDefinitionNames) {
+            @NonNull String entityType, @NonNull UUID queueId,
+            List<String> feedbackDefinitionNames) {
         var query = CollectionUtils.isEmpty(feedbackDefinitionNames)
                 ? COUNT_DISTINCT_COMMENT_AUTHORS
                 : COUNT_DISTINCT_ANNOTATORS;
@@ -793,7 +793,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(query)
                             .bind("item_id", itemId)
-                            .bind("project_id", projectId);
+                            .bind("project_id", projectId)
+                            .bind("queue_id", queueId.toString());
 
                     if (!CollectionUtils.isEmpty(feedbackDefinitionNames)) {
                         statement.bind("entity_type", entityType);

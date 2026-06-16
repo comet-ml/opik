@@ -18,6 +18,7 @@ type UseThreadListParams = {
   fromTime?: string;
   toTime?: string;
   logsSource?: LOGS_SOURCE;
+  annotationQueueId?: string;
 };
 
 export type UseThreadListResponse = {
@@ -39,6 +40,7 @@ const getThreadList = async (
     fromTime,
     toTime,
     logsSource,
+    annotationQueueId,
   }: UseThreadListParams,
 ) => {
   const { data } = await api.get<UseThreadListResponse>(
@@ -58,6 +60,9 @@ const getThreadList = async (
         truncate,
         ...(fromTime && { from_time: fromTime }),
         ...(toTime && { to_time: toTime }),
+        ...(annotationQueueId && {
+          annotation_queue_id: annotationQueueId,
+        }),
       },
     },
   );
