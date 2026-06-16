@@ -192,10 +192,6 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
     private DateWindow resolveWindow(LocalDate fromDate, LocalDate toDate) {
         LocalDate effectiveFrom = Objects.requireNonNullElse(fromDate, DEFAULT_FROM_DATE);
         LocalDate effectiveTo = Objects.requireNonNullElse(toDate, DEFAULT_TO_DATE);
-        if (effectiveFrom.isAfter(effectiveTo)) {
-            throw new BadRequestException("from_date '%s' must not be after to_date '%s'"
-                    .formatted(effectiveFrom, effectiveTo));
-        }
         return new DateWindow(effectiveFrom, effectiveTo);
     }
 

@@ -39,6 +39,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.utils.ValidationUtils.validateDateRangeParameters;
+
 @Path("/v1/private/agent-insights")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
@@ -66,6 +68,8 @@ public class AgentInsightsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @Max(100) @DefaultValue("10") int size) {
 
+        validateDateRangeParameters(fromDate, toDate);
+
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
         AgentInsightsIssue.AgentInsightsIssuePage issuesPage = agentInsightsIssueService.findIssues(
                 projectId, fromDate, toDate, status, sortingFields, page, size);
@@ -86,6 +90,8 @@ public class AgentInsightsResource {
             @QueryParam("project_id") @NotNull UUID projectId,
             @QueryParam("from_date") LocalDate fromDate,
             @QueryParam("to_date") LocalDate toDate) {
+
+        validateDateRangeParameters(fromDate, toDate);
 
         AgentInsightsIssueWithDetails issue = agentInsightsIssueService.getIssue(issueId, projectId, fromDate,
                 toDate);
