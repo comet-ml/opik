@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.infrastructure.StreamConfiguration;
-import com.comet.opik.infrastructure.metrics.ErrorMetrics;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -365,7 +364,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 // Unexpected errors handling: interval is dropped, but processing continues
                 .onErrorContinue((throwable, object) -> {
                     unexpectedErrors.add(1, Attributes.of(
-                            stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(throwable)));
+                            stringKey(ErrorMetricsResolver.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(throwable)));
                     log.error("Unexpected error processing message from Redis stream '{}'", object, throwable);
                 })
                 .name("redis-subscriber")
@@ -511,13 +510,13 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         failures.forEach(failure -> {
             var failureContext = failure.context() != null ? failure.context() : MessageContext.UNKNOWN;
             messageProcessingErrors.add(1, Attributes.builder()
-                    .put(ErrorMetrics.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(failure.error()))
-                    .put(ErrorMetrics.WORKSPACE_ID_KEY,
-                            StringUtils.defaultIfBlank(failureContext.workspaceId(), ErrorMetrics.UNKNOWN))
-                    .put(ErrorMetrics.WORKSPACE_NAME_KEY,
-                            StringUtils.defaultIfBlank(failureContext.workspaceName(), ErrorMetrics.UNKNOWN))
-                    .put(ErrorMetrics.USER_NAME_KEY,
-                            StringUtils.defaultIfBlank(failureContext.userName(), ErrorMetrics.UNKNOWN))
+                    .put(ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(failure.error()))
+                    .put(ErrorMetricsResolver.WORKSPACE_ID_KEY,
+                            StringUtils.defaultIfBlank(failureContext.workspaceId(), ErrorMetricsResolver.UNKNOWN))
+                    .put(ErrorMetricsResolver.WORKSPACE_NAME_KEY,
+                            StringUtils.defaultIfBlank(failureContext.workspaceName(), ErrorMetricsResolver.UNKNOWN))
+                    .put(ErrorMetricsResolver.USER_NAME_KEY,
+                            StringUtils.defaultIfBlank(failureContext.userName(), ErrorMetricsResolver.UNKNOWN))
                     .build());
         });
 
@@ -679,8 +678,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * subclasses set into the Reactor context inside {@link #processEvent(Object)}.
      */
     protected record MessageContext(String workspaceId, String workspaceName, String userName) {
-        static final MessageContext UNKNOWN = new MessageContext(ErrorMetrics.UNKNOWN, ErrorMetrics.UNKNOWN,
-                ErrorMetrics.UNKNOWN);
+        static final MessageContext UNKNOWN = new MessageContext(ErrorMetricsResolver.UNKNOWN,
+                ErrorMetricsResolver.UNKNOWN,
+                ErrorMetricsResolver.UNKNOWN);
     }
 
     /**

@@ -36,7 +36,7 @@ class ErrorMetricsResolverTest {
     @Test
     @DisplayName("errorType: null throwable resolves to unknown")
     void errorTypeNull() {
-        assertThat(ErrorMetricsResolver.errorType(null)).isEqualTo(ErrorMetrics.UNKNOWN);
+        assertThat(ErrorMetricsResolver.errorType(null)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
     }
 
     @Test
@@ -56,14 +56,14 @@ class ErrorMetricsResolverTest {
         var uriInfo = mock(ExtendedUriInfo.class);
         when(uriInfo.getMatchedTemplates()).thenReturn(List.of());
 
-        assertThat(ErrorMetricsResolver.endpoint(uriInfo)).isEqualTo(ErrorMetrics.UNKNOWN);
+        assertThat(ErrorMetricsResolver.endpoint(uriInfo)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
     }
 
     @Test
     @DisplayName("endpoint: non-extended UriInfo resolves to unknown")
     void endpointNonExtended() {
-        assertThat(ErrorMetricsResolver.endpoint(mock(UriInfo.class))).isEqualTo(ErrorMetrics.UNKNOWN);
-        assertThat(ErrorMetricsResolver.endpoint(null)).isEqualTo(ErrorMetrics.UNKNOWN);
+        assertThat(ErrorMetricsResolver.endpoint(mock(UriInfo.class))).isEqualTo(ErrorMetricsResolver.UNKNOWN);
+        assertThat(ErrorMetricsResolver.endpoint(null)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
     }
 
     @Test
@@ -86,7 +86,7 @@ class ErrorMetricsResolverTest {
             throw new IllegalStateException("no request scope");
         };
 
-        assertThat(ErrorMetricsResolver.workspaceId(provider)).isEqualTo(ErrorMetrics.UNKNOWN);
-        assertThat(ErrorMetricsResolver.workspaceName(provider)).isEqualTo(ErrorMetrics.UNKNOWN);
+        assertThat(ErrorMetricsResolver.workspaceId(provider)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
+        assertThat(ErrorMetricsResolver.workspaceName(provider)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
     }
 }

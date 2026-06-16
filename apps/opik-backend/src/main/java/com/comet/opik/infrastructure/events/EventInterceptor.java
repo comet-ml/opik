@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.events;
 
-import com.comet.opik.infrastructure.metrics.ErrorMetrics;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
@@ -54,7 +53,7 @@ class EventInterceptor implements MethodInterceptor {
         } catch (Throwable e) {
             errorCounter().add(1, Attributes.of(
                     stringKey(LISTENER_KEY), listenerName,
-                    stringKey(ErrorMetrics.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(e)));
+                    stringKey(ErrorMetricsResolver.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(e)));
 
             span.recordException(e);
             span.setStatus(StatusCode.ERROR, "Failed to process event");

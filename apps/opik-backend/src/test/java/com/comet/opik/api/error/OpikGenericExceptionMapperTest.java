@@ -1,8 +1,9 @@
 package com.comet.opik.api.error;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.metrics.ErrorMetrics;
+import com.comet.opik.infrastructure.metrics.HttpErrorMetrics;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.DisplayName;
@@ -20,9 +21,11 @@ import static org.mockito.Mockito.when;
 class OpikGenericExceptionMapperTest {
 
     @Mock
-    private ErrorMetrics errorMetrics;
+    private HttpErrorMetrics errorMetrics;
     @Mock
     private Provider<RequestContext> requestContext;
+    @Mock
+    private Provider<Request> request;
     @Mock
     private Provider<UriInfo> uriInfoProvider;
     @Mock
@@ -32,12 +35,12 @@ class OpikGenericExceptionMapperTest {
     @DisplayName("records the uncaught error and delegates to the 500 rendering")
     void recordsAndReturns500() {
         when(uriInfoProvider.get()).thenReturn(uriInfo);
-        var mapper = new OpikGenericExceptionMapper(errorMetrics, requestContext, uriInfoProvider);
+        var mapper = new OpikGenericExceptionMapper(errorMetrics, requestContext, request, uriInfoProvider);
         var exception = new IllegalStateException("unexpected");
 
         var response = mapper.toResponse(exception);
 
         assertThat(response.getStatus()).isEqualTo(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
-        verify(errorMetrics).record(exception, uriInfo, requestContext);
+        verify(errorMetrics).record(exception, request, uriInfo, requestContext);
     }
 }

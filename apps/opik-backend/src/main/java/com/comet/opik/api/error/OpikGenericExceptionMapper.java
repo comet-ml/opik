@@ -1,11 +1,12 @@
 package com.comet.opik.api.error;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.metrics.ErrorMetrics;
+import com.comet.opik.infrastructure.metrics.HttpErrorMetrics;
 import io.dropwizard.jersey.errors.LoggingExceptionMapper;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 
@@ -18,21 +19,23 @@ import jakarta.ws.rs.core.UriInfo;
 @Priority(1)
 public class OpikGenericExceptionMapper extends LoggingExceptionMapper<Throwable> {
 
-    private final ErrorMetrics errorMetrics;
+    private final HttpErrorMetrics errorMetrics;
     private final Provider<RequestContext> requestContext;
+    private final Provider<Request> request;
     private final Provider<UriInfo> uriInfo;
 
     @Inject
-    public OpikGenericExceptionMapper(ErrorMetrics errorMetrics, Provider<RequestContext> requestContext,
-            Provider<UriInfo> uriInfo) {
+    public OpikGenericExceptionMapper(HttpErrorMetrics errorMetrics, Provider<RequestContext> requestContext,
+            Provider<Request> request, Provider<UriInfo> uriInfo) {
         this.errorMetrics = errorMetrics;
         this.requestContext = requestContext;
+        this.request = request;
         this.uriInfo = uriInfo;
     }
 
     @Override
     public Response toResponse(Throwable exception) {
-        errorMetrics.record(exception, uriInfo.get(), requestContext);
+        errorMetrics.record(exception, request, uriInfo.get(), requestContext);
         return super.toResponse(exception);
     }
 }
