@@ -108,6 +108,7 @@ const AlgorithmConfigs = ({
                 onClick={() => {
                   const next = { ...configs };
                   delete next.model;
+                  delete next.model_parameters;
                   onChange(next);
                 }}
               >

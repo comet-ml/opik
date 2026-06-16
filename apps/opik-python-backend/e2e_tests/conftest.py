@@ -69,6 +69,8 @@ def anthropic_workspace_key() -> None:
     gateway. The key is never handed to the optimizer. Skips if no key is
     available (and none is already configured)."""
     base = _backend_base()
+    if not base:
+        pytest.skip("OPIK_URL_OVERRIDE not set; e2e requires a running Opik backend")
     headers = _workspace_headers()
     if _anthropic_configured(base, headers):
         return
