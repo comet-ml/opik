@@ -130,9 +130,9 @@ class Dashboard:
 
     def add_widget(
         self,
-        section_id: str,
         widget: Union[types.DashboardWidget, Dict[str, Any]],
         *,
+        section_id: Optional[str] = None,
         size: Optional[Dict[str, int]] = None,
     ) -> str:
         """Add a widget to a section and auto-place it on the grid.
@@ -141,9 +141,10 @@ class Dashboard:
         it to the first available slot that fits its default (or overridden) size.
 
         Args:
-            section_id: ID of the section to add the widget to.
             widget: A :class:`~opik.api_objects.dashboard.types.DashboardWidget`
                 instance or a raw config dict.
+            section_id: ID of the section to add the widget to. Defaults to the
+                first section on the dashboard.
             size: Optional ``{"w": int, "h": int}`` to override the widget's
                 default grid dimensions (columns × rows).
 
@@ -161,8 +162,9 @@ class Dashboard:
         validation.validate_widget_for_dashboard(widget_dict, self._type)
         validation.inject_project_id(widget_dict, self._project_id)
 
+        resolved_section_id = section_id or self._default_section_id()
         with self._atomic_config():
-            section = self._get_section(section_id)
+            section = self._get_section(resolved_section_id)
             section.setdefault("widgets", []).append(widget_dict)
             typed_layout = [
                 types.DashboardLayoutItem.model_validate(i)
@@ -330,6 +332,14 @@ class Dashboard:
             self._id, config=self._config
         )
         self._absorb(response)
+
+    def _default_section_id(self) -> str:
+        sections = self._config.get("sections", [])
+        if not sections:
+            raise exceptions.DashboardValidationError(
+                "Dashboard has no sections. Add a section first with add_section()."
+            )
+        return str(sections[0]["id"])
 
     def _get_section(self, section_id: str) -> Dict[str, Any]:
         for section in self._config.get("sections", []):

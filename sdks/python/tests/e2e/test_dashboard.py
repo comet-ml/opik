@@ -17,16 +17,6 @@ PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 @pytest.fixture
-def project_id(opik_client: opik.Opik) -> str:
-    """Ensure the module project exists and return its id (idempotent)."""
-    try:
-        opik_client.rest_client.projects.create_project(name=PROJECT_NAME)
-    except ApiError:
-        pass  # already exists
-    return opik_client.rest_client.projects.retrieve_project(name=PROJECT_NAME).id
-
-
-@pytest.fixture
 def created_dashboards(opik_client: opik.Opik):
     """Track created dashboards and clean them up even if an assertion fails."""
     ids = []
@@ -51,11 +41,9 @@ def test_dashboard_lifecycle__happyflow(
 
     assert dash.id is not None
     assert dash.type == "multi_project"
-    section_id = dash.sections[0].id
 
     # Stats card uses the lowercase-dotted metric namespace.
     dash.add_widget(
-        section_id,
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.PROJECT_STATS_CARD,
             title="Total traces",
@@ -66,7 +54,6 @@ def test_dashboard_lifecycle__happyflow(
     )
     # Time-series uses the ALL-CAPS metricType namespace, plus a breakdown.
     dash.add_widget(
-        section_id,
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.PROJECT_METRICS,
             title="Duration by model",
@@ -117,10 +104,8 @@ def test_update_and_remove_widget__persisted(
         type=dashboard.DashboardType.MULTI_PROJECT,
     )
     created_dashboards.append(dash.id)
-    section_id = dash.sections[0].id
 
     widget_id = dash.add_widget(
-        section_id,
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.TEXT_MARKDOWN,
             title="Notes",
@@ -158,10 +143,8 @@ def test_experiments_dashboard_widgets__all_types(
         type=dashboard.DashboardType.EXPERIMENTS,
     )
     created_dashboards.append(dash.id)
-    section_id = dash.sections[0].id
 
     dash.add_widget(
-        section_id,
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.EXPERIMENTS_FEEDBACK_SCORES,
             title="Feedback scores",
@@ -172,7 +155,6 @@ def test_experiments_dashboard_widgets__all_types(
         ),
     )
     dash.add_widget(
-        section_id,
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.EXPERIMENT_LEADERBOARD,
             title="Leaderboard",
@@ -201,11 +183,9 @@ def test_move_widget_position__persisted(
         project_name=PROJECT_NAME,
     )
     created_dashboards.append(dash.id)
-    section_id = dash.sections[0].id
 
     # Two stats-card widgets; auto-layout places them at x=0 and x=1 (w=1 each).
     w1_id = dash.add_widget(
-        section_id,
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.PROJECT_STATS_CARD,
             title="Widget A",
@@ -215,7 +195,6 @@ def test_move_widget_position__persisted(
         ),
     )
     dash.add_widget(
-        section_id,
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.PROJECT_STATS_CARD,
             title="Widget B",

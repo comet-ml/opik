@@ -91,7 +91,6 @@ def test_add_widget__preserves_unknown_fields_round_trip():
     dashboard, rest, _ = _make_dashboard(_config_with_legacy_widget())
 
     widget_id = dashboard.add_widget(
-        "s1",
         types.DashboardWidget(
             type=types.WidgetType.TEXT_MARKDOWN,
             title="Notes",
@@ -119,7 +118,6 @@ def test_add_widget__project_scoped_injects_project_id():
     dashboard, _, _ = _make_dashboard(config, project_id="proj-xyz")
 
     widget_id = dashboard.add_widget(
-        "s1",
         types.DashboardWidget(
             type=types.WidgetType.PROJECT_STATS_CARD,
             config=types.ProjectStatsCardConfig(
@@ -143,7 +141,6 @@ def test_add_widget__project_scoped_without_dashboard_project_raises():
 
     with pytest.raises(exceptions.DashboardValidationError, match="project-scoped"):
         dashboard.add_widget(
-            "s1",
             types.DashboardWidget(type=types.WidgetType.PROJECT_STATS_CARD),
         )
 
@@ -160,7 +157,7 @@ def test_add_widget__incompatible_type_raises_before_write():
 
     with pytest.raises(exceptions.DashboardValidationError, match="not supported"):
         dashboard.add_widget(
-            "s1", types.DashboardWidget(type=types.WidgetType.EXPERIMENT_LEADERBOARD)
+            types.DashboardWidget(type=types.WidgetType.EXPERIMENT_LEADERBOARD)
         )
 
     assert rest.dashboards.update_calls == []
@@ -176,7 +173,8 @@ def test_add_widget__unknown_section_raises():
 
     with pytest.raises(exceptions.DashboardValidationError, match="not found"):
         dashboard.add_widget(
-            "missing", types.DashboardWidget(type=types.WidgetType.TEXT_MARKDOWN)
+            types.DashboardWidget(type=types.WidgetType.TEXT_MARKDOWN),
+            section_id="missing",
         )
 
 
@@ -189,9 +187,7 @@ def test_mutation__unknown_version_refused():
     dashboard, rest, _ = _make_dashboard(config)
 
     with pytest.raises(exceptions.DashboardValidationError, match="schema version 5"):
-        dashboard.add_widget(
-            "s1", types.DashboardWidget(type=types.WidgetType.TEXT_MARKDOWN)
-        )
+        dashboard.add_widget(types.DashboardWidget(type=types.WidgetType.TEXT_MARKDOWN))
     assert rest.dashboards.update_calls == []
 
 
@@ -439,7 +435,7 @@ def test_add_widget__null_id_is_replaced():
     dashboard, _, _ = _make_dashboard(config)
 
     widget_id = dashboard.add_widget(
-        "s1", {"id": None, "type": "text_markdown", "config": {"content": "hi"}}
+        {"id": None, "type": "text_markdown", "config": {"content": "hi"}}
     )
 
     assert widget_id != "None"
@@ -458,7 +454,6 @@ def test_add_widget__partial_size_raises():
 
     with pytest.raises(exceptions.DashboardValidationError, match="'w' and 'h'"):
         dashboard.add_widget(
-            "s1",
             types.DashboardWidget(type=types.WidgetType.TEXT_MARKDOWN),
             size={"w": 2},
         )
