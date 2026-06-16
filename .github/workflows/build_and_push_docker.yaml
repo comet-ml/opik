@@ -43,6 +43,8 @@ on:
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
+      OPIK_PLUGIN_AI_SPEND_TOKEN:
+        required: false
 
 env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik"
